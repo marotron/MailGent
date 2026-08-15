@@ -1,10 +1,10 @@
-# Lock MailGant v1 Product
+# Lock MailGent v1 Product
 
 Label: wayfinder:map
 
 ## Destination
 
-Produce a locked, implementation-ready v1 product specification for MailGant: a macOS-first agent-safe email companion for individuals who continue using Apple Mail, differentiated by controlled access for external AI agents. Stop before technical architecture, technology selection, delivery planning, or implementation tickets.
+Produce a locked, implementation-ready v1 product specification for MailGent: a macOS-first agent-safe email companion for individuals who continue using Apple Mail, differentiated by controlled access for external AI agents. Stop before technical architecture, technology selection, delivery planning, or implementation tickets.
 
 ## Notes
 
@@ -14,7 +14,7 @@ Produce a locked, implementation-ready v1 product specification for MailGant: a 
 - Product role: agent-safe companion alongside Apple Mail, not a replacement daily client.
 - Human surfaces: account connection; unified and per-account scoped search/read; draft inspection/editing; mutation approvals; policy and audit management; opening source messages in Apple Mail.
 - External-agent access is the differentiator; no built-in assistant in v1.
-- Device-first: mailbox cache, search index, credentials, and policy enforcement stay on-device. MailGant cloud does not read mailbox content.
+- Device-first: mailbox cache, search index, credentials, and policy enforcement stay on-device. MailGent cloud does not read mailbox content.
 - Local agents can connect directly. Remote agents require explicit user-mediated sessions. No unattended inbound endpoint.
 - Every agent has its own identity, scopes, capabilities, revocable grants, and comprehensive append-only access log. Trusted local agents may receive private scopes denied to remote agents.
 - Agent reads/searches are restricted to explicit grants. Agents may create drafts. Send, delete, move, and other mutations require human approval.

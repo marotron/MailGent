@@ -5,11 +5,11 @@ Status: resolved
 
 ## Question
 
-What observable user outcomes and acceptance criteria must the v1 product specification guarantee, and which tempting capabilities are unnecessary for MailGant to deliver its core promise?
+What observable user outcomes and acceptance criteria must the v1 product specification guarantee, and which tempting capabilities are unnecessary for MailGent to deliver its core promise?
 
 ## Answer
 
-MailGant v1 succeeds as a **macOS-first agent-safe companion to Apple Mail**, not yet as a replacement daily mail client. A technical or power user must be able to connect Gmail and Yahoo; grant a named local external agent explicit scoped read/search access and draft creation; require in-app approval for mutations; revoke access; and inspect a comprehensive local access log.
+MailGent v1 succeeds as a **macOS-first agent-safe companion to Apple Mail**, not yet as a replacement daily mail client. A technical or power user must be able to connect Gmail and Yahoo; grant a named local external agent explicit scoped read/search access and draft creation; require in-app approval for mutations; revoke access; and inspect a comprehensive local access log.
 
 Required human surfaces are account connection, scoped search/read, draft inspection and editing, mutation approvals, policy management, audit inspection, and opening the source message in Apple Mail. Optional macOS notifications are configurable by event severity and remain local.
 

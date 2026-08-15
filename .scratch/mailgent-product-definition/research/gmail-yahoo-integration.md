@@ -10,7 +10,7 @@
 
 ## 1. Decision-oriented summary
 
-| Topic | Confirmed constraint for MailGant v1 |
+| Topic | Confirmed constraint for MailGent v1 |
 | --- | --- |
 | Gmail access path | Prefer **Gmail API + OAuth 2.0** with least-privilege restricted scopes (`gmail.modify` / `gmail.readonly` + compose/send as needed). Avoid IMAP/SMTP unless permanent-delete-bypass-trash is required — IMAP/SMTP forces `https://mail.google.com/` and fails minimum-scope review if used for ordinary client features. |
 | Yahoo access path | **No proprietary Mail REST API** for third parties. Access is **IMAP + SMTP with OAuth 2.0** (`mail-r` / `mail-w`), after Yahoo **approves** commercial developer access. App passwords exist for clients that do not use Yahoo branded sign-in — weaker UX/security; OAuth is the intended path for a modern client. |
@@ -18,7 +18,7 @@
 | Push / sync | Gmail real-time push = **Cloud Pub/Sub** → webhook or pull on a **backend**; `users.watch` must be renewed ≤ every 7 days. Device-only polling / history sync remains required as fallback. Yahoo push = **IMAP IDLE** (+ CONDSTORE / HIGHESTMODSEQ / All Mail); IDLE does not report deletes/expunge. |
 | Review / launch risk | Gmail: built-in email client is an **approved use case**, but read/modify/compose scopes are **restricted** → brand + restricted-scope verification; **100-user cap** until verified; **CASA** if restricted data is stored/transmitted on servers. Yahoo: mail scopes **not self-serve**; apply via Sender Hub; policy review + security bar. |
 | Account models | Gmail: consumer `@gmail.com` vs Google Workspace (admin API allowlists, domain policy can block the app). Labels (many-to-many), not folders. Yahoo/AOL share identity infra but need **separate OAuth client credentials per namespace**; folder model via IMAP SPECIAL-USE. |
-| Agent / device-first tension | Google Limited Use + Yahoo “Use of Data” both forbid transferring mailbox content to third parties except for the approved user-facing app. **On-device agent reads** fit better than **remote agents receiving mail bodies**. Any MailGant cloud that sees mailbox content for push or agent mediation triggers Google CASA and Yahoo policy scrutiny. |
+| Agent / device-first tension | Google Limited Use + Yahoo “Use of Data” both forbid transferring mailbox content to third parties except for the approved user-facing app. **On-device agent reads** fit better than **remote agents receiving mail bodies**. Any MailGent cloud that sees mailbox content for push or agent mediation triggers Google CASA and Yahoo policy scrutiny. |
 
 ---
 
@@ -152,7 +152,7 @@ Sources: [Google Workspace OAuth considerations](https://developers.google.com/i
 
 ---
 
-## 6. Product implications for MailGant v1
+## 6. Product implications for MailGent v1
 
 ### 6.1 Provider strategy
 
@@ -192,7 +192,7 @@ Sources: [Google Workspace OAuth considerations](https://developers.google.com/i
 | Y3 | Handle MESSAGELIMIT / UIDONLY / PARTIAL; IDLE without delete events. |
 | Y4 | Do not depend on a Yahoo proprietary REST Mail API. |
 | A1 | Use ASWebAuthenticationSession (or Google Sign-In SDK) for OAuth on Apple platforms. |
-| X1 | Do not put mailbox bodies in MailGant cloud for v1 if avoiding CASA / Yahoo transfer bans is a goal. |
+| X1 | Do not put mailbox bodies in MailGent cloud for v1 if avoiding CASA / Yahoo transfer bans is a goal. |
 
 ---
 
