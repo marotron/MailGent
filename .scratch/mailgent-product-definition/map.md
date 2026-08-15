@@ -26,13 +26,17 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 
 - [Research Gmail and Yahoo Integration Constraints](issues/02-research-gmail-yahoo-integration.md) — Gmail API + OAuth preferred; Yahoo is IMAP/SMTP OAuth after commercial approval; Gmail push needs Pub/Sub backend; keep mailbox content on-device
 - [Define v1 Success and Product Acceptance Boundary](issues/01-define-v1-success.md) — v1 is a macOS agent-safe companion to Apple Mail with scoped access, approvals, revocation, comprehensive local auditing, and optional local notifications
+- [Research Apple Platform Constraints](issues/03-research-apple-platform-constraints.md) — macOS sync needs consented helpers (no native BGAppRefresh); Keychain for tokens; sandboxed XPC/localhost for agents; local notifications OK; MAS sandbox vs Developer ID+notarization choice pending
+- [Research External-Agent Interface Protocols](issues/04-research-agent-interface-protocols.md) — MCP best wire protocol (MailGent as server); product must own identity, grants, approvals, audit, remote sessions; A2A/App Intents/tool-calling are complementary not substitutes
 
 ## Not yet specified
 
 - Whether any low-risk mutation can later receive persistent automation approval depends on the operation and approval models.
-- App Store distribution, extensions, and entitlement implications depend on Apple-platform feasibility findings.
+- MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
+- Gmail push under device-first still open ([14](issues/14-decide-gmail-push-posture.md); unblocked by Apple research).
+- Agent discovery, per-device session ownership, and user-mediated remote sessions still open ([06](issues/06-choose-agent-runtime-topology.md); unblocked by Apple + MCP research).
 - Attachment-specific disclosure and handling may need finer policy after the agent operation contract is known.
-- Failure, recovery, and degraded/offline behavior cannot be finalized until Apple platform constraints and agent topology are known.
+- Failure, recovery, and degraded/offline behavior still open until security/audit/recovery grilling ([13](issues/13-define-security-audit-recovery.md)).
 
 ## Out of scope
 
