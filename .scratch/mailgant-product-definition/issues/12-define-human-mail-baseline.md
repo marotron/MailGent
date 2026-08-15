@@ -1,4 +1,4 @@
-# Define Human Mail Baseline Behaviors
+# Define Companion Human-Surface Behaviors
 
 Type: grilling
 Status: open
@@ -6,4 +6,4 @@ Blocked by: 05
 
 ## Question
 
-For each included human mail capability, what behavior and edge cases are required for v1 to be a credible simple daily client rather than a demo, while avoiding parity work outside MailGant's core promise?
+For account connection, scoped search/read, draft inspection and editing, mutation approval, policy management, audit inspection, and opening messages in Apple Mail, what behavior and edge cases must the macOS v1 companion support without drifting into daily-client parity?
