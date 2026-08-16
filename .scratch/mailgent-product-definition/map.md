@@ -31,13 +31,13 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Research External-Agent Interface Protocols](issues/04-research-agent-interface-protocols.md) — MCP best wire protocol (MailGent as server); product must own identity, grants, approvals, audit, remote sessions; A2A/App Intents/tool-calling are complementary not substitutes
 - Soft vs hard delete — Agent-facing `delete` means soft delete to Trash (approval-gated). Hard/permanent delete is available only in the human companion UI for Gmail and Yahoo; never exposed to agents
 - [Define the Canonical Mailbox Model](issues/05-define-canonical-mailbox-model.md) — Placement vs flags (Yahoo max one placement); archive = Gmail drop INBOX / Yahoo Archive folder + virtual Archived view; no cross-account threads; drafts owned by one account+From; unified search merges hits with account+placement; hard delete human-only (agent trash detail in 08)
+- [Choose Agent Runtime and Cross-Device Topology](issues/06-choose-agent-runtime-topology.md) — MailGent owns sessions; v1 supports UDS plus hardened loopback MCP; agent trust is per-device; iCloud syncs only non-sensitive UI preferences; remote access uses explicit, expiring sessions over an opaque end-to-end encrypted relay
 
 ## Not yet specified
 
 - Whether any low-risk mutation can later receive persistent automation approval depends on the operation and approval models.
 - MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
 - Gmail push under device-first still open ([14](issues/14-decide-gmail-push-posture.md); unblocked by Apple research).
-- Agent discovery, per-device session ownership, and user-mediated remote sessions still open ([06](issues/06-choose-agent-runtime-topology.md); unblocked by Apple + MCP research).
 - Attachment-specific disclosure and handling may need finer policy after the agent operation contract is known.
 - Failure, recovery, and degraded/offline behavior still open until security/audit/recovery grilling ([13](issues/13-define-security-audit-recovery.md)).
 
