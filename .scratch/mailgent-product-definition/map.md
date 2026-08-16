@@ -40,11 +40,11 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Prototype Companion Search and Review Navigation](issues/09-prototype-mailbox-navigation.md) — Default home = control-first; settings may switch to search-first or review desk; account+placement always visible
 - [Prototype Agent Access Policy Authoring](issues/10-prototype-policy-authoring.md) — Ship wizard A + grant desk B; scope-then-access selectors; resource caps (not free-form Write); explicit Deny carve-outs; pairing finish-setup deferred to 17
 - [Prototype Agent Mutation Approval](issues/11-prototype-mutation-approval.md) — Ship queue A + focus B + batch C; approve/deny/edit-then-approve; soft + hard delete with stronger hard-delete confirm; no auto-approve; expiry cancels pending
+- [Prototype Agent Pairing and Finish-Setup](issues/17-prototype-agent-pairing-setup.md) — Ship wizard A (required) + connection desk B (nice-to-have); challenge + credential + UDS/loopback/relay; remote sessions; revoke/suspend/forget; drop checklist C
 
 ## Not yet specified
 
 - MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
-- Agent pairing finish-setup UX after identity + trust class (pairing challenge, credential, local/MCP path, host config help, status, remote session open) — tracked in [17](issues/17-prototype-agent-pairing-setup.md).
 
 ## Out of scope
 

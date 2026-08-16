@@ -1,0 +1,1086 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: answers issue 17. Open in browser. ?view=wizard|desk|checklist
+     After identity + trust class (issue 10), finish connecting the agent.
+     Shared locks: pairing challenge, per-agent credential, UDS vs loopback MCP,
+     setup help, status, remote session durations, revoke/suspend/forget.
+     Styling aligned with prototype-policy-authoring.html. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Agent pairing finish-setup prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #e1e6ef;
+      --line-strong: #c9d1df;
+      --canvas: #f3f5f9;
+      --paper: #ffffff;
+      --blue: #2a4fc7;
+      --blue-ink: #1a3aa8;
+      --blue-soft: #eef2ff;
+      --amber: #9a6700;
+      --green: #0b7a56;
+      --red: #b4232f;
+      --violet: #5b3db8;
+      --rail: #f8f9fc;
+      --shadow: 0 1px 2px #15203308, 0 12px 32px #1520330c;
+      --radius: 14px;
+      --focus: 0 0 0 3px #2a4fc733;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(1200px 480px at 10% -10%, #e8eeff 0%, transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #f0eef8 0%, transparent 50%),
+        var(--canvas);
+      color: var(--ink);
+      font: 14px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: none; box-shadow: var(--focus);
+    }
+    .icon {
+      width: 16px; height: 16px; flex: none;
+      stroke: currentColor; fill: none; stroke-width: 1.75;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .icon.lg { width: 18px; height: 18px; }
+    .icon.xl { width: 24px; height: 24px; }
+    .icon.sm { width: 14px; height: 14px; }
+    .shell { min-height: 100vh; padding: 28px 28px 120px; }
+    .top {
+      max-width: 1180px; margin: 0 auto 18px;
+      display: flex; justify-content: space-between; gap: 16px; align-items: end;
+    }
+    h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; font-weight: 650; }
+    .top p { margin: 6px 0 0; color: var(--muted); }
+    .note { max-width: 420px; text-align: right; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .proto { max-width: 1180px; margin: 0 auto; min-height: 660px; overflow: hidden; }
+    .hidden { display: none !important; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--blue); font-size: 11px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+    }
+    h2 { margin: 6px 0 4px; font-size: 21px; letter-spacing: -0.02em; font-weight: 650; }
+    h3 { margin: 0 0 8px; font-size: 15px; font-weight: 650; }
+    .sub { margin: 0 0 16px; color: var(--muted); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px 3px 7px; border-radius: 999px;
+      font-size: 12px; font-weight: 650; line-height: 1.2;
+    }
+    .pill .icon { width: 13px; height: 13px; }
+    .pill.ok { background: #e8f7f0; color: var(--green); }
+    .pill.warn { background: #fff4db; color: var(--amber); }
+    .pill.bad { background: #fdecee; color: var(--red); }
+    .pill.neutral { background: #eef1f6; color: #516079; }
+    .pill.violet { background: #f1ecff; color: var(--violet); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border-radius: 10px; border: 1px solid var(--line-strong);
+      background: white; color: #334155; padding: 8px 12px;
+      transition: background .15s ease, border-color .15s ease, transform .1s ease;
+    }
+    .btn:hover { background: #f7f8fb; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn.primary:hover { background: var(--blue-ink); }
+    .btn.danger { color: var(--red); border-color: #efc2c7; background: #fff8f8; }
+    .btn.danger:hover { background: #fdecee; }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+    .btn.ghost:hover { background: #eef1f6; color: var(--ink); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 6px 11px; color: #4a5871;
+    }
+    .chip.on { background: var(--blue-soft); border-color: #b4c2f5; color: var(--blue-ink); font-weight: 650; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .explain {
+      display: flex; gap: 10px; align-items: flex-start;
+      border: 1px solid #d5def5; background: linear-gradient(180deg, #f7f9ff, #f2f5ff);
+      border-radius: 12px; padding: 12px 14px; color: #2a3f73;
+      margin-bottom: 14px;
+    }
+    .explain .glyph {
+      width: 28px; height: 28px; border-radius: 8px; flex: none;
+      display: grid; place-items: center; background: #dde5ff; color: var(--blue-ink);
+    }
+    .explain.warn {
+      border-color: #f0c7a0; background: linear-gradient(180deg, #fff8f0, #fff3e6);
+      color: #7a3e12;
+    }
+    .explain.warn .glyph { background: #ffe0c2; color: #a85a14; }
+    .explain strong { font-weight: 650; }
+    .hint {
+      display: flex; gap: 8px; align-items: flex-start;
+      margin-top: 8px; color: var(--muted); font-size: 12px;
+    }
+    .field { display: grid; gap: 6px; margin-bottom: 12px; }
+    .field label {
+      font-size: 11px; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .field input, .field select, .field textarea {
+      border: 1px solid var(--line-strong); border-radius: 10px;
+      padding: 9px 11px; background: #fff; color: var(--ink);
+    }
+    .field textarea { min-height: 88px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .codebox {
+      border: 1px solid var(--line); border-radius: 12px; background: #0f172a; color: #e2e8f0;
+      padding: 12px 14px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap; word-break: break-all; position: relative;
+    }
+    .challenge {
+      display: flex; gap: 10px; justify-content: center; margin: 18px 0;
+    }
+    .challenge span {
+      width: 48px; height: 56px; border-radius: 12px; border: 1px solid var(--line-strong);
+      background: #fff; display: grid; place-items: center;
+      font: 700 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .04em;
+    }
+    .path-card {
+      border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+      background: #fff; text-align: left; display: grid; gap: 4px; width: 100%;
+    }
+    .path-card.on { border-color: #b4c2f5; background: var(--blue-soft); box-shadow: inset 0 0 0 1px #b4c2f5; }
+    .path-card strong { font-weight: 650; }
+    .path-card small { color: var(--muted); font-size: 12px; }
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .meta-cell {
+      border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fbfcfe;
+    }
+    .meta-cell label {
+      display: block; color: var(--muted); font-size: 11px; font-weight: 650;
+      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+    }
+    .meta-cell div { font-weight: 650; display: flex; align-items: center; gap: 6px; }
+    .floating {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 4px; padding: 6px;
+      background: #121a2b; border-radius: 14px;
+      box-shadow: 0 14px 40px #121a2b55; z-index: 20;
+    }
+    .floating button {
+      color: #c9d3ea; background: transparent; border: 0; border-radius: 10px;
+      padding: 9px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .floating button.active { background: #3554a8; color: #fff; }
+    .floating .cycle { width: 36px; padding: 9px 0; justify-content: center; }
+    .state-bar {
+      max-width: 1180px; margin: 14px auto 0; padding: 10px 14px;
+      border: 1px dashed var(--line-strong); border-radius: 10px; background: #fbfcfe;
+      color: #44516a; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+
+    /* A · wizard */
+    #wizard { display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+    .wiz-rail { background: var(--rail); border-right: 1px solid var(--line); padding: 18px 14px; }
+    .wiz-rail .brand {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 750; font-size: 16px; margin-bottom: 18px;
+    }
+    .brand-mark {
+      width: 26px; height: 26px; border-radius: 8px;
+      display: grid; place-items: center; background: var(--blue); color: #fff;
+    }
+    .steps { display: grid; gap: 4px; }
+    .step {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px; border-radius: 10px; border: 0; background: transparent;
+      text-align: left; color: var(--muted); width: 100%;
+    }
+    .step.on { background: var(--blue-soft); color: var(--blue-ink); font-weight: 650; }
+    .step.done { color: var(--ink); }
+    .step .num {
+      width: 22px; height: 22px; border-radius: 999px; flex: none;
+      display: grid; place-items: center; font-size: 11px; font-weight: 700;
+      background: #e4e9f3; color: #3d4b63;
+    }
+    .step.on .num { background: var(--blue); color: #fff; }
+    .step.done .num { background: #cfeedf; color: var(--green); }
+    .wiz-body { padding: 28px; background: var(--rail); overflow: auto; }
+    .wiz-panel { max-width: 640px; }
+    .wiz-foot {
+      display: flex; justify-content: space-between; gap: 10px; margin-top: 22px;
+      padding-top: 14px; border-top: 1px solid var(--line);
+    }
+
+    /* B · desk */
+    #desk { display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+    .desk-rail { background: var(--rail); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    .desk-head { padding: 16px 14px; border-bottom: 1px solid var(--line); }
+    .desk-head h2 { margin: 0; font-size: 17px; }
+    .desk-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .agent-list { padding: 8px; overflow: auto; flex: 1; }
+    .agent-row {
+      width: 100%; text-align: left; border: 0; border-radius: 10px;
+      background: transparent; padding: 11px; display: grid; gap: 6px; margin-bottom: 4px;
+    }
+    .agent-row:hover { background: #eef1f6; }
+    .agent-row.selected { background: var(--blue-soft); }
+    .agent-row strong { font-size: 13px; font-weight: 650; }
+    .agent-row .meta { color: var(--muted); font-size: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .desk-main { padding: 24px; background: var(--rail); overflow: auto; }
+    .desk-panel { max-width: 760px; display: grid; gap: 14px; }
+    .panel {
+      border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 14px;
+    }
+    .panel-head {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px;
+    }
+
+    /* C · checklist */
+    #checklist { display: grid; grid-template-rows: auto 1fr; }
+    .check-bar {
+      display: flex; justify-content: space-between; gap: 16px; align-items: center;
+      padding: 16px 18px; border-bottom: 1px solid var(--line); background: var(--rail);
+    }
+    .check-bar h2 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+    .check-body {
+      display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
+      min-height: 560px;
+    }
+    .check-list { padding: 18px; display: grid; gap: 10px; align-content: start; background: #fff; }
+    .check-item {
+      border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+      display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: start;
+      background: #fbfcfe;
+    }
+    .check-item.done { background: #f3fbf7; border-color: #c6e8d6; }
+    .check-item.active { border-color: #b4c2f5; background: var(--blue-soft); }
+    .check-item .mark {
+      width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center;
+      background: #e4e9f3; color: #3d4b63;
+    }
+    .check-item.done .mark { background: #cfeedf; color: var(--green); }
+    .check-item.active .mark { background: var(--blue); color: #fff; }
+    .check-item h3 { margin: 0 0 2px; font-size: 14px; }
+    .check-item p { margin: 0; color: var(--muted); font-size: 12px; }
+    .check-side {
+      border-left: 1px solid var(--line); padding: 18px; background: var(--rail); overflow: auto;
+    }
+
+    @media (max-width: 900px) {
+      #wizard, #desk, .check-body { grid-template-columns: 1fr; }
+      .wiz-rail, .desk-rail { border-right: 0; border-bottom: 1px solid var(--line); }
+      .check-side { border-left: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/></symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m7 7 10 10"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M12 15h9v-3"/><path d="M17 12v3"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 12a4 4 0 0 1 0-5.7l1.5-1.5a4 4 0 0 1 5.7 5.7L15 12"/><path d="M15 12a4 4 0 0 1 0 5.7l-1.5 1.5a4 4 0 0 1-5.7-5.7L9 12"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 7v4"/><path d="M15 7v4"/><path d="M7 11h10v2a5 5 0 0 1-10 0Z"/><path d="M12 18v3"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+  </svg>
+
+  <main class="shell">
+    <div class="top">
+      <div>
+        <h1>Agent pairing · finish setup</h1>
+        <p>Issue 17 · challenge + credential + path + host help · remote sessions · revoke / suspend / forget</p>
+      </div>
+      <div class="note">Display name is never identity. Pairing challenge + per-agent credential required. Prefer UDS; loopback HTTP for MCP hosts that need it. Remote reachability is never permanent.</div>
+    </div>
+
+    <section id="wizard" class="proto card" aria-label="Variant A guided wizard"></section>
+    <section id="desk" class="proto card hidden" aria-label="Variant B connection desk"></section>
+    <section id="checklist" class="proto card hidden" aria-label="Variant C connection checklist"></section>
+
+    <pre class="state-bar" id="state">state…</pre>
+
+    <nav class="floating" aria-label="Prototype variations">
+      <button type="button" class="cycle" data-cycle="-1" aria-label="Previous variant"><svg class="icon"><use href="#i-arrow-left"/></svg></button>
+      <button type="button" data-view="wizard" class="active"><svg class="icon sm"><use href="#i-spark"/></svg> A · Wizard</button>
+      <button type="button" data-view="desk"><svg class="icon sm"><use href="#i-folder"/></svg> B · Desk</button>
+      <button type="button" data-view="checklist"><svg class="icon sm"><use href="#i-list"/></svg> C · Checklist</button>
+      <button type="button" class="cycle" data-cycle="1" aria-label="Next variant"><svg class="icon"><use href="#i-arrow-right"/></svg></button>
+    </nav>
+  </main>
+
+  <script>
+    const VIEWS = ["wizard", "desk", "checklist"];
+    const STEPS = [
+      { id: "challenge", label: "Pairing challenge" },
+      { id: "path", label: "Connection path" },
+      { id: "credential", label: "Credential & host" },
+      { id: "connect", label: "Wait for connect" },
+      { id: "session", label: "Remote session" },
+      { id: "manage", label: "Status & revoke" },
+    ];
+    const DURATIONS = [
+      { id: "15m", label: "15 minutes" },
+      { id: "1h", label: "1 hour", default: true },
+      { id: "8h", label: "8 hours" },
+      { id: "custom", label: "Custom (≤24h)" },
+    ];
+
+    const icon = (id, cls = "icon") => `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+
+    const seedAgents = () => ([
+      {
+        id: "a-new",
+        name: "Claude Desktop",
+        trustClass: "machine-local",
+        status: "waiting",
+        path: null,
+        challenge: "7K4Q",
+        credential: null,
+        connected: false,
+        sessionOpen: false,
+        sessionDuration: "1h",
+        note: "Just named in policy authoring",
+      },
+      {
+        id: "a-cursor",
+        name: "Cursor",
+        trustClass: "machine-local",
+        status: "paired",
+        path: "uds",
+        challenge: "AC91",
+        credential: "mg_agt_cursor_9f3c…e21a",
+        connected: false,
+        sessionOpen: false,
+        sessionDuration: "1h",
+        note: "Paired · not yet connected",
+      },
+      {
+        id: "a-hermes",
+        name: "Hermes",
+        trustClass: "lan-inference",
+        status: "connected",
+        path: "loopback",
+        challenge: "H2M8",
+        credential: "mg_agt_hermes_44ab…91cf",
+        connected: true,
+        sessionOpen: false,
+        sessionDuration: "1h",
+        note: "Local MCP over loopback",
+      },
+      {
+        id: "a-remote",
+        name: "Travel laptop",
+        trustClass: "remote",
+        status: "paired",
+        path: "relay",
+        challenge: "R9XZ",
+        credential: "mg_agt_travel_bb12…77d0",
+        connected: false,
+        sessionOpen: false,
+        sessionDuration: "1h",
+        note: "Needs explicit session each time",
+      },
+      {
+        id: "a-reauth",
+        name: "CLI helper",
+        trustClass: "machine-local",
+        status: "needs-reauth",
+        path: "uds",
+        challenge: "C0FF",
+        credential: "mg_agt_cli_dead…beef",
+        connected: false,
+        sessionOpen: false,
+        sessionDuration: "1h",
+        note: "Credential proof failed",
+      },
+    ]);
+
+    let agents = seedAgents();
+    let selectedId = "a-new";
+    let wizStep = 0;
+    let logLines = [];
+    let customHours = 2;
+
+    const byId = (id) => agents.find((a) => a.id === id);
+    const selected = () => byId(selectedId);
+
+    const statusPill = (status) => {
+      const map = {
+        waiting: ["pill warn", "i-clock", "Waiting"],
+        paired: ["pill neutral", "i-key", "Paired"],
+        connected: ["pill ok", "i-check", "Connected"],
+        "needs-reauth": ["pill bad", "i-lock", "Needs reauth"],
+        suspended: ["pill warn", "i-ban", "Suspended"],
+      };
+      const [cls, ic, label] = map[status] || ["pill neutral", "i-info", status];
+      return `<span class="${cls}">${icon(ic)} ${label}</span>`;
+    };
+
+    const classPill = (tc) => {
+      if (tc === "remote") return `<span class="pill violet">${icon("i-lock")} remote</span>`;
+      if (tc === "lan-inference") return `<span class="pill warn">${icon("i-shield")} lan-inference</span>`;
+      return `<span class="pill neutral">${icon("i-bot")} machine-local</span>`;
+    };
+
+    const pathLabel = (path) => ({
+      uds: "UDS / App Group IPC",
+      loopback: "Hardened loopback HTTP",
+      relay: "Remote relay (E2E)",
+    })[path] || "Not chosen";
+
+    const mcpSnippet = (a) => {
+      if (a.path === "loopback") {
+        return `{
+  "mcpServers": {
+    "mailgent": {
+      "url": "http://127.0.0.1:8743/mcp",
+      "headers": {
+        "Authorization": "Bearer ${a.credential || "mg_agt_…"}"
+      }
+    }
+  }
+}`;
+      }
+      if (a.path === "relay") {
+        return `# Remote agents use the MailGent relay only while a session is open.
+# No permanent inbound endpoint. Credential proves identity; session grants reachability.
+MAILGENT_AGENT_ID=${a.id}
+MAILGENT_TOKEN=${a.credential || "mg_agt_…"}
+MAILGENT_SESSION=open-from-companion`;
+      }
+      return `# Prefer UDS / App Group IPC (stronger isolation).
+# Example host config — exact path is device-local.
+MAILGENT_SOCKET=~/Library/Group Containers/…/mailgent.sock
+MAILGENT_AGENT_ID=${a.id}
+MAILGENT_TOKEN=${a.credential || "mg_agt_…"}`;
+    };
+
+    const log = (msg) => {
+      logLines.unshift(`${new Date().toLocaleTimeString()} · ${msg}`);
+      if (logLines.length > 12) logLines.pop();
+      renderState();
+    };
+
+    const renderState = () => {
+      const a = selected();
+      document.getElementById("state").textContent =
+        `view=${currentView()} · selected=${a?.name || "—"} · status=${a?.status} · path=${a?.path || "—"} · connected=${!!a?.connected} · session=${a?.sessionOpen ? a.sessionDuration : "closed"}\n` +
+        `agents: ${agents.map((x) => `${x.name}:${x.status}`).join(" · ")}\n` +
+        (logLines.join("\n") || "log: —");
+    };
+
+    const currentView = () => {
+      const p = new URLSearchParams(location.search).get("view");
+      return VIEWS.includes(p) ? p : "wizard";
+    };
+
+    const setView = (view) => {
+      const url = new URL(location.href);
+      url.searchParams.set("view", view);
+      history.replaceState(null, "", url);
+      document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      VIEWS.forEach((v) => document.getElementById(v).classList.toggle("hidden", v !== view));
+      renderAll();
+    };
+
+    const issueCredential = (a) => {
+      if (!a.credential) {
+        a.credential = `mg_agt_${a.name.toLowerCase().replace(/\W+/g, "").slice(0, 8)}_${Math.random().toString(16).slice(2, 6)}…${Math.random().toString(16).slice(2, 6)}`;
+      }
+      if (a.status === "waiting") a.status = "paired";
+    };
+
+    const approveChallenge = (a) => {
+      issueCredential(a);
+      log(`challenge approved · ${a.name} · code ${a.challenge}`);
+    };
+
+    const choosePath = (a, path) => {
+      a.path = path;
+      log(`path ${path} · ${a.name}`);
+    };
+
+    const simulateConnect = (a) => {
+      if (!a.credential || !a.path) return;
+      if (a.trustClass === "remote" && !a.sessionOpen) {
+        a.status = "paired";
+        a.connected = false;
+        log(`remote blocked · open a session first · ${a.name}`);
+        return;
+      }
+      a.connected = true;
+      a.status = "connected";
+      log(`connected · ${a.name} via ${a.path}`);
+    };
+
+    const openSession = (a, duration) => {
+      a.sessionDuration = duration;
+      a.sessionOpen = true;
+      if (a.status === "paired" || a.status === "waiting") a.status = "paired";
+      log(`remote session open · ${duration} · ${a.name}`);
+    };
+
+    const stopSession = (a) => {
+      a.sessionOpen = false;
+      a.connected = false;
+      if (a.status === "connected") a.status = "paired";
+      log(`remote session stopped · ${a.name}`);
+    };
+
+    const suspendAgent = (a) => {
+      a.status = "suspended";
+      a.connected = false;
+      a.sessionOpen = false;
+      log(`suspended · ${a.name}`);
+    };
+
+    const forgetAgent = (a) => {
+      agents = agents.filter((x) => x.id !== a.id);
+      selectedId = agents[0]?.id || null;
+      wizStep = 0;
+      log(`forgotten · ${a.name} · credentials destroyed · re-pair = new identity`);
+    };
+
+    const revokeCredential = (a) => {
+      a.credential = null;
+      a.connected = false;
+      a.sessionOpen = false;
+      a.status = "needs-reauth";
+      log(`credential revoked · ${a.name} · needs re-pair`);
+    };
+
+    const resetDemo = () => {
+      agents = seedAgents();
+      selectedId = "a-new";
+      wizStep = 0;
+      logLines = [];
+      log("reset sample agents");
+      renderAll();
+    };
+
+    const challengeHtml = (code) =>
+      `<div class="challenge" aria-label="Pairing code">${[...String(code)].map((c) => `<span>${esc(c)}</span>`).join("")}</div>`;
+
+    const pathPickerHtml = (a, prefix) => `
+      <div class="field" style="margin:0">
+        <label>Connection path</label>
+        <div class="actions" style="flex-direction:column;align-items:stretch">
+          <button type="button" class="path-card ${a.path === "uds" ? "on" : ""}" data-${prefix}-path="uds">
+            <strong>${icon("i-plug")} Prefer UDS / App Group IPC</strong>
+            <small>Stronger local isolation. Best when the host can speak domain sockets.</small>
+          </button>
+          <button type="button" class="path-card ${a.path === "loopback" ? "on" : ""}" data-${prefix}-path="loopback">
+            <strong>${icon("i-link")} Hardened loopback HTTP</strong>
+            <small>For MCP hosts that need HTTP. Bind 127.0.0.1 only · still needs credential.</small>
+          </button>
+          ${a.trustClass === "remote" ? `
+          <button type="button" class="path-card ${a.path === "relay" ? "on" : ""}" data-${prefix}-path="relay">
+            <strong>${icon("i-lock")} Remote relay (opaque E2E)</strong>
+            <small>Remembered identity only. Reachability requires an explicit, expiring session.</small>
+          </button>` : ""}
+        </div>
+      </div>`;
+
+    const credentialPanelHtml = (a, prefix) => `
+      <div class="explain">
+        <span class="glyph">${icon("i-key")}</span>
+        <div><strong>Per-agent credential.</strong> Proof of possession required on reconnect. A claimed display name alone is never enough.</div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-cell"><label>Credential</label><div>${icon("i-key")} ${esc(a.credential || "Not issued yet")}</div></div>
+        <div class="meta-cell"><label>Path</label><div>${icon("i-plug")} ${esc(pathLabel(a.path))}</div></div>
+      </div>
+      <div class="field">
+        <label>Host setup snippet</label>
+        <div class="codebox" id="${prefix}-snippet">${esc(mcpSnippet(a))}</div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" id="${prefix}-copy">${icon("i-copy")} Copy config</button>
+        <button type="button" class="btn" id="${prefix}-open-host">${icon("i-spark")} Open in host (stub)</button>
+      </div>
+      <p class="hint">${icon("i-info", "icon sm")} One-time help so the agent can reach MailGent. Stdio bridge deferred (ticket 06).</p>`;
+
+    const sessionPanelHtml = (a, prefix) => {
+      if (a.trustClass !== "remote") {
+        return `<div class="explain"><span class="glyph">${icon("i-check")}</span><div>Same-Mac agent — no remote session step. Local path + credential are enough once connected.</div></div>`;
+      }
+      return `
+        <div class="explain warn">
+          <span class="glyph">${icon("i-lock")}</span>
+          <div><strong>Remote reachability is never permanent.</strong> Open each session explicitly. Default 1 hour · max 24 hours. Sleep pauses; Touch ID to resume.</div>
+        </div>
+        <div class="field">
+          <label>Session duration</label>
+          <div class="row" id="${prefix}-durs">
+            ${DURATIONS.map((d) => `<button type="button" class="chip ${a.sessionDuration === d.id ? "on" : ""}" data-dur="${d.id}">${d.label}</button>`).join("")}
+          </div>
+        </div>
+        ${a.sessionDuration === "custom" ? `<div class="field"><label>Custom hours (≤24)</label><input type="number" id="${prefix}-custom" min="1" max="24" value="${customHours}"></div>` : ""}
+        <div class="actions">
+          ${a.sessionOpen
+            ? `<button type="button" class="btn danger" id="${prefix}-stop-session">${icon("i-ban")} Stop session</button>
+               <span class="pill ok">${icon("i-clock")} Open · ${esc(a.sessionDuration)}</span>`
+            : `<button type="button" class="btn primary" id="${prefix}-open-session">${icon("i-check")} Open session</button>
+               <span class="pill neutral">${icon("i-lock")} Closed</span>`}
+        </div>`;
+    };
+
+    const managePanelHtml = (a, prefix) => `
+      <div class="meta-grid">
+        <div class="meta-cell"><label>Status</label><div>${statusPill(a.status)}</div></div>
+        <div class="meta-cell"><label>Trust class</label><div>${classPill(a.trustClass)}</div></div>
+        <div class="meta-cell"><label>Connected</label><div>${a.connected ? icon("i-check") + " Yes" : icon("i-ban") + " No"}</div></div>
+        <div class="meta-cell"><label>Session</label><div>${a.trustClass === "remote" ? (a.sessionOpen ? "Open · " + esc(a.sessionDuration) : "Closed") : "n/a"}</div></div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" id="${prefix}-suspend">${icon("i-ban")} Suspend</button>
+        <button type="button" class="btn" id="${prefix}-revoke">${icon("i-key")} Revoke credential</button>
+        <button type="button" class="btn danger" id="${prefix}-forget">${icon("i-ban")} Forget agent</button>
+      </div>
+      <p class="hint">${icon("i-info", "icon sm")} Forget destroys credentials/assignments. Re-pair creates a new identity and never revives old grants (ticket 07).</p>`;
+
+    const wirePathPicker = (a, prefix) => {
+      document.querySelectorAll(`[data-${prefix}-path]`).forEach((btn) => {
+        btn.onclick = () => {
+          choosePath(a, btn.getAttribute(`data-${prefix}-path`));
+          renderAll();
+        };
+      });
+    };
+
+    const wireCredential = (a, prefix) => {
+      const copy = document.getElementById(`${prefix}-copy`);
+      if (copy) copy.onclick = () => log(`copied host config · ${a.name}`);
+      const open = document.getElementById(`${prefix}-open-host`);
+      if (open) open.onclick = () => log(`open-in-host stub · ${a.name}`);
+    };
+
+    const wireSession = (a, prefix) => {
+      document.querySelectorAll(`#${prefix}-durs [data-dur]`).forEach((chip) => {
+        chip.onclick = () => {
+          a.sessionDuration = chip.dataset.dur;
+          renderAll();
+        };
+      });
+      const custom = document.getElementById(`${prefix}-custom`);
+      if (custom) custom.onchange = () => {
+        customHours = Math.min(24, Math.max(1, Number(custom.value) || 1));
+        custom.value = customHours;
+      };
+      const open = document.getElementById(`${prefix}-open-session`);
+      if (open) open.onclick = () => {
+        const dur = a.sessionDuration === "custom" ? `${customHours}h` : a.sessionDuration;
+        openSession(a, dur);
+        renderAll();
+      };
+      const stop = document.getElementById(`${prefix}-stop-session`);
+      if (stop) stop.onclick = () => { stopSession(a); renderAll(); };
+    };
+
+    const wireManage = (a, prefix) => {
+      const sus = document.getElementById(`${prefix}-suspend`);
+      if (sus) sus.onclick = () => { suspendAgent(a); renderAll(); };
+      const rev = document.getElementById(`${prefix}-revoke`);
+      if (rev) rev.onclick = () => { revokeCredential(a); renderAll(); };
+      const fog = document.getElementById(`${prefix}-forget`);
+      if (fog) fog.onclick = () => {
+        if (!confirm(`Forget ${a.name}? Credentials destroyed. Re-pair = new identity.`)) return;
+        forgetAgent(a);
+        renderAll();
+      };
+    };
+
+    /* ---------- A · Wizard ---------- */
+    const effectiveSteps = (a) =>
+      a.trustClass === "remote" ? STEPS : STEPS.filter((s) => s.id !== "session");
+
+    const renderWizard = () => {
+      const root = document.getElementById("wizard");
+      const a = selected();
+      if (!a) {
+        root.innerHTML = `<div class="wiz-body"><div class="wiz-panel"><h2>No agents</h2><button class="btn primary" id="wiz-reset">${icon("i-spark")} Reload samples</button></div></div>`;
+        document.getElementById("wiz-reset").onclick = resetDemo;
+        return;
+      }
+      const steps = effectiveSteps(a);
+      if (wizStep >= steps.length) wizStep = steps.length - 1;
+      const step = steps[wizStep];
+
+      let body = "";
+      if (step.id === "challenge") {
+        body = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · guided wizard</div>
+          <h2>Approve pairing challenge</h2>
+          <p class="sub">Confirm the code shown by the agent host. Name “${esc(a.name)}” is a label only.</p>
+          ${challengeHtml(a.challenge)}
+          <div class="explain warn"><span class="glyph">${icon("i-shield")}</span><div>Claimed agent name or local process status is <strong>never</strong> sufficient identity.</div></div>
+          <div class="actions">
+            <button type="button" class="btn primary" id="wiz-approve">${icon("i-check")} Approve &amp; issue credential</button>
+            <button type="button" class="btn danger" id="wiz-reject">${icon("i-ban")} Reject</button>
+          </div>`;
+      } else if (step.id === "path") {
+        body = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · guided wizard</div>
+          <h2>Choose how this agent connects</h2>
+          <p class="sub">Hybrid local connectivity (ticket 06). Both paths still require pairing + credential.</p>
+          ${pathPickerHtml(a, "wiz")}`;
+      } else if (step.id === "credential") {
+        if (!a.credential) issueCredential(a);
+        body = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · guided wizard</div>
+          <h2>Credential &amp; host setup</h2>
+          <p class="sub">Copy config into the agent host, or open a stub deep-link.</p>
+          ${credentialPanelHtml(a, "wiz")}`;
+      } else if (step.id === "connect") {
+        body = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · guided wizard</div>
+          <h2>Waiting for connection</h2>
+          <p class="sub">Status: ${statusPill(a.status)} · ${a.connected ? "live" : "not yet connected"}</p>
+          <div class="explain"><span class="glyph">${icon("i-plug")}</span><div>MailGent owns the MCP server session. Agents connect in; they do not launch MailGent.</div></div>
+          <div class="actions">
+            <button type="button" class="btn primary" id="wiz-sim-connect" ${(!a.path || !a.credential) ? "disabled" : ""}>${icon("i-check")} Simulate agent connect</button>
+            <button type="button" class="btn" id="wiz-sim-fail">${icon("i-lock")} Simulate needs reauth</button>
+          </div>`;
+      } else if (step.id === "session") {
+        body = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · guided wizard</div>
+          <h2>Open a remote session</h2>
+          <p class="sub">Paired remote identity may be remembered; reachability is per session.</p>
+          ${sessionPanelHtml(a, "wiz")}`;
+      } else {
+        body = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · guided wizard</div>
+          <h2>Connected status</h2>
+          <p class="sub">Manage this agent after pairing. Grants stay in policy authoring (issue 10).</p>
+          ${managePanelHtml(a, "wiz")}
+          <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn" id="wiz-reset">${icon("i-spark")} Reload samples</button>
+          </div>`;
+      }
+
+      root.innerHTML = `
+        <aside class="wiz-rail">
+          <div class="brand"><span class="brand-mark">${icon("i-mail", "icon sm")}</span> MailGent</div>
+          <div class="meta-cell" style="margin-bottom:14px">
+            <label>Finishing setup for</label>
+            <div>${icon("i-bot")} ${esc(a.name)}</div>
+            <div class="hint" style="margin-top:6px">${classPill(a.trustClass)} ${statusPill(a.status)}</div>
+          </div>
+          <div class="steps">
+            ${steps.map((s, i) => `
+              <button type="button" class="step ${i === wizStep ? "on" : ""} ${i < wizStep ? "done" : ""}" data-step="${i}">
+                <span class="num">${i < wizStep ? icon("i-check", "icon sm") : (i + 1)}</span>
+                <span>${s.label}</span>
+              </button>`).join("")}
+          </div>
+        </aside>
+        <section class="wiz-body">
+          <div class="wiz-panel">
+            ${body}
+            <div class="wiz-foot">
+              <button type="button" class="btn ghost" id="wiz-back" ${wizStep === 0 ? "disabled" : ""}>${icon("i-arrow-left")} Back</button>
+              <button type="button" class="btn primary" id="wiz-next">${wizStep === steps.length - 1 ? icon("i-check") + " Done" : "Continue " + icon("i-arrow-right")}</button>
+            </div>
+          </div>
+        </section>`;
+
+      root.querySelectorAll("[data-step]").forEach((btn) => {
+        btn.onclick = () => { wizStep = Number(btn.dataset.step); renderAll(); };
+      });
+      document.getElementById("wiz-back").onclick = () => { wizStep = Math.max(0, wizStep - 1); renderAll(); };
+      document.getElementById("wiz-next").onclick = () => {
+        if (wizStep >= steps.length - 1) { log(`wizard done · ${a.name}`); return; }
+        if (step.id === "challenge" && !a.credential) approveChallenge(a);
+        if (step.id === "path" && !a.path) {
+          choosePath(a, a.trustClass === "remote" ? "relay" : "uds");
+        }
+        if (step.id === "credential") issueCredential(a);
+        wizStep += 1;
+        renderAll();
+      };
+
+      const approve = document.getElementById("wiz-approve");
+      if (approve) approve.onclick = () => { approveChallenge(a); renderAll(); };
+      const reject = document.getElementById("wiz-reject");
+      if (reject) reject.onclick = () => { log(`challenge rejected · ${a.name}`); };
+      wirePathPicker(a, "wiz");
+      wireCredential(a, "wiz");
+      const sim = document.getElementById("wiz-sim-connect");
+      if (sim) sim.onclick = () => { simulateConnect(a); renderAll(); };
+      const fail = document.getElementById("wiz-sim-fail");
+      if (fail) fail.onclick = () => { a.status = "needs-reauth"; a.connected = false; log(`needs reauth · ${a.name}`); renderAll(); };
+      wireSession(a, "wiz");
+      wireManage(a, "wiz");
+      const reset = document.getElementById("wiz-reset");
+      if (reset) reset.onclick = resetDemo;
+    };
+
+    /* ---------- B · Desk ---------- */
+    const renderDesk = () => {
+      const root = document.getElementById("desk");
+      const a = selected();
+      root.innerHTML = `
+        <aside class="desk-rail">
+          <div class="desk-head">
+            <div class="brand" style="display:flex;align-items:center;gap:8px;font-weight:750;margin-bottom:10px">
+              <span class="brand-mark">${icon("i-mail", "icon sm")}</span> MailGent
+            </div>
+            <h2>Connection desk</h2>
+            <p>Variant B · inspect any agent’s pairing live</p>
+          </div>
+          <div class="agent-list">
+            ${agents.map((x) => `
+              <button type="button" class="agent-row ${x.id === selectedId ? "selected" : ""}" data-id="${x.id}">
+                <div class="row" style="justify-content:space-between">
+                  <strong>${esc(x.name)}</strong>
+                  ${statusPill(x.status)}
+                </div>
+                <div class="meta">${classPill(x.trustClass)} · ${esc(pathLabel(x.path))}</div>
+              </button>`).join("")}
+          </div>
+          <div style="padding:12px;border-top:1px solid var(--line)">
+            <button type="button" class="btn" id="desk-reset" style="width:100%">${icon("i-spark")} Reload samples</button>
+          </div>
+        </aside>
+        <section class="desk-main">
+          ${!a ? `<div class="desk-panel"><h2>Select an agent</h2></div>` : `
+          <div class="desk-panel">
+            <div>
+              <div class="eyebrow">${icon("i-spark", "icon sm")} Variant B · connection desk</div>
+              <h2>${esc(a.name)}</h2>
+              <p class="sub">${esc(a.note || "")}</p>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>${icon("i-shield")} Pairing challenge</h3>${statusPill(a.status)}</div>
+              ${a.status === "waiting" || !a.credential ? `
+                ${challengeHtml(a.challenge)}
+                <div class="actions">
+                  <button type="button" class="btn primary" id="desk-approve">${icon("i-check")} Approve &amp; issue credential</button>
+                  <button type="button" class="btn danger" id="desk-reject">${icon("i-ban")} Reject</button>
+                </div>` : `
+                <div class="explain"><span class="glyph">${icon("i-check")}</span><div>Challenge accepted · credential issued. Proof of possession required on reconnect.</div></div>
+                <div class="actions"><button type="button" class="btn" id="desk-reissue">${icon("i-key")} Rotate challenge / re-pair</button></div>`}
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>${icon("i-plug")} Path &amp; host</h3></div>
+              ${pathPickerHtml(a, "desk")}
+              <div style="height:12px"></div>
+              ${a.credential ? credentialPanelHtml(a, "desk") : `<p class="hint">${icon("i-info", "icon sm")} Approve the challenge to issue a credential and show host config.</p>`}
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>${icon("i-link")} Live connection</h3>
+                <button type="button" class="btn primary" id="desk-sim-connect">${icon("i-check")} Simulate connect</button>
+              </div>
+              ${sessionPanelHtml(a, "desk")}
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>${icon("i-ban")} Revoke / suspend / forget</h3></div>
+              ${managePanelHtml(a, "desk")}
+            </div>
+          </div>`}
+        </section>`;
+
+      root.querySelectorAll("[data-id]").forEach((btn) => {
+        btn.onclick = () => { selectedId = btn.dataset.id; renderAll(); };
+      });
+      document.getElementById("desk-reset").onclick = resetDemo;
+      if (!a) return;
+      const approve = document.getElementById("desk-approve");
+      if (approve) approve.onclick = () => { approveChallenge(a); renderAll(); };
+      const reject = document.getElementById("desk-reject");
+      if (reject) reject.onclick = () => log(`challenge rejected · ${a.name}`);
+      const reissue = document.getElementById("desk-reissue");
+      if (reissue) reissue.onclick = () => {
+        a.challenge = Math.random().toString(36).slice(2, 6).toUpperCase();
+        a.credential = null;
+        a.connected = false;
+        a.status = "waiting";
+        log(`re-pair started · ${a.name}`);
+        renderAll();
+      };
+      wirePathPicker(a, "desk");
+      wireCredential(a, "desk");
+      document.getElementById("desk-sim-connect").onclick = () => { simulateConnect(a); renderAll(); };
+      wireSession(a, "desk");
+      wireManage(a, "desk");
+    };
+
+    /* ---------- C · Checklist ---------- */
+    const checklistItems = (a) => {
+      const items = [
+        {
+          id: "challenge",
+          title: "Approve pairing challenge",
+          detail: "Code match · name is not identity",
+          done: !!a.credential && a.status !== "waiting",
+        },
+        {
+          id: "path",
+          title: "Pick connection path",
+          detail: a.trustClass === "remote" ? "Relay for remote" : "Prefer UDS · loopback if needed",
+          done: !!a.path,
+        },
+        {
+          id: "credential",
+          title: "Install credential in host",
+          detail: "Copy snippet or open-in-host",
+          done: !!a.credential && !!a.path,
+        },
+        {
+          id: "session",
+          title: "Open remote session",
+          detail: "Explicit, expiring · never permanent",
+          done: a.trustClass !== "remote" || a.sessionOpen,
+          skip: a.trustClass !== "remote",
+        },
+        {
+          id: "connect",
+          title: "Agent connected",
+          detail: a.status === "needs-reauth" ? "Needs reauth" : "Waiting for first connect",
+          done: !!a.connected,
+        },
+      ];
+      return items.filter((i) => !i.skip);
+    };
+
+    const renderChecklist = () => {
+      const root = document.getElementById("checklist");
+      const a = selected() || agents[0];
+      if (a && selectedId !== a.id) selectedId = a.id;
+      if (!a) {
+        root.innerHTML = `<div class="check-bar"><h2>No agents</h2><button class="btn" id="c-reset">${icon("i-spark")} Reload</button></div>`;
+        document.getElementById("c-reset").onclick = resetDemo;
+        return;
+      }
+      const items = checklistItems(a);
+      const active = items.find((i) => !i.done) || items[items.length - 1];
+      const doneCount = items.filter((i) => i.done).length;
+
+      let side = "";
+      if (active.id === "challenge") {
+        side = `
+          <h3>Approve challenge</h3>
+          ${challengeHtml(a.challenge)}
+          <div class="actions">
+            <button type="button" class="btn primary" id="c-approve">${icon("i-check")} Approve</button>
+            <button type="button" class="btn danger" id="c-reject">${icon("i-ban")} Reject</button>
+          </div>`;
+      } else if (active.id === "path") {
+        side = `<h3>Connection path</h3>${pathPickerHtml(a, "c")}`;
+      } else if (active.id === "credential") {
+        issueCredential(a);
+        side = `<h3>Host setup</h3>${credentialPanelHtml(a, "c")}`;
+      } else if (active.id === "session") {
+        side = `<h3>Remote session</h3>${sessionPanelHtml(a, "c")}`;
+      } else {
+        side = `
+          <h3>Connection</h3>
+          <div class="actions" style="margin-bottom:12px">
+            <button type="button" class="btn primary" id="c-sim">${icon("i-check")} Simulate connect</button>
+            <button type="button" class="btn" id="c-fail">${icon("i-lock")} Needs reauth</button>
+          </div>
+          ${managePanelHtml(a, "c")}`;
+      }
+
+      root.innerHTML = `
+        <div class="check-bar">
+          <div>
+            <h2>${icon("i-list")} Finish setup · ${esc(a.name)}</h2>
+            <div class="hint" style="margin:4px 0 0">${classPill(a.trustClass)} ${statusPill(a.status)} · ${doneCount}/${items.length} complete</div>
+          </div>
+          <div class="actions">
+            <select id="c-pick" aria-label="Agent">
+              ${agents.map((x) => `<option value="${x.id}" ${x.id === a.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}
+            </select>
+            <button type="button" class="btn" id="c-reset">${icon("i-spark")} Reload</button>
+          </div>
+        </div>
+        <div class="check-body">
+          <div class="check-list">
+            <div class="eyebrow">${icon("i-spark", "icon sm")} Variant C · connection checklist</div>
+            <p class="sub">Progressive requirements. Active item drives the side panel.</p>
+            ${items.map((item) => `
+              <div class="check-item ${item.done ? "done" : ""} ${item.id === active.id ? "active" : ""}">
+                <span class="mark">${item.done ? icon("i-check", "icon sm") : icon("i-arrow-right", "icon sm")}</span>
+                <div>
+                  <h3>${esc(item.title)}</h3>
+                  <p>${esc(item.detail)}</p>
+                </div>
+                ${item.done ? `<span class="pill ok">${icon("i-check")} Done</span>` : item.id === active.id ? `<span class="pill warn">${icon("i-clock")} Now</span>` : `<span class="pill neutral">Next</span>`}
+              </div>`).join("")}
+          </div>
+          <aside class="check-side">${side}</aside>
+        </div>`;
+
+      document.getElementById("c-pick").onchange = (e) => { selectedId = e.target.value; renderAll(); };
+      document.getElementById("c-reset").onclick = resetDemo;
+      const approve = document.getElementById("c-approve");
+      if (approve) approve.onclick = () => { approveChallenge(a); renderAll(); };
+      const reject = document.getElementById("c-reject");
+      if (reject) reject.onclick = () => log(`challenge rejected · ${a.name}`);
+      wirePathPicker(a, "c");
+      wireCredential(a, "c");
+      wireSession(a, "c");
+      const sim = document.getElementById("c-sim");
+      if (sim) sim.onclick = () => { simulateConnect(a); renderAll(); };
+      const fail = document.getElementById("c-fail");
+      if (fail) fail.onclick = () => { a.status = "needs-reauth"; a.connected = false; log(`needs reauth · ${a.name}`); renderAll(); };
+      wireManage(a, "c");
+    };
+
+    const renderAll = () => {
+      renderWizard();
+      renderDesk();
+      renderChecklist();
+      renderState();
+    };
+
+    document.querySelectorAll("[data-view]").forEach((btn) => {
+      btn.addEventListener("click", () => setView(btn.dataset.view));
+    });
+    document.querySelectorAll("[data-cycle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = VIEWS.indexOf(currentView());
+        const next = VIEWS[(i + Number(btn.dataset.cycle) + VIEWS.length) % VIEWS.length];
+        setView(next);
+      });
+    });
+    window.addEventListener("keydown", (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target?.isContentEditable) return;
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const i = VIEWS.indexOf(currentView());
+        setView(VIEWS[(i + (e.key === "ArrowRight" ? 1 : -1) + VIEWS.length) % VIEWS.length]);
+      }
+    });
+
+    setView(currentView());
+  </script>
+</body>
+</html>
