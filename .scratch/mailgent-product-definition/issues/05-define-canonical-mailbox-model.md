@@ -35,7 +35,7 @@ MailGent keeps **provider-faithful objects** under a thin product vocabulary. Ac
 ### Delete (C1 + prior lock)
 
 - Hard/permanent delete: human UI only for Gmail and Yahoo; never agent-facing (no tool, grant, or approval path).
-- Agent trash / soft-delete (approval-gated) is deferred to ticket 08 (operations contract). Map already allows soft delete as an approval-gated mutation; this ticket does not re-open hard delete.
+- Agent soft-delete → Trash is approval-gated per ticket 08; hard delete remains human-only.
 
 ### Unified search (D1)
 

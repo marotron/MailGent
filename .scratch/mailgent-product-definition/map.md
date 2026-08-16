@@ -33,13 +33,12 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Define the Canonical Mailbox Model](issues/05-define-canonical-mailbox-model.md) — Placement vs flags (Yahoo max one placement); archive = Gmail drop INBOX / Yahoo Archive folder + virtual Archived view; no cross-account threads; drafts owned by one account+From; unified search merges hits with account+placement; hard delete human-only (agent trash detail in 08)
 - [Choose Agent Runtime and Cross-Device Topology](issues/06-choose-agent-runtime-topology.md) — MailGent owns sessions; v1 supports UDS plus hardened loopback MCP; agent trust is per-device; iCloud syncs only non-sensitive UI preferences; remote access uses explicit, expiring sessions over an opaque end-to-end encrypted relay
 - [Define Per-Agent Authorization and Exposure](issues/07-define-agent-authorization.md) — Deny-by-default; product-agnostic agents (not models); classes `lan-inference` / `machine-local` / `remote`; private/regular/remote-eligible scopes; deny wins; AND/OR selectors; field groups; smart folders; duration/revocation/explanation without leak; data grants separate from capabilities
+- [Define Agent Operations and Redaction Contract](issues/08-define-agent-operation-contract.md) — Read ops capability-only; drafts capability-only; send/trash/move/label/archive/flags need approval; hard delete absent; search deny-filtered with cursor pages; omit without redaction stubs; no v1 persistent auto-approve
 
 ## Not yet specified
 
-- Whether any low-risk mutation can later receive persistent automation approval depends on the operation and approval models.
 - MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
 - Gmail push under device-first still open ([14](issues/14-decide-gmail-push-posture.md); unblocked by Apple research).
-- Attachment-specific disclosure and handling may need finer policy after the agent operation contract is known.
 - Failure, recovery, and degraded/offline behavior still open until security/audit/recovery grilling ([13](issues/13-define-security-audit-recovery.md)).
 
 ## Out of scope
