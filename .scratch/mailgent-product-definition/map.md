@@ -37,6 +37,7 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Define Companion Human-Surface Behaviors](issues/12-define-human-mail-baseline.md) — Companion control plane (not daily client): OAuth accounts + sync health; unified/per-account search-read; open in Apple Mail; draft inspect/edit; approval queue; policy/audit; soft + hard delete human-only with confirm
 - [Define Security, Audit, and Recovery Behavior](issues/13-define-security-audit-recovery.md) — Keychain-only credentials; lock pauses sessions; fail closed; stale reads only; append-only local audit with Touch ID manual purge; local severity notifications; confirmed destructive recovery
 - [Decide Gmail Push Posture Under Device-First](issues/14-decide-gmail-push-posture.md) — v1 polling/history-sync only (no Pub/Sub relay); Yahoo IDLE/poll on local helper; content-blind push deferred
+- [Prototype Companion Search and Review Navigation](issues/09-prototype-mailbox-navigation.md) — Default home = control-first; settings may switch to search-first or review desk; account+placement always visible
 
 ## Not yet specified
 

@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: answers issue 09 only. Open this file in a browser. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Companion navigation prototype</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#62708a; --line:#dbe1ec; --canvas:#f4f6fa; --paper:#fff; --blue:#3258d4; --blue-soft:#eaf0ff; --amber:#bd7200; --green:#14805e; --red:#ba3c47; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--canvas); color:var(--ink); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button { font:inherit; cursor:pointer; } .shell { min-height:100vh; padding:32px 32px 108px; }
+    .top { display:flex; max-width:1220px; margin:0 auto 18px; align-items:end; justify-content:space-between; gap:20px; } h1 { margin:0; font-size:25px; } .top p { margin:4px 0 0; color:var(--muted); }
+    .card { background:var(--paper); border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 28px #1720330b; }
+    .prototype { max-width:1220px; min-height:660px; margin:auto; display:grid; overflow:hidden; }
+    .rail { padding:18px 12px; border-right:1px solid var(--line); background:#fbfcfe; } .brand { padding:0 10px 18px; font-weight:750; font-size:17px; }
+    .nav { display:grid; gap:3px; } .nav button { border:0; border-radius:8px; padding:9px 10px; text-align:left; background:transparent; color:#34415a; } .nav button.active { background:var(--blue-soft); color:#163aaf; font-weight:650; }
+    .badge { float:right; background:#ffe9c9; color:#8c5300; padding:1px 7px; border-radius:999px; font-size:12px; }
+    .content { padding:22px; min-width:0; } .eyebrow { color:var(--blue); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.06em; } h2 { margin:2px 0 2px; font-size:21px; } .sub { margin:0 0 20px; color:var(--muted); }
+    .search { display:flex; border:1px solid #aeb9ca; border-radius:10px; overflow:hidden; max-width:650px; margin-bottom:16px; } .search input { border:0; padding:11px 12px; flex:1; outline:0; } .search button { border:0; background:var(--blue); color:white; padding:0 16px; }
+    .filters { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px; } .chip { border:1px solid var(--line); background:white; border-radius:99px; color:#4a5871; padding:5px 10px; } .chip.on { border-color:#9fb3f8; background:var(--blue-soft); color:#1d45bb; }
+    .list { border:1px solid var(--line); border-radius:10px; overflow:hidden; } .mail { display:grid; grid-template-columns:145px 1fr auto; gap:14px; padding:13px 14px; border-bottom:1px solid var(--line); align-items:center; } .mail:last-child { border:0; } .sender { font-weight:650; } .subject { font-weight:600; } .snippet { color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:430px; } .origin { display:flex; gap:5px; align-items:center; color:var(--muted); font-size:12px; } .source { border-radius:4px; padding:2px 5px; background:#eef1f6; color:#526077; } .gmail { background:#ffeaeb; color:#a32d3b; } .yahoo { background:#f1eaff; color:#6423a6; } .time { color:var(--muted); font-size:12px; }
+    .split { display:grid; grid-template-columns:minmax(320px,.8fr) minmax(460px,1.2fr); gap:18px; } .pane { border:1px solid var(--line); border-radius:10px; padding:17px; } .pane h3 { margin:0 0 5px; font-size:16px; } .selected { border-left:3px solid var(--blue); background:#f7f9ff; } .message { margin:15px 0; padding:13px; border-radius:8px; background:#f6f8fb; } .message p { margin:6px 0; } .actions { display:flex; gap:8px; flex-wrap:wrap; } .primary,.secondary,.danger { padding:8px 11px; border-radius:8px; border:1px solid var(--line); background:white; color:#36445d; } .primary { background:var(--blue); color:#fff; border-color:var(--blue); } .danger { color:var(--red); }
+    .queue { display:grid; gap:10px; } .queue-item { border:1px solid var(--line); border-radius:10px; padding:13px; } .queue-item strong { display:block; } .queue-item p { margin:4px 0 10px; color:var(--muted); } .risk { color:var(--amber); font-size:12px; font-weight:700; }
+    .audit { display:grid; grid-template-columns:120px 1fr auto; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); color:#44516a; } .audit:last-child { border:0; } .status { color:var(--green); font-size:12px; font-weight:650; }
+    .floating { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); display:flex; gap:5px; padding:7px; background:#172033; border-radius:12px; box-shadow:0 10px 35px #17203355; } .floating button { color:#dfe6f6; background:transparent; border:0; border-radius:8px; padding:8px 10px; font-size:12px; } .floating button.active { background:#3856a8; color:#fff; } .note { font-size:12px; color:var(--muted); max-width:420px; text-align:right; }
+    #overview { grid-template-columns:190px 1fr; } #workbench { grid-template-columns:190px 1fr; } #control { grid-template-columns:190px 1fr; } .hidden { display:none; }
+    @media (max-width:760px) { .shell { padding:18px 14px 100px; } .top { display:block; } .note { text-align:left; margin-top:8px; } .prototype { min-height:0; } #overview,#workbench,#control { grid-template-columns:1fr; } .rail { border-right:0; border-bottom:1px solid var(--line); } .nav { grid-template-columns:repeat(3,1fr); } .brand { padding-bottom:8px; } .mail { grid-template-columns:1fr auto; } .origin { grid-column:1; } .split { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="top">
+      <div><h1>Companion navigation</h1><p>Issue 09 · throwaway information-architecture comparison</p></div>
+      <div class="note">All variants keep source account and provider placement visible. They differ in what becomes the primary work surface.</div>
+    </div>
+
+    <section id="overview" class="prototype card">
+      <aside class="rail"><div class="brand">MailGent</div><nav class="nav"><button class="active">Search & review</button><button>Drafts <span class="badge">2</span></button><button>Approvals <span class="badge">3</span></button><button>Policies</button><button>Audit</button></nav></aside>
+      <section class="content">
+        <div class="eyebrow">Variant A · search-first</div><h2>Find mail across accounts</h2><p class="sub">Default landing place. Other control-plane work lives in dedicated sections.</p>
+        <div class="search"><input aria-label="Search" value="quarterly planning"><button>Search</button></div>
+        <div class="filters"><button class="chip on">All accounts</button><button class="chip">Work Gmail</button><button class="chip">Personal Yahoo</button><button class="chip">Last 30 days</button></div>
+        <div class="list">
+          <article class="mail"><div><div class="sender">Ava Chen</div><div class="origin"><span class="source gmail">Work Gmail</span><span>Inbox</span></div></div><div><div class="subject">Q3 planning notes</div><div class="snippet">Here is the revised schedule and proposed next steps…</div></div><div class="time">10:32</div></article>
+          <article class="mail"><div><div class="sender">Marcus Ltd.</div><div class="origin"><span class="source yahoo">Personal Yahoo</span><span>Archive</span></div></div><div><div class="subject">Quarterly statement ready</div><div class="snippet">Your new statement is ready to review in the portal…</div></div><div class="time">Yesterday</div></article>
+          <article class="mail"><div><div class="sender">Product team</div><div class="origin"><span class="source gmail">Work Gmail</span><span>Projects</span></div></div><div><div class="subject">Planning workshop follow-up</div><div class="snippet">Thanks for joining. Notes and actions are attached…</div></div><div class="time">Fri</div></article>
+        </div>
+      </section>
+    </section>
+
+    <section id="workbench" class="prototype card hidden">
+      <aside class="rail"><div class="brand">MailGent</div><nav class="nav"><button class="active">Review desk</button><button>Search</button><button>Policies</button><button>Audit</button></nav></aside>
+      <section class="content">
+        <div class="eyebrow">Variant B · review desk</div><h2>One work queue, context beside it</h2><p class="sub">Search results, drafts, and agent proposals share one queue; selected item opens in an inspector.</p>
+        <div class="split">
+          <div class="pane"><h3>Review queue</h3><p class="sub">Filtered: all accounts · 5 items</p>
+            <div class="queue"><div class="queue-item selected"><strong>Q3 planning notes</strong><span class="source gmail">Work Gmail · Inbox</span><p>Mail result · Ava Chen · 10:32</p></div><div class="queue-item"><strong>Send draft to Ava Chen</strong><span class="risk">Agent proposal · approval needed</span><p>Cursor · Work Gmail · From: you@company.com</p></div><div class="queue-item"><strong>Move 2 receipts to Archive</strong><span class="risk">Agent proposal · approval needed</span><p>Hermes · Personal Yahoo</p></div></div>
+          </div>
+          <div class="pane"><h3>Q3 planning notes</h3><div class="origin"><span class="source gmail">Work Gmail</span><span>Inbox · received today 10:32</span></div><div class="message"><p><strong>From:</strong> Ava Chen &lt;ava@company.com&gt;</p><p><strong>To:</strong> you@company.com</p><p>Here is the revised schedule. Can you confirm availability for Tuesday?</p></div><div class="actions"><button class="primary">Open in Apple Mail</button><button class="secondary">Create draft reply</button><button class="secondary">View source details</button></div></div>
+        </div>
+      </section>
+    </section>
+
+    <section id="control" class="prototype card hidden">
+      <aside class="rail"><div class="brand">MailGent</div><nav class="nav"><button class="active">Control center</button><button>Mail search</button><button>Drafts</button><button>Policies</button><button>Audit</button></nav></aside>
+      <section class="content">
+        <div class="eyebrow">Variant C · control-first</div><h2>Security and agent state first</h2><p class="sub">Landing page is a safety dashboard. Search remains a separate, deliberate destination.</p>
+        <div class="split">
+          <div class="pane"><h3>Needs attention</h3><div class="queue"><div class="queue-item"><strong>3 mutation proposals</strong><p>Two moves to Archive, one draft ready to send. Review before they expire.</p><button class="primary">Review approvals</button></div><div class="queue-item"><strong>Work Gmail sync healthy</strong><p><span class="status">Up to date</span> · Last synced 1 minute ago</p></div><div class="queue-item"><strong>Personal Yahoo needs reauth</strong><p><span class="risk">Action needed</span> · No agent access until reconnect.</p><button class="secondary">Reconnect account</button></div></div></div>
+          <div class="pane"><h3>Recent agent activity</h3><div class="audit"><span>10:31</span><span>Cursor searched granted Work Gmail mail</span><span class="status">Allowed</span></div><div class="audit"><span>10:29</span><span>Hermes proposed moving 2 Yahoo receipts to Archive</span><span class="risk">Pending</span></div><div class="audit"><span>Yesterday</span><span>Policy “Work contacts only” changed for Cursor</span><span class="status">Recorded</span></div><div class="actions" style="margin-top:14px"><button class="secondary">Inspect audit</button><button class="secondary">Manage agents & policies</button><button class="primary">Search mail</button></div></div>
+        </div>
+      </section>
+    </section>
+
+    <nav class="floating" aria-label="Prototype variations">
+      <button data-view="overview" class="active">A · Search-first</button>
+      <button data-view="workbench">B · Review desk</button>
+      <button data-view="control">C · Control-first</button>
+    </nav>
+  </main>
+  <script>
+    const views = ["overview", "workbench", "control"];
+    const choose = (view) => {
+      views.forEach((id) => document.getElementById(id).classList.toggle("hidden", id !== view));
+      document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+      history.replaceState(null, "", `?view=${view}`);
+    };
+    document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => choose(button.dataset.view)));
+    const initial = new URLSearchParams(location.search).get("view");
+    if (views.includes(initial)) choose(initial);
+  </script>
+</body>
+</html>
