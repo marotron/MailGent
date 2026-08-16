@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailGent — Remaining mailbox-model challenges</title>
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --ink: #1a1a1a;
+      --muted: #5c5a56;
+      --line: #d9d2c5;
+      --gmail: #c5221f;
+      --gmail-soft: #fce8e6;
+      --yahoo: #6001d2;
+      --yahoo-soft: #f3e8ff;
+      --ok: #0f6b3c;
+      --ok-soft: #e6f4ec;
+      --warn: #8a5a00;
+      --warn-soft: #fff4d6;
+      --bad: #9b1c1c;
+      --bad-soft: #fde8e8;
+      --ask: #1d4f91;
+      --ask-soft: #e8f0fb;
+      --card: #fffdf9;
+      --shadow: 0 1px 0 rgba(26, 26, 26, 0.04), 0 12px 32px rgba(26, 26, 26, 0.06);
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+      --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --ui: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #efe6d6 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #e8efe9 0%, transparent 50%),
+        var(--bg);
+      font-family: var(--ui);
+      line-height: 1.5;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-family: var(--sans);
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    .lede {
+      font-size: 1.125rem;
+      color: var(--muted);
+      max-width: 44rem;
+      margin: 0 0 28px;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--card);
+    }
+    .badge.locked {
+      background: var(--ok-soft);
+      border-color: #b7dfc7;
+      color: var(--ok);
+    }
+    .badge.open {
+      background: var(--warn-soft);
+      border-color: #f0d48a;
+      color: var(--warn);
+    }
+    section {
+      margin: 48px 0;
+      scroll-margin-top: 24px;
+    }
+    h2 {
+      font-family: var(--sans);
+      font-size: 1.55rem;
+      margin: 0 0 8px;
+      letter-spacing: -0.015em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 0 0 8px;
+    }
+    .section-intro {
+      color: var(--muted);
+      max-width: 46rem;
+      margin: 0 0 20px;
+    }
+    .status {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+    }
+    .status.decide {
+      background: var(--ask-soft);
+      color: var(--ask);
+      border-color: #b7cce8;
+    }
+    .status.clarify {
+      background: var(--warn-soft);
+      color: var(--warn);
+      border-color: #f0d48a;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    .panel.gmail { border-top: 4px solid var(--gmail); }
+    .panel.yahoo { border-top: 4px solid var(--yahoo); }
+    .provider {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .provider.gmail { color: var(--gmail); }
+    .provider.yahoo { color: var(--yahoo); }
+    .msg {
+      border: 1px dashed var(--line);
+      padding: 12px;
+      margin: 10px 0;
+      background: #fff;
+    }
+    .msg-subject { font-weight: 650; margin-bottom: 4px; }
+    .msg-meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .chip {
+      font-size: 0.78rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 600;
+    }
+    .chip.label {
+      background: var(--gmail-soft);
+      color: var(--gmail);
+      border-color: #f5c2be;
+    }
+    .chip.folder {
+      background: var(--yahoo-soft);
+      color: var(--yahoo);
+      border-color: #d4b3ff;
+    }
+    .chip.flag {
+      background: #eef1f4;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+    .chip.fake {
+      background: var(--bad-soft);
+      color: var(--bad);
+      border-color: #f0b4b4;
+      text-decoration: line-through;
+    }
+    .chip.virtual {
+      background: var(--ask-soft);
+      color: var(--ask);
+      border-color: #b7cce8;
+      border-style: dashed;
+    }
+    .callout {
+      border: 1px solid var(--line);
+      padding: 14px 16px;
+      margin-top: 16px;
+      background: #fff;
+    }
+    .callout.ok { background: var(--ok-soft); border-color: #b7dfc7; }
+    .callout.warn { background: var(--warn-soft); border-color: #f0d48a; }
+    .callout.bad { background: var(--bad-soft); border-color: #f0b4b4; }
+    .callout.ask { background: var(--ask-soft); border-color: #b7cce8; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      font-size: 0.95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: #f3efe7;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .choice {
+      border: 1px solid var(--line);
+      background: var(--card);
+      padding: 14px 16px;
+      margin-top: 10px;
+    }
+    .choice-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--ask);
+      margin-bottom: 6px;
+    }
+    .arrow {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding: 8px 0;
+    }
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 16px 18px;
+      margin-bottom: 8px;
+    }
+    .toc ol {
+      margin: 8px 0 0;
+      padding-left: 1.25rem;
+    }
+    .toc a {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .toc li { margin: 4px 0; }
+    .settled {
+      display: grid;
+      gap: 8px;
+    }
+    .settled-item {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      background: var(--ok-soft);
+      border: 1px solid #b7dfc7;
+    }
+    .check {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      border: 1px solid #b7dfc7;
+      color: var(--ok);
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: #efe9dd;
+      padding: 1px 5px;
+    }
+    .footer-note {
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 46rem;
+    }
+    .compare-flow {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .flow-step {
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+    }
+    .flow-step .who {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="badge-row">
+      <span class="badge">MailGent product grilling</span>
+      <span class="badge">Ticket 05 · follow-up</span>
+      <span class="badge locked">Partly decided</span>
+      <span class="badge open">4 challenges left</span>
+    </div>
+
+    <h1>Remaining challenges before we lock the mailbox model</h1>
+    <p class="lede">
+      You already locked several rules. This page only explains what is still
+      unsettled — where your “labels for both” idea collides with how Gmail and
+      Yahoo actually work, and the two decisions still needed to finish ticket 05.
+    </p>
+
+    <nav class="toc" aria-label="Contents">
+      <strong>On this page</strong>
+      <ol>
+        <li><a href="#settled">Already settled (skip if you remember)</a></li>
+        <li><a href="#c1">Challenge A — Gmail Archive is not a label</a></li>
+        <li><a href="#c2">Challenge B — Placement labels vs flags</a></li>
+        <li><a href="#c3">Challenge C — Trash vs hard delete</a></li>
+        <li><a href="#c4">Challenge D — Unified search (still unanswered)</a></li>
+        <li><a href="#decide">What to answer next</a></li>
+      </ol>
+    </nav>
+
+    <section id="settled">
+      <h2>Already settled</h2>
+      <p class="section-intro">These are treated as decided from your last reply. Not re-litigated here.</p>
+      <div class="settled">
+        <div class="settled-item">
+          <div class="check">✓</div>
+          <div><strong>Shared “label” vocabulary</strong> for both providers, with Yahoo limited to <em>one</em> placement label.</div>
+        </div>
+        <div class="settled-item">
+          <div class="check">✓</div>
+          <div><strong>Remember provider semantics</strong> when mapping user actions (especially archive / move).</div>
+        </div>
+        <div class="settled-item">
+          <div class="check">✓</div>
+          <div><strong>No cross-account threads.</strong></div>
+        </div>
+        <div class="settled-item">
+          <div class="check">✓</div>
+          <div><strong>Drafts are account-owned.</strong> Agent must specify account and From identity.</div>
+        </div>
+        <div class="settled-item">
+          <div class="check">✓</div>
+          <div><strong>Hard delete is not available to agents.</strong> It remains available to the human in the UI for Gmail and Yahoo.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="c1">
+      <div class="status decide">Needs your choice</div>
+      <h2>Challenge A — Gmail Archive is not a label</h2>
+      <p class="section-intro">
+        You proposed: for Gmail, archive = remove <code>INBOX</code> <em>and add an Archive label</em>.
+        Yahoo archive = move to Archive folder. Yahoo side is fine. Gmail side fights the real provider.
+      </p>
+
+      <div class="grid-2">
+        <article class="panel gmail">
+          <div class="provider gmail">What Gmail actually does</div>
+          <div class="msg">
+            <div class="msg-subject">Invoice #4412 — Acme Corp</div>
+            <div class="msg-meta">user clicks Archive in Gmail</div>
+            <div class="chips">
+              <span class="chip label" style="opacity:0.35;text-decoration:line-through">INBOX</span>
+              <span class="chip label">Finance</span>
+              <span class="chip label">Vendors/Acme</span>
+            </div>
+          </div>
+          <p>
+            Archive only <strong>removes <code>INBOX</code></strong>. Other labels stay.
+            There is <strong>no system label called <code>ARCHIVE</code></strong>.
+            The message still exists in All Mail.
+          </p>
+        </article>
+
+        <article class="panel gmail">
+          <div class="provider gmail">What “add Archive label” would invent</div>
+          <div class="msg">
+            <div class="msg-subject">Invoice #4412 — Acme Corp</div>
+            <div class="msg-meta">MailGent-only fiction unless you create a user label</div>
+            <div class="chips">
+              <span class="chip label" style="opacity:0.35;text-decoration:line-through">INBOX</span>
+              <span class="chip fake">Archive</span>
+              <span class="chip label">Finance</span>
+            </div>
+          </div>
+          <p>
+            If MailGent adds a real user label <code>Archive</code>, it will
+            <strong>not match</strong> mail archived in Gmail web / Apple Mail
+            (those only dropped Inbox). Policies and search for “Archive” will miss them.
+          </p>
+        </article>
+      </div>
+
+      <div class="grid-2" style="margin-top:16px">
+        <article class="panel yahoo">
+          <div class="provider yahoo">Yahoo — your mapping is fine</div>
+          <div class="msg">
+            <div class="msg-subject">Invoice #4412 — Acme Corp</div>
+            <div class="chips">
+              <span class="chip folder" style="opacity:0.35;text-decoration:line-through">Inbox</span>
+              <span class="chip folder">Archive</span>
+            </div>
+          </div>
+          <p>
+            Single placement label changes from Inbox → Archive (MOVE under the hood).
+            Archive here is a real folder / SPECIAL-USE location.
+          </p>
+        </article>
+
+        <article class="panel">
+          <h3>Safer shared rule</h3>
+          <table>
+            <thead>
+              <tr><th>User says Archive</th><th>MailGent does</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Gmail</td>
+                <td>Remove placement <code>INBOX</code> only</td>
+              </tr>
+              <tr>
+                <td>Yahoo</td>
+                <td>Set the one placement to <code>Archive</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="margin:12px 0 0;color:var(--muted);font-size:0.92rem">
+            Optional: a virtual <span class="chip virtual">Archived</span> <em>view</em>
+            (Gmail: no Inbox/Trash/Spam; Yahoo: placement Archive) without storing a fake Gmail label.
+          </p>
+        </article>
+      </div>
+
+      <div class="callout ask">
+        <strong>Decision needed</strong>
+        Pick one for Gmail archive in the product model:
+        <div class="choice">
+          <div class="choice-label">Option A1 — recommended</div>
+          Archive = remove <code>INBOX</code>. Optional virtual “Archived” view. No Archive label stored on Gmail.
+        </div>
+        <div class="choice">
+          <div class="choice-label">Option A2 — synthetic label</div>
+          MailGent maintains a visible Archive chip/label on Gmail even though Gmail itself does not. Accept drift from Gmail web.
+        </div>
+        <div class="choice">
+          <div class="choice-label">Option A3 — real user label</div>
+          Create/use a user label named Archive on Gmail. Accept that mail archived outside MailGent won’t have it.
+        </div>
+      </div>
+    </section>
+
+    <section id="c2">
+      <div class="status decide">Needs sharper wording</div>
+      <h2>Challenge B — “Labels for both” needs two layers</h2>
+      <p class="section-intro">
+        Calling Yahoo folders “labels” is fine as a teaching metaphor <em>if</em>
+        MailGent separates <strong>placement</strong> (where the mail lives) from
+        <strong>flags</strong> (read, starred, …). Otherwise agents will try illegal second labels on Yahoo.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Gmail</th>
+            <th>Yahoo</th>
+            <th>Cardinality</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Placement</strong></td>
+            <td>Inbox, Trash, user labels like Finance…</td>
+            <td>Inbox, Archive, Finance folder…</td>
+            <td>Gmail: many · Yahoo: exactly one</td>
+          </tr>
+          <tr>
+            <td><strong>Flags</strong></td>
+            <td>UNREAD, STARRED, IMPORTANT…</td>
+            <td>\Seen, \Flagged…</td>
+            <td>Both: many flags allowed with the one placement</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="grid-2" style="margin-top:16px">
+        <div class="callout ok">
+          <strong>Legal on Yahoo</strong>
+          Placement <code>Inbox</code> + flag Starred + flag Unread.
+          Still only one placement label.
+        </div>
+        <div class="callout bad">
+          <strong>Illegal on Yahoo</strong>
+          Placement <code>Inbox</code> + placement <code>Finance</code> at once.
+          That is a Gmail-only pattern. Agent must get a clear fail-closed error.
+        </div>
+      </div>
+
+      <div class="compare-flow">
+        <div class="flow-step">
+          <div class="who">Human / agent intent</div>
+          “Also put this in Finance, keep Inbox”
+        </div>
+        <div class="arrow">↓</div>
+        <div class="grid-2">
+          <div class="flow-step">
+            <div class="who">Gmail</div>
+            Add placement label <code>Finance</code>. Inbox stays. Done.
+          </div>
+          <div class="flow-step">
+            <div class="who">Yahoo</div>
+            Cannot. Must choose: stay Inbox, or move (replace placement with Finance).
+          </div>
+        </div>
+      </div>
+
+      <div class="callout ask">
+        <strong>Decision needed</strong>
+        Confirm product language:
+        <div class="choice">
+          <div class="choice-label">Option B1 — recommended</div>
+          UI may say “labels”; agent/API contract says <strong>placement</strong> (max 1 on Yahoo)
+          plus separate <strong>flags</strong>.
+        </div>
+        <div class="choice">
+          <div class="choice-label">Option B2</div>
+          Call everything “labels” in API too, and encode Yahoo exclusivity only as a runtime error
+          when a second label is added (weaker clarity for agent authors).
+        </div>
+      </div>
+    </section>
+
+    <section id="c3">
+      <div class="status clarify">Mostly decided — one gap</div>
+      <h2>Challenge C — Trash vs hard delete</h2>
+      <p class="section-intro">
+        You locked: agents never get hard delete; humans can hard-delete in the UI.
+        Ticket 05 still needs a one-line stance on <em>trash</em> (soft delete), or we park it for the operations ticket.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Gmail</th>
+            <th>Yahoo</th>
+            <th>Agent?</th>
+            <th>Human UI?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Trash / soft delete</strong></td>
+            <td>Add <code>TRASH</code> (remove from Inbox etc.)</td>
+            <td>Move to Trash folder</td>
+            <td class="ask">?</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td><strong>Hard delete</strong></td>
+            <td>Permanent delete / empty trash</td>
+            <td>Expunge / delete forever</td>
+            <td><strong>No</strong> (locked)</td>
+            <td>Yes (locked)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout ask">
+        <strong>Decision needed</strong>
+        <div class="choice">
+          <div class="choice-label">Option C1 — recommended for this ticket</div>
+          Lock only: permanent delete = human-only. Leave agent trash/move-to-trash
+          (approval-gated) to ticket 08 (operations contract).
+        </div>
+        <div class="choice">
+          <div class="choice-label">Option C2</div>
+          Also lock now: agents may propose trash with approval; still never hard delete.
+        </div>
+        <div class="choice">
+          <div class="choice-label">Option C3</div>
+          Agents may not trash either — only humans move to trash; agents stop at draft/read/search.
+        </div>
+      </div>
+    </section>
+
+    <section id="c4">
+      <div class="status decide">Still unanswered</div>
+      <h2>Challenge D — Unified search must not invent a mega-mailbox</h2>
+      <p class="section-intro">
+        You did not answer §3 from the first explainer. Default recommendation below —
+        confirm or change.
+      </p>
+
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div style="padding:10px 12px;background:#f3efe7;border-bottom:1px solid var(--line);font-size:0.85rem;color:var(--muted)">
+          <strong style="color:var(--ink)">Unified search</strong> · query: <code>invoice acme</code>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);align-items:center">
+          <span class="chip label" style="justify-self:start">Gmail</span>
+          <div>
+            <strong>Invoice #4412 — Acme Corp</strong>
+            <div style="font-size:0.82rem;color:var(--muted)">placement: INBOX, Finance, Vendors/Acme</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;padding:12px 14px;align-items:center">
+          <span class="chip folder" style="justify-self:start">Yahoo</span>
+          <div>
+            <strong>Invoice #4412 — Acme Corp</strong>
+            <div style="font-size:0.82rem;color:var(--muted)">placement: Inbox <em>(only one)</em></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:16px">
+        <div class="callout ok">
+          <strong>Good</strong>
+          Ranked merge of per-account hits. Every row shows source account + placement.
+          Separate view = same objects filtered to one account.
+        </div>
+        <div class="callout bad">
+          <strong>Bad</strong>
+          Pretend both invoices are one thread, or one shared Finance mailbox across providers.
+        </div>
+      </div>
+
+      <div class="callout ask">
+        <strong>Decision needed</strong>
+        <div class="choice">
+          <div class="choice-label">Option D1 — recommended</div>
+          Unified = merge hits; always show account + placement; no cross-account thread or fake shared folder.
+        </div>
+        <div class="choice">
+          <div class="choice-label">Option D2</div>
+          Something else — say what you want instead.
+        </div>
+      </div>
+    </section>
+
+    <section id="decide">
+      <h2>What to answer next</h2>
+      <p class="section-intro">
+        Reply with letter choices (example: <code>A1, B1, C1, D1</code>).
+        After that, ticket 05 can be resolved and written into the map.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Topic</th>
+            <th>Recommended</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="#c1">A</a></td>
+            <td>Gmail archive representation</td>
+            <td>A1 — drop INBOX only; optional virtual Archived view</td>
+          </tr>
+          <tr>
+            <td><a href="#c2">B</a></td>
+            <td>Labels vs placement/flags language</td>
+            <td>B1 — UI “labels”; contract = placement + flags</td>
+          </tr>
+          <tr>
+            <td><a href="#c3">C</a></td>
+            <td>Trash vs hard delete scope</td>
+            <td>C1 — hard delete human-only now; agent trash later in ticket 08</td>
+          </tr>
+          <tr>
+            <td><a href="#c4">D</a></td>
+            <td>Unified search</td>
+            <td>D1 — merge hits with source account + placement always visible</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="footer-note">
+      Companion to
+      <code>examples/mailbox-model-problem.html</code>.
+      For Wayfinder ticket
+      <code>05-define-canonical-mailbox-model</code>.
+      Open in a browser while grilling — not product UI.
+    </p>
+  </main>
+</body>
+</html>

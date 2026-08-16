@@ -12,12 +12,13 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - Platform: macOS first. iPhone and iPad follow after the core companion proves useful.
 - v1 providers: Gmail and Yahoo. Microsoft 365/Exchange and Proton belong to a later version.
 - Product role: agent-safe companion alongside Apple Mail, not a replacement daily client.
-- Human surfaces: account connection; unified and per-account scoped search/read; draft inspection/editing; mutation approvals; policy and audit management; opening source messages in Apple Mail.
+- Human surfaces: account connection; unified and per-account scoped search/read; draft inspection/editing; mutation approvals; policy and audit management; opening source messages in Apple Mail; soft delete (Trash) and hard delete (permanent) for Gmail and Yahoo.
 - External-agent access is the differentiator; no built-in assistant in v1.
 - Device-first: mailbox cache, search index, credentials, and policy enforcement stay on-device. MailGent cloud does not read mailbox content.
 - Local agents can connect directly. Remote agents require explicit user-mediated sessions. No unattended inbound endpoint.
 - Every agent has its own identity, scopes, capabilities, revocable grants, and comprehensive append-only access log. Trusted local agents may receive private scopes denied to remote agents.
-- Agent reads/searches are restricted to explicit grants. Agents may create drafts. Send, delete, move, and other mutations require human approval.
+- Agent reads/searches are restricted to explicit grants. Agents may create drafts. Send, soft delete (move/label to Trash), move, and other mutations require human approval.
+- Hard delete (permanent purge) is human-UI-only for Gmail and Yahoo. Agents must not propose, request, or invoke hard delete — no tool, grant, or approval path exposes it.
 - v1 policy selectors: account, folder/mailbox, sender/recipient address or domain, date range, headers/body/attachments, and reusable allow/deny smart folders.
 - Approval starts as a simple in-app action queue. Optional macOS notifications are configurable by event severity and remain local.
 - Use `/prototype` for prototype tickets and `/research` for research tickets.
@@ -28,6 +29,8 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Define v1 Success and Product Acceptance Boundary](issues/01-define-v1-success.md) — v1 is a macOS agent-safe companion to Apple Mail with scoped access, approvals, revocation, comprehensive local auditing, and optional local notifications
 - [Research Apple Platform Constraints](issues/03-research-apple-platform-constraints.md) — macOS sync needs consented helpers (no native BGAppRefresh); Keychain for tokens; sandboxed XPC/localhost for agents; local notifications OK; MAS sandbox vs Developer ID+notarization choice pending
 - [Research External-Agent Interface Protocols](issues/04-research-agent-interface-protocols.md) — MCP best wire protocol (MailGent as server); product must own identity, grants, approvals, audit, remote sessions; A2A/App Intents/tool-calling are complementary not substitutes
+- Soft vs hard delete — Agent-facing `delete` means soft delete to Trash (approval-gated). Hard/permanent delete is available only in the human companion UI for Gmail and Yahoo; never exposed to agents
+- [Define the Canonical Mailbox Model](issues/05-define-canonical-mailbox-model.md) — Placement vs flags (Yahoo max one placement); archive = Gmail drop INBOX / Yahoo Archive folder + virtual Archived view; no cross-account threads; drafts owned by one account+From; unified search merges hits with account+placement; hard delete human-only (agent trash detail in 08)
 
 ## Not yet specified
 
@@ -44,5 +47,5 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - Built-in AI assistant or model hosting.
 - Regex, wildcard, or AI-classified access rules.
 - Unattended remote-agent access.
-- Replacement-mail-client behavior, iPhone/iPad delivery, inbox notifications, manual filing, daily-client parity, calendar, contacts management, advanced visual customization, and server-side rule editing.
+- Replacement-mail-client behavior, iPhone/iPad delivery, inbox notifications, manual filing, daily-client parity, calendar, contacts management, advanced visual customization, and server-side rule editing. (Companion soft/hard delete for Gmail and Yahoo remains in scope; hard delete is human-UI-only.)
 - Technical architecture, framework selection, storage implementation, build plan, and implementation tickets.

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailGent — Why a canonical mailbox model is hard</title>
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --ink: #1a1a1a;
+      --muted: #5c5a56;
+      --line: #d9d2c5;
+      --gmail: #c5221f;
+      --gmail-soft: #fce8e6;
+      --yahoo: #6001d2;
+      --yahoo-soft: #f3e8ff;
+      --ok: #0f6b3c;
+      --ok-soft: #e6f4ec;
+      --warn: #8a5a00;
+      --warn-soft: #fff4d6;
+      --bad: #9b1c1c;
+      --bad-soft: #fde8e8;
+      --card: #fffdf9;
+      --shadow: 0 1px 0 rgba(26, 26, 26, 0.04), 0 12px 32px rgba(26, 26, 26, 0.06);
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+      --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --ui: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #efe6d6 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #e8efe9 0%, transparent 50%),
+        var(--bg);
+      font-family: var(--ui);
+      line-height: 1.5;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-family: var(--sans);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    .lede {
+      font-size: 1.125rem;
+      color: var(--muted);
+      max-width: 42rem;
+      margin: 0 0 36px;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--card);
+    }
+    section {
+      margin: 48px 0;
+    }
+    h2 {
+      font-family: var(--sans);
+      font-size: 1.6rem;
+      margin: 0 0 8px;
+      letter-spacing: -0.015em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 0 0 8px;
+    }
+    .section-intro {
+      color: var(--muted);
+      max-width: 46rem;
+      margin: 0 0 20px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 18px 18px 16px;
+    }
+    .panel.gmail { border-top: 4px solid var(--gmail); }
+    .panel.yahoo { border-top: 4px solid var(--yahoo); }
+    .provider {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .provider.gmail { color: var(--gmail); }
+    .provider.yahoo { color: var(--yahoo); }
+    .msg {
+      border: 1px dashed var(--line);
+      padding: 12px;
+      margin: 10px 0;
+      background: #fff;
+    }
+    .msg-subject {
+      font-weight: 650;
+      margin-bottom: 4px;
+    }
+    .msg-meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .chip {
+      font-size: 0.78rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 600;
+    }
+    .chip.label {
+      background: var(--gmail-soft);
+      color: var(--gmail);
+      border-color: #f5c2be;
+    }
+    .chip.folder {
+      background: var(--yahoo-soft);
+      color: var(--yahoo);
+      border-color: #d4b3ff;
+    }
+    .chip.system {
+      background: #eef1f4;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+    .folder-tree {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.7;
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+    .folder-tree strong { color: var(--ink); }
+    .callout {
+      border: 1px solid var(--line);
+      padding: 14px 16px;
+      margin-top: 16px;
+      background: #fff;
+    }
+    .callout.ok { background: var(--ok-soft); border-color: #b7dfc7; }
+    .callout.warn { background: var(--warn-soft); border-color: #f0d48a; }
+    .callout.bad { background: var(--bad-soft); border-color: #f0b4b4; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      font-size: 0.95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: #f3efe7;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .scenario {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 12px;
+      align-items: start;
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 14px;
+    }
+    .step-num {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      background: #ece6da;
+      border: 1px solid var(--line);
+    }
+    .fake-ui {
+      border: 1px solid var(--line);
+      background: #fff;
+      margin-top: 12px;
+    }
+    .fake-ui-bar {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f3efe7;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .fake-ui-bar .active {
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .result-row {
+      display: grid;
+      grid-template-columns: 110px 1fr auto;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      align-items: center;
+    }
+    .result-row:last-child { border-bottom: 0; }
+    .acct {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 4px 7px;
+      border: 1px solid var(--line);
+      text-align: center;
+    }
+    .acct.g { background: var(--gmail-soft); color: var(--gmail); border-color: #f5c2be; }
+    .acct.y { background: var(--yahoo-soft); color: var(--yahoo); border-color: #d4b3ff; }
+    .result-title { font-weight: 650; }
+    .result-sub { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+    .footer-note {
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 46rem;
+    }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: #efe9dd;
+      padding: 1px 5px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="badge-row">
+      <span class="badge">MailGent product grilling</span>
+      <span class="badge">Ticket 05 · Canonical mailbox model</span>
+    </div>
+
+    <h1>Same email. Two provider worlds.</h1>
+    <p class="lede">
+      MailGent needs one shared way to talk about accounts, messages, drafts, and search —
+      without pretending Gmail labels and Yahoo folders work the same. Below are concrete
+      examples of where the models collide.
+    </p>
+
+    <section>
+      <h2>1. One message, two placement rules</h2>
+      <p class="section-intro">
+        Imagine the same invoice arrives in a Gmail account and a Yahoo account.
+        Where does it “live”?
+      </p>
+
+      <div class="grid-2">
+        <article class="panel gmail">
+          <div class="provider gmail">Gmail · labels (many-to-many)</div>
+          <div class="msg">
+            <div class="msg-subject">Invoice #4412 — Acme Corp</div>
+            <div class="msg-meta">from: billing@acme.com · id: 18c2…</div>
+            <div class="chips">
+              <span class="chip label">INBOX</span>
+              <span class="chip label">Finance</span>
+              <span class="chip label">Vendors/Acme</span>
+              <span class="chip system">UNREAD</span>
+            </div>
+          </div>
+          <p>
+            One message can wear <strong>several labels at once</strong>.
+            Removing <code>INBOX</code> does not delete the message; it can still be under
+            <code>Finance</code> and <code>Vendors/Acme</code>.
+          </p>
+          <div class="callout ok">
+            <strong>Honest model</strong>
+            Message has a <em>set of labels</em>.
+          </div>
+        </article>
+
+        <article class="panel yahoo">
+          <div class="provider yahoo">Yahoo · folders (usually one place)</div>
+          <div class="msg">
+            <div class="msg-subject">Invoice #4412 — Acme Corp</div>
+            <div class="msg-meta">from: billing@acme.com · uid: 90211</div>
+            <div class="chips">
+              <span class="chip folder">Inbox</span>
+              <span class="chip system">\Seen = false</span>
+            </div>
+          </div>
+          <div class="folder-tree">
+            Inbox<br />
+            &nbsp;&nbsp;└─ <strong>Invoice #4412</strong> ← lives here<br />
+            Finance<br />
+            Vendors<br />
+            &nbsp;&nbsp;└─ Acme
+          </div>
+          <p>
+            Moving it to <code>Finance</code> typically <strong>removes it from Inbox</strong>.
+            It is not simultaneously in both places the way a Gmail label set is.
+          </p>
+          <div class="callout ok">
+            <strong>Honest model</strong>
+            Message has a <em>primary folder</em> (plus SPECIAL-USE roles like Sent/Drafts).
+          </div>
+        </article>
+      </div>
+
+      <div class="callout bad" style="margin-top:16px">
+        <strong>Bad abstraction: “everything is a folder”</strong>
+        If MailGent forces Gmail into exclusive folders, “also keep Finance + Vendors/Acme”
+        becomes impossible or fake. If it forces Yahoo into multi-label semantics, “move to Finance”
+        becomes ambiguous (copy? tag? leave Inbox?).
+      </div>
+    </section>
+
+    <section>
+      <h2>2. “Archive” means different operations</h2>
+      <p class="section-intro">
+        Users and agents both say “archive this.” Providers implement that differently.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>User intent</th>
+            <th>Gmail reality</th>
+            <th>Yahoo reality</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Archive invoice</td>
+            <td>Remove <code>INBOX</code> label; message remains with other labels / All Mail</td>
+            <td>Move message into an Archive / All Mail style folder (SPECIAL-USE if present)</td>
+          </tr>
+          <tr>
+            <td>Still find it under Finance?</td>
+            <td>Yes, if <code>Finance</code> label remains</td>
+            <td>Only if it was moved/copied into a Finance folder — usually no longer in Inbox</td>
+          </tr>
+          <tr>
+            <td>Agent tool if naively named <code>archive()</code></td>
+            <td>Must map to label mutation</td>
+            <td>Must map to folder MOVE</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>3. Unified search must not invent a mega-mailbox</h2>
+      <p class="section-intro">
+        You connect <code>alex@gmail.com</code> and <code>alex@yahoo.com</code>, then search
+        <code>invoice acme</code>. Results should feel unified, but each hit still belongs
+        to one account and one placement model.
+      </p>
+
+      <div class="fake-ui">
+        <div class="fake-ui-bar">
+          <span class="active">Unified search</span>
+          <span>·</span>
+          <span>query: invoice acme</span>
+        </div>
+        <div class="result-row">
+          <span class="acct g">Gmail</span>
+          <div>
+            <div class="result-title">Invoice #4412 — Acme Corp</div>
+            <div class="result-sub">labels: INBOX, Finance, Vendors/Acme</div>
+          </div>
+          <span class="chip system">unread</span>
+        </div>
+        <div class="result-row">
+          <span class="acct y">Yahoo</span>
+          <div>
+            <div class="result-title">Invoice #4412 — Acme Corp</div>
+            <div class="result-sub">folder: Inbox</div>
+          </div>
+          <span class="chip system">unread</span>
+        </div>
+        <div class="result-row">
+          <span class="acct g">Gmail</span>
+          <div>
+            <div class="result-title">Re: Invoice #4412 — paid</div>
+            <div class="result-sub">thread with previous Gmail message · labels: Finance</div>
+          </div>
+          <span class="chip system">read</span>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:16px">
+        <div class="callout ok">
+          <strong>Good unified view</strong>
+          Ranked merge of per-account hits. Every row shows source account + provider placement.
+        </div>
+        <div class="callout bad">
+          <strong>Bad unified view</strong>
+          Pretend both invoices are one thread, or one shared “Finance folder” across providers.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Threads do not cross accounts</h2>
+      <p class="section-intro">
+        Gmail has first-class threads. Yahoo may expose conversation/thread ids via IMAP extensions.
+        Neither means MailGent should glue two provider inboxes into one conversation object.
+      </p>
+      <div class="scenario">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div>
+            <h3>Work reply on Gmail</h3>
+            <p>You discuss a contract on <code>alex@gmail.com</code>. Gmail groups 6 messages as one thread.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div>
+            <h3>Same person mails your Yahoo</h3>
+            <p>They accidentally send the next reply to <code>alex@yahoo.com</code>. Subject looks related.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div>
+            <h3>Product rule for v1</h3>
+            <p>
+              MailGent may show them near each other in search results, but must <strong>not</strong>
+              invent a cross-account thread id. Agents must not “reply in thread” across providers.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Drafts are owned by one account</h2>
+      <p class="section-intro">
+        An agent drafts “Thanks, payment sent.” That draft must live somewhere concrete.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Choice</th>
+            <th>What happens</th>
+            <th>Verdict for companion v1</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Draft on Gmail account</td>
+            <td>Stored as Gmail draft (labels/Drafts); send uses Gmail identity</td>
+            <td>Valid — account-owned</td>
+          </tr>
+          <tr>
+            <td>Draft on Yahoo account</td>
+            <td>Stored in Yahoo Drafts folder; send uses Yahoo identity</td>
+            <td>Valid — account-owned</td>
+          </tr>
+          <tr>
+            <td>“Floating” draft with no account</td>
+            <td>Looks convenient until send time: which From? which Sent folder?</td>
+            <td>Reject for v1</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn" style="margin-top:16px">
+        <strong>Why this matters for agents</strong>
+        Mutation approval (“allow send”) is meaningless unless the draft already names the
+        owning account and From identity.
+      </div>
+    </section>
+
+    <section>
+      <h2>6. What breaks if MailGent lies</h2>
+      <div class="grid-2">
+        <article class="panel">
+          <h3>Policy / smart folder: “Finance mail”</h3>
+          <p>
+            User grants an agent access to Finance.
+          </p>
+          <ul>
+            <li><strong>Gmail:</strong> messages with label <code>Finance</code> (even if not in Inbox)</li>
+            <li><strong>Yahoo:</strong> messages currently in folder <code>Finance</code></li>
+          </ul>
+          <div class="callout warn">
+            <strong>Same policy name, different membership rules</strong>
+            The grant UI must explain that, or users will think Yahoo Inbox mail tagged mentally as “finance” is included when it is not.
+          </div>
+        </article>
+        <article class="panel">
+          <h3>Agent action: “remove from Inbox”</h3>
+          <ul>
+            <li><strong>Gmail:</strong> strip <code>INBOX</code> label</li>
+            <li><strong>Yahoo:</strong> MOVE out of Inbox into another folder — destination required</li>
+          </ul>
+          <div class="callout bad">
+            <strong>One tool, two semantics</strong>
+            Without provider-specific facts on the canonical message, the agent API either fails closed or does the wrong thing.
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>7. The decision this ticket must lock</h2>
+      <p class="section-intro">
+        Not “which database tables,” but the product nouns humans and agents share.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Shared noun</th>
+            <th>Same across providers?</th>
+            <th>Provider-specific fact that must remain visible</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Account</td>
+            <td>Yes — one login</td>
+            <td>Provider = Gmail or Yahoo</td>
+          </tr>
+          <tr>
+            <td>Identity (From)</td>
+            <td>Yes — belongs to an account</td>
+            <td>Send-as aliases differ by provider</td>
+          </tr>
+          <tr>
+            <td>Message</td>
+            <td>Yes — atomic email</td>
+            <td>Provider ids, flags, attachment handling</td>
+          </tr>
+          <tr>
+            <td>Thread</td>
+            <td>Only within one account</td>
+            <td>Gmail thread id; Yahoo thread/OBJECTID when available</td>
+          </tr>
+          <tr>
+            <td>Location</td>
+            <td>No single metaphor</td>
+            <td>Gmail: label set · Yahoo: primary folder</td>
+          </tr>
+          <tr>
+            <td>Draft / Sent</td>
+            <td>Yes — account-owned</td>
+            <td>Provider draft/sent locations</td>
+          </tr>
+          <tr>
+            <td>Search hit</td>
+            <td>Yes — always sourced</td>
+            <td>Account + labels or folder on every result</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout ok" style="margin-top:16px">
+        <strong>Recommended product stance</strong>
+        Canonical shared objects for account, identity, message, thread, draft, and search —
+        plus honest provider placement (labels vs folder). Unified and separate views are filters
+        over the same objects. No cross-account threads. No accountless drafts.
+      </div>
+    </section>
+
+    <p class="footer-note">
+      Local explainer for Wayfinder ticket
+      <code>05-define-canonical-mailbox-model</code>.
+      Open this file in a browser while grilling. It is not product UI.
+    </p>
+  </main>
+</body>
+</html>

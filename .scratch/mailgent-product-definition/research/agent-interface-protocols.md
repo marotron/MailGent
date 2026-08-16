@@ -92,7 +92,7 @@ Authorization is **OPTIONAL**. When used ([Authorization](https://modelcontextpr
 
 **Prompts:** templated workflows for users (server feature listed in overview). Useful for guided UX, not for MailGent’s agent identity model.
 
-**Fit for mail ops:** Map `search` / `read_message` as read-only tools or resources; `create_draft` as additive write; `send` / `delete` / `move` as destructive tools that MailGent refuses until the human approval queue clears — protocol carries the call; MailGent enforces the gate.
+**Fit for mail ops:** Map `search` / `read_message` as read-only tools or resources; `create_draft` as additive write; `send` / soft `delete` (Trash) / `move` as destructive tools that MailGent refuses until the human approval queue clears — protocol carries the call; MailGent enforces the gate. Do **not** expose hard/permanent delete as an agent tool; that remains human-UI-only for Gmail and Yahoo.
 
 ### 3.5 Sampling and elicitation (HITL hooks)
 
@@ -198,7 +198,7 @@ Do **not** rely on clients honoring SHOULD-level HITL. Pattern:
 
 1. Mutation tools either (a) create an **approval request** resource and return pending status, or (b) block until elicitation/URL consent completes.  
 2. Human resolves in MailGent UI (product requirement).  
-3. Only then perform send/delete/move.
+3. Only then perform send / soft delete (Trash) / move. Hard/permanent delete is never an agent-proposed mutation.
 
 A2A’s `TASK_STATE_AUTH_REQUIRED` is analogous but for agent tasks, not mail mutations.
 
@@ -227,7 +227,7 @@ Regardless of MCP adoption, primary specs leave these to the implementor:
 1. **Agent identity model** — local trusted vs remote; registration; attestation of local processes.  
 2. **Grant store** — capabilities, mailbox selectors, expiry, revoke, private scopes.  
 3. **Policy enforcement** — every read/search/draft/mutation checked server-side.  
-4. **Approval queue** — human UI for send/delete/move (and any other mutation).  
+4. **Approval queue** — human UI for send / soft delete (Trash) / move (and any other agent-proposed mutation). Hard/permanent delete is a separate human-only companion action, not an approval-gated agent tool.  
 5. **Append-only access log** — comprehensive, agent-attributed, retention, export.  
 6. **Session mediator** — start/stop remote access without unattended inbound.  
 7. **Tool catalog design** — map mail operations to MCP tools/resources with least privilege.  

@@ -12,7 +12,7 @@
 
 | Topic | Confirmed constraint for MailGent v1 |
 | --- | --- |
-| Gmail access path | Prefer **Gmail API + OAuth 2.0** with least-privilege restricted scopes (`gmail.modify` / `gmail.readonly` + compose/send as needed). Avoid IMAP/SMTP unless permanent-delete-bypass-trash is required — IMAP/SMTP forces `https://mail.google.com/` and fails minimum-scope review if used for ordinary client features. |
+| Gmail access path | Prefer **Gmail API + OAuth 2.0**. Soft delete / modify / compose use least-privilege restricted scopes (`gmail.modify` / `gmail.readonly` + compose/send as needed). **Human UI hard delete** requires permanent-delete capability → `https://mail.google.com/` (or equivalent full-mail scope). Avoid IMAP/SMTP as the primary Gmail path — it also forces that full scope and fails minimum-scope review when used only for ordinary client features. |
 | Yahoo access path | **No proprietary Mail REST API** for third parties. Access is **IMAP + SMTP with OAuth 2.0** (`mail-r` / `mail-w`), after Yahoo **approves** commercial developer access. App passwords exist for clients that do not use Yahoo branded sign-in — weaker UX/security; OAuth is the intended path for a modern client. |
 | Auth UX on Apple | Use system browser / **ASWebAuthenticationSession** (or Google’s Sign In with Google iOS SDK for Gmail). Installed apps are public clients: **PKCE**, no embedded client secret in the app binary for Google. Yahoo token exchange docs assume `client_id` + `client_secret` — store secret carefully (Keychain / backend) or clarify with Yahoo whether native public-client patterns are allowed for approved mail apps. |
 | Push / sync | Gmail real-time push = **Cloud Pub/Sub** → webhook or pull on a **backend**; `users.watch` must be renewed ≤ every 7 days. Device-only polling / history sync remains required as fallback. Yahoo push = **IMAP IDLE** (+ CONDSTORE / HIGHESTMODSEQ / All Mail); IDLE does not report deletes/expunge. |
@@ -156,7 +156,7 @@ Sources: [Google Workspace OAuth considerations](https://developers.google.com/i
 
 ### 6.1 Provider strategy
 
-1. **Gmail:** Ship as **Gmail API client** with scopes justified to minimum set for the locked human baseline (likely `gmail.modify` or `gmail.readonly` + `gmail.compose` / send path — all restricted except pure `gmail.send`). Do **not** plan IMAP as the primary Gmail path for App Store launch.
+1. **Gmail:** Ship as **Gmail API client**. Soft-delete and ordinary mutations use restricted scopes (`gmail.modify` / compose/send as needed). **Human UI hard/permanent delete** is in product scope → plan for `https://mail.google.com/` (or justify the permanent-delete path under minimum-scope review). Agents never call permanent delete. Do **not** plan IMAP as the primary Gmail path for App Store launch.
 2. **Yahoo:** Plan **IMAP/SMTP OAuth** only; start **Yahoo commercial access application early** — it is a launch blocker, not a polish task.
 3. **Unified mailbox model** must abstract Gmail labels vs Yahoo folders (ticket `05-define-canonical-mailbox-model`).
 
@@ -171,6 +171,18 @@ Sources: [Google Workspace OAuth considerations](https://developers.google.com/i
 - Keep **mailbox content, search index, and tokens on-device** to maximize chance of avoiding CASA and to align with Yahoo/Google transfer bans.
 - External **remote agents** must not become a silent redistribution of Yahoo/Google mailbox data; prefer local agents + explicit mediated sessions with disclosed consent (map Notes).
 
+### 6.3a Delete semantics (product lock)
+
+| Actor | Soft delete (Trash) | Hard delete (permanent) |
+| --- | --- | --- |
+| Agent | Allowed as approval-gated mutation (`delete` → Trash) | **Forbidden** — no tool, grant, or approval path |
+| Human UI | Available for Gmail and Yahoo | Available for Gmail and Yahoo |
+
+- **Gmail soft:** `messages.trash` / label to `TRASH` under `gmail.modify`.
+- **Gmail hard:** `messages.delete` / `batchDelete` under `https://mail.google.com/`.
+- **Yahoo soft:** IMAP `UID MOVE` (or copy+delete) Inbox → `\Trash`.
+- **Yahoo hard:** IMAP `\Deleted` + `EXPUNGE` (typically from Trash or source mailbox).
+
 ### 6.4 Multi-account
 
 - Support consumer Gmail + Workspace with UX for “admin blocked this app.”
@@ -182,7 +194,7 @@ Sources: [Google Workspace OAuth considerations](https://developers.google.com/i
 | # | Constraint |
 | --- | --- |
 | G1 | OAuth only for Gmail (no password collection). |
-| G2 | Prefer Gmail API; avoid `https://mail.google.com/` unless permanent delete bypassing trash is a hard requirement. |
+| G2 | Prefer Gmail API. Soft delete → Trash via `gmail.modify` (or `messages.trash`). Human UI hard delete → `messages.delete` / `batchDelete` requires `https://mail.google.com/`; agents must not get this op. Avoid IMAP as primary Gmail path. |
 | G3 | Restricted-scope verification before >100 users. |
 | G4 | Encrypt OAuth tokens at rest (Keychain); Limited Use disclosure in product + privacy policy. |
 | G5 | Implement history sync + full-resync on 404; do not rely solely on Pub/Sub. |
