@@ -1,0 +1,1659 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: answers issue 11. Open in browser. ?view=queue|focus|batch
+     Styling + icons aligned with prototype-policy-authoring.html. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Mutation approval prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #e1e6ef;
+      --line-strong: #c9d1df;
+      --canvas: #f3f5f9;
+      --paper: #ffffff;
+      --blue: #2a4fc7;
+      --blue-ink: #1a3aa8;
+      --blue-soft: #eef2ff;
+      --amber: #9a6700;
+      --green: #0b7a56;
+      --red: #b4232f;
+      --violet: #5b3db8;
+      --rail: #f8f9fc;
+      --shadow: 0 1px 2px #15203308, 0 12px 32px #1520330c;
+      --radius: 14px;
+      --focus: 0 0 0 3px #2a4fc733;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(1200px 480px at 10% -10%, #e8eeff 0%, transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #f0eef8 0%, transparent 50%),
+        var(--canvas);
+      color: var(--ink);
+      font: 14px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: none; box-shadow: var(--focus);
+    }
+    .icon {
+      width: 16px; height: 16px; flex: none;
+      stroke: currentColor; fill: none; stroke-width: 1.75;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .icon.lg { width: 18px; height: 18px; }
+    .icon.xl { width: 24px; height: 24px; }
+    .icon.sm { width: 14px; height: 14px; }
+    .icon.brand { stroke: none; fill: unset; }
+    .icon.brand.yahoo { fill: currentColor; color: #6001d2; }
+    .shell { min-height: 100vh; padding: 28px 28px 120px; }
+    .top {
+      max-width: 1180px; margin: 0 auto 18px;
+      display: flex; justify-content: space-between; gap: 16px; align-items: end;
+    }
+    h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; font-weight: 650; }
+    .top p { margin: 6px 0 0; color: var(--muted); }
+    .note { max-width: 420px; text-align: right; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .proto { max-width: 1180px; margin: 0 auto; min-height: 660px; overflow: hidden; }
+    .hidden { display: none !important; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--blue); font-size: 11px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+    }
+    h2 { margin: 6px 0 4px; font-size: 21px; letter-spacing: -0.02em; font-weight: 650; }
+    .sub { margin: 0 0 16px; color: var(--muted); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px 3px 7px; border-radius: 999px;
+      font-size: 12px; font-weight: 650; line-height: 1.2;
+    }
+    .pill .icon { width: 13px; height: 13px; }
+    .pill.ok { background: #e8f7f0; color: var(--green); }
+    .pill.warn { background: #fff4db; color: var(--amber); }
+    .pill.warn.expire { font-weight: 400; }
+    .pill.warn.expire .t { font-weight: 650; }
+    .pill.bad { background: #fdecee; color: var(--red); }
+    .pill.neutral { background: #eef1f6; color: #516079; }
+    .pill.write { background: #f1ecff; color: var(--violet); }
+    .pill.send { background: #e8f7f0; color: var(--green); }
+    .pill.move { background: var(--blue-soft); color: var(--blue-ink); }
+    .pill.trash { background: linear-gradient(180deg, #fff8f0, #fff3e6); color: #7a3e12; }
+    .pill.purge { background: var(--red); color: #fff; }
+    .pill.flag { background: #f1ecff; color: var(--violet); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border-radius: 10px; border: 1px solid var(--line-strong);
+      background: white; color: #334155; padding: 8px 12px;
+      transition: background .15s ease, border-color .15s ease, transform .1s ease;
+    }
+    .btn:hover { background: #f7f8fb; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn.primary:hover { background: var(--blue-ink); }
+    .btn.danger { color: var(--red); border-color: #efc2c7; background: #fff8f8; }
+    .btn.danger:hover { background: #fdecee; }
+    .btn.danger-solid { background: var(--red); border-color: var(--red); color: #fff; }
+    .btn.danger-solid:hover { background: #8a1f2a; border-color: #8a1f2a; }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+    .btn.ghost:hover { background: #eef1f6; color: var(--ink); }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 6px 11px; color: #4a5871;
+    }
+    .chip.on { background: var(--blue-soft); border-color: #b4c2f5; color: var(--blue-ink); font-weight: 650; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .explain {
+      display: flex; gap: 10px; align-items: flex-start;
+      border: 1px solid #d5def5; background: linear-gradient(180deg, #f7f9ff, #f2f5ff);
+      border-radius: 12px; padding: 12px 14px; color: #2a3f73;
+      margin-bottom: 14px;
+    }
+    .explain .glyph {
+      width: 28px; height: 28px; border-radius: 8px; flex: none;
+      display: grid; place-items: center; background: #dde5ff; color: var(--blue-ink);
+    }
+    .explain.warn {
+      border-color: #f0c7a0; background: linear-gradient(180deg, #fff8f0, #fff3e6);
+      color: #7a3e12;
+    }
+    .explain.warn .glyph {
+      background: #ffe0c2; color: #a85a14;
+    }
+    .explain.danger {
+      border-color: #f0b8be; background: linear-gradient(180deg, #fff5f6, #fdecee);
+      color: #8a1f2a;
+    }
+    .explain.danger .glyph {
+      background: #f9d0d5; color: var(--red);
+    }
+    .explain strong { font-weight: 650; }
+    .hint {
+      display: flex; gap: 8px; align-items: flex-start;
+      margin-top: 8px; color: var(--muted); font-size: 12px;
+    }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 9px; flex: none;
+      display: grid; place-items: center; background: #e4e9f3; color: #3d4b63;
+    }
+    .acct-dot {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 999px;
+      background: #fff; border: 1px solid var(--line); box-sizing: border-box;
+    }
+    .acct-dot .icon { width: 12px; height: 12px; }
+    .source {
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 999px; padding: 3px 9px 3px 5px;
+      background: #eef1f6; color: #516079; font-size: 12px; font-weight: 400;
+    }
+    .source .t { font-weight: 650; }
+    .floating {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 4px; padding: 6px;
+      background: #121a2b; border-radius: 14px;
+      box-shadow: 0 14px 40px #121a2b55; z-index: 20;
+    }
+    .floating button {
+      color: #c9d3ea; background: transparent; border: 0; border-radius: 10px;
+      padding: 9px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .floating button.active { background: #3554a8; color: #fff; }
+    .floating .cycle { width: 36px; padding: 9px 0; justify-content: center; }
+    .state-bar {
+      max-width: 1180px; margin: 14px auto 0; padding: 10px 14px;
+      border: 1px dashed var(--line-strong); border-radius: 10px; background: #fbfcfe;
+      color: #44516a; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+
+    /* A · queue + inspector */
+    #queue { display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+    .q-rail { background: var(--rail); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+    .q-head { padding: 16px 14px 10px; border-bottom: 1px solid var(--line); }
+    .q-head .brand {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 750; font-size: 16px; margin-bottom: 14px;
+    }
+    .brand-mark {
+      width: 26px; height: 26px; border-radius: 8px;
+      display: grid; place-items: center; background: var(--blue); color: #fff;
+    }
+    .q-head h2 { margin: 0; font-size: 17px; }
+    .q-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .q-list { overflow: auto; flex: 1; padding: 8px; }
+    .q-item {
+      width: 100%; text-align: left; border: 0; border-radius: 10px;
+      background: transparent; padding: 11px; display: grid; gap: 6px; margin-bottom: 4px;
+    }
+    .q-item:hover { background: #eef1f6; }
+    .q-item.selected { background: var(--blue-soft); }
+    .q-item .row1 { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .q-item strong { font-size: 13px; font-weight: 650; line-height: 1.3; }
+    .q-item .meta { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .q-item .meta.meta-time { justify-content: space-between; flex-wrap: nowrap; gap: 8px; }
+    .inspector { padding: 24px; min-width: 0; background: var(--rail); overflow: auto; }
+    .insp-panel { max-width: 760px; }
+    .insp-top { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+    .insp-top-bar {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .insp-top h2 { margin: 4px 0; }
+    .insp-title {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+      width: 100%;
+    }
+    .insp-title h2 { flex: 1; min-width: 0; }
+    .insp-title .requested {
+      flex: none; color: var(--muted); font-size: 12px; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .meta-cell {
+      border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fbfcfe;
+    }
+    .meta-cell label {
+      display: block; color: var(--muted); font-size: 11px; font-weight: 650;
+      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+    }
+    .meta-cell div { font-weight: 650; display: flex; align-items: center; gap: 6px; }
+    .preview {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: #fbfcfe; margin-bottom: 14px;
+    }
+    .preview h3, .section-title {
+      margin: 0 0 8px; font-size: 13px; font-weight: 750; color: #3d4b63;
+      text-transform: uppercase; letter-spacing: .05em;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .preview .body { white-space: pre-wrap; color: #2a364d; }
+    .thread-list { display: flex; flex-direction: column; gap: 10px; }
+    .thread {
+      border: 1px solid var(--line); border-radius: 10px; background: #fff; overflow: hidden;
+    }
+    .thread-head {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 10px 12px; border-bottom: 1px solid transparent;
+      background: #f7f9fc;
+    }
+    .thread.open .thread-head { border-bottom-color: var(--line); }
+    .thread-head:hover { background: #eef2f8; }
+    .thread-toggle {
+      display: inline-flex; align-items: center; gap: 8px;
+      border: 0; background: transparent; padding: 0; margin: 0;
+      color: inherit; font: inherit; cursor: pointer; text-align: left;
+    }
+    .thread-toggle.grow { flex: 1; min-width: 0; }
+    .kind-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 7px; flex: none;
+      background: #e4e9f3; color: #3d4b63;
+    }
+    .thread-head .main { flex: 1; min-width: 0; }
+    .thread-head .title-row {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .thread-head .title {
+      font-size: 13px; font-weight: 650; color: #1f2937;
+      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      border: 0; background: transparent; padding: 0; margin: 0;
+      font: inherit; font-weight: 650; color: #1f2937; cursor: pointer; text-align: left;
+    }
+    .thread-head .mail-open { flex: none; margin-left: auto; }
+    .thread-head .count { font-size: 11px; font-weight: 400; color: var(--muted); flex: none; }
+    .thread-head .chev {
+      width: 18px; height: 18px; flex: none; color: #8b95a8;
+      display: grid; place-items: center; transition: transform .15s ease;
+    }
+    .thread.open .chev { transform: rotate(90deg); }
+    .thread-body { display: none; }
+    .thread.open .thread-body { display: block; }
+    .thread-body-top {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      padding: 10px 12px; border-bottom: 1px solid #eef1f6; background: #fbfcfe;
+    }
+    .thread-meta, .msg-meta {
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .meta-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 400; color: #516079;
+      background: #eef1f6; border-radius: 999px; padding: 2px 8px;
+    }
+    .meta-chip strong { font-weight: 650; color: #2a364d; }
+    .meta-chip.unread { background: #e8f0ff; color: var(--blue-ink); }
+    .meta-chip.attach { background: #f1ecff; color: var(--violet); }
+    .mail-open {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 650; color: var(--blue-ink);
+      text-decoration: none; border-radius: 8px; padding: 4px 8px;
+      background: var(--blue-soft); border: 1px solid #b4c2f5;
+      white-space: nowrap;
+    }
+    .mail-open:hover { background: #d9e3ff; }
+    .thread-body .msg-stack {
+      display: flex; flex-direction: column; gap: 10px; padding: 10px;
+    }
+
+    /* Read-only message cards (compose chrome) inside target preview */
+    .mail-compose.msg-review {
+      margin-bottom: 0;
+    }
+    .mail-compose.msg-review.unread {
+      box-shadow: 0 0 0 2px #2a4fc722, 0 8px 24px #1520330a;
+    }
+    .mail-compose.msg-review .mail-row {
+      grid-template-columns: 88px minmax(0, 1fr) auto;
+      min-height: 32px; padding: 4px 12px;
+    }
+    .mail-compose.msg-review .mail-row .when {
+      font-size: 11px; color: var(--muted); white-space: nowrap; justify-self: end;
+    }
+    .mail-compose.msg-review .mail-token {
+      padding: 3px 8px;
+    }
+    .mail-compose.msg-review .mail-subject {
+      font-size: 13px; font-weight: 500; color: #1c1c1e;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mail-compose.msg-review .mail-body-wrap { padding: 10px 12px 8px; }
+    .mail-compose.msg-review .mail-body {
+      margin: 0; font-size: 13px; line-height: 1.45; color: #1c1c1e;
+      white-space: pre-wrap;
+    }
+    .mail-compose.msg-review .mail-body.clamped {
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+      overflow: hidden; white-space: normal;
+    }
+    .mail-compose.msg-review .mail-body-actions {
+      display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    }
+    .mail-compose.msg-review .linkish {
+      border: 0; background: transparent; color: var(--blue-ink);
+      font: inherit; font-size: 12px; font-weight: 650; padding: 0; cursor: pointer;
+    }
+    .mail-compose.msg-review .linkish:hover { text-decoration: underline; }
+    .mail-compose.msg-review .mail-open { margin-left: auto; }
+
+    /* Apple Mail–style compose */
+    .mail-compose {
+      margin-bottom: 14px;
+      border: 1px solid #d4d7de;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: 0 1px 0 #fff inset, 0 8px 24px #1520330a;
+      font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    }
+    .mail-compose.compact { margin-bottom: 0; }
+    .mail-fields { background: #fff; }
+    .mail-row {
+      display: grid; grid-template-columns: 92px minmax(0, 1fr);
+      gap: 8px; align-items: center;
+      min-height: 34px; padding: 5px 14px;
+      border-bottom: 1px solid #e5e5ea;
+    }
+    .mail-row.attach-row { align-items: flex-start; padding-top: 8px; padding-bottom: 8px; }
+    .mail-row label {
+      font-size: 12px; font-weight: 500; color: #8e8e93; padding-top: 1px;
+    }
+    .mail-row .field {
+      display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0;
+    }
+    .mail-row input {
+      flex: 1; min-width: 120px; border: 0; outline: 0; background: transparent;
+      padding: 4px 0; font-size: 13px; color: #1c1c1e; box-shadow: none !important;
+    }
+    .mail-token {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 3px 3px 8px; border-radius: 999px;
+      background: #e8f0fe; color: #1a4bb8;
+      font-size: 12px; font-weight: 500; line-height: 1.35;
+      border: 1px solid #c9daf8;
+    }
+    .mail-token .x {
+      width: 20px; height: 20px; border: 0; border-radius: 999px; flex: none;
+      background: transparent; color: #4a6fb8; padding: 0; margin: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 14px; line-height: 1;
+    }
+    .mail-token .x:hover { background: #c9daf8; color: #143a8f; }
+    .mail-from {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px 3px 3px; border-radius: 999px;
+      background: #eef1f6; color: #1c1c1e;
+      font-size: 12px; font-weight: 500; line-height: 1.35;
+      border: 1px solid #e5e5ea;
+    }
+    .mail-from .acct-dot {
+      width: 18px; height: 18px; border-radius: 999px;
+      background: #fff; border: 1px solid var(--line);
+      display: inline-flex; align-items: center; justify-content: center;
+      flex: none; margin: 0;
+    }
+    .mail-from .acct-dot .icon { width: 11px; height: 11px; display: block; }
+    .mail-attach {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px 3px 3px; border-radius: 999px;
+      background: #eef1f6; color: #1c1c1e;
+      font-size: 12px; font-weight: 500; line-height: 1.35;
+      border: 1px solid #e5e5ea; max-width: 100%;
+    }
+    /* Compose chips already end with ×; drop extra right pad so × sits flush */
+    .mail-attach:has(.x) { padding-right: 3px; }
+    .mail-attach .glyph {
+      width: 18px; height: 18px; border-radius: 999px; flex: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #fff; border: 1px solid var(--line); color: #636366; margin: 0;
+    }
+    .mail-attach .glyph .icon { width: 11px; height: 11px; display: block; }
+    .mail-attach .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    .mail-attach .size { color: #8e8e93; flex: none; font-weight: 500; }
+    .mail-attach .x {
+      width: 20px; height: 20px; border: 0; border-radius: 999px; flex: none;
+      background: transparent; color: #8e8e93; padding: 0; margin: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 14px; line-height: 1;
+    }
+    .mail-attach .x:hover {
+      background: #d8dbe3; color: #3a3a3c;
+    }
+    .mail-attach-empty { color: #8e8e93; font-size: 12px; font-weight: 500; }
+    .mail-body-wrap { background: #fff; }
+    .mail-body-wrap textarea {
+      width: 100%; min-height: 160px; border: 0; outline: 0; resize: vertical;
+      padding: 14px 16px; font-size: 14px; line-height: 1.5; color: #1c1c1e;
+      background: transparent; box-shadow: none !important;
+      font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    }
+    .mail-compose.compact .mail-body-wrap textarea { min-height: 88px; padding: 10px 12px; font-size: 13px; }
+    .mail-compose.compact .mail-row { padding: 4px 10px; grid-template-columns: 88px minmax(0, 1fr); }
+    .inline-edit { width: 100%; border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 11px; background: #fff; }
+    .footer-bar {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      margin-top: 8px; width: 100%; flex-wrap: wrap;
+    }
+    .footer-bar > .btn.primary:last-child,
+    .footer-bar > .btn.danger-solid:last-child { margin-left: auto; }
+
+    /* B · focus one */
+    #focus {
+      display: grid; place-items: center; padding: 28px;
+      background:
+        radial-gradient(700px 320px at 50% 0%, #e8eeff 0%, transparent 60%),
+        var(--rail);
+    }
+    .focus-card {
+      width: min(720px, 100%);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+      display: grid; gap: 16px;
+    }
+    .focus-prog { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+    .focus-card h2 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+    .focus-card .lead { margin: 0; color: var(--muted); font-size: 15px; }
+    .focus-ops { display: grid; gap: 8px; }
+    .op-line {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px; border-radius: 12px; background: #fbfcfe; border: 1px solid var(--line);
+    }
+    .op-line .glyph {
+      width: 28px; height: 28px; border-radius: 8px; flex: none;
+      display: grid; place-items: center; background: #eef1f6; color: #516079;
+    }
+    .focus-actions { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 10px; }
+    .focus-actions .btn { padding: 14px; font-weight: 650; font-size: 15px; }
+    .focus-skip { text-align: center; }
+
+    /* C · batch desk */
+    #batch { display: grid; grid-template-rows: auto 1fr auto; }
+    .batch-bar {
+      display: flex; justify-content: space-between; gap: 12px; align-items: center;
+      padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--rail); flex-wrap: wrap;
+    }
+    .batch-bar h2 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+    .batch-wrap { overflow: auto; max-height: 560px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+    th {
+      color: var(--muted); font-weight: 650; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .04em; background: #fbfcfe; position: sticky; top: 0;
+    }
+    tr.selected td { background: #f5f7ff; }
+    tr:hover td { background: #fafbfe; }
+    tr.selected:hover td { background: #f5f7ff; }
+    tr.done td { opacity: .5; }
+    .inline-edit { min-height: 64px; resize: vertical; }
+    .batch-foot {
+      padding: 12px 16px; border-top: 1px solid var(--line);
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      align-items: center; color: var(--muted); font-size: 12px; background: var(--rail);
+    }
+
+    @media (max-width: 820px) {
+      .shell { padding: 16px 12px 110px; }
+      .top { display: block; }
+      .note { text-align: left; margin-top: 8px; }
+      #queue { grid-template-columns: 1fr; }
+      .q-rail { border-right: 0; border-bottom: 1px solid var(--line); max-height: 280px; }
+      .meta-grid { grid-template-columns: 1fr 1fr; }
+      .focus-actions { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" class="hidden" aria-hidden="true">
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6 18 18 6"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></symbol>
+    <symbol id="i-thread" viewBox="0 0 24 24"><path d="M3.5 4h11a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-3.5 2.8V13H3.5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M7 7.5h6M7 10h4"/><path d="M9.5 13.5H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1.2L14.5 24v-2.5H9.5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z"/><path d="M11.5 17h6"/></symbol>
+    <symbol id="i-gmail" viewBox="52 42 88 66"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></symbol>
+    <symbol id="i-yahoo" viewBox="0 0 24 24"><path fill="currentColor" d="M3.2 3h4.6L12 11.2 16.2 3h4.6l-6.7 11.4V21h-3.9v-6.6L3.2 3Zm15.1 14.2a2.15 2.15 0 1 1 0 4.3 2.15 2.15 0 0 1 0-4.3Z"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.4 11.6-8.5 8.5a5 5 0 0 1-7.1-7.1l9.2-9.2a3.2 3.2 0 0 1 4.5 4.5L10.3 17.5a1.4 1.4 0 0 1-2-2l8-8"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M7 7v13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M3 6.5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M8.75 13.25h6.25"/><path d="m12.25 10.5 2.75 2.75-2.75 2.75"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6Z"/></symbol>
+  </svg>
+
+  <main class="shell">
+    <div class="top">
+      <div>
+        <h1>Mutation approval</h1>
+        <p>Issue 11 · approve / deny / edit-then-approve · soft + hard delete · no auto-approve</p>
+      </div>
+      <div class="note">Agents may propose soft delete (Trash) or hard delete (permanent); both need approval. Grant or session expiry cancels pending proposals; audit remains.</div>
+    </div>
+
+    <section id="queue" class="proto card" aria-label="Variant A queue and inspector">
+      <aside class="q-rail">
+        <div class="q-head">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"><svg class="icon sm"><use href="#i-mail"/></svg></span>
+            MailGent
+          </div>
+          <h2>Approvals</h2>
+          <p><svg class="icon sm"><use href="#i-shield"/></svg> <span id="a-count">0</span> pending · expiry auto-cancels</p>
+        </div>
+        <div class="filters">
+          <button type="button" class="chip on" data-filter="all"><svg class="icon sm"><use href="#i-spark"/></svg> All</button>
+          <button type="button" class="chip" data-filter="send"><svg class="icon sm"><use href="#i-send"/></svg> Send</button>
+          <button type="button" class="chip" data-filter="move"><svg class="icon sm"><use href="#i-move"/></svg> Move</button>
+          <button type="button" class="chip" data-filter="trash"><svg class="icon sm"><use href="#i-trash"/></svg> Trash</button>
+          <button type="button" class="chip" data-filter="purge"><svg class="icon sm"><use href="#i-trash"/></svg> Purge</button>
+          <button type="button" class="chip" data-filter="flag"><svg class="icon sm"><use href="#i-flag"/></svg> Flags</button>
+        </div>
+        <div class="q-list" id="a-list"></div>
+      </aside>
+      <section class="inspector"><div class="insp-panel" id="a-insp"></div></section>
+    </section>
+
+    <section id="focus" class="proto card hidden" aria-label="Variant B one at a time">
+      <div class="focus-card" id="b-card"></div>
+    </section>
+
+    <section id="batch" class="proto card hidden" aria-label="Variant C batch desk">
+      <div class="batch-bar">
+        <div>
+          <h2><svg class="icon"><use href="#i-check"/></svg> Batch approval desk</h2>
+          <div class="hint" style="margin:4px 0 0"><svg class="icon sm"><use href="#i-info"/></svg> Select a clearly bounded set · same agent preferred · edit sends inline</div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn" id="c-select-agent"><svg class="icon"><use href="#i-bot"/></svg> Same agent</button>
+          <button type="button" class="btn danger" id="c-deny"><svg class="icon"><use href="#i-ban"/></svg> Deny selected</button>
+          <button type="button" class="btn primary" id="c-approve"><svg class="icon"><use href="#i-check"/></svg> Approve selected</button>
+        </div>
+      </div>
+      <div class="batch-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="c-all" aria-label="Select all pending"></th>
+              <th>Proposal</th>
+              <th>Agent</th>
+              <th>Account</th>
+              <th>Requested</th>
+              <th>Expires</th>
+              <th>Edit / detail</th>
+            </tr>
+          </thead>
+          <tbody id="c-body"></tbody>
+        </table>
+      </div>
+      <div class="batch-foot">
+        <span class="hint" style="margin:0"><svg class="icon sm"><use href="#i-lock"/></svg> No persistent auto-approve · soft + hard delete need approval</span>
+        <span id="c-sel" class="pill neutral">0 selected</span>
+      </div>
+    </section>
+
+    <pre class="state-bar" id="state">state…</pre>
+
+    <nav class="floating" aria-label="Prototype variations">
+      <button type="button" class="cycle" data-cycle="-1" aria-label="Previous variant"><svg class="icon"><use href="#i-arrow-left"/></svg></button>
+      <button type="button" data-view="queue" class="active"><svg class="icon sm"><use href="#i-folder"/></svg> A · Queue</button>
+      <button type="button" data-view="focus"><svg class="icon sm"><use href="#i-eye"/></svg> B · Focus</button>
+      <button type="button" data-view="batch"><svg class="icon sm"><use href="#i-check"/></svg> C · Batch</button>
+      <button type="button" class="cycle" data-cycle="1" aria-label="Next variant"><svg class="icon"><use href="#i-arrow-right"/></svg></button>
+    </nav>
+  </main>
+
+  <script>
+    const VIEWS = ["queue", "focus", "batch"];
+    const TYPE_META = {
+      send: { pill: "pill send", label: "Send", icon: "i-send" },
+      move: { pill: "pill move", label: "Move / label", icon: "i-move" },
+      trash: { pill: "pill trash", label: "Delete", icon: "i-trash" },
+      purge: { pill: "pill purge", label: "Delete", icon: "i-trash" },
+      flag: { pill: "pill flag", label: "Flags", icon: "i-flag" },
+    };
+
+    const icon = (id, cls = "icon") =>
+      `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
+
+    const providerIcon = (provider) =>
+      provider === "yahoo"
+        ? `<svg class="icon brand yahoo" aria-hidden="true"><use href="#i-yahoo"/></svg>`
+        : `<svg class="icon brand gmail" aria-hidden="true"><use href="#i-gmail"/></svg>`;
+
+    const typePill = (type) => {
+      const m = TYPE_META[type];
+      return `<span class="${m.pill}">${icon(m.icon, "icon")} ${m.label}</span>`;
+    };
+
+    const trashWarnHtml = () => `
+      <div class="explain warn">
+        <span class="glyph">${icon("i-trash", "icon")}</span>
+        <div>
+          <strong>Approve moves mail to Trash (soft delete).</strong>
+          Messages leave the current folder but stay recoverable from Trash for the provider retention window.
+          Use this when the agent wants clutter gone without permanent loss.
+        </div>
+      </div>`;
+
+    const purgeWarnHtml = () => `
+      <div class="explain danger">
+        <span class="glyph">${icon("i-trash", "icon")}</span>
+        <div>
+          <strong>Approve permanently deletes this mail.</strong>
+          Hard delete cannot be undone through Trash. Review targets carefully before approving.
+        </div>
+      </div>`;
+
+    const mutationWarnHtml = (p) => {
+      if (p.type === "trash") return trashWarnHtml();
+      if (p.type === "purge") return purgeWarnHtml();
+      return "";
+    };
+
+    /** Soft label + bold time, e.g. "Expires in 1 h" or "in 1 h". */
+    const expirePill = (expires, { withLabel = false } = {}) => {
+      const time = String(expires || "").replace(/^in\s+/i, "");
+      const soft = withLabel ? "Expires in " : "in ";
+      return `<span class="pill warn expire">${icon("i-clock", "icon")} ${soft}<span class="t">${esc(time)}</span></span>`;
+    };
+
+    const requestedAtHtml = (requestedAt, { withIcon = true } = {}) => {
+      const label = esc(requestedAt || "—");
+      return withIcon
+        ? `${icon("i-calendar", "icon sm")} ${label}`
+        : label;
+    };
+
+    const accountChip = (p) => {
+      const providerLabel = p.provider === "yahoo" ? "Yahoo" : "Gmail";
+      const soft = String(p.account || "")
+        .replace(new RegExp(`\\s*${providerLabel}\\s*$`, "i"), "")
+        .trim();
+      return `<span class="source">${providerIcon(p.provider)}${
+        soft ? ` ${esc(soft)}` : ""
+      } <span class="t">${esc(providerLabel)}</span></span>`;
+    };
+
+    const normalizeTargets = (targets) => (targets || []).map((t) => {
+      if (typeof t === "string") {
+        return { kind: "message", title: t, messages: [{ from: "—", subject: t, date: "", snippet: "" }] };
+      }
+      return t;
+    });
+
+    const targetsSummary = (targets) => normalizeTargets(targets).map((t) => {
+      const n = (t.messages || []).length;
+      return t.kind === "thread" ? `${t.title} (${n} msg)` : t.title;
+    }).join(" · ");
+
+    const openMailLink = (label, href, openLabel, iconId = null) =>
+      `<a class="mail-open" href="${esc(href)}" data-open-mail="${esc(openLabel)}" title="${esc(openLabel)}">${iconId ? `${icon(iconId, "icon sm")} ` : ""}${esc(label)}</a>`;
+
+    const metaChips = (bits) => bits.filter(Boolean).map((b) =>
+      typeof b === "string" ? `<span class="meta-chip">${b}</span>` : b
+    ).join("");
+
+    const addrToken = (addr) => addr
+      ? `<span class="mail-token">${esc(addr)}</span>`
+      : "";
+
+    const msgReviewCard = (m, threadTitle) => {
+      const from = m.fromEmail
+        ? `${m.from || m.fromEmail} <${m.fromEmail}>`
+        : (m.from || "Unknown");
+      const toList = Array.isArray(m.to) ? m.to : (m.to ? [m.to] : []);
+      const when = [m.date, m.time].filter(Boolean).join(" ");
+      const body = m.body || m.snippet || "";
+      const attach = (m.hasAttachment || m.attachmentName)
+        ? `<div class="mail-row attach-row">
+            <label>Attachments:</label>
+            <div class="field">
+              <span class="mail-attach">
+                <span class="glyph">${icon("i-paperclip", "icon sm")}</span>
+                <span class="name">${esc(m.attachmentName || "Attachment")}</span>
+              </span>
+            </div>
+          </div>`
+        : "";
+      return `
+        <article class="mail-compose msg-review ${m.unread ? "unread" : ""}" data-msg="${esc(m.id || "")}">
+          <div class="mail-fields">
+            <div class="mail-row">
+              <label>From:</label>
+              <div class="field">${addrToken(from)}</div>
+              <span class="when">${esc(when)}</span>
+            </div>
+            ${toList.length ? `<div class="mail-row">
+              <label>To:</label>
+              <div class="field">${toList.map(addrToken).join("")}</div>
+            </div>` : ""}
+            <div class="mail-row">
+              <label>Subject:</label>
+              <div class="field"><span class="mail-subject">${esc(m.subject || threadTitle)}</span></div>
+            </div>
+            ${attach}
+          </div>
+          <div class="mail-body-wrap">
+            ${body ? `<p class="mail-body clamped" data-body>${esc(body)}</p>` : `<p class="mail-body" style="color:var(--muted)">No preview.</p>`}
+            <div class="mail-body-actions">
+              ${body ? `<button type="button" class="linkish" data-expand-body>Show more</button>` : ""}
+              ${m.href ? openMailLink("Open", m.href, `Open message · ${m.subject || threadTitle}`) : ""}
+            </div>
+          </div>
+        </article>`;
+    };
+
+    const targetsHtml = (targets, { compact = false } = {}) => {
+      const list = normalizeTargets(targets);
+      if (!list.length) return `<div class="hint" style="margin:0">No mail listed.</div>`;
+      const threadCount = list.filter((t) => t.kind === "thread").length;
+      const msgOnly = list.length - threadCount;
+      const heading = threadCount && !msgOnly
+        ? `${threadCount} thread${threadCount === 1 ? "" : "s"}`
+        : threadCount
+          ? `${threadCount} thread${threadCount === 1 ? "" : "s"} · ${msgOnly} message${msgOnly === 1 ? "" : "s"}`
+          : `${msgOnly} message${msgOnly === 1 ? "" : "s"}`;
+      const items = list.map((t, ti) => {
+        const msgs = t.messages || [];
+        const kindLabel = t.kind === "thread" ? "Thread" : "Message";
+        const threadMeta = metaChips([
+          t.folder ? `<span class="meta-chip">Folder <strong>${esc(t.folder)}</strong></span>` : "",
+          t.participants ? `<span class="meta-chip">${esc(t.participants)}</span>` : "",
+          ...(t.labels || []).map((l) => `<span class="meta-chip">${esc(l)}</span>`),
+          t.id ? `<span class="meta-chip">id <strong>${esc(t.id)}</strong></span>` : "",
+        ]);
+        const nested = msgs.map((m) => msgReviewCard(m, t.title)).join("");
+        return `
+          <div class="thread" data-thread="${ti}">
+            <div class="thread-head">
+              <button type="button" class="thread-toggle grow" data-toggle-thread aria-expanded="false">
+                <span class="kind-icon" title="${kindLabel}" aria-label="${kindLabel}">${icon(t.kind === "thread" ? "i-folder" : "i-mail", "icon sm")}</span>
+                <span class="title">${esc(t.title)}</span>
+              </button>
+              ${t.href ? openMailLink("Open", t.href, `Open thread · ${t.title}`) : ""}
+              <button type="button" class="thread-toggle" data-toggle-thread aria-label="Expand thread">
+                ${t.kind === "thread" ? `<span class="count">${msgs.length} message${msgs.length === 1 ? "" : "s"}</span>` : ""}
+                <span class="chev" aria-hidden="true">${icon("i-arrow-right", "icon sm")}</span>
+              </button>
+            </div>
+            <div class="thread-body">
+              ${threadMeta ? `<div class="thread-body-top"><div class="thread-meta">${threadMeta}</div></div>` : ""}
+              <div class="msg-stack">${nested}</div>
+            </div>
+          </div>`;
+      }).join("");
+      return `
+        <div class="preview" style="${compact ? "margin:0" : ""}">
+          <h3>${icon("i-folder", "icon")} ${heading}</h3>
+          <div class="thread-list">${items}</div>
+          ${compact ? "" : `<div class="hint">${icon("i-lock", "icon sm")} Expand a thread to review messages. Body clipped to 3 lines — Show more expands. Soft delete → Trash only. Open links are stubs.</div>`}
+        </div>`;
+    };
+
+    const wireOpenMailLinks = (root) => {
+      const scope = root || document;
+      scope.querySelectorAll("[data-open-mail]").forEach((a) => {
+        a.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          log(`open-mail stub · ${a.dataset.openMail} · ${a.getAttribute("href")}`);
+        };
+      });
+      scope.querySelectorAll("[data-toggle-thread]").forEach((btn) => {
+        btn.onclick = () => {
+          const thread = btn.closest(".thread");
+          if (!thread) return;
+          const open = thread.classList.toggle("open");
+          thread.querySelectorAll("[data-toggle-thread]").forEach((b) => {
+            b.setAttribute("aria-expanded", open ? "true" : "false");
+          });
+        };
+      });
+      scope.querySelectorAll("[data-expand-body]").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const body = btn.closest(".mail-body-wrap")?.querySelector("[data-body]");
+          if (!body) return;
+          const nowClamped = body.classList.toggle("clamped");
+          btn.textContent = nowClamped ? "Show more" : "Show less";
+          log(`${nowClamped ? "collapse" : "expand"} body · ${btn.closest(".msg-review")?.dataset.msg || "msg"}`);
+        };
+      });
+    };
+
+    const esc = (s) => String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+
+    const tokensHtml = (list, kind) =>
+      (list || []).map((addr, i) => `
+        <span class="mail-token" data-kind="${kind}" data-i="${i}" data-addr="${esc(addr)}">
+          ${esc(addr)}
+          <button type="button" class="x" data-remove-token="${kind}:${i}" aria-label="Remove ${esc(addr)}">×</button>
+        </span>`).join("");
+
+    const attachmentsHtml = (list, prefix) => {
+      if (!list?.length) {
+        return `<span class="mail-attach-empty">None</span>`;
+      }
+      return list.map((a, i) => `
+        <span class="mail-attach" data-attach="${i}">
+          <span class="glyph">${icon("i-paperclip", "icon sm")}</span>
+          <span class="name">${esc(a.name)}</span>
+          <span class="size">${esc(a.size)}</span>
+          <button type="button" class="x" data-remove-attach="${prefix}:${i}" aria-label="Remove ${esc(a.name)}">×</button>
+        </span>`).join("");
+    };
+
+    /** Apple Mail–style compose for send / draft create·edit approvals. */
+    const mailComposeHtml = (p, { prefix = "a", compact = false } = {}) => {
+      const fromEmail = p.from || (p.provider === "yahoo" ? "you@yahoo.com" : "you@company.com");
+      return `
+        <div class="mail-compose ${compact ? "compact" : ""}" data-mail-compose="${prefix}" data-proposal="${p.id}">
+          <div class="mail-fields">
+            <div class="mail-row">
+              <label>From:</label>
+              <div class="field">
+                <span class="mail-from"><span class="acct-dot">${providerIcon(p.provider)}</span> ${esc(fromEmail)}</span>
+              </div>
+            </div>
+            <div class="mail-row">
+              <label for="${prefix}-to">To:</label>
+              <div class="field" id="${prefix}-to-field">
+                ${tokensHtml(p.to, "to")}
+                <input id="${prefix}-to" type="text" value="" placeholder="Add recipient" aria-label="To" data-token-input="to" autocomplete="off">
+              </div>
+            </div>
+            <div class="mail-row">
+              <label for="${prefix}-cc">Cc:</label>
+              <div class="field" id="${prefix}-cc-field">
+                ${tokensHtml(p.cc, "cc")}
+                <input id="${prefix}-cc" type="text" value="" placeholder="Add Cc" aria-label="Cc" data-token-input="cc" autocomplete="off">
+              </div>
+            </div>
+            <div class="mail-row">
+              <label for="${prefix}-subject">Subject:</label>
+              <div class="field">
+                <input id="${prefix}-subject" type="text" value="${esc(p.subject || "")}" aria-label="Subject">
+              </div>
+            </div>
+            <div class="mail-row attach-row">
+              <label>Attachments:</label>
+              <div class="field" id="${prefix}-attach-field">
+                ${attachmentsHtml(p.attachments, prefix)}
+              </div>
+            </div>
+          </div>
+          <div class="mail-body-wrap">
+            <textarea id="${prefix}-body" aria-label="Message body">${esc(p.body || "")}</textarea>
+          </div>
+        </div>
+        ${compact ? "" : `<div class="hint">${icon("i-info", "icon sm")} Looks like Apple Mail so you can review To / Cc / Subject / Attachments before approve.</div>`}`;
+    };
+
+    const readMailCompose = (prefix, base) => {
+      const root = document.querySelector(`[data-mail-compose="${prefix}"]`);
+      if (!root) return null;
+      const collectTokens = (kind) =>
+        [...root.querySelectorAll(`.mail-token[data-kind="${kind}"]`)].map((el) =>
+          el.getAttribute("data-addr") || ""
+        );
+      const toInput = root.querySelector(`#${prefix}-to`)?.value.trim();
+      const ccInput = root.querySelector(`#${prefix}-cc`)?.value.trim();
+      const to = collectTokens("to");
+      const cc = collectTokens("cc");
+      if (toInput) to.push(toInput);
+      if (ccInput) cc.push(ccInput);
+      const attachments = [...root.querySelectorAll(".mail-attach")].map((el) => ({
+        name: el.querySelector(".name")?.textContent || "",
+        size: el.querySelector(".size")?.textContent || "",
+      }));
+      return {
+        to,
+        cc,
+        subject: root.querySelector(`#${prefix}-subject`)?.value || "",
+        body: root.querySelector(`#${prefix}-body`)?.value || "",
+        attachments,
+        from: base.from,
+      };
+    };
+
+    const wireMailCompose = (prefix, proposalId) => {
+      const root = document.querySelector(`[data-mail-compose="${prefix}"]`);
+      if (!root) return;
+
+      const commitToken = (kind, input) => {
+        const val = input.value.trim().replace(/,$/, "");
+        if (!val) return;
+        const p = byId(proposalId);
+        if (!p) return;
+        p[kind] = [...(p[kind] || []), val];
+        input.value = "";
+        // re-render only the field tokens
+        const field = root.querySelector(`#${prefix}-${kind}-field`);
+        if (!field) return;
+        const keep = input;
+        field.innerHTML = `${tokensHtml(p[kind], kind)}`;
+        field.appendChild(keep);
+        keep.focus();
+        wireTokenRemoves(prefix, proposalId);
+      };
+
+      root.querySelectorAll("[data-token-input]").forEach((input) => {
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            commitToken(input.dataset.tokenInput, input);
+          } else if (e.key === "Backspace" && !input.value) {
+            const p = byId(proposalId);
+            const kind = input.dataset.tokenInput;
+            if (p?.[kind]?.length) {
+              p[kind] = p[kind].slice(0, -1);
+              const field = root.querySelector(`#${prefix}-${kind}-field`);
+              field.innerHTML = `${tokensHtml(p[kind], kind)}`;
+              field.appendChild(input);
+              wireTokenRemoves(prefix, proposalId);
+            }
+          }
+        });
+        input.addEventListener("blur", () => commitToken(input.dataset.tokenInput, input));
+      });
+
+      wireTokenRemoves(prefix, proposalId);
+      wireAttachRemoves(prefix, proposalId);
+    };
+
+    const wireTokenRemoves = (prefix, proposalId) => {
+      const root = document.querySelector(`[data-mail-compose="${prefix}"]`);
+      root?.querySelectorAll("[data-remove-token]").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          const [kind, idx] = btn.dataset.removeToken.split(":");
+          const p = byId(proposalId);
+          if (!p) return;
+          p[kind] = (p[kind] || []).filter((_, i) => i !== Number(idx));
+          const field = root.querySelector(`#${prefix}-${kind}-field`);
+          const input = field.querySelector("input");
+          field.innerHTML = `${tokensHtml(p[kind], kind)}`;
+          field.appendChild(input);
+          wireTokenRemoves(prefix, proposalId);
+        };
+      });
+    };
+
+    const wireAttachRemoves = (prefix, proposalId) => {
+      const root = document.querySelector(`[data-mail-compose="${prefix}"]`);
+      root?.querySelectorAll("[data-remove-attach]").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          const idx = Number(btn.dataset.removeAttach.split(":")[1]);
+          const p = byId(proposalId);
+          if (!p) return;
+          p.attachments = (p.attachments || []).filter((_, i) => i !== idx);
+          const field = root.querySelector(`#${prefix}-attach-field`);
+          field.innerHTML = attachmentsHtml(p.attachments, prefix);
+          wireAttachRemoves(prefix, proposalId);
+        };
+      });
+    };
+
+    const seed = () => ([
+      {
+        id: "p1", type: "send", title: "Send draft to Ava Chen", agent: "Cursor",
+        account: "Work Gmail", provider: "gmail", placement: "Drafts",
+        summary: "Reply confirming Tuesday availability for Q3 planning.",
+        expires: "in 45 min", requestedAt: "Aug 16 · 15:42", editable: true, mailCompose: true,
+        from: "you@company.com",
+        to: ["Ava Chen <ava@company.com>"],
+        cc: ["Product team <product@company.com>"],
+        subject: "Re: Q3 planning notes",
+        body: "Thanks Ava — Tuesday 10:30 works for me.\n\nI'll bring the revised schedule notes.",
+        attachments: [{ name: "Q3-schedule.pdf", size: "248 KB" }],
+        targets: [], status: "pending",
+      },
+      {
+        id: "p2", type: "move", title: "Archive 2 receipts", agent: "Hermes",
+        account: "Personal Yahoo", provider: "yahoo", placement: "Inbox → Archive",
+        summary: "Move two merchant receipts out of Inbox into Archive.",
+        expires: "in 2 h", requestedAt: "Aug 16 · 14:05", editable: false,
+        targets: [
+          {
+            kind: "thread",
+            id: "th_stripe_0312",
+            title: "Stripe receipt · Mar 12",
+            folder: "Inbox",
+            participants: "Stripe · you",
+            labels: ["Receipts"],
+            href: "message://stripe-receipt-2026-03-12",
+            messages: [
+              {
+                id: "msg_s1",
+                from: "Stripe", fromEmail: "receipts@stripe.com",
+                to: "you@yahoo.com",
+                subject: "Your receipt from Acme Tools",
+                date: "Mar 12", time: "09:14",
+                snippet: "You paid $48.00 to Acme Tools.",
+                body: "You paid $48.00 to Acme Tools.\n\nReceipt #ch_0312 · Visa ending 4242\nDate: Mar 12, 2026\n\nDownload the PDF for your records.",
+                unread: false, hasAttachment: true, attachmentName: "receipt.pdf",
+                href: "message://stripe-receipt-2026-03-12/msg_s1",
+              },
+            ],
+          },
+          {
+            kind: "thread",
+            id: "th_notion_0311",
+            title: "Notion receipt · Mar 11",
+            folder: "Inbox",
+            participants: "Notion · you",
+            labels: ["Receipts"],
+            href: "message://notion-receipt-2026-03-11",
+            messages: [
+              {
+                id: "msg_n1",
+                from: "Notion", fromEmail: "noreply@makenotion.com",
+                to: "you@yahoo.com",
+                subject: "Payment receipt — Notion Plus",
+                date: "Mar 11", time: "16:02",
+                snippet: "Thanks for your payment of $10.00.",
+                body: "Thanks for your payment of $10.00.\n\nNotion Plus · Monthly\nNext bill: Apr 11\n\nManage billing in Settings → Plans.",
+                unread: false, hasAttachment: false,
+                href: "message://notion-receipt-2026-03-11/msg_n1",
+              },
+            ],
+          },
+        ],
+        status: "pending",
+      },
+      {
+        id: "p3", type: "trash", title: "Soft-delete 3 promo threads", agent: "Cursor",
+        account: "Work Gmail", provider: "gmail", placement: "Inbox → Trash",
+        summary: "Move three unread promo threads to Trash (recoverable).",
+        expires: "in 20 min", requestedAt: "Aug 16 · 16:18", editable: false,
+        targets: [
+          {
+            kind: "thread",
+            id: "th_acme",
+            title: "Acme Newsletter",
+            folder: "Inbox",
+            participants: "Acme Digest · you",
+            labels: ["Promo", "Newsletters"],
+            href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzAcmeThread",
+            messages: [
+              {
+                id: "msg_a1",
+                from: "Acme Digest", fromEmail: "digest@acme.com",
+                to: "you@company.com",
+                subject: "This week at Acme",
+                date: "Aug 14", time: "07:02",
+                snippet: "Launch notes, hiring, and a 20% code inside.",
+                body: "Launch notes, hiring, and a 20% code inside.\n\n1) Product launch recap\n2) Open roles on platform\n3) Partner webinar Thursday\n\nUse code WEEK20 at checkout.",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzAcmeThread/msg_a1",
+              },
+              {
+                id: "msg_a2",
+                from: "Acme Digest", fromEmail: "digest@acme.com",
+                to: "you@company.com",
+                subject: "Re: This week at Acme",
+                date: "Aug 15", time: "08:11",
+                snippet: "Forgot the webinar link — joining details below.",
+                body: "Forgot the webinar link — joining details below.\n\nhttps://acme.example/webinar\nPasscode: launch-2026\n\nSee you there.",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzAcmeThread/msg_a2",
+              },
+            ],
+          },
+          {
+            kind: "thread",
+            id: "th_devtools",
+            title: "DevTools Weekly",
+            folder: "Inbox",
+            participants: "DevTools Weekly · you",
+            labels: ["Promo"],
+            href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzDevTools",
+            messages: [
+              {
+                id: "msg_d1",
+                from: "DevTools Weekly", fromEmail: "hello@devtools.weekly",
+                to: "you@company.com",
+                subject: "Issue #214 — profiling tips",
+                date: "Aug 13", time: "06:40",
+                snippet: "Flamegraphs, sample rates, and one anti-pattern.",
+                body: "Flamegraphs, sample rates, and one anti-pattern.\n\nThis week: continuous profiling without drowning in noise, plus a short note on p99 vs avg.\n\nAlso: a bad habit — measuring cold-start with warm caches.",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzDevTools/msg_d1",
+              },
+            ],
+          },
+          {
+            kind: "thread",
+            id: "th_cloudops",
+            title: "CloudOps Digest",
+            folder: "Inbox",
+            participants: "CloudOps · you",
+            labels: ["Promo", "Ops"],
+            href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzCloudOps",
+            messages: [
+              {
+                id: "msg_c1",
+                from: "CloudOps", fromEmail: "digest@cloudops.dev",
+                to: "you@company.com",
+                subject: "Outage postmortem roundup",
+                date: "Aug 12", time: "05:55",
+                snippet: "Three incidents worth reading this week.",
+                body: "Three incidents worth reading this week.\n\n1) Cascading retry storm after a bad deploy\n2) Latency chart that lied about p99\n3) DNS TTL that outlived the failover\n\nFull write-ups linked in the digest archive.",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzCloudOps/msg_c1",
+              },
+              {
+                id: "msg_c2",
+                from: "CloudOps", fromEmail: "digest@cloudops.dev",
+                to: "you@company.com",
+                subject: "Re: Outage postmortem roundup",
+                date: "Aug 12", time: "11:20",
+                snippet: "Correction on the latency chart in item 2.",
+                body: "Correction on the latency chart in item 2.\n\nThe published graph used a 5-minute rollup; the real spike was ~90s. Updated PDF attached in the archive.\n\nSorry for the noise.",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzCloudOps/msg_c2",
+              },
+              {
+                id: "msg_c3",
+                from: "CloudOps", fromEmail: "digest@cloudops.dev",
+                to: "you@company.com",
+                subject: "Follow-up: runbook template",
+                date: "Aug 13", time: "09:03",
+                snippet: "Template attached for on-call handoff.",
+                body: "Template attached for on-call handoff.\n\nSections: symptom → blast radius → mitigation → owners → follow-ups.\n\nFeel free to fork for your team’s pager rotation.",
+                unread: false, hasAttachment: true, attachmentName: "runbook.md",
+                href: "https://mail.google.com/mail/u/0/#inbox/FMfcgzCloudOps/msg_c3",
+              },
+            ],
+          },
+        ],
+        status: "pending",
+      },
+      {
+        id: "p4", type: "flag", title: "Mark thread read + star", agent: "Hermes",
+        account: "Work Gmail", provider: "gmail", placement: "Projects",
+        summary: "Mark Planning workshop follow-up as read and starred.",
+        expires: "in 3 h", requestedAt: "Aug 16 · 13:20", editable: false,
+        targets: [
+          {
+            kind: "thread",
+            id: "th_workshop",
+            title: "Planning workshop follow-up",
+            folder: "Projects",
+            participants: "Maya Ortiz · you",
+            labels: ["Work", "Starred"],
+            href: "https://mail.google.com/mail/u/0/#label/Projects/FMfcgzWorkshop",
+            messages: [
+              {
+                id: "msg_w1",
+                from: "Maya Ortiz", fromEmail: "maya@company.com",
+                to: "you@company.com",
+                subject: "Notes from Thursday workshop",
+                date: "Aug 10", time: "14:22",
+                snippet: "Sharing decisions + open questions from the room.",
+                body: "Sharing decisions + open questions from the room.\n\nDecided: ship pilot with two accounts first.\nOpen: who owns the timeline slide, and when is the next sync?\n\nNotes PDF attached.",
+                unread: false, hasAttachment: true, attachmentName: "workshop-notes.pdf",
+                href: "https://mail.google.com/mail/u/0/#label/Projects/FMfcgzWorkshop/msg_w1",
+              },
+              {
+                id: "msg_w2",
+                from: "you@company.com", fromEmail: "you@company.com",
+                to: "maya@company.com",
+                subject: "Re: Notes from Thursday workshop",
+                date: "Aug 10", time: "16:05",
+                snippet: "Thanks — I’ll own the timeline slide.",
+                body: "Thanks — I’ll own the timeline slide.\n\nCan take a first draft by Friday and circulate before Monday’s sync.\n\nPing me if the scope changed after the room.",
+                unread: false, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#label/Projects/FMfcgzWorkshop/msg_w2",
+              },
+              {
+                id: "msg_w3",
+                from: "Maya Ortiz", fromEmail: "maya@company.com",
+                to: "you@company.com",
+                subject: "Re: Notes from Thursday workshop",
+                date: "Aug 11", time: "09:18",
+                snippet: "Great. Can you star this so it stays visible?",
+                body: "Great. Can you star this so it stays visible?\n\nAlso looping Alex for the pilot checklist.\n\nThanks!",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#label/Projects/FMfcgzWorkshop/msg_w3",
+              },
+            ],
+          },
+        ],
+        status: "pending",
+      },
+      {
+        id: "p5", type: "send", title: "Send invoice chase", agent: "Hermes",
+        account: "Personal Yahoo", provider: "yahoo", placement: "Drafts",
+        summary: "Follow-up on unpaid March invoice.",
+        expires: "in 90 min", requestedAt: "Aug 16 · 12:55", editable: true, mailCompose: true,
+        from: "you@yahoo.com",
+        to: ["billing@marcus.ltd"],
+        cc: [],
+        subject: "March invoice — gentle reminder",
+        body: "Hi team,\n\nChecking whether March invoice MG-204 landed. Happy to resend if needed.\n\nThanks,",
+        attachments: [
+          { name: "MG-204.pdf", size: "112 KB" },
+          { name: "statement-mar.csv", size: "18 KB" },
+        ],
+        targets: [], status: "pending",
+      },
+      {
+        id: "p6", type: "send", title: "Create & send intro draft", agent: "Cursor",
+        account: "Work Gmail", provider: "gmail", placement: "Drafts",
+        summary: "Agent created a new outbound draft and proposed send.",
+        expires: "in 1 h", requestedAt: "Aug 16 · 15:01", editable: true, mailCompose: true,
+        from: "you@company.com",
+        to: ["Jordan Lee <jordan@partner.io>"],
+        cc: ["alex@company.com"],
+        subject: "Intro — MailGent companion pilot",
+        body: "Hi Jordan,\n\nGreat chatting earlier. Sharing a short note on the companion pilot and next steps.\n\nBest,",
+        attachments: [],
+        targets: [], status: "pending",
+      },
+      {
+        id: "p7", type: "purge", title: "Permanently delete phishing thread", agent: "Hermes",
+        account: "Work Gmail", provider: "gmail", placement: "Spam → purge",
+        summary: "Hard-delete one phishing thread after review. Not recoverable from Trash.",
+        expires: "in 25 min", requestedAt: "Aug 15 · 22:48", editable: false,
+        targets: [
+          {
+            kind: "thread",
+            id: "th_phish",
+            title: "Urgent: verify payroll credentials",
+            folder: "Spam",
+            participants: "unknown · you",
+            labels: ["Spam", "Phishing"],
+            href: "https://mail.google.com/mail/u/0/#spam/FMfcgzPhish",
+            messages: [
+              {
+                id: "msg_ph1",
+                from: "Payroll Desk", fromEmail: "payroll-help@secure-payrol1.com",
+                to: "you@company.com",
+                subject: "Urgent: verify payroll credentials",
+                date: "Aug 15", time: "22:41",
+                snippet: "Your direct deposit will pause unless you confirm within 2 hours.",
+                body: "Your direct deposit will pause unless you confirm within 2 hours.\n\nOpen the link below and sign in with your work password.\n\nhttps://secure-payrol1.example/verify\n\nIT will not call you about this.",
+                unread: true, hasAttachment: false,
+                href: "https://mail.google.com/mail/u/0/#spam/FMfcgzPhish/msg_ph1",
+              },
+            ],
+          },
+        ],
+        status: "pending",
+      },
+    ]);
+
+    let proposals = seed();
+    let selectedId = "p1";
+    let filter = "all";
+    let focusIndex = 0;
+    let batchSelected = new Set();
+    let lastAction = "loaded";
+    let audit = [];
+
+    const pending = () => proposals.filter((p) => p.status === "pending");
+    const byId = (id) => proposals.find((p) => p.id === id);
+
+    const confirmHardDelete = (ids) => {
+      const list = ids.map(byId).filter((p) => p?.type === "purge");
+      if (!list.length) return true;
+      const titles = list.map((p) => p.title).join("; ");
+      return window.confirm(
+        `Permanently delete?\n\n${titles}\n\nThis cannot be undone through Trash.`
+      );
+    };
+
+    const log = (msg) => {
+      audit.unshift(`${new Date().toLocaleTimeString()} · ${msg}`);
+      if (audit.length > 8) audit.pop();
+      lastAction = msg;
+      renderState();
+    };
+
+    const renderState = () => {
+      const counts = proposals.reduce((acc, p) => {
+        acc[p.status] = (acc[p.status] || 0) + 1;
+        return acc;
+      }, {});
+      document.getElementById("state").textContent =
+        `last: ${lastAction}\n` +
+        `counts: ${JSON.stringify(counts)} · selected=${selectedId} · filter=${filter} · focusIdx=${focusIndex} · batch=${[...batchSelected].join(",") || "—"}\n` +
+        `audit:\n- ${audit.join("\n- ") || "(empty)"}`;
+    };
+
+    const decide = (ids, decision, edits = null) => {
+      ids.forEach((id) => {
+        const p = byId(id);
+        if (!p || p.status !== "pending") return;
+        if (edits && edits[id] && (p.editable || p.mailCompose)) {
+          Object.assign(p, edits[id]);
+          p.status = "approved_edited";
+          log(`${decision} (edited) ${p.title} · ${p.agent}`);
+        } else {
+          p.status = decision;
+          log(`${decision} ${p.title} · ${p.agent}`);
+        }
+      });
+      batchSelected.clear();
+      const still = pending();
+      if (!still.find((p) => p.id === selectedId)) selectedId = still[0]?.id || null;
+      if (focusIndex >= still.length) focusIndex = Math.max(0, still.length - 1);
+      renderAll();
+    };
+
+    const expireDemo = (id) => {
+      const p = byId(id);
+      if (!p || p.status !== "pending") return;
+      p.status = "expired";
+      log(`expired (grant/session) ${p.title}`);
+      batchSelected.delete(id);
+      const still = pending();
+      if (selectedId === id) selectedId = still[0]?.id || null;
+      renderAll();
+    };
+
+    const filteredA = () => pending().filter((p) => filter === "all" || p.type === filter);
+
+    const renderA = () => {
+      document.getElementById("a-count").textContent = String(pending().length);
+      const list = document.getElementById("a-list");
+      const items = filteredA();
+      list.innerHTML = items.map((p) => `
+        <button type="button" class="q-item ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}">
+          <div class="row1"><strong>${p.title}</strong>${typePill(p.type)}</div>
+          <div class="meta">
+            ${icon("i-bot", "icon sm")}
+            ${p.agent} · ${accountChip(p)}
+          </div>
+          <div class="meta meta-time">
+            <span>${requestedAtHtml(p.requestedAt)}</span>
+            ${expirePill(p.expires, { withLabel: true })}
+          </div>
+        </button>
+      `).join("") || `<div style="padding:18px;color:var(--muted)" class="hint">${icon("i-check", "icon")} No pending proposals in this filter.</div>`;
+
+      list.querySelectorAll("[data-id]").forEach((btn) => {
+        btn.addEventListener("click", () => { selectedId = btn.dataset.id; renderA(); });
+      });
+
+      const insp = document.getElementById("a-insp");
+      const p = byId(selectedId);
+      if (!p || p.status !== "pending") {
+        insp.innerHTML = `
+          <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · queue + inspector</div>
+          <h2>Nothing selected</h2>
+          <p class="sub">Pick a pending proposal. Queue empties when grant/session expiry cancels leftovers.</p>
+          <div class="explain"><span class="glyph">${icon("i-info", "icon")}</span><div>Agents may propose soft delete (Trash) or hard delete (permanent); both need your approval.</div></div>`;
+        return;
+      }
+
+      const editBlock = p.mailCompose || p.editable
+        ? mailComposeHtml(p, { prefix: "a" })
+        : targetsHtml(p.targets);
+
+      insp.innerHTML = `
+        <div class="eyebrow">${icon("i-spark", "icon sm")} Variant A · queue + inspector</div>
+        <div class="insp-top">
+          <div class="insp-top-bar">
+            ${typePill(p.type)}
+            <button type="button" class="btn ghost" id="a-expire">${icon("i-calendar", "icon")} Simulate expiry</button>
+          </div>
+          <div class="insp-title">
+            <h2>${p.title}</h2>
+            <span class="requested">${requestedAtHtml(p.requestedAt)}</span>
+          </div>
+          <p class="sub">${p.summary}</p>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-cell"><label>Agent</label><div>${icon("i-bot", "icon")} ${p.agent}</div></div>
+          <div class="meta-cell"><label>Account</label><div>${accountChip(p)}</div></div>
+          <div class="meta-cell"><label>Placement</label><div>${icon("i-folder", "icon")} ${p.placement}</div></div>
+          <div class="meta-cell"><label>Expires</label><div>${expirePill(p.expires)}</div></div>
+        </div>
+        ${mutationWarnHtml(p)}
+        ${editBlock}
+        <div class="footer-bar">
+          <button type="button" class="btn danger" id="a-deny">${icon("i-ban", "icon")} Deny</button>
+          <button type="button" class="btn" id="a-open">${icon("i-mail", "icon")} Open in Apple Mail</button>
+          <button type="button" class="btn ${p.type === "purge" ? "danger-solid" : "primary"}" id="a-approve">${icon("i-check", "icon")} ${(p.mailCompose || p.editable) ? "Save edits & approve" : (p.type === "purge" ? "Approve permanent delete" : "Approve")}</button>
+        </div>
+      `;
+
+      if (p.mailCompose || p.editable) wireMailCompose("a", p.id);
+      else wireOpenMailLinks(insp);
+
+      document.getElementById("a-deny").onclick = () => decide([p.id], "denied");
+      document.getElementById("a-approve").onclick = () => {
+        if (!confirmHardDelete([p.id])) return;
+        if (p.mailCompose || p.editable) {
+          decide([p.id], "approved", { [p.id]: readMailCompose("a", p) });
+        } else decide([p.id], "approved");
+      };
+      document.getElementById("a-expire").onclick = () => expireDemo(p.id);
+      document.getElementById("a-open").onclick = () => log(`open-in-mail stub · ${p.title}`);
+    };
+
+    document.querySelectorAll("[data-filter]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        filter = chip.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach((c) => c.classList.toggle("on", c === chip));
+        const first = filteredA()[0];
+        if (first) selectedId = first.id;
+        renderA();
+        renderState();
+      });
+    });
+
+    const renderB = () => {
+      const list = pending();
+      const card = document.getElementById("b-card");
+      if (!list.length) {
+        card.innerHTML = `
+          <div class="focus-prog"><span class="eyebrow">${icon("i-spark", "icon sm")} Variant B</span><span class="pill ok">${icon("i-check", "icon")} Queue clear</span></div>
+          <h2>Nothing left to review</h2>
+          <p class="lead">Expired or decided proposals leave an audit trail; they do not linger for auto-approve.</p>
+          <button type="button" class="btn" id="b-reset">${icon("i-spark", "icon")} Reload sample queue</button>`;
+        document.getElementById("b-reset").onclick = () => {
+          proposals = seed();
+          selectedId = "p1";
+          focusIndex = 0;
+          batchSelected.clear();
+          log("reset sample queue");
+          renderAll();
+        };
+        return;
+      }
+      if (focusIndex >= list.length) focusIndex = 0;
+      const p = list[focusIndex];
+      const compose = p.mailCompose || p.editable;
+      card.innerHTML = `
+        <div class="focus-prog">
+          <span class="eyebrow">${icon("i-spark", "icon sm")} Variant B · ${focusIndex + 1} of ${list.length}</span>
+          ${typePill(p.type)}
+        </div>
+        <h2>${p.title}</h2>
+        <p class="lead">${p.summary}</p>
+        <div class="focus-ops">
+          <div class="op-line">
+            <span class="glyph">${icon("i-bot", "icon")}</span>
+            <div>
+              <strong>${p.agent}</strong>
+              <div class="hint" style="margin:2px 0 0">${accountChip(p)} · ${p.placement} · requested ${esc(p.requestedAt)} · expires ${p.expires}</div>
+            </div>
+          </div>
+        </div>
+        ${mutationWarnHtml(p)}
+        ${compose
+          ? mailComposeHtml(p, { prefix: "b" })
+          : targetsHtml(p.targets, { compact: true })}
+        <div class="focus-actions">
+          <button type="button" class="btn danger" id="b-deny">${icon("i-ban", "icon")} Deny</button>
+          <button type="button" class="btn" id="b-skip">${icon("i-arrow-right", "icon")} Skip</button>
+          <button type="button" class="btn ${p.type === "purge" ? "danger-solid" : "primary"}" id="b-approve">${icon("i-check", "icon")} ${compose ? "Approve edits" : (p.type === "purge" ? "Approve permanent delete" : "Approve")}</button>
+        </div>
+        <div class="focus-skip"><button type="button" class="btn ghost" id="b-expire">${icon("i-calendar", "icon")} Simulate expiry</button></div>
+      `;
+      if (compose) wireMailCompose("b", p.id);
+      else wireOpenMailLinks(card);
+      document.getElementById("b-deny").onclick = () => decide([p.id], "denied");
+      document.getElementById("b-approve").onclick = () => {
+        if (!confirmHardDelete([p.id])) return;
+        if (compose) {
+          decide([p.id], "approved", { [p.id]: readMailCompose("b", p) });
+        } else decide([p.id], "approved");
+      };
+      document.getElementById("b-skip").onclick = () => {
+        focusIndex = (focusIndex + 1) % list.length;
+        log(`skipped ${p.title}`);
+        renderB();
+        renderState();
+      };
+      document.getElementById("b-expire").onclick = () => expireDemo(p.id);
+    };
+
+    const renderC = () => {
+      const body = document.getElementById("c-body");
+      body.innerHTML = proposals.map((p) => {
+        const pendingRow = p.status === "pending";
+        const checked = batchSelected.has(p.id);
+        const compose = (p.mailCompose || p.editable) && pendingRow;
+        return `<tr class="${checked ? "selected" : ""} ${pendingRow ? "" : "done"}">
+          <td>${pendingRow
+            ? `<input type="checkbox" data-check="${p.id}" ${checked ? "checked" : ""}>`
+            : `<span class="pill neutral">${p.status}</span>`}</td>
+          <td>
+            <div style="font-weight:650;margin-bottom:6px">${p.title}</div>
+            ${typePill(p.type)}
+          </td>
+          <td><div class="row" style="gap:6px">${icon("i-bot", "icon")} ${p.agent}</div></td>
+          <td>${accountChip(p)}<div class="hint" style="margin:4px 0 0">${icon("i-folder", "icon sm")} ${p.placement}</div></td>
+          <td><div class="hint" style="margin:0">${requestedAtHtml(p.requestedAt)}</div></td>
+          <td>${pendingRow ? expirePill(p.expires) : "—"}</td>
+          <td style="min-width:320px">${compose
+            ? mailComposeHtml(p, { prefix: `c-${p.id}`, compact: true })
+            : `<div class="hint" style="margin:0">${icon("i-info", "icon sm")} ${esc(targetsSummary(p.targets) || p.summary)}</div>`}
+          </td>
+        </tr>`;
+      }).join("");
+
+      proposals.forEach((p) => {
+        if ((p.mailCompose || p.editable) && p.status === "pending") {
+          wireMailCompose(`c-${p.id}`, p.id);
+        }
+      });
+
+      body.querySelectorAll("[data-check]").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          if (cb.checked) batchSelected.add(cb.dataset.check);
+          else batchSelected.delete(cb.dataset.check);
+          renderC();
+          renderState();
+        });
+      });
+      document.getElementById("c-sel").textContent = `${batchSelected.size} selected`;
+      document.getElementById("c-all").checked =
+        pending().length > 0 && pending().every((p) => batchSelected.has(p.id));
+    };
+
+    document.getElementById("c-all").addEventListener("change", (e) => {
+      if (e.target.checked) pending().forEach((p) => batchSelected.add(p.id));
+      else batchSelected.clear();
+      renderC();
+      renderState();
+    });
+
+    document.getElementById("c-select-agent").onclick = () => {
+      const first = pending()[0];
+      if (!first) return;
+      batchSelected = new Set(pending().filter((p) => p.agent === first.agent).map((p) => p.id));
+      log(`batch bounded to agent ${first.agent}`);
+      renderC();
+      renderState();
+    };
+
+    document.getElementById("c-deny").onclick = () => {
+      if (!batchSelected.size) return;
+      decide([...batchSelected], "denied");
+    };
+
+    document.getElementById("c-approve").onclick = () => {
+      if (!batchSelected.size) return;
+      const ids = [...batchSelected];
+      if (!confirmHardDelete(ids)) return;
+      const edits = {};
+      ids.forEach((id) => {
+        const p = byId(id);
+        if (p?.mailCompose || p?.editable) {
+          const read = readMailCompose(`c-${id}`, p);
+          if (read) edits[id] = read;
+        }
+      });
+      decide(ids, "approved", edits);
+    };
+
+    const renderAll = () => { renderA(); renderB(); renderC(); renderState(); };
+
+    const choose = (view) => {
+      VIEWS.forEach((id) => document.getElementById(id).classList.toggle("hidden", id !== view));
+      document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      history.replaceState(null, "", `?view=${view}`);
+    };
+
+    document.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => choose(b.dataset.view)));
+    document.querySelectorAll("[data-cycle]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const cur = new URLSearchParams(location.search).get("view") || "queue";
+        const i = VIEWS.indexOf(cur);
+        const next = VIEWS[(i + Number(b.dataset.cycle) + VIEWS.length) % VIEWS.length];
+        choose(next);
+      });
+    });
+
+    document.addEventListener("keydown", (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) return;
+      const cur = new URLSearchParams(location.search).get("view") || "queue";
+      const i = VIEWS.indexOf(cur);
+      if (e.key === "ArrowLeft") choose(VIEWS[(i + VIEWS.length - 1) % VIEWS.length]);
+      if (e.key === "ArrowRight") choose(VIEWS[(i + 1) % VIEWS.length]);
+    });
+
+    const initial = new URLSearchParams(location.search).get("view");
+    if (VIEWS.includes(initial)) choose(initial);
+    renderAll();
+  </script>
+</body>
+</html>

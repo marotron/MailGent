@@ -8,7 +8,7 @@ Blocked by: 02
 
 How should MailGent represent accounts, identities, threads, messages, Gmail labels, Yahoo folders, drafts, sent mail, and cross-account search so unified and separate views remain predictable without erasing provider-specific behavior?
 
-Constraint from map: canonical ops must distinguish soft delete (Trash; agent-approvable) from hard/permanent delete (human UI only for Gmail and Yahoo; never agent-facing).
+Constraint from map: canonical ops must distinguish soft delete (Trash) from hard/permanent delete. Both may be agent-proposed with approval when granted (ticket 08); humans may also delete directly.
 
 ## Answer
 
@@ -34,8 +34,9 @@ MailGent keeps **provider-faithful objects** under a thin product vocabulary. Ac
 
 ### Delete (C1 + prior lock)
 
-- Hard/permanent delete: human UI only for Gmail and Yahoo; never agent-facing (no tool, grant, or approval path).
-- Agent soft-delete → Trash is approval-gated per ticket 08; hard delete remains human-only.
+- Soft delete → Trash and hard/permanent delete are distinct ops for Gmail and Yahoo.
+- Both may be agent-proposed when capability + approval allow (ticket 08).
+- Empty Trash / bulk purge, if exposed, remains a human-only companion action.
 
 ### Unified search (D1)
 
@@ -47,3 +48,7 @@ MailGent keeps **provider-faithful objects** under a thin product vocabulary. Ac
 
 - Walkthrough of provider differences: `examples/mailbox-model-problem.html`
 - Decision options locked here: `examples/mailbox-model-remaining-challenges.html` → A1, B1, C1, D1
+
+## Comments
+
+- **Superseded (user):** soft and hard delete both agent-proposeable with approval (ticket 08); empty Trash / bulk purge stays human-only if exposed.

@@ -14,7 +14,7 @@ MailGent authorizes **agent identities**, not models. Deny by default. Effective
 
 `identity + class ceiling + data grant + capability + required approval`
 
-Hard delete has no capability and cannot be granted. Exact operations and approval UX belong to ticket 08.
+Soft-delete and hard-delete are separate grantable capabilities; both still require mutation approval when used. Exact operations and approval UX belong to ticket 08.
 
 ### Agent vs model
 
@@ -142,4 +142,5 @@ Immediate stop; cancel pending mutations; append-only audit; disclosed data cann
 - Human policy explanations show class ceiling, matching allows/denies, exposed fields, expiry, and final decision, with pre-save counts. Agents may inspect their own effective grant summaries, but object-level missing and denied cases both return generic `not_available`; no hidden rule, count, field, or message existence leaks. Audit retains the exact internal reason.
 - Every allow grant selects at least one explicit account. `All current accounts` is a snapshot and never includes future accounts. Placement is optional; Gmail matches any selected label, Yahoo its folder, and canonical virtual Archived is selectable. New placements are not implicit, and placement changes trigger immediate re-evaluation.
 - Every direct or smart-folder-backed allow grant is classified exactly one of private (`lan-inference` only), regular (`lan-inference` or `machine-local`), or remote-eligible (any class with active remote-session confirmation). Default is regular. Moving to a less restrictive class is access broadening and requires confirmation.
-- Data grants and operation capabilities are separate axes; both are required for a request, mutation approval remains an independent gate, and hard delete has no grantable capability. Exact operations deferred to ticket 08.
+- Data grants and operation capabilities are separate axes; both are required for a request, mutation approval remains an independent gate, and soft-delete / hard-delete are separate grantable capabilities. Exact operations deferred to ticket 08.
+- **Superseded (user):** hard delete is grantable (capability + approval), not banned from the agent surface.

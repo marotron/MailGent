@@ -13,6 +13,6 @@ Using first-party documentation, what authentication, mail APIs or protocols, pu
 
 **Yahoo:** No proprietary Mail API — IMAP/SMTP OAuth (`mail-r`/`mail-w`) after commercial access approval (scopes not self-serve). IDLE + CONDSTORE; handle MESSAGELIMIT/UIDONLY; IDLE omits deletes. App passwords exist but OAuth is the modern path. Separate OAuth clients for Yahoo vs AOL.
 
-**v1 product:** Start Yahoo access application early; plan Gmail API not IMAP; keep mailbox bodies/tokens on-device to reduce CASA/Yahoo transfer risk; abstract labels vs folders; treat remote agents receiving mail content as policy-sensitive. Soft delete (Trash) may be agent-proposed with approval; hard/permanent delete is human-UI-only for Gmail and Yahoo.
+**v1 product:** Start Yahoo access application early; plan Gmail API not IMAP; keep mailbox bodies/tokens on-device to reduce CASA/Yahoo transfer risk; abstract labels vs folders; treat remote agents receiving mail content as policy-sensitive. Soft delete (Trash) and hard/permanent delete may both be agent-proposed with approval.
 
 Full findings (cited): [../research/gmail-yahoo-integration.md](../research/gmail-yahoo-integration.md)

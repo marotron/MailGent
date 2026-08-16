@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype · Thread open icons</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --ink: #152033;
+      --muted: #6b778c;
+      --line: #dfe4ee;
+      --blue: #2a4fc7;
+      --blue-ink: #1a3aa8;
+      --blue-soft: #eef2ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #e8eefc, transparent),
+                  radial-gradient(900px 500px at 100% 0%, #f0f3f8, transparent),
+                  var(--bg);
+      color: var(--ink);
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 36px 20px 100px; }
+    .eyebrow {
+      color: var(--blue); font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.02em; font-weight: 650; }
+    .sub { margin: 0 0 28px; color: var(--muted); font-size: 14px; max-width: 52ch; }
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--line); border-radius: 14px; background: #fff;
+      padding: 16px; cursor: pointer; text-align: left;
+      box-shadow: 0 8px 24px #15203308;
+      transition: border-color .15s, box-shadow .15s, transform .1s;
+    }
+    .card:hover { border-color: #b4c2f5; transform: translateY(-1px); }
+    .card.on {
+      border-color: var(--blue); box-shadow: 0 0 0 3px #2a4fc722;
+    }
+    .card .id {
+      font-size: 11px; font-weight: 650; color: var(--muted);
+      letter-spacing: .04em; text-transform: uppercase; margin-bottom: 12px;
+    }
+    .card .name { font-size: 15px; font-weight: 650; margin-bottom: 4px; }
+    .card .desc { font-size: 12px; color: var(--muted); margin-bottom: 16px; min-height: 32px; }
+    .preview-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 12px; border-radius: 10px; background: #f7f9fc; border: 1px solid var(--line);
+    }
+    .preview-row .title { font-size: 13px; font-weight: 650; }
+    .mail-open {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 650; color: var(--blue-ink);
+      text-decoration: none; border-radius: 8px; padding: 4px 8px;
+      background: var(--blue-soft); border: 1px solid #b4c2f5;
+      white-space: nowrap;
+    }
+    .sizes {
+      display: flex; align-items: flex-end; gap: 14px; margin-top: 14px;
+      color: #3d4b63;
+    }
+    .sizes .sz { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .sizes span { font-size: 10px; color: var(--muted); }
+    .icon { width: 18px; height: 18px; stroke: currentColor; fill: none;
+      stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+    .icon.sm { width: 14px; height: 14px; }
+    .icon.lg { width: 28px; height: 28px; }
+    .icon.fill { fill: currentColor; stroke: none; }
+    .floating {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      background: #121a2b; border-radius: 14px; color: #c9d3ea;
+      box-shadow: 0 14px 40px #121a2b55; z-index: 20; font-size: 12px;
+      max-width: calc(100vw - 24px);
+    }
+    .floating strong { color: #fff; }
+    .floating code { color: #9ec5ff; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <!-- PROTOTYPE — throwaway icon picker for Open-thread affordance -->
+  <svg xmlns="http://www.w3.org/2000/svg" class="hidden" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <!-- A · current stacked envelopes -->
+    <symbol id="v-a" viewBox="0 0 24 24">
+      <rect x="5" y="3" width="14" height="10" rx="2"/>
+      <path d="m5 5 7 5 7-5"/>
+      <rect x="3" y="9" width="14" height="10" rx="2"/>
+      <path d="m3 11 7 5 7-5"/>
+    </symbol>
+    <!-- B · three staggered envelopes -->
+    <symbol id="v-b" viewBox="0 0 24 24">
+      <rect x="7" y="2.5" width="13" height="9" rx="1.5"/>
+      <path d="m7 4.2 6.5 4.2L20 4.2"/>
+      <rect x="5" y="6.5" width="13" height="9" rx="1.5"/>
+      <path d="m5 8.2 6.5 4.2L18 8.2"/>
+      <rect x="3" y="10.5" width="13" height="9" rx="1.5"/>
+      <path d="m3 12.2 6.5 4.2L16 12.2"/>
+    </symbol>
+    <!-- C · envelope + reply arcs -->
+    <symbol id="v-c" viewBox="0 0 24 24">
+      <rect x="2.5" y="6" width="15" height="12" rx="2"/>
+      <path d="m2.5 8.2 7.5 5.5 7.5-5.5"/>
+      <path d="M17.5 8.5c2.2 0 4 1.6 4 3.6 0 1.4-.8 2.6-2.1 3.2"/>
+      <path d="M19.2 17.2 19.4 15.1 21.5 15.4"/>
+    </symbol>
+    <!-- D · speech bubbles (conversation) -->
+    <symbol id="v-d" viewBox="0 0 24 24">
+      <path d="M4 4.5h10a2.5 2.5 0 0 1 2.5 2.5v4A2.5 2.5 0 0 1 14 13.5H9l-3.5 2.5V13.5H4A2.5 2.5 0 0 1 1.5 11V7A2.5 2.5 0 0 1 4 4.5Z"/>
+      <path d="M10 12.5h8a2.5 2.5 0 0 1 2.5 2.5v3.5A2.5 2.5 0 0 1 18 21h-1.2L13.5 23v-2H10A2.5 2.5 0 0 1 7.5 18.5V15A2.5 2.5 0 0 1 10 12.5Z"/>
+    </symbol>
+    <!-- E · list lines + envelope -->
+    <symbol id="v-e" viewBox="0 0 24 24">
+      <path d="M3 5h8M3 9h6M3 13h5"/>
+      <rect x="10" y="8" width="11" height="11" rx="2"/>
+      <path d="m10 10.2 5.5 4 5.5-4"/>
+    </symbol>
+    <!-- F · stacked cards / papers -->
+    <symbol id="v-f" viewBox="0 0 24 24">
+      <rect x="6" y="3" width="12" height="14" rx="2"/>
+      <path d="M9 7h6M9 10h6M9 13h4"/>
+      <path d="M4.5 7v10.5A2.5 2.5 0 0 0 7 20h9.5"/>
+    </symbol>
+    <!-- G · chain-link messages -->
+    <symbol id="v-g" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="10" height="8" rx="2"/>
+      <path d="m3 5 5 3.5L13 5"/>
+      <path d="M14 8.5h1.5a3.5 3.5 0 0 1 0 7H14"/>
+      <path d="M10 15.5H8.5a3.5 3.5 0 0 1 0-7H10"/>
+      <rect x="11" y="13" width="10" height="8" rx="2"/>
+      <path d="m11 15 5 3.5 5-3.5"/>
+    </symbol>
+    <!-- H · inbox tray with stack -->
+    <symbol id="v-h" viewBox="0 0 24 24">
+      <path d="M3 13h4l1.5 2.5h7L17 13h4v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>
+      <rect x="6" y="4" width="12" height="7" rx="1.5"/>
+      <path d="m6 5.8 6 4 6-4"/>
+    </symbol>
+    <!-- I · single mail + badge count -->
+    <symbol id="v-i" viewBox="0 0 24 24">
+      <rect x="2" y="5" width="16" height="13" rx="2"/>
+      <path d="m2 7.2 8 5.8 8-5.8"/>
+      <circle cx="18.5" cy="6.5" r="3.2" fill="currentColor" stroke="none"/>
+    </symbol>
+    <!-- J · offset double outline (cleaner stack) -->
+    <symbol id="v-j" viewBox="0 0 24 24">
+      <rect x="6.5" y="2.5" width="14" height="11" rx="2"/>
+      <rect x="3.5" y="7.5" width="14" height="11" rx="2"/>
+      <path d="m3.5 9.7 7 5 7-5"/>
+    </symbol>
+    <!-- K · mail in folder -->
+    <symbol id="v-k" viewBox="0 0 24 24">
+      <path d="M3 7.5a2 2 0 0 1 2-2h4.2l1.6 1.6H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z"/>
+      <rect x="7" y="10" width="10" height="7" rx="1.4"/>
+      <path d="m7 11.6 5 3.4 5-3.4"/>
+    </symbol>
+    <!-- L · open folder with mail peeking -->
+    <symbol id="v-l" viewBox="0 0 24 24">
+      <path d="M3 8a2 2 0 0 1 2-2h3.8l1.5 1.5H14"/>
+      <path d="M3 10.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6.2a1.5 1.5 0 0 0-1.1-1.45L8.2 8.4A2 2 0 0 0 6.4 8.6L3 10.5Z"/>
+      <rect x="8.5" y="5" width="9" height="6.5" rx="1.3"/>
+      <path d="m8.5 6.4 4.5 3 4.5-3"/>
+    </symbol>
+    <!-- M · conversation (two bubbles, clear) -->
+    <symbol id="v-m" viewBox="0 0 24 24">
+      <rect x="2.5" y="3.5" width="12" height="8" rx="2.5"/>
+      <path d="M5.5 11.5 4 14.5 8 11.5"/>
+      <rect x="9.5" y="12" width="12" height="8" rx="2.5"/>
+      <path d="M18.5 20 20 23 16 20"/>
+    </symbol>
+    <!-- N · conversation with message lines -->
+    <symbol id="v-n" viewBox="0 0 24 24">
+      <path d="M3.5 4h11a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-3.5 2.8V13H3.5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>
+      <path d="M7 7.5h6M7 10h4"/>
+      <path d="M9.5 13.5H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1.2L14.5 24v-2.5H9.5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z"/>
+      <path d="M11.5 17h6"/>
+    </symbol>
+    <!-- O · folder tab + envelope front -->
+    <symbol id="v-o" viewBox="0 0 24 24">
+      <path d="M2.5 8.2A1.7 1.7 0 0 1 4.2 6.5h3.6l1.3 1.3h10.2a1.7 1.7 0 0 1 1.7 1.7V18a1.7 1.7 0 0 1-1.7 1.7H4.2A1.7 1.7 0 0 1 2.5 18V8.2Z"/>
+      <path d="M6 12.2h12v5.3a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-5.3Z"/>
+      <path d="m6 12.2 6 4 6-4"/>
+    </symbol>
+  </svg>
+
+  <div class="wrap">
+    <p class="eyebrow">Prototype · throwaway</p>
+    <h1>Open-thread icon variants</h1>
+    <p class="sub">Pick the glyph for the thread <strong>Open</strong> control. Message Open stays a single envelope. Click a card — pick shows in the bar.</p>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="floating" id="bar">Selected: <strong id="pick-name">—</strong> · id <code id="pick-id">—</code></div>
+
+  <script>
+    const VARIANTS = [
+      { id: "v-k", name: "K · Mail in folder", desc: "Folder with envelope inside — thread as container." },
+      { id: "v-l", name: "L · Open folder + mail", desc: "Mail peeking from open folder." },
+      { id: "v-o", name: "O · Folder tab + mail", desc: "Classic folder tab, envelope in body." },
+      { id: "v-m", name: "M · Conversation", desc: "Two speech bubbles — back-and-forth." },
+      { id: "v-n", name: "N · Conversation + lines", desc: "Bubbles with message lines inside." },
+      { id: "v-d", name: "D · Speech bubbles (earlier)", desc: "Chat-style thread, less “email”." },
+      { id: "v-c", name: "C · Mail + reply", desc: "One mail with reply arc — conversation cue." },
+      { id: "v-a", name: "A · Stacked envelopes", desc: "Current prototype — two overlapping mails." },
+      { id: "v-b", name: "B · Triple stagger", desc: "Three envelopes; louder “many messages”." },
+      { id: "v-e", name: "E · List + mail", desc: "Thread list + message open." },
+      { id: "v-f", name: "F · Document stack", desc: "Papers / thread pages, not envelopes." },
+      { id: "v-g", name: "G · Linked messages", desc: "Two mails joined by a link." },
+      { id: "v-h", name: "H · Inbox tray", desc: "Tray + mail — mailbox metaphor." },
+      { id: "v-i", name: "I · Mail + count badge", desc: "Single mail with thread-count dot." },
+      { id: "v-j", name: "J · Clean double", desc: "Offset outlines; front has flap." },
+    ];
+
+    const params = new URLSearchParams(location.search);
+    let selected = params.get("v") || "v-k";
+
+    const icon = (id, cls = "icon sm") =>
+      `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
+
+    const render = () => {
+      document.getElementById("grid").innerHTML = VARIANTS.map((v) => `
+        <button type="button" class="card ${v.id === selected ? "on" : ""}" data-id="${v.id}">
+          <div class="id">${v.id}</div>
+          <div class="name">${v.name}</div>
+          <div class="desc">${v.desc}</div>
+          <div class="preview-row">
+            <span class="title">Acme Newsletter</span>
+            <span class="mail-open">${icon(v.id)} Open</span>
+          </div>
+          <div class="sizes">
+            <div class="sz">${icon(v.id, "icon sm")}<span>14</span></div>
+            <div class="sz">${icon(v.id, "icon")}<span>18</span></div>
+            <div class="sz">${icon(v.id, "icon lg")}<span>28</span></div>
+          </div>
+        </button>
+      `).join("");
+
+      const cur = VARIANTS.find((v) => v.id === selected) || VARIANTS[0];
+      document.getElementById("pick-name").textContent = cur.name;
+      document.getElementById("pick-id").textContent = cur.id;
+
+      document.querySelectorAll("[data-id]").forEach((btn) => {
+        btn.onclick = () => {
+          selected = btn.dataset.id;
+          const url = new URL(location.href);
+          url.searchParams.set("v", selected);
+          history.replaceState(null, "", url);
+          render();
+        };
+      });
+    };
+
+    render();
+  </script>
+</body>
+</html>

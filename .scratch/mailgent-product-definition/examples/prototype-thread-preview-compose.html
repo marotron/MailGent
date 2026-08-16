@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype · Thread preview as compose</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #e5e5ea;
+      --line-strong: #d4d7de;
+      --blue: #2a4fc7;
+      --blue-ink: #1a3aa8;
+      --blue-soft: #eef2ff;
+      --paper: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      background:
+        radial-gradient(1100px 520px at 15% -10%, #e8eefc, transparent),
+        radial-gradient(900px 480px at 100% 0%, #f0f3f8, transparent),
+        var(--bg);
+      color: var(--ink);
+    }
+    .wrap { max-width: 820px; margin: 0 auto; padding: 32px 20px 120px; }
+    .eyebrow {
+      color: var(--blue); font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px;
+    }
+    h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: -0.02em; font-weight: 650; }
+    .sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.45; max-width: 62ch; }
+    .banner {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      padding: 10px 12px; margin-bottom: 14px;
+      border: 1px solid #c9d6f5; border-radius: 12px; background: var(--blue-soft); color: #2a3f73;
+      font-size: 13px;
+    }
+    .banner strong { font-weight: 650; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 650;
+      background: #fdecee; color: #b42318;
+    }
+    .preview h3 {
+      margin: 0 0 10px; font-size: 13px; font-weight: 650;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .thread-list { display: flex; flex-direction: column; gap: 12px; }
+    .thread {
+      border: 1px solid var(--line-strong); border-radius: 12px;
+      background: #fbfcfe; overflow: hidden;
+    }
+    .thread-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; background: #fff; border-bottom: 1px solid var(--line);
+    }
+    .thread-head .title { font-size: 14px; font-weight: 650; flex: 1; min-width: 0; }
+    .thread-head .count { font-size: 11px; color: var(--muted); }
+    .thread-head .meta {
+      display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
+    }
+    .meta-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; color: #516079; background: #eef1f6;
+      border-radius: 999px; padding: 2px 8px;
+    }
+    .meta-chip strong { font-weight: 650; color: #2a364d; }
+    .thread-toggle {
+      border: 0; background: transparent; color: var(--muted); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 8px;
+      font: inherit; font-size: 12px;
+    }
+    .thread-toggle:hover { background: #f0f2f6; color: var(--ink); }
+    .chev { transition: transform .15s; display: inline-flex; }
+    .thread.open .chev { transform: rotate(90deg); }
+    .thread-body { display: none; padding: 10px; }
+    .thread.open .thread-body { display: flex; flex-direction: column; gap: 10px; }
+    .thread-body-top { padding: 0 2px 4px; }
+
+    /* Compose-styled message card */
+    .mail-compose {
+      border: 1px solid var(--line-strong); border-radius: 10px;
+      background: #fff; overflow: hidden;
+      box-shadow: 0 1px 0 #fff inset, 0 8px 24px #1520330a;
+    }
+    .mail-compose.unread { box-shadow: 0 0 0 2px #2a4fc722, 0 8px 24px #1520330a; }
+    .mail-fields { background: #fff; }
+    .mail-row {
+      display: grid; grid-template-columns: 88px minmax(0, 1fr) auto;
+      gap: 8px; align-items: center;
+      min-height: 32px; padding: 4px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .mail-row.attach-row { align-items: flex-start; padding-top: 8px; padding-bottom: 8px; }
+    .mail-row label {
+      font-size: 12px; font-weight: 500; color: #8e8e93; padding-top: 1px;
+    }
+    .mail-row .field {
+      display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0;
+    }
+    .mail-row .when {
+      font-size: 11px; color: var(--muted); white-space: nowrap; justify-self: end;
+    }
+    .mail-token {
+      display: inline-flex; align-items: center;
+      padding: 3px 8px; border-radius: 999px;
+      background: #e8f0fe; color: #1a4bb8;
+      font-size: 12px; font-weight: 500; line-height: 1.35;
+      border: 1px solid #c9daf8; max-width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mail-subject {
+      font-size: 13px; font-weight: 500; color: #1c1c1e;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mail-attach {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px 3px 3px; border-radius: 999px;
+      background: #eef1f6; color: #1c1c1e;
+      font-size: 12px; font-weight: 500; line-height: 1.35;
+      border: 1px solid var(--line); max-width: 100%;
+    }
+    .mail-attach .glyph {
+      width: 18px; height: 18px; border-radius: 999px; flex: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #fff; border: 1px solid var(--line); color: #636366;
+      font-size: 10px;
+    }
+    .mail-body-wrap { background: #fff; padding: 10px 12px 8px; }
+    .mail-body {
+      margin: 0; font-size: 13px; line-height: 1.45; color: #1c1c1e;
+      white-space: pre-wrap;
+    }
+    .mail-body.clamped {
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+      overflow: hidden; white-space: normal;
+    }
+    .mail-body-actions {
+      display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    }
+    .linkish {
+      border: 0; background: transparent; color: var(--blue-ink);
+      font: inherit; font-size: 12px; font-weight: 650; padding: 0; cursor: pointer;
+    }
+    .linkish:hover { text-decoration: underline; }
+    .mail-open {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 650; color: var(--blue-ink);
+      text-decoration: none; border-radius: 8px; padding: 4px 8px;
+      background: var(--blue-soft); border: 1px solid #b4c2f5;
+      white-space: nowrap; margin-left: auto;
+    }
+    .mail-open:hover { background: #d9e3ff; }
+    .hint {
+      margin-top: 14px; color: var(--muted); font-size: 12px; line-height: 1.45;
+    }
+    .log {
+      margin-top: 18px; padding: 10px 12px; border-radius: 10px;
+      border: 1px dashed var(--line-strong); background: #fbfcfe;
+      font-size: 12px; color: var(--muted); min-height: 42px;
+    }
+    .switcher {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 999px;
+      background: #121a2b; color: #c9d3ea; box-shadow: 0 12px 32px #0006;
+      z-index: 40; font-size: 12px;
+    }
+    .switcher button {
+      border: 0; background: #243049; color: #e8eefc; border-radius: 999px;
+      width: 28px; height: 28px; cursor: pointer; font-size: 14px;
+    }
+    .switcher button:hover { background: #314564; }
+    .switcher .label { min-width: 210px; text-align: center; font-weight: 650; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">Prototype · mutation preview</p>
+    <h1>Thread preview as compose chrome</h1>
+    <p class="sub">
+      Question: does reviewing targets feel clearer when each message uses the same
+      From / To / Subject / body layout as draft compose — with body clipped to ~3 lines
+      and expand on request?
+    </p>
+
+    <div class="banner">
+      <span class="pill">Trash</span>
+      <span><strong>Trash 3 promo threads</strong> · Hermes · Work Gmail</span>
+      <span style="color:#5a6b95">Soft delete → Trash only</span>
+    </div>
+
+    <div class="preview" id="preview"></div>
+    <div class="hint">Open links are stubs. Expand a message body to read the rest in-place.</div>
+    <div class="log" id="log">Ready.</div>
+  </div>
+
+  <div class="switcher" role="navigation" aria-label="Prototype variants">
+    <button type="button" id="prev" aria-label="Previous variant">←</button>
+    <div class="label" id="variant-label">A — Compose cards</div>
+    <button type="button" id="next" aria-label="Next variant">→</button>
+  </div>
+
+  <script>
+    const esc = (s) => String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+
+    const log = (msg) => {
+      document.getElementById("log").textContent = `${new Date().toLocaleTimeString()} · ${msg}`;
+    };
+
+    const threads = [
+      {
+        id: "th_acme",
+        title: "Acme Newsletter",
+        folder: "Inbox",
+        participants: "Acme Digest · you",
+        labels: ["Promo"],
+        href: "message://acme",
+        messages: [
+          {
+            id: "msg_a1",
+            from: "Acme Digest", fromEmail: "digest@acme.com",
+            to: "you@company.com",
+            subject: "This week at Acme",
+            date: "Aug 11", time: "07:12",
+            unread: true,
+            body: "Launch notes, hiring, and a 20% code inside.\n\n1) Product launch recap\n2) Open roles on platform\n3) Partner webinar Thursday\n\nUse code WEEK20 at checkout.",
+          },
+          {
+            id: "msg_a2",
+            from: "Acme Digest", fromEmail: "digest@acme.com",
+            to: "you@company.com",
+            subject: "Re: This week at Acme",
+            date: "Aug 11", time: "15:02",
+            unread: true,
+            body: "Forgot the webinar link — joining details below.\n\nhttps://acme.example/webinar\nPasscode: launch-2026\n\nSee you there.",
+          },
+        ],
+      },
+      {
+        id: "th_devtools",
+        title: "DevTools Weekly",
+        folder: "Inbox",
+        participants: "DevTools Weekly · you",
+        labels: ["Promo"],
+        href: "message://devtools",
+        messages: [
+          {
+            id: "msg_d1",
+            from: "DevTools Weekly", fromEmail: "hello@devtools.weekly",
+            to: "you@company.com",
+            subject: "Issue #214 — profiling tips",
+            date: "Aug 13", time: "06:40",
+            unread: true,
+            body: "Flamegraphs, sample rates, and one anti-pattern.\n\nThis week: continuous profiling without drowning in noise, plus a short note on p99 vs avg.\n\nAlso: a bad habit — measuring cold-start with warm caches.",
+          },
+        ],
+      },
+      {
+        id: "th_cloudops",
+        title: "CloudOps Digest",
+        folder: "Inbox",
+        participants: "CloudOps · you",
+        labels: ["Promo", "Ops"],
+        href: "message://cloudops",
+        messages: [
+          {
+            id: "msg_c1",
+            from: "CloudOps", fromEmail: "digest@cloudops.dev",
+            to: "you@company.com",
+            subject: "Outage postmortem roundup",
+            date: "Aug 12", time: "05:55",
+            unread: true,
+            body: "Three incidents worth reading this week.\n\n1) Cascading retry storm after a bad deploy\n2) Latency chart that lied about p99\n3) DNS TTL that outlived the failover\n\nFull write-ups linked in the digest archive.",
+          },
+          {
+            id: "msg_c2",
+            from: "CloudOps", fromEmail: "digest@cloudops.dev",
+            to: "you@company.com",
+            subject: "Re: Outage postmortem roundup",
+            date: "Aug 12", time: "11:20",
+            unread: true,
+            body: "Correction on the latency chart in item 2.\n\nThe published graph used a 5-minute rollup; the real spike was ~90s. Updated PDF attached in the archive.\n\nSorry for the noise.",
+          },
+          {
+            id: "msg_c3",
+            from: "CloudOps", fromEmail: "digest@cloudops.dev",
+            to: "you@company.com",
+            subject: "Follow-up: runbook template",
+            date: "Aug 13", time: "09:03",
+            unread: false,
+            attachmentName: "runbook.md",
+            body: "Template attached for on-call handoff.\n\nSections: symptom → blast radius → mitigation → owners → follow-ups.\n\nFeel free to fork for your team’s pager rotation.",
+          },
+        ],
+      },
+    ];
+
+    const variants = [
+      { key: "A", name: "Compose cards", clamp: 3, openFirst: true },
+      { key: "B", name: "Tighter clamp", clamp: 2, openFirst: true },
+      { key: "C", name: "All threads open", clamp: 3, openFirst: "all" },
+    ];
+
+    const params = new URLSearchParams(location.search);
+    let variantKey = (params.get("variant") || "A").toUpperCase();
+    if (!variants.some((v) => v.key === variantKey)) variantKey = "A";
+
+    const setVariant = (key) => {
+      variantKey = key;
+      const url = new URL(location.href);
+      url.searchParams.set("variant", key);
+      history.replaceState(null, "", url);
+      render();
+    };
+
+    const cycle = (dir) => {
+      const i = variants.findIndex((v) => v.key === variantKey);
+      const next = variants[(i + dir + variants.length) % variants.length];
+      setVariant(next.key);
+    };
+
+    const token = (addr) => `<span class="mail-token">${esc(addr)}</span>`;
+
+    const msgCard = (m, clamp) => {
+      const from = m.fromEmail ? `${m.from} <${m.fromEmail}>` : m.from;
+      const when = [m.date, m.time].filter(Boolean).join(" ");
+      const attach = m.attachmentName
+        ? `<div class="mail-row attach-row">
+            <label>Attachments:</label>
+            <div class="field">
+              <span class="mail-attach"><span class="glyph">⌘</span>${esc(m.attachmentName)}</span>
+            </div>
+          </div>`
+        : "";
+      return `
+        <article class="mail-compose ${m.unread ? "unread" : ""}" data-msg="${esc(m.id)}">
+          <div class="mail-fields">
+            <div class="mail-row">
+              <label>From:</label>
+              <div class="field">${token(from)}</div>
+              <span class="when">${esc(when)}</span>
+            </div>
+            <div class="mail-row">
+              <label>To:</label>
+              <div class="field">${token(m.to)}</div>
+            </div>
+            <div class="mail-row">
+              <label>Subject:</label>
+              <div class="field"><span class="mail-subject">${esc(m.subject)}</span></div>
+            </div>
+            ${attach}
+          </div>
+          <div class="mail-body-wrap">
+            <p class="mail-body clamped" data-body style="-webkit-line-clamp:${clamp}">${esc(m.body)}</p>
+            <div class="mail-body-actions">
+              <button type="button" class="linkish" data-expand>Show more</button>
+              <a class="mail-open" href="${esc(m.href || "#")}" data-open-mail="${esc(m.id)}">Open</a>
+            </div>
+          </div>
+        </article>`;
+    };
+
+    const render = () => {
+      const v = variants.find((x) => x.key === variantKey) || variants[0];
+      document.getElementById("variant-label").textContent = `${v.key} — ${v.name}`;
+
+      const items = threads.map((t, ti) => {
+        const open =
+          v.openFirst === "all" || (v.openFirst === true && ti === 2);
+        const chips = [
+          t.folder ? `Folder <strong>${esc(t.folder)}</strong>` : "",
+          t.participants ? esc(t.participants) : "",
+          ...(t.labels || []).map((l) => esc(l)),
+          t.id ? `id <strong>${esc(t.id)}</strong>` : "",
+        ].filter(Boolean).map((c) => `<span class="meta-chip">${c}</span>`).join("");
+
+        return `
+          <div class="thread ${open ? "open" : ""}" data-thread="${ti}">
+            <div class="thread-head">
+              <button type="button" class="thread-toggle" data-toggle-thread aria-expanded="${open}">
+                <span class="chev" aria-hidden="true">▸</span>
+                <span class="title">${esc(t.title)}</span>
+              </button>
+              <span class="count">${t.messages.length} message${t.messages.length === 1 ? "" : "s"}</span>
+              <a class="mail-open" href="${esc(t.href)}" data-open-mail="${esc(t.id)}">Open</a>
+            </div>
+            <div class="thread-body">
+              <div class="thread-body-top"><div class="meta">${chips}</div></div>
+              ${t.messages.map((m) => msgCard(m, v.clamp)).join("")}
+            </div>
+          </div>`;
+      }).join("");
+
+      document.getElementById("preview").innerHTML = `
+        <h3>3 threads</h3>
+        <div class="thread-list">${items}</div>`;
+
+      wire();
+      log(`variant ${v.key} · clamp ${v.clamp} lines`);
+    };
+
+    const wire = () => {
+      document.querySelectorAll("[data-toggle-thread]").forEach((btn) => {
+        btn.onclick = () => {
+          const thread = btn.closest(".thread");
+          const open = thread.classList.toggle("open");
+          btn.setAttribute("aria-expanded", open ? "true" : "false");
+          log(`${open ? "expand" : "collapse"} thread · ${thread.querySelector(".title")?.textContent}`);
+        };
+      });
+
+      document.querySelectorAll("[data-expand]").forEach((btn) => {
+        btn.onclick = () => {
+          const body = btn.closest(".mail-body-wrap").querySelector("[data-body]");
+          const nowClamped = body.classList.toggle("clamped");
+          btn.textContent = nowClamped ? "Show more" : "Show less";
+          log(`${nowClamped ? "collapse" : "expand"} body · ${btn.closest(".mail-compose")?.dataset.msg}`);
+        };
+      });
+
+      document.querySelectorAll("[data-open-mail]").forEach((a) => {
+        a.onclick = (e) => {
+          e.preventDefault();
+          log(`open-mail stub · ${a.dataset.openMail}`);
+        };
+      });
+    };
+
+    document.getElementById("prev").onclick = () => cycle(-1);
+    document.getElementById("next").onclick = () => cycle(1);
+    window.addEventListener("keydown", (e) => {
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+      if (e.key === "ArrowLeft") cycle(-1);
+      if (e.key === "ArrowRight") cycle(1);
+    });
+
+    render();
+  </script>
+</body>
+</html>

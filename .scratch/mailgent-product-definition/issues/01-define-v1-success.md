@@ -11,7 +11,7 @@ What observable user outcomes and acceptance criteria must the v1 product specif
 
 MailGent v1 succeeds as a **macOS-first agent-safe companion to Apple Mail**, not yet as a replacement daily mail client. A technical or power user must be able to connect Gmail and Yahoo; grant a named local external agent explicit scoped read/search access and draft creation; require in-app approval for mutations; revoke access; and inspect a comprehensive local access log.
 
-Required human surfaces are account connection, scoped search/read, draft inspection and editing, mutation approvals, policy management, audit inspection, opening the source message in Apple Mail, and human-initiated soft delete (Trash) plus hard delete (permanent) for Gmail and Yahoo. Hard delete is never available to agents. Optional macOS notifications are configurable by event severity and remain local.
+Required human surfaces are account connection, scoped search/read, draft inspection and editing, mutation approvals, policy management, audit inspection, opening the source message in Apple Mail, and soft delete (Trash) plus hard delete (permanent) for Gmail and Yahoo — both as direct human actions and as agent proposals that still require approval. Optional macOS notifications are configurable by event severity and remain local.
 
 The access log records agent identity, timestamp, query or proposed action, scope used, records exposed, redactions, outcome, and approval result. Access must fail closed when policy or identity is ambiguous.
 

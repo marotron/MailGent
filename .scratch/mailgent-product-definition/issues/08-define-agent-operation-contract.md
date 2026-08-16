@@ -8,7 +8,7 @@ Blocked by: 05, 07
 
 Which resources and operations does MailGent expose to agents, how are searches bounded and paginated, how is inaccessible data omitted or redacted without leaking it through metadata, and how do draft and mutation proposals behave under partial access?
 
-Constraint from map: agent `delete` is soft delete (Trash) only, approval-gated. Hard/permanent delete must not appear in the agent operation surface for Gmail or Yahoo.
+Constraint from map: agents may propose soft delete → Trash or hard/permanent delete when granted the matching capability; both are approval-gated. Soft delete is recoverable; hard delete needs stronger confirmation.
 
 ## Answer
 
@@ -25,7 +25,7 @@ Agents may address only:
 - Attachments when field grants allow
 - The agent’s own effective grant summary
 
-No hard-delete resource or tool exists.
+Soft-delete and hard-delete are separate capabilities (not a single undifferentiated `delete`).
 
 ### Read operations (capability only; no approval)
 
@@ -41,8 +41,8 @@ No hard-delete resource or tool exists.
 | Create / update / discard draft | Capability only |
 | Propose send | Capability + human approval |
 | Propose soft delete → Trash | Capability + human approval |
+| Propose hard / permanent delete | Capability + human approval (stronger confirm in UI) |
 | Propose move / label / archive / mark read-unread / star | Capability + human approval |
-| Hard / permanent delete | Not exposed (no capability, tool, or approval path) |
 
 ### Search and pagination
 
@@ -68,10 +68,13 @@ No hard-delete resource or tool exists.
 ### Approvals
 
 - Companion in-app queue: approve, deny, or edit-then-approve.
+- Soft-delete proposals warn that mail moves to Trash (recoverable).
+- Hard-delete proposals use a stronger permanent-purge warning and confirmation before approve.
 - Optional local notifications follow existing severity preferences.
 - No persistent auto-approve / automation approval in v1.
 - Grant or session expiry cancels pending proposals; audit remains.
 
-### Comments
+## Comments
 
 - User approved the recommended v1 package in one shot: resources, read/write gates, search/pagination, omission-without-leak, draft cite rules, one-shot approvals, no v1 persistent automation, hard delete absent from agent surface.
+- **Superseded (user):** agents may request soft delete or hard delete; both still require human approval. Soft delete purpose = recoverable remove. Hard delete = permanent purge with stronger confirm.
