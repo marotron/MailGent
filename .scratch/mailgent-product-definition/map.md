@@ -34,6 +34,7 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Choose Agent Runtime and Cross-Device Topology](issues/06-choose-agent-runtime-topology.md) — MailGent owns sessions; v1 supports UDS plus hardened loopback MCP; agent trust is per-device; iCloud syncs only non-sensitive UI preferences; remote access uses explicit, expiring sessions over an opaque end-to-end encrypted relay
 - [Define Per-Agent Authorization and Exposure](issues/07-define-agent-authorization.md) — Deny-by-default; product-agnostic agents (not models); classes `lan-inference` / `machine-local` / `remote`; private/regular/remote-eligible scopes; deny wins; AND/OR selectors; field groups; smart folders; duration/revocation/explanation without leak; data grants separate from capabilities
 - [Define Agent Operations and Redaction Contract](issues/08-define-agent-operation-contract.md) — Read ops capability-only; drafts capability-only; send/trash/move/label/archive/flags need approval; hard delete absent; search deny-filtered with cursor pages; omit without redaction stubs; no v1 persistent auto-approve
+- [Define Companion Human-Surface Behaviors](issues/12-define-human-mail-baseline.md) — Companion control plane (not daily client): OAuth accounts + sync health; unified/per-account search-read; open in Apple Mail; draft inspect/edit; approval queue; policy/audit; soft + hard delete human-only with confirm
 
 ## Not yet specified
 
