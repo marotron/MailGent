@@ -42,6 +42,7 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 ## Not yet specified
 
 - MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
+- Agent pairing finish-setup UX after identity + trust class (pairing challenge, credential, local/MCP path, host config help, status, remote session open) — deferred from policy-authoring prototype; tracked in [17](issues/17-prototype-agent-pairing-setup.md).
 
 ## Out of scope
 

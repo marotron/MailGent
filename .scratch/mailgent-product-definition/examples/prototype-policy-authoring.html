@@ -1,0 +1,2597 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: answers issue 10 only. Open in a browser. Variants via ?variant=
+     Variant A: wizard — step 2 v1 selectors, step 3 Read/Write/Deny resource caps. No regex (map OOS).
+     Variant B: grant desk — same selector + access options as A, per-grant persistence. Tabs: Scope / Access.
+     Icons: inline SVG (no external deps). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Policy authoring prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #e1e6ef;
+      --line-strong: #c9d1df;
+      --canvas: #f3f5f9;
+      --paper: #ffffff;
+      --blue: #2a4fc7;
+      --blue-ink: #1a3aa8;
+      --blue-soft: #eef2ff;
+      --amber: #9a6700;
+      --green: #0b7a56;
+      --red: #b4232f;
+      --violet: #5b3db8;
+      --rail: #f8f9fc;
+      --shadow: 0 1px 2px #15203308, 0 12px 32px #1520330c;
+      --radius: 14px;
+      --focus: 0 0 0 3px #2a4fc733;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(1200px 480px at 10% -10%, #e8eeff 0%, transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #f0eef8 0%, transparent 50%),
+        var(--canvas);
+      color: var(--ink);
+      font: 14px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: none; box-shadow: var(--focus); }
+    .icon {
+      width: 16px; height: 16px; flex: none;
+      stroke: currentColor; fill: none; stroke-width: 1.75;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .icon.lg { width: 18px; height: 18px; }
+    .icon.xl { width: 24px; height: 24px; }
+    .icon.sm { width: 14px; height: 14px; }
+    .shell { min-height: 100vh; padding: 28px 28px 120px; }
+    .top {
+      max-width: 1180px; margin: 0 auto 18px;
+      display: flex; justify-content: space-between; gap: 16px; align-items: end;
+    }
+    h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; font-weight: 650; }
+    .top p { margin: 6px 0 0; color: var(--muted); }
+    .note {
+      max-width: 420px; text-align: right; color: var(--muted); font-size: 12px; line-height: 1.5;
+    }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .proto { max-width: 1180px; margin: 0 auto; min-height: 660px; overflow: hidden; }
+    .hidden { display: none !important; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--blue); font-size: 11px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+    }
+    h2 { margin: 6px 0 4px; font-size: 21px; letter-spacing: -0.02em; font-weight: 650; }
+    .sub { margin: 0 0 16px; color: var(--muted); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px 3px 7px; border-radius: 999px;
+      font-size: 12px; font-weight: 650; line-height: 1.2;
+    }
+    .pill .icon { width: 13px; height: 13px; }
+    .pill.ok { background: #e8f7f0; color: var(--green); }
+    .pill.warn { background: #fff4db; color: var(--amber); }
+    .pill.bad { background: #fdecee; color: var(--red); }
+    .pill.neutral { background: #eef1f6; color: #516079; }
+    .pill.write { background: #f1ecff; color: var(--violet); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border-radius: 10px; border: 1px solid var(--line-strong);
+      background: white; color: #334155; padding: 8px 12px;
+      transition: background .15s ease, border-color .15s ease, transform .1s ease;
+    }
+    .btn:hover { background: #f7f8fb; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn.primary:hover { background: var(--blue-ink); }
+    .btn.danger { color: var(--red); border-color: #efc2c7; background: #fff8f8; }
+    .btn.danger:hover { background: #fdecee; }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+    .btn.ghost:hover { background: #eef1f6; color: var(--ink); }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 6px 11px; color: #4a5871;
+    }
+    .chip.on { background: var(--blue-soft); border-color: #b4c2f5; color: var(--blue-ink); }
+    .modebar {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 8px;
+    }
+    .mode {
+      display: flex; flex-direction: row; align-items: flex-start; gap: 12px;
+      border: 1px solid var(--line); background: #fff; border-radius: 12px;
+      padding: 12px 36px 12px 12px; text-align: left; min-height: 68px; position: relative;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .mode:hover { border-color: var(--line-strong); }
+    .mode .glyph {
+      width: 44px; height: 44px; border-radius: 12px; flex: none;
+      display: grid; place-items: center; background: #eef1f6; color: #516079;
+    }
+    .mode .label {
+      display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 2px;
+    }
+    .mode .check {
+      position: absolute; top: 14px; right: 12px;
+      width: 18px; height: 18px; border-radius: 5px;
+      border: 1.5px solid var(--line-strong); background: #fff;
+      display: grid; place-items: center; color: transparent;
+    }
+    .mode .check .icon { width: 12px; height: 12px; }
+    .mode strong { display: block; font-size: 13px; font-weight: 650; line-height: 18px; }
+    .mode .label > span { color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .modebar.compact {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+    .modebar.compact .mode {
+      padding: 8px 10px;
+      min-height: 0;
+      gap: 10px;
+      align-items: center;
+    }
+    .modebar.compact .mode .check { display: none; }
+    .modebar.compact .mode .switch {
+      width: 34px; height: 20px; border-radius: 999px; flex: none; margin-left: auto;
+      background: #d5dbe8; position: relative; transition: background .15s ease;
+    }
+    .modebar.compact .mode .switch .knob {
+      position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+      border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #121a2b33;
+      transition: transform .15s ease;
+    }
+    .modebar.compact .mode .glyph {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+    }
+    .modebar.compact .mode .glyph .icon {
+      width: 16px;
+      height: 16px;
+    }
+    .modebar.compact .mode .label { padding-top: 0; flex: 1; min-width: 0; }
+    .modebar.compact .mode strong { font-size: 12px; line-height: 1.2; }
+    .modebar.compact .mode .label > span { font-size: 10px; }
+    .mode.on-read { border-color: #8fd0b0; background: #f3fbf7; box-shadow: inset 0 0 0 1px #8fd0b055; }
+    .mode.on-read .glyph { background: #d9f3e6; color: var(--green); }
+    .mode.on-read .check { border-color: var(--green); background: var(--green); color: #fff; }
+    .modebar.compact .mode.on-read .switch { background: var(--green); }
+    .modebar.compact .mode.on-read .switch .knob { transform: translateX(14px); }
+    .mode.on-write { border-color: #c2adf0; background: #f8f5ff; box-shadow: inset 0 0 0 1px #c2adf055; }
+    .mode.on-write .glyph { background: #ebe3ff; color: var(--violet); }
+    .mode.on-write .check { border-color: var(--violet); background: var(--violet); color: #fff; }
+    .modebar.compact .mode.on-write .switch { background: var(--violet); }
+    .modebar.compact .mode.on-write .switch .knob { transform: translateX(14px); }
+    .mode.on-deny { border-color: #e7a8af; background: #fff6f7; box-shadow: inset 0 0 0 1px #e7a8af55; }
+    .mode.on-deny .glyph { background: #f9d9dd; color: var(--red); }
+    .mode.on-deny .check { border-color: var(--red); background: var(--red); color: #fff; }
+    .modebar.compact .mode.on-deny .switch { background: var(--red); }
+    .modebar.compact .mode.on-deny .switch .knob { transform: translateX(14px); }
+    .attach-toggle, .cap-toggle {
+      display: inline-flex; align-items: center; gap: 10px;
+      border: 1px solid var(--line); background: #fff; border-radius: 12px;
+      padding: 8px 10px 8px 8px; text-align: left; min-width: 0;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .attach-toggle { min-width: 220px; }
+    .attach-toggle:hover, .cap-toggle:hover { border-color: var(--line-strong); }
+    .attach-toggle .glyph, .cap-toggle .glyph {
+      width: 28px; height: 28px; border-radius: 8px; flex: none;
+      display: grid; place-items: center; background: #eef1f6; color: #516079;
+    }
+    .attach-copy, .cap-copy { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+    .attach-copy strong, .cap-copy strong { font-size: 12px; font-weight: 650; color: var(--ink); }
+    .attach-state, .cap-state { font-size: 11px; color: var(--muted); }
+    .attach-toggle .switch, .cap-toggle .switch {
+      width: 34px; height: 20px; border-radius: 999px; flex: none;
+      background: #d5dbe8; position: relative; transition: background .15s ease;
+    }
+    .attach-toggle .knob, .cap-toggle .knob {
+      position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+      border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #121a2b33;
+      transition: transform .15s ease;
+    }
+    .attach-toggle[aria-pressed="true"],
+    .cap-toggle[aria-pressed="true"][data-tone="read"] {
+      border-color: #8fd0b0; background: #f3fbf7;
+    }
+    .attach-toggle[aria-pressed="true"] .glyph,
+    .cap-toggle[aria-pressed="true"][data-tone="read"] .glyph { background: #d9f3e6; color: var(--green); }
+    .attach-toggle[aria-pressed="true"] .attach-state,
+    .cap-toggle[aria-pressed="true"][data-tone="read"] .cap-state { color: var(--green); font-weight: 650; }
+    .attach-toggle[aria-pressed="true"] .switch,
+    .cap-toggle[aria-pressed="true"][data-tone="read"] .switch { background: var(--green); }
+    .attach-toggle[aria-pressed="true"] .knob,
+    .cap-toggle[aria-pressed="true"] .knob { transform: translateX(14px); }
+    .cap-toggle[aria-pressed="true"][data-tone="write"] {
+      border-color: #c2adf0; background: #f8f5ff;
+    }
+    .cap-toggle[aria-pressed="true"][data-tone="write"] .glyph { background: #ebe3ff; color: var(--violet); }
+    .cap-toggle[aria-pressed="true"][data-tone="write"] .cap-state { color: var(--violet); font-weight: 650; }
+    .cap-toggle[aria-pressed="true"][data-tone="write"] .switch { background: var(--violet); }
+    .cap-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+      width: 100%; margin-top: 4px;
+    }
+    .resource-head { display: block; margin-bottom: 8px; }
+    .resource-head h4 { margin-bottom: 10px; }
+    .resource.denied {
+      opacity: .72;
+      background: #fff8f8;
+      border-color: #e7a8af;
+    }
+    .resource.denied .cap-toggle,
+    .resource.denied .attach-toggle { pointer-events: none; opacity: .55; }
+    .mode-hint { color: var(--muted); font-size: 12px; margin: 0 0 16px; display: flex; gap: 6px; align-items: center; }
+    .field { margin-bottom: 12px; }
+    .field label, .field-label { display: block; font-size: 12px; font-weight: 650; color: #4a5871; margin-bottom: 5px; }
+    .field input, .field select, .field textarea {
+      width: 100%; border: 1px solid var(--line-strong); border-radius: 10px;
+      padding: 9px 11px; background: #fff;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .explain {
+      display: flex; gap: 10px; align-items: flex-start;
+      border: 1px solid #d5def5; background: linear-gradient(180deg, #f7f9ff, #f2f5ff);
+      border-radius: 12px; padding: 12px 14px; color: #2a3f73;
+    }
+    .explain .glyph {
+      width: 28px; height: 28px; border-radius: 8px; flex: none;
+      display: grid; place-items: center; background: #dde5ff; color: var(--blue-ink);
+    }
+    .count { font-weight: 750; color: var(--ink); }
+    .floating {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 4px; padding: 6px;
+      background: #121a2b; border-radius: 14px;
+      box-shadow: 0 14px 40px #121a2b55; z-index: 20;
+    }
+    .floating button {
+      color: #c9d3ea; background: transparent; border: 0; border-radius: 10px;
+      padding: 9px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .floating button.active { background: #3554a8; color: #fff; }
+    .floating .cycle { width: 36px; padding: 9px 0; justify-content: center; }
+
+    #variant-a { display: grid; grid-template-columns: 232px 1fr; }
+    .steps { background: var(--rail); border-right: 1px solid var(--line); padding: 20px 14px; }
+    .steps .brand {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 750; font-size: 16px; margin-bottom: 20px; padding: 0 8px;
+    }
+    .brand-mark {
+      width: 26px; height: 26px; border-radius: 8px;
+      display: grid; place-items: center; background: var(--blue); color: #fff;
+    }
+    .step {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 10px 10px; border-radius: 10px; color: #44516a; margin-bottom: 3px;
+      cursor: pointer;
+    }
+    .step .n {
+      width: 22px; height: 22px; border-radius: 999px; flex: none;
+      display: grid; place-items: center; font-size: 11px; font-weight: 700;
+      background: #e8ecf3; color: #617089; margin-top: 1px;
+    }
+    .step-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+    .step-label { line-height: 1.25; }
+    .step-meta {
+      font-size: 11px; font-weight: 500; color: var(--muted);
+      line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .step-meta:empty { display: none; }
+    .step-meta.lines {
+      display: flex; flex-direction: column; gap: 3px;
+      -webkit-line-clamp: unset; overflow: visible;
+      margin-top: 2px;
+    }
+    .step-meta.lines .step-line {
+      display: flex; align-items: flex-start; gap: 6px;
+      line-height: 1.3;
+    }
+    .step-meta.lines .step-line .icon {
+      width: 12px; height: 12px; flex: none; margin-top: 1px; opacity: 0.75;
+    }
+    .step-meta.lines .step-line .v {
+      min-width: 0; overflow-wrap: anywhere;
+    }
+    .step.active { background: var(--blue-soft); color: var(--blue-ink); font-weight: 650; }
+    .step.active .n { background: var(--blue); color: #fff; }
+    .step.active .step-meta { color: #4a5f8c; font-weight: 500; }
+    .step.done { color: var(--green); }
+    .step.done .n { background: #d9f3e6; color: var(--green); }
+    .step.done .step-meta { color: #3d7a5c; }
+    .wizard { padding: 24px; }
+    .wizard-panel { max-width: 760px; }
+    .resource {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+      margin-bottom: 10px; background: #fbfcfe;
+    }
+    .resource h4 {
+      margin: 0; font-size: 14px; font-weight: 650;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .footer-bar {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      margin-top: 22px; width: 100%;
+    }
+    .footer-bar > .btn.primary:only-of-type,
+    .footer-bar > .btn.primary:last-child { margin-left: auto; }
+
+    #variant-b { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+    .agent-list, .inspector { background: var(--rail); padding: 16px; }
+    .agent-list { border-right: 1px solid var(--line); }
+    .inspector { overflow: auto; max-height: calc(100vh - 160px); padding: 24px; }
+    #variant-b .grants { display: none; }
+    .desk-agent-group { margin-bottom: 12px; }
+    .desk-agent-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 9px; border-radius: 9px; }
+    .desk-agent-row:hover, .desk-agent-row.active { background: var(--blue-soft); }
+    .desk-agent-row .agent-meta { min-width: 0; flex: 1; }
+    .desk-agent-row small { display: block; color: var(--muted); margin-top: 2px; font-size: 11px; }
+    .desk-grant-row { display: flex; align-items: center; gap: 7px; width: calc(100% - 18px); margin: 2px 0 2px 18px; text-align: left; border: 0; border-left: 2px solid var(--line); background: transparent; padding: 8px 9px; font-size: 12px; color: #44516a; }
+    .desk-grant-row:hover, .desk-grant-row.active { background: #fff; border-left-color: var(--blue); color: var(--blue-ink); }
+    .desk-grant-row .mode-stack, .desk-grant-row .mode-dot, .desk-grant-row .acct-stack, .desk-grant-row .acct-dot { flex: none; }
+    .desk-grant-row .grant-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .desk-add-grant-row {
+      display: flex; align-items: center; gap: 6px;
+      width: calc(100% - 18px); margin: 2px 0 2px 18px;
+      border: 0; border-left: 2px dashed var(--line); background: transparent;
+      padding: 6px 9px; font-size: 12px; color: var(--muted); cursor: pointer;
+    }
+    .desk-add-grant-row:hover { background: #fff; border-left-color: var(--blue); color: var(--blue-ink); }
+    .desk-add-grant-row .icon { width: 12px; height: 12px; }
+    .mode-stack { display: inline-flex; align-items: center; }
+    .mode-dot {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 999px;
+    }
+    .mode-dot + .mode-dot { margin-left: -7px; }
+    .mode-dot .icon { width: 12px; height: 12px; }
+    .mode-dot.read { background: #d5e8d4; color: #006600; }
+    .mode-dot.write { background: #e1d5e7; color: #4c0099; position: relative; z-index: 1; }
+    .mode-dot.deny { background: #fdecee; color: var(--red); }
+    .mode-dot.none { background: #eef1f6; color: #516079; font-size: 11px; font-weight: 700; }
+    .acct-stack { display: inline-flex; align-items: center; }
+    .acct-dot {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 999px;
+      background: #fff; border: 1px solid var(--line); box-sizing: border-box;
+    }
+    .acct-dot + .acct-dot { margin-left: -7px; }
+    .acct-dot .icon { width: 12px; height: 12px; }
+    .desk-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .desk-editor-head h2 { margin: 3px 0 0; }
+    .desk-grant-editor { max-width: 760px; }
+    .desk-toolbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin-bottom: 16px; flex-wrap: nowrap;
+    }
+    .desk-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: #e9edf5; width: fit-content; flex: none; }
+    .desk-tabs button { border: 0; background: transparent; color: #53617a; padding: 7px 11px; border-radius: 7px; font-size: 12px; }
+    .desk-tabs button.active { color: var(--blue-ink); background: #fff; box-shadow: 0 1px 2px #15203318; }
+    .desk-toolbar .row { margin-left: auto; flex: none; flex-wrap: nowrap; }
+    .desk-section { margin-bottom: 20px; }
+    .desk-section > .section-title { margin-top: 4px; }
+    .desk-section[data-desk-section="scope"] .explain { margin-bottom: 16px; }
+    .desk-section[data-desk-section="scope"] .explain-sub { font-size: 13px; }
+    .desk-section[data-desk-section="scope"] > .sub { margin-bottom: 16px; }
+    [data-desk-section].hidden-by-layout { display: none; }
+    .desk-agent-editor { max-width: 620px; }
+    #variant-b .desk-resources .resource { padding: 10px; margin-bottom: 8px; }
+    #variant-b .desk-resources .resource h4 { font-size: 12px; margin-bottom: 8px; }
+    #variant-b .desk-resources .cap-grid { grid-template-columns: 1fr; gap: 6px; }
+    #variant-b .desk-resources .attach-toggle { min-width: 0; width: 100%; }
+    #variant-b .grants { overflow: auto; }
+    .section-title {
+      display: flex; align-items: center; gap: 7px;
+      font-weight: 750; margin-bottom: 12px; font-size: 13px; color: #3d4b63;
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .agent {
+      width: 100%; text-align: left; border: 0; background: transparent;
+      padding: 11px; border-radius: 10px; margin-bottom: 4px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .agent:hover { background: #eef1f6; }
+    .agent.active { background: var(--blue-soft); }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 9px; flex: none;
+      display: grid; place-items: center; background: #e4e9f3; color: #3d4b63;
+    }
+    .agent.active .avatar { background: #d5defe; color: var(--blue-ink); }
+    .agent small { display: block; color: var(--muted); margin-top: 2px; }
+    .grants { padding: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+    th {
+      color: var(--muted); font-weight: 650; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    tr.selected td { background: #f5f7ff; }
+    tr:hover td { background: #fafbfe; }
+    tr.selected:hover td { background: #f5f7ff; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
+
+    .hint {
+      display: flex; gap: 8px; align-items: flex-start;
+      margin-top: 8px; color: var(--muted); font-size: 12px;
+    }
+
+    .wizard-step.hidden { display: none !important; }
+    .step[data-goto] { cursor: pointer; }
+    .step[data-goto]:hover { background: #eef1f6; }
+    .step.active[data-goto]:hover { background: var(--blue-soft); }
+    .selector-block {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+      margin-bottom: 10px; background: #fbfcfe;
+    }
+    .selector-block h4 {
+      margin: 0; font-size: 14px; font-weight: 650;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .selector-block .block-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 4px;
+    }
+    .selector-block .block-head .btn {
+      flex: none; padding: 5px 10px; font-size: 12px;
+    }
+    .selector-block .block-sub { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip-pick {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 6px 11px; color: #4a5871; cursor: pointer;
+    }
+    .chip-pick.on { background: var(--blue-soft); border-color: #b4c2f5; color: var(--blue-ink); font-weight: 650; }
+    .chip-pick .x {
+      width: 16px; height: 16px; border-radius: 50%; border: 0; background: #dfe5f0;
+      color: #44516a; display: grid; place-items: center; padding: 0; font-size: 11px; line-height: 1;
+    }
+    .chip-pick.on .x { background: #c8d4fb; color: var(--blue-ink); }
+    .icon.brand { stroke: none; fill: unset; }
+    .icon.brand.yahoo, .chip-pick[data-provider="yahoo"] .icon.brand { fill: currentColor; color: #6001d2; }
+    .provider-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+    .inline-add {
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px;
+    }
+    .inline-add input, .inline-add select {
+      border: 1px solid var(--line-strong); border-radius: 10px;
+      padding: 8px 10px; background: #fff; min-width: 0;
+    }
+    .inline-add input { flex: 1; min-width: 160px; }
+    .check-row {
+      display: flex; align-items: center; gap: 8px; margin-top: 8px;
+      color: #4a5871; font-size: 12px;
+    }
+    .check-row input { accent-color: var(--blue); }
+    .seg {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff;
+    }
+    .seg button {
+      border: 0; background: transparent; padding: 7px 11px; color: #4a5871; font-size: 12px;
+    }
+    .seg button.on { background: var(--blue-soft); color: var(--blue-ink); font-weight: 650; }
+    .scope-summary {
+      display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px;
+    }
+    .selector-block select {
+      width: 100%; border: 1px solid var(--line-strong); border-radius: 10px;
+      padding: 9px 11px; background: #fff;
+    }
+    .required { color: var(--red); font-weight: 700; }
+    .agent-pick-grid {
+      display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 14px; align-items: start;
+    }
+    .agent-pick-list { display: flex; flex-direction: column; gap: 6px; }
+    .agent-pick-list .agent {
+      border: 1px solid var(--line); background: #fff; max-width: none; width: 100%;
+    }
+    .agent-pick-list .agent.active {
+      border-color: #9eb0f0;
+      box-shadow: inset 0 0 0 1px #9eb0f0;
+    }
+    .agent-pick-list .agent.draft {
+      border-style: dashed;
+      border-color: #9eb0f0;
+      background: linear-gradient(180deg, #f7f9ff, #eef2ff);
+      box-shadow: inset 0 0 0 1px #b4c2f5;
+    }
+    .agent-pick-list .agent.draft .avatar {
+      background: #d5defe; color: var(--blue-ink);
+      outline: 1px dashed #9eb0f0; outline-offset: -1px;
+    }
+    .agent-pick-list .agent.draft small { color: #4a5f8c; }
+    .agent-config {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: #fbfcfe;
+    }
+    .agent-config.hidden { display: none !important; }
+    .agent-config h4 {
+      margin: 0 0 10px; font-size: 14px; font-weight: 650;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .agent-config > .row {
+      width: 100%;
+    }
+    .agent-config > .row > .btn.primary:last-child {
+      margin-left: auto;
+    }
+    .agent-side { min-width: 0; }
+    .trust-warn {
+      display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+      background: #fff4db; border: 1px solid #f0d48a; color: #7a5200; font-size: 12px; line-height: 1.4;
+    }
+    .trust-warn.show { display: flex; gap: 8px; align-items: flex-start; }
+    .class-ceil {
+      margin-top: 8px; font-size: 11px; color: var(--muted); line-height: 1.4;
+    }
+    .add-agent-panel {
+      margin-top: 12px; border: 1px dashed var(--line-strong); border-radius: 12px;
+      padding: 14px; background: #fff;
+    }
+    .add-agent-panel.hidden { display: none !important; }
+
+    @media (max-width: 980px) {
+      .shell { padding: 16px 12px 110px; }
+      .top { display: block; }
+      .note { text-align: left; margin-top: 8px; }
+      #variant-a, #variant-b { grid-template-columns: 1fr; }
+      .agent-pick-grid { grid-template-columns: 1fr; }
+      .steps, .agent-list, .inspector { border: 0; border-bottom: 1px solid var(--line); }
+      .modebar { grid-template-columns: 1fr; }
+      .cap-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Icon sprite -->
+  <svg xmlns="http://www.w3.org/2000/svg" class="hidden" aria-hidden="true">
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6 18 18 6"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></symbol>
+    <symbol id="i-gmail" viewBox="52 42 88 66"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></symbol>
+    <symbol id="i-yahoo" viewBox="0 0 24 24"><path fill="currentColor" d="M3.2 3h4.6L12 11.2 16.2 3h4.6l-6.7 11.4V21h-3.9v-6.6L3.2 3Zm15.1 14.2a2.15 2.15 0 1 1 0 4.3 2.15 2.15 0 0 1 0-4.3Z"/></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.4 11.6-8.5 8.5a5 5 0 0 1-7.1-7.1l9.2-9.2a3.2 3.2 0 0 1 4.5 4.5L10.3 17.5a1.4 1.4 0 0 1-2-2l8-8"/></symbol>
+    <symbol id="i-draft" viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M7 7v13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6L5.5 18A2 2 0 0 0 7.2 21h9.6a2 2 0 0 0 1.7-3L14 9V3"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M3 12h4M17 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M3 6.5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M8.75 13.25h6.25"/><path d="m12.25 10.5 2.75 2.75-2.75 2.75"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></symbol>
+  </svg>
+
+  <main class="shell">
+    <div class="top">
+      <div>
+        <h1>Policy authoring</h1>
+        <p>Issue 10 · v1 selectors define which mail · then Read/Write/Deny per resource</p>
+      </div>
+      <div class="note">Step 2 builds the message group with locked v1 selectors (no regex). Step 3 sets what the agent may do on that group. Deny is exclusive.</div>
+    </div>
+
+    <!-- A -->
+    <section id="variant-a" class="proto card" aria-label="Variant A guided wizard">
+      <aside class="steps" id="wizard-steps">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><svg class="icon sm"><use href="#i-mail"/></svg></span>
+          MailGent
+        </div>
+        <div class="step done" data-goto="1">
+          <span class="n" aria-hidden="true"><svg class="icon sm"><use href="#i-check"/></svg></span>
+          <span class="step-body">
+            <span class="step-label">Pick agent</span>
+            <span class="step-meta lines" id="wiz-step-agent-meta"></span>
+          </span>
+        </div>
+        <div class="step active" data-goto="2" aria-current="step">
+          <span class="n">2</span>
+          <span class="step-body">
+            <span class="step-label">Which mail?</span>
+            <span class="step-meta lines" id="wiz-step-mail-meta"></span>
+          </span>
+        </div>
+        <div class="step" data-goto="3">
+          <span class="n">3</span>
+          <span class="step-body">
+            <span class="step-label">Access mode</span>
+            <span class="step-meta lines" id="wiz-step-access-meta"></span>
+          </span>
+        </div>
+        <div class="step" data-goto="4">
+          <span class="n">4</span>
+          <span class="step-body">
+            <span class="step-label">Review &amp; save</span>
+            <span class="step-meta lines" id="wiz-step-review-meta"></span>
+          </span>
+        </div>
+      </aside>
+      <div class="wizard">
+        <div class="eyebrow"><svg class="icon sm"><use href="#i-spark"/></svg> Variant A · guided wizard</div>
+
+        <!-- Step 2: selectors -->
+        <div class="wizard-step" data-wizard-step="2">
+          <h2 id="wiz-mail-title">Which mail may this agent use?</h2>
+          <p class="sub">Groups AND together · values inside a group OR. Agent: <span class="pill neutral" id="wiz-agent-pill"><svg class="icon"><use href="#i-bot"/></svg> —</span></p>
+          <div class="wizard-panel">
+            <div class="selector-block">
+              <div class="block-head">
+                <h4><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg> Account <span class="required">*</span></h4>
+                <button class="btn" type="button" id="sel-show-add-account">
+                  <svg class="icon"><use href="#i-plus"/></svg> Add mail account
+                </button>
+              </div>
+              <p class="block-sub">Every allow needs ≥1 account. “All current” is a snapshot — new accounts never join automatically.</p>
+              <div class="chip-row" id="sel-accounts" role="group" aria-label="Accounts"></div>
+              <div class="add-agent-panel hidden" id="sel-add-account-panel">
+                <h4 style="margin:0 0 10px;font-size:13px;font-weight:650">Connect account</h4>
+                <div class="field">
+                  <label for="sel-add-acct-name">Display name</label>
+                  <input id="sel-add-acct-name" type="text" placeholder="e.g. Side project Gmail" autocomplete="off">
+                </div>
+                <div class="field">
+                  <span class="field-label" id="sel-add-acct-provider-label">Provider</span>
+                  <div class="provider-picks" id="sel-add-acct-provider" role="group" aria-labelledby="sel-add-acct-provider-label">
+                    <button type="button" class="chip-pick on" data-provider="gmail"><svg class="icon brand gmail"><use href="#i-gmail"/></svg> Gmail</button>
+                    <button type="button" class="chip-pick" data-provider="yahoo"><svg class="icon brand yahoo"><use href="#i-yahoo"/></svg> Yahoo</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="sel-add-acct-email">Email</label>
+                  <input id="sel-add-acct-email" type="email" placeholder="you@example.com" autocomplete="off">
+                </div>
+                <p class="class-ceil">OAuth stub — Gmail API / Yahoo IMAP+OAuth. New account never joins existing “All current” grants.</p>
+                <div class="row" style="margin-top:12px">
+                  <button class="btn ghost" type="button" id="sel-add-acct-cancel">Cancel</button>
+                  <button class="btn primary" type="button" id="sel-add-acct-save"><svg class="icon"><use href="#i-plus"/></svg> Connect</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="selector-block">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> Placement <span style="font-weight:500;color:var(--muted)">(optional)</span></h4>
+              <p class="block-sub">Omit = match anywhere in selected accounts. Gmail = any selected label · Yahoo = one folder · virtual Archived selectable.</p>
+              <div class="chip-row" id="sel-placements" role="group" aria-label="Placements"></div>
+            </div>
+
+            <div class="selector-block">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-people"/></svg> Participants</h4>
+              <p class="block-sub">Normalized addresses only — never display names. Domains exact unless include subdomains.</p>
+              <div class="row" style="margin-bottom:8px">
+                <div class="seg" id="sel-role" role="group" aria-label="Participant role">
+                  <button type="button" class="on" data-role="from">From</button>
+                  <button type="button" data-role="to">To</button>
+                  <button type="button" data-role="cc">Cc</button>
+                  <button type="button" data-role="bcc">Bcc</button>
+                  <button type="button" data-role="any">Any participant</button>
+                </div>
+              </div>
+              <div class="chip-row" id="sel-participants"></div>
+              <div class="inline-add">
+                <input id="sel-participant-input" type="text" placeholder="address or domain · e.g. *@company.com" autocomplete="off">
+                <button class="btn" type="button" id="sel-participant-add"><svg class="icon"><use href="#i-plus"/></svg> Add</button>
+              </div>
+              <label class="check-row"><input type="checkbox" id="sel-subdomains"> Include subdomains for domain matches</label>
+            </div>
+
+            <div class="selector-block">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> Date</h4>
+              <p class="block-sub">Provider mailbox timestamps · user local timezone · inclusive · re-evaluates continuously.</p>
+              <div class="row" style="margin-bottom:8px">
+                <div class="seg" id="sel-date-mode" role="group" aria-label="Date mode">
+                  <button type="button" class="on" data-date-mode="rolling">Rolling window</button>
+                  <button type="button" data-date-mode="absolute">Absolute range</button>
+                  <button type="button" data-date-mode="any">Any time</button>
+                </div>
+              </div>
+              <div class="inline-add" id="sel-date-rolling">
+                <label for="sel-rolling-days" style="font-size:12px;color:var(--muted)">Last</label>
+                <select id="sel-rolling-days">
+                  <option value="7">7 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90" selected>90 days</option>
+                  <option value="365">365 days</option>
+                </select>
+              </div>
+              <div class="inline-add hidden" id="sel-date-absolute">
+                <input id="sel-date-from" type="date" value="2026-01-01">
+                <span style="color:var(--muted)">→</span>
+                <input id="sel-date-to" type="date" value="2026-08-16">
+              </div>
+            </div>
+
+            <div class="selector-block">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> Smart folder <span style="font-weight:500;color:var(--muted)">(optional)</span></h4>
+              <p class="block-sub">Named reusable dynamic selector — not a provider placement. Can drive allow or deny elsewhere.</p>
+              <select id="sel-smart-folder">
+                <option value="">None — use selectors above only</option>
+                <option value="receipts">Receipts</option>
+                <option value="vendors">Work vendors</option>
+                <option value="family">Family</option>
+              </select>
+            </div>
+
+            <div class="explain" id="selector-explain">
+              <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-info"/></svg></span>
+              <div>
+                <div class="explain-main"><span class="count" id="sel-match-count">~184</span> messages match this scope</div>
+                <div class="explain-sub" id="sel-match-english" style="margin-top:4px;font-size:13px"></div>
+              </div>
+            </div>
+            <div class="footer-bar">
+              <button class="btn ghost" type="button" data-wizard-nav="1"><svg class="icon"><use href="#i-arrow-left"/></svg> Back</button>
+              <div class="row">
+                <button class="btn" type="button" id="sel-test"><svg class="icon"><use href="#i-flask"/></svg> Preview hits</button>
+                <button class="btn primary" type="button" data-wizard-nav="3">Continue <svg class="icon"><use href="#i-arrow-right"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: access mode -->
+        <div class="wizard-step hidden" data-wizard-step="3">
+          <h2 id="wiz-access-title">Choose what this agent may do with this mail</h2>
+          <p class="sub" id="access-scope-sub"></p>
+          <div class="wizard-panel">
+            <div class="modebar" data-access-group="wizard-top" role="group" aria-label="Bulk access controls">
+              <button class="mode on-read" type="button" data-access="read" aria-pressed="true">
+                <span class="check" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>
+                <span class="glyph" aria-hidden="true"><svg class="icon xl"><use href="#i-eye"/></svg></span>
+                <div class="label"><strong>Read</strong><span>Search &amp; open</span></div>
+              </button>
+              <button class="mode on-write" type="button" data-access="write" aria-pressed="true">
+                <span class="check" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>
+                <span class="glyph" aria-hidden="true"><svg class="icon xl"><use href="#i-pen"/></svg></span>
+                <div class="label"><strong>Write</strong><span>Drafts &amp; proposals</span></div>
+              </button>
+              <button class="mode" type="button" data-access="deny" aria-pressed="false">
+                <span class="check" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>
+                <span class="glyph" aria-hidden="true"><svg class="icon xl"><use href="#i-ban"/></svg></span>
+                <div class="label"><strong>Deny</strong><span>Block all access</span></div>
+              </button>
+            </div>
+            <p class="mode-hint"><svg class="icon sm" aria-hidden="true"><use href="#i-info"/></svg> Top controls apply to every resource below and overwrite those toggles when changed. Fine-tune per resource afterward.</p>
+
+            <div class="resource" data-resource="messages">
+              <div class="resource-head">
+                <h4><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg> Messages in this scope</h4>
+                <div class="cap-grid" role="group" aria-label="Message capabilities">
+                  <button class="cap-toggle" type="button" data-cap="read" data-tone="read" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+                    <span class="cap-copy"><strong>Read</strong><span class="cap-state">On</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                  <button class="cap-toggle" type="button" data-cap="propose" data-tone="write" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-send"/></svg></span>
+                    <span class="cap-copy"><strong>Write proposals</strong><span class="cap-state">On</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                  <button class="cap-toggle" type="button" data-cap="move" data-tone="write" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-move"/></svg></span>
+                    <span class="cap-copy"><strong>Move messages</strong><span class="cap-state">On</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                  <button class="cap-toggle" type="button" data-cap="trash" data-tone="write" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-trash"/></svg></span>
+                    <span class="cap-copy"><strong>Soft delete</strong><span class="cap-state">On · Trash</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                </div>
+              </div>
+              <p class="sub" style="margin:0">Approval still required for move / trash / other proposals. Hard delete never available to agents.</p>
+            </div>
+            <div class="resource" data-resource="drafts">
+              <div class="resource-head">
+                <h4><svg class="icon" aria-hidden="true"><use href="#i-draft"/></svg> Drafts for selected accounts</h4>
+                <div class="cap-grid" role="group" aria-label="Draft capabilities">
+                  <button class="cap-toggle" type="button" data-cap="read" data-tone="read" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+                    <span class="cap-copy"><strong>Read</strong><span class="cap-state">On</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                  <button class="cap-toggle" type="button" data-cap="create" data-tone="write" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-plus"/></svg></span>
+                    <span class="cap-copy"><strong>Create</strong><span class="cap-state">On</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                  <button class="cap-toggle" type="button" data-cap="edit" data-tone="write" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-edit"/></svg></span>
+                    <span class="cap-copy"><strong>Edit</strong><span class="cap-state">On</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                  <button class="cap-toggle" type="button" data-cap="trash" data-tone="write" aria-pressed="true">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-trash"/></svg></span>
+                    <span class="cap-copy"><strong>Soft delete</strong><span class="cap-state">On · Trash</span></span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                </div>
+              </div>
+              <p class="sub" style="margin:0">Create / edit / soft-delete drafts (Trash). Propose send still needs approval. Citing unread messages stays blocked.</p>
+            </div>
+            <div class="resource" data-resource="attachments">
+              <div class="resource-head">
+                <h4><svg class="icon" aria-hidden="true"><use href="#i-paperclip"/></svg> Attachments</h4>
+                <div class="cap-grid" style="grid-template-columns: 1fr">
+                  <button class="attach-toggle" type="button" data-cap="read" data-tone="read" data-attach-read aria-pressed="false">
+                    <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+                    <span class="attach-copy">
+                      <strong>Attachment content</strong>
+                      <span class="attach-state">Not readable</span>
+                    </span>
+                    <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                  </button>
+                </div>
+              </div>
+              <p class="sub" style="margin:0">Independent of message body. Off = agent sees no files; On = may open attachment bytes in this scope.</p>
+            </div>
+
+            <div class="explain" id="wizard-explain">
+              <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-info"/></svg></span>
+              <div>
+                <div class="explain-main"><span class="count">~184</span> messages readable · write proposals allowed on those</div>
+                <div class="explain-sub" style="margin-top:4px;font-size:13px">Top Read/Write overwrite the toggles below. Deny blocks every resource in this scope.</div>
+              </div>
+            </div>
+            <div class="footer-bar">
+              <button class="btn ghost" type="button" data-wizard-nav="2"><svg class="icon"><use href="#i-arrow-left"/></svg> Back</button>
+              <div class="row">
+                <button class="btn" type="button"><svg class="icon"><use href="#i-flask"/></svg> Test sample</button>
+                <button class="btn primary" type="button" data-wizard-nav="4">Continue <svg class="icon"><use href="#i-arrow-right"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4 stub -->
+        <div class="wizard-step hidden" data-wizard-step="4">
+          <h2>Review &amp; save</h2>
+          <p class="sub">Plain-English policy from steps 2–3. Stub for prototype — save not wired.</p>
+          <div class="wizard-panel">
+            <div class="explain" id="review-explain">
+              <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-book"/></svg></span>
+              <div id="review-english"></div>
+            </div>
+            <div class="footer-bar">
+              <button class="btn ghost" type="button" data-wizard-nav="3"><svg class="icon"><use href="#i-arrow-left"/></svg> Back</button>
+              <button class="btn primary" type="button"><svg class="icon"><use href="#i-check"/></svg> Save grant</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 1: pick / add / configure agent -->
+        <div class="wizard-step hidden" data-wizard-step="1">
+          <h2>Pick agent</h2>
+          <p class="sub">Grants attach to product-agnostic identities (ticket 07). New same-Mac agents start <code>machine-local</code>.</p>
+          <div class="wizard-panel">
+            <div class="agent-pick-grid">
+              <div>
+                <div class="agent-pick-list" id="wiz-agent-list" role="listbox" aria-label="Paired agents"></div>
+                <button class="btn" type="button" id="wiz-show-add" style="width:100%;margin-top:10px">
+                  <svg class="icon"><use href="#i-plus"/></svg> Pair new agent
+                </button>
+              </div>
+              <div class="agent-side">
+                <div class="agent-config" id="wiz-agent-config">
+                  <h4><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> Configure selected</h4>
+                  <div class="field">
+                    <label for="wiz-cfg-name">Display name</label>
+                    <input id="wiz-cfg-name" type="text" autocomplete="off">
+                  </div>
+                  <div class="field">
+                    <label for="wiz-cfg-class">Trust class</label>
+                    <select id="wiz-cfg-class">
+                      <option value="machine-local">machine-local</option>
+                      <option value="lan-inference">lan-inference</option>
+                      <option value="remote">remote</option>
+                    </select>
+                    <p class="class-ceil" id="wiz-cfg-ceil"></p>
+                  </div>
+                  <div class="field">
+                    <label for="wiz-cfg-status">Status</label>
+                    <select id="wiz-cfg-status">
+                      <option value="active">Active</option>
+                      <option value="suspended">Suspended (config kept)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="wiz-cfg-note">Note <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+                    <input id="wiz-cfg-note" type="text" placeholder="e.g. work laptop Cursor" autocomplete="off">
+                  </div>
+                  <div class="trust-warn" id="wiz-cfg-warn">
+                    <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+                    <span>lan-inference requires Touch ID confirmation. Model locality is user-declared, not verified. Downgrade immediately disables incompatible grants.</span>
+                  </div>
+                  <div class="row" style="margin-top:12px">
+                    <button class="btn danger" type="button" id="wiz-cfg-forget"><svg class="icon"><use href="#i-trash"/></svg> Forget agent</button>
+                    <button class="btn primary" type="button" id="wiz-cfg-save"><svg class="icon"><use href="#i-check"/></svg> Save</button>
+                  </div>
+                </div>
+                <div class="agent-config hidden" id="wiz-add-panel">
+                  <h4><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg> New agent</h4>
+                  <div class="field">
+                    <label for="wiz-add-name">Display name</label>
+                    <input id="wiz-add-name" type="text" placeholder="e.g. Cursor, Hermes, CLI helper" autocomplete="off">
+                  </div>
+                  <div class="field">
+                    <label for="wiz-add-class">Trust class</label>
+                    <select id="wiz-add-class">
+                      <option value="machine-local" selected>machine-local (default)</option>
+                      <option value="lan-inference">lan-inference</option>
+                      <option value="remote">remote</option>
+                    </select>
+                    <p class="class-ceil" id="wiz-add-ceil"></p>
+                  </div>
+                  <div class="trust-warn" id="wiz-add-warn">
+                    <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+                    <span>Promotion to lan-inference is Touch ID–gated. MailGent cannot verify model locality. Promotion never expands grants.</span>
+                  </div>
+                  <div class="row" style="margin-top:12px">
+                    <button class="btn ghost" type="button" id="wiz-add-cancel">Cancel</button>
+                    <button class="btn primary" type="button" id="wiz-add-save"><svg class="icon"><use href="#i-plus"/></svg> Pair agent</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="footer-bar">
+              <span class="hint" style="margin:0"><svg class="icon sm"><use href="#i-info"/></svg> Deny by default until grants are saved.</span>
+              <button class="btn primary" type="button" data-wizard-nav="2">Continue <svg class="icon"><use href="#i-arrow-right"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- B -->
+    <section id="variant-b" class="proto card hidden" aria-label="Variant B grant desk">
+      <aside class="agent-list">
+        <div class="section-title"><svg class="icon sm"><use href="#i-bot"/></svg> Agents</div>
+        <div id="desk-agent-list"></div>
+        <button class="btn" type="button" id="desk-pair-agent" style="width:100%;margin-top:12px"><svg class="icon"><use href="#i-plus"/></svg> Pair new agent</button>
+      </aside>
+      <div class="grants">
+        <div class="eyebrow"><svg class="icon sm"><use href="#i-shield"/></svg> Variant B · grant desk</div>
+        <div class="toolbar">
+          <div>
+            <h2 style="margin:0">Resources &amp; modes</h2>
+            <p class="sub" style="margin:4px 0 0">Each row is a resource scope plus an access mode. Deny always wins.</p>
+          </div>
+          <div class="row">
+            <button class="btn" type="button"><svg class="icon"><use href="#i-ban"/></svg> Add deny</button>
+            <button class="btn primary" type="button"><svg class="icon"><use href="#i-plus"/></svg> Add grant</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Resource / scope</th><th>Fields / ops</th><th>Effect</th></tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td><span class="pill ok"><svg class="icon"><use href="#i-eye"/></svg> Read</span></td>
+              <td>Work Gmail · Inbox, Projects<br><span style="color:var(--muted)">From *@company.com · 90d</span></td>
+              <td>Locator, envelope, body</td>
+              <td class="count">184 msgs</td>
+            </tr>
+            <tr>
+              <td>
+                <div class="row" style="gap:4px">
+                  <span class="pill ok"><svg class="icon"><use href="#i-eye"/></svg> Read</span>
+                  <span class="pill write"><svg class="icon"><use href="#i-pen"/></svg> Write</span>
+                </div>
+              </td>
+              <td>Personal Yahoo · Archive<br><span style="color:var(--muted)">Smart folder: Receipts</span></td>
+              <td>Envelope · propose archive/trash</td>
+              <td class="count">41 msgs</td>
+            </tr>
+            <tr>
+              <td><span class="pill write"><svg class="icon"><use href="#i-pen"/></svg> Write</span></td>
+              <td>Work Gmail · Drafts<br><span style="color:var(--muted)">Account drafts only</span></td>
+              <td>Read · create · edit · soft-delete</td>
+              <td>No mailbox browse</td>
+            </tr>
+            <tr>
+              <td><span class="pill bad"><svg class="icon"><use href="#i-ban"/></svg> Deny</span></td>
+              <td>Work Gmail · any<br><span style="color:var(--muted)">From hr@company.com</span></td>
+              <td>All access blocked</td>
+              <td>Overrides allows</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <aside class="inspector">
+        <div class="desk-agent-editor hidden" id="desk-agent-editor">
+          <div class="desk-editor-head"><div><div class="eyebrow"><svg class="icon sm"><use href="#i-bot"/></svg> Grant desk · agent</div><h2 id="desk-agent-title">Agent identity</h2></div></div>
+          <div class="agent-config">
+            <h4><svg class="icon"><use href="#i-shield"/></svg> Identity &amp; trust</h4>
+            <div class="field"><label for="desk-cfg-name">Display name</label><input id="desk-cfg-name" type="text"></div>
+            <div class="field"><label for="desk-cfg-class">Trust class</label><select id="desk-cfg-class"><option value="machine-local">machine-local</option><option value="lan-inference">lan-inference</option><option value="remote">remote</option></select><p class="class-ceil" id="desk-cfg-ceil"></p></div>
+            <div class="trust-warn" id="desk-cfg-warn"><svg class="icon"><use href="#i-info"/></svg><span>lan-inference requires Touch ID confirmation. Model locality remains user-declared.</span></div>
+            <div class="field"><label for="desk-cfg-status">Status</label><select id="desk-cfg-status"><option value="active">Active</option><option value="suspended">Suspended</option></select></div>
+            <div class="field"><label for="desk-cfg-note">Note</label><input id="desk-cfg-note" type="text" placeholder="Optional operator note"></div>
+            <div class="row"><button class="btn danger" type="button" id="desk-cfg-forget">Forget</button><button class="btn primary" type="button" id="desk-cfg-save">Save</button></div>
+          </div>
+        </div>
+        <div class="desk-agent-editor hidden" id="desk-pair-editor">
+          <div class="desk-editor-head"><div><div class="eyebrow"><svg class="icon sm"><use href="#i-plus"/></svg> Grant desk · pair</div><h2>New agent</h2></div></div>
+          <div class="agent-config">
+            <h4><svg class="icon"><use href="#i-shield"/></svg> Identity &amp; trust</h4>
+            <div class="field">
+              <label for="desk-add-name">Display name</label>
+              <input id="desk-add-name" type="text" placeholder="e.g. Cursor, Hermes, CLI helper" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="desk-add-class">Trust class</label>
+              <select id="desk-add-class">
+                <option value="machine-local" selected>machine-local (default)</option>
+                <option value="lan-inference">lan-inference</option>
+                <option value="remote">remote</option>
+              </select>
+              <p class="class-ceil" id="desk-add-ceil"></p>
+            </div>
+            <div class="trust-warn" id="desk-add-warn">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+              <span>Promotion to lan-inference is Touch ID–gated. MailGent cannot verify model locality. Promotion never expands grants.</span>
+            </div>
+            <p class="hint" style="margin:0 0 12px"><svg class="icon sm"><use href="#i-info"/></svg> Deny by default until grants are saved. Finish-setup connect UX lives in issue 17.</p>
+            <div class="row">
+              <button class="btn ghost" type="button" id="desk-add-cancel">Cancel</button>
+              <button class="btn primary" type="button" id="desk-add-save"><svg class="icon"><use href="#i-plus"/></svg> Pair agent</button>
+            </div>
+          </div>
+        </div>
+        <div class="desk-grant-editor" id="desk-grant-editor">
+        <div class="desk-editor-head">
+          <div><div class="eyebrow"><svg class="icon sm"><use href="#i-shield"/></svg> Grant desk</div><h2 id="desk-grant-title">Grant settings</h2></div>
+        </div>
+        <div class="desk-toolbar">
+          <div class="desk-tabs" role="tablist" aria-label="Grant settings"><button class="active" type="button" data-desk-view="scope">Scope</button><button type="button" data-desk-view="access">Access</button></div>
+          <div class="row">
+            <button class="btn" type="button" id="desk-test"><svg class="icon"><use href="#i-flask"/></svg> Test</button>
+            <button class="btn primary" type="button" id="desk-save"><svg class="icon"><use href="#i-check"/></svg> Save</button>
+            <button class="btn danger" type="button" id="desk-revoke"><svg class="icon"><use href="#i-trash"/></svg> Revoke</button>
+          </div>
+        </div>
+        <div class="desk-section" data-desk-section="scope">
+        <div class="explain" id="desk-explain">
+          <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-info"/></svg></span>
+          <div>
+            <div class="explain-main"><span class="count">~184</span> messages readable · no write proposals</div>
+            <div class="explain-sub" style="margin-top:4px">Same options as wizard A · groups AND · values OR · no regex</div>
+          </div>
+        </div>
+        <h2>Which mail may this agent use?</h2>
+        <p class="sub">Groups AND together · values inside a group OR. No regex.</p>
+        <div class="wizard-panel" id="desk-selector">
+          <div class="selector-block">
+            <div class="block-head">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg> Account <span class="required">*</span></h4>
+              <button class="btn" type="button" id="desk-sel-show-add-account">
+                <svg class="icon"><use href="#i-plus"/></svg> Add mail account
+              </button>
+            </div>
+            <p class="block-sub">Every allow needs ≥1 account. “All current” is a snapshot — new accounts never join automatically.</p>
+            <div class="chip-row" id="desk-sel-accounts" role="group" aria-label="Accounts"></div>
+            <div class="add-agent-panel hidden" id="desk-sel-add-account-panel">
+              <h4 style="margin:0 0 10px;font-size:13px;font-weight:650">Connect account</h4>
+              <div class="field">
+                <label for="desk-sel-add-acct-name">Display name</label>
+                <input id="desk-sel-add-acct-name" type="text" placeholder="e.g. Side project Gmail" autocomplete="off">
+              </div>
+              <div class="field">
+                <span class="field-label" id="desk-sel-add-acct-provider-label">Provider</span>
+                <div class="provider-picks" id="desk-sel-add-acct-provider" role="group" aria-labelledby="desk-sel-add-acct-provider-label">
+                  <button type="button" class="chip-pick on" data-provider="gmail"><svg class="icon brand gmail"><use href="#i-gmail"/></svg> Gmail</button>
+                  <button type="button" class="chip-pick" data-provider="yahoo"><svg class="icon brand yahoo"><use href="#i-yahoo"/></svg> Yahoo</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="desk-sel-add-acct-email">Email</label>
+                <input id="desk-sel-add-acct-email" type="email" placeholder="you@example.com" autocomplete="off">
+              </div>
+              <p class="class-ceil">OAuth stub — Gmail API / Yahoo IMAP+OAuth. New account never joins existing “All current” grants.</p>
+              <div class="row" style="margin-top:12px">
+                <button class="btn ghost" type="button" id="desk-sel-add-acct-cancel">Cancel</button>
+                <button class="btn primary" type="button" id="desk-sel-add-acct-save"><svg class="icon"><use href="#i-plus"/></svg> Connect</button>
+              </div>
+            </div>
+          </div>
+          <div class="selector-block">
+            <h4><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> Placement <span style="font-weight:500;color:var(--muted)">(optional)</span></h4>
+            <p class="block-sub">Omit = match anywhere in selected accounts. Gmail = any selected label · Yahoo = one folder · virtual Archived selectable.</p>
+            <div class="chip-row" id="desk-sel-placements" role="group" aria-label="Placements"></div>
+          </div>
+          <div class="selector-block">
+            <h4><svg class="icon" aria-hidden="true"><use href="#i-people"/></svg> Participants</h4>
+            <p class="block-sub">Normalized addresses only — never display names. Domains exact unless include subdomains.</p>
+            <div class="row" style="margin-bottom:8px">
+              <div class="seg" id="desk-sel-role" role="group" aria-label="Participant role">
+                <button type="button" class="on" data-role="from">From</button>
+                <button type="button" data-role="to">To</button>
+                <button type="button" data-role="cc">Cc</button>
+                <button type="button" data-role="bcc">Bcc</button>
+                <button type="button" data-role="any">Any participant</button>
+              </div>
+            </div>
+            <div class="chip-row" id="desk-sel-participants"></div>
+            <div class="inline-add">
+              <input id="desk-sel-participant-input" type="text" placeholder="address or domain · e.g. *@company.com" autocomplete="off">
+              <button class="btn" type="button" id="desk-sel-participant-add"><svg class="icon"><use href="#i-plus"/></svg> Add</button>
+            </div>
+            <label class="check-row"><input type="checkbox" id="desk-sel-subdomains"> Include subdomains for domain matches</label>
+          </div>
+          <div class="selector-block">
+            <h4><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> Date</h4>
+            <p class="block-sub">Provider mailbox timestamps · user local timezone · inclusive · re-evaluates continuously.</p>
+            <div class="row" style="margin-bottom:8px">
+              <div class="seg" id="desk-sel-date-mode" role="group" aria-label="Date mode">
+                <button type="button" class="on" data-date-mode="rolling">Rolling window</button>
+                <button type="button" data-date-mode="absolute">Absolute range</button>
+                <button type="button" data-date-mode="any">Any time</button>
+              </div>
+            </div>
+            <div class="inline-add" id="desk-sel-date-rolling">
+              <label for="desk-sel-rolling-days" style="font-size:12px;color:var(--muted)">Last</label>
+              <select id="desk-sel-rolling-days">
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="90" selected>90 days</option>
+                <option value="365">365 days</option>
+              </select>
+            </div>
+            <div class="inline-add hidden" id="desk-sel-date-absolute">
+              <input id="desk-sel-date-from" type="date" value="2026-01-01">
+              <span style="color:var(--muted)">→</span>
+              <input id="desk-sel-date-to" type="date" value="2026-08-16">
+            </div>
+          </div>
+          <div class="selector-block">
+            <h4><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> Smart folder <span style="font-weight:500;color:var(--muted)">(optional)</span></h4>
+            <p class="block-sub">Named reusable dynamic selector — not a provider placement. Can drive allow or deny elsewhere.</p>
+            <select id="desk-sel-smart-folder">
+              <option value="">None — use selectors above only</option>
+              <option value="receipts">Receipts</option>
+              <option value="vendors">Work vendors</option>
+              <option value="family">Family</option>
+            </select>
+          </div>
+          <div class="explain" id="desk-selector-explain">
+            <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-info"/></svg></span>
+            <div>
+              <div class="explain-main"><span class="count" id="desk-sel-match-count">~184</span> messages match this scope</div>
+              <div class="explain-sub" id="desk-sel-match-english" style="margin-top:4px"></div>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <div class="desk-section" data-desk-section="access">
+        <div class="section-title"><svg class="icon sm"><use href="#i-shield"/></svg> Access mode</div>
+        <div class="field">
+          <label>Bulk access</label>
+          <div class="modebar compact" data-access-group="desk-top" role="group" aria-label="Inspector bulk access controls">
+            <button class="mode on-read" type="button" data-access="read" aria-pressed="true">
+              <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+              <div class="label"><strong>Read</strong><span>Search &amp; open</span></div>
+              <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+            </button>
+            <button class="mode" type="button" data-access="write" aria-pressed="false">
+              <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-pen"/></svg></span>
+              <div class="label"><strong>Write</strong><span>Drafts &amp; proposals</span></div>
+              <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+            </button>
+            <button class="mode" type="button" data-access="deny" aria-pressed="false">
+              <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-ban"/></svg></span>
+              <div class="label"><strong>Deny</strong><span>Block all access</span></div>
+              <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+            </button>
+          </div>
+          <p class="mode-hint" style="margin-bottom:10px"><svg class="icon sm" aria-hidden="true"><use href="#i-info"/></svg> Overwrites resource toggles when changed. Fine-tune below.</p>
+        </div>
+
+        <div class="desk-resources" id="desk-resources">
+          <div class="resource" data-resource="messages">
+            <div class="resource-head">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg> Messages in this scope</h4>
+              <div class="cap-grid" role="group" aria-label="Message capabilities">
+                <button class="cap-toggle" type="button" data-cap="read" data-tone="read" aria-pressed="true">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+                  <span class="cap-copy"><strong>Read</strong><span class="cap-state">On</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+                <button class="cap-toggle" type="button" data-cap="propose" data-tone="write" aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-send"/></svg></span>
+                  <span class="cap-copy"><strong>Write proposals</strong><span class="cap-state">Off</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+                <button class="cap-toggle" type="button" data-cap="move" data-tone="write" aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-move"/></svg></span>
+                  <span class="cap-copy"><strong>Move messages</strong><span class="cap-state">Off</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+                <button class="cap-toggle" type="button" data-cap="trash" data-tone="write" aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-trash"/></svg></span>
+                  <span class="cap-copy"><strong>Soft delete</strong><span class="cap-state">Off</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+              </div>
+            </div>
+            <p class="sub" style="margin:0;font-size:11px">Approval still required for move / trash / other proposals. Hard delete never available.</p>
+          </div>
+          <div class="resource" data-resource="drafts">
+            <div class="resource-head">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-draft"/></svg> Drafts for selected accounts</h4>
+              <div class="cap-grid" role="group" aria-label="Draft capabilities">
+                <button class="cap-toggle" type="button" data-cap="read" data-tone="read" aria-pressed="true">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+                  <span class="cap-copy"><strong>Read</strong><span class="cap-state">On</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+                <button class="cap-toggle" type="button" data-cap="create" data-tone="write" aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-plus"/></svg></span>
+                  <span class="cap-copy"><strong>Create</strong><span class="cap-state">Off</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+                <button class="cap-toggle" type="button" data-cap="edit" data-tone="write" aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-edit"/></svg></span>
+                  <span class="cap-copy"><strong>Edit</strong><span class="cap-state">Off</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+                <button class="cap-toggle" type="button" data-cap="trash" data-tone="write" aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-trash"/></svg></span>
+                  <span class="cap-copy"><strong>Soft delete</strong><span class="cap-state">Off</span></span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+              </div>
+            </div>
+            <p class="sub" style="margin:0;font-size:11px">Create / edit / soft-delete. Propose send needs approval. Citing unread stays blocked.</p>
+          </div>
+          <div class="resource" data-resource="attachments">
+            <div class="resource-head">
+              <h4><svg class="icon" aria-hidden="true"><use href="#i-paperclip"/></svg> Attachments</h4>
+              <div class="cap-grid" style="grid-template-columns: 1fr">
+                <button class="attach-toggle" type="button" data-cap="read" data-tone="read" data-attach-read aria-pressed="false">
+                  <span class="glyph" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
+                  <span class="attach-copy">
+                    <strong>Attachment content</strong>
+                    <span class="attach-state">Not readable</span>
+                  </span>
+                  <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+                </button>
+              </div>
+            </div>
+            <p class="sub" style="margin:0;font-size:11px">Independent of message body. Off = no files; On = open attachment bytes.</p>
+          </div>
+        </div>
+        </div>
+        </div>
+      </aside>
+    </section>
+
+    <nav class="floating" aria-label="Prototype variants">
+      <button class="cycle" type="button" data-cycle="-1" aria-label="Previous variant"><svg class="icon"><use href="#i-arrow-left"/></svg></button>
+      <button type="button" data-variant="a" class="active">A · Wizard</button>
+      <button type="button" data-variant="b">B · Grant desk</button>
+      <button class="cycle" type="button" data-cycle="1" aria-label="Next variant"><svg class="icon"><use href="#i-arrow-right"/></svg></button>
+    </nav>
+  </main>
+
+  <script>
+    const keys = ["a", "b"];
+    const normalizeVariant = (key) => (key === "b1" || key === "b2" || key === "b3" ? "b" : key);
+    const choose = (key) => {
+      const visible = normalizeVariant(key);
+      ["a", "b"].forEach((k) => document.getElementById(`variant-${k}`).classList.toggle("hidden", k !== visible));
+      if (visible === "b" && typeof refreshDeskLayout === "function") refreshDeskLayout();
+      document.querySelectorAll("[data-variant]").forEach((btn) => btn.classList.toggle("active", btn.dataset.variant === visible));
+      const url = new URL(location.href);
+      url.searchParams.set("variant", visible);
+      history.replaceState(null, "", url);
+    };
+    document.querySelectorAll("[data-variant]").forEach((btn) => btn.addEventListener("click", () => choose(btn.dataset.variant)));
+    document.querySelectorAll("[data-cycle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cur = normalizeVariant(new URLSearchParams(location.search).get("variant") || "a");
+        const i = keys.indexOf(cur);
+        choose(keys[(i + Number(btn.dataset.cycle) + keys.length) % keys.length]);
+      });
+    });
+
+    // --- Shared agents (ticket 07 trust classes) ---
+    const CLASS_CEIL = {
+      "machine-local": "Ceiling: regular scopes only · never private",
+      "lan-inference": "Ceiling: regular + private · Touch ID to promote · locality unverified",
+      remote: "Ceiling: remote-eligible only · active session required",
+    };
+    const agents = [
+      { id: "a-cursor", name: "Cursor", trustClass: "machine-local", status: "active", note: "" },
+      { id: "a-hermes", name: "Hermes", trustClass: "lan-inference", status: "active", note: "LAN model claimed" },
+      { id: "a-cli", name: "CLI helper", trustClass: "machine-local", status: "suspended", note: "" },
+    ];
+    let selectedAgentId = "a-cursor";
+    let wizAdding = false;
+
+    const selectedAgent = () => agents.find((a) => a.id === selectedAgentId) || agents[0];
+
+    const agentSubtitle = (a) => {
+      const bits = [a.trustClass];
+      if (a.status === "suspended") bits.push("suspended");
+      else bits.push("deny by default");
+      if (a.note) bits.push(a.note);
+      return bits.join(" · ");
+    };
+
+    const draftAgentPreview = () => {
+      const name = (document.getElementById("wiz-add-name")?.value || "").trim();
+      const trustClass = document.getElementById("wiz-add-class")?.value || "machine-local";
+      return {
+        id: "a-draft",
+        name: name || "New agent",
+        trustClass,
+        status: "active",
+        note: name ? "configuring…" : "fill in details…",
+        draft: true,
+      };
+    };
+
+    const syncTrustUi = (classVal, warnEl, ceilEl) => {
+      if (ceilEl) ceilEl.textContent = CLASS_CEIL[classVal] || "";
+      if (warnEl) warnEl.classList.toggle("show", classVal === "lan-inference");
+    };
+
+    const renderAgentLists = () => {
+      const wizHost = document.getElementById("wiz-agent-list");
+      const deskHost = document.getElementById("desk-agent-list");
+      const paint = (host, { includeDraft } = {}) => {
+        if (!host) return;
+        host.innerHTML = "";
+        agents.forEach((a) => {
+          const selected = !includeDraft && a.id === selectedAgentId;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "agent" + (selected ? " active" : "");
+          btn.setAttribute("role", "option");
+          btn.setAttribute("aria-selected", selected ? "true" : "false");
+          const icon = a.status === "suspended" || a.trustClass === "remote" ? "i-lock" : "i-bot";
+          btn.innerHTML = `<span class="avatar" aria-hidden="true"><svg class="icon"><use href="#${icon}"/></svg></span>
+            <span>${a.name}<small>${agentSubtitle(a)}</small></span>`;
+          btn.addEventListener("click", () => {
+            selectedAgentId = a.id;
+            showWizAgentAdd(false);
+            renderAgentLists();
+            fillAgentConfig();
+            refreshWizardExtras();
+          });
+          host.appendChild(btn);
+        });
+        if (includeDraft) {
+          const draft = draftAgentPreview();
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "agent active draft";
+          btn.id = "wiz-agent-draft";
+          btn.setAttribute("role", "option");
+          btn.setAttribute("aria-selected", "true");
+          btn.setAttribute("aria-label", "New agent being configured");
+          const icon = draft.trustClass === "remote" ? "i-lock" : "i-plus";
+          btn.innerHTML = `<span class="avatar" aria-hidden="true"><svg class="icon"><use href="#${icon}"/></svg></span>
+            <span>${draft.name}<small>${draft.trustClass} · ${draft.note}</small></span>`;
+          btn.addEventListener("click", () => {
+            document.getElementById("wiz-add-name")?.focus();
+          });
+          host.appendChild(btn);
+        }
+      };
+      paint(wizHost, { includeDraft: wizAdding });
+      if (typeof renderDeskList === "function") renderDeskList();
+    };
+
+    const fillAgentConfig = () => {
+      const a = selectedAgent();
+      if (!a) return;
+      const name = document.getElementById("wiz-cfg-name");
+      const cls = document.getElementById("wiz-cfg-class");
+      const status = document.getElementById("wiz-cfg-status");
+      const note = document.getElementById("wiz-cfg-note");
+      if (name) name.value = a.name;
+      if (cls) cls.value = a.trustClass;
+      if (status) status.value = a.status;
+      if (note) note.value = a.note || "";
+      syncTrustUi(a.trustClass, document.getElementById("wiz-cfg-warn"), document.getElementById("wiz-cfg-ceil"));
+    };
+
+    const showWizAgentAdd = (on) => {
+      wizAdding = !!on;
+      document.getElementById("wiz-add-panel")?.classList.toggle("hidden", !on);
+      document.getElementById("wiz-agent-config")?.classList.toggle("hidden", on);
+      renderAgentLists();
+      if (on) {
+        syncTrustUi(
+          document.getElementById("wiz-add-class")?.value || "machine-local",
+          document.getElementById("wiz-add-warn"),
+          document.getElementById("wiz-add-ceil")
+        );
+        document.getElementById("wiz-add-name")?.focus();
+      }
+    };
+
+    const pairAgent = ({ name, trustClass, from }) => {
+      const trimmed = (name || "").trim();
+      if (!trimmed) {
+        alert("Name required.");
+        return null;
+      }
+      if (trustClass === "lan-inference") {
+        const ok = confirm("Touch ID stub: promote to lan-inference?\n\nMailGent cannot verify model locality. Promotion does not expand grants.");
+        if (!ok) return null;
+      }
+      const agent = {
+        id: "a-" + Date.now(),
+        name: trimmed,
+        trustClass: trustClass || "machine-local",
+        status: "active",
+        note: "",
+      };
+      agents.push(agent);
+      selectedAgentId = agent.id;
+      if (from === "wiz") {
+        document.getElementById("wiz-add-name").value = "";
+        document.getElementById("wiz-add-class").value = "machine-local";
+        syncTrustUi("machine-local", document.getElementById("wiz-add-warn"), document.getElementById("wiz-add-ceil"));
+        showWizAgentAdd(false);
+      } else {
+        renderAgentLists();
+      }
+      fillAgentConfig();
+      refreshWizardExtras();
+      if (from === "desk") {
+        document.getElementById("desk-add-name").value = "";
+        document.getElementById("desk-add-class").value = "machine-local";
+        syncTrustUi("machine-local", document.getElementById("desk-add-warn"), document.getElementById("desk-add-ceil"));
+        if (typeof selectDeskAgent === "function") selectDeskAgent(agent.id);
+      }
+      return agent;
+    };
+
+    document.getElementById("wiz-show-add")?.addEventListener("click", () => {
+      showWizAgentAdd(true);
+    });
+    document.getElementById("wiz-add-cancel")?.addEventListener("click", () => {
+      showWizAgentAdd(false);
+    });
+    document.getElementById("wiz-add-name")?.addEventListener("input", () => {
+      if (wizAdding) renderAgentLists();
+    });
+    document.getElementById("wiz-add-class")?.addEventListener("change", (e) => {
+      syncTrustUi(e.target.value, document.getElementById("wiz-add-warn"), document.getElementById("wiz-add-ceil"));
+      if (wizAdding) renderAgentLists();
+    });
+    document.getElementById("wiz-add-save")?.addEventListener("click", () => {
+      pairAgent({
+        name: document.getElementById("wiz-add-name")?.value,
+        trustClass: document.getElementById("wiz-add-class")?.value,
+        from: "wiz",
+      });
+    });
+    document.getElementById("wiz-cfg-class")?.addEventListener("change", (e) => {
+      syncTrustUi(e.target.value, document.getElementById("wiz-cfg-warn"), document.getElementById("wiz-cfg-ceil"));
+    });
+    document.getElementById("wiz-cfg-save")?.addEventListener("click", () => {
+      const a = selectedAgent();
+      if (!a) return;
+      const nextClass = document.getElementById("wiz-cfg-class")?.value || a.trustClass;
+      if (nextClass === "lan-inference" && a.trustClass !== "lan-inference") {
+        const ok = confirm("Touch ID stub: promote to lan-inference?\n\nLocality unverified. Does not expand existing grants.");
+        if (!ok) {
+          document.getElementById("wiz-cfg-class").value = a.trustClass;
+          syncTrustUi(a.trustClass, document.getElementById("wiz-cfg-warn"), document.getElementById("wiz-cfg-ceil"));
+          return;
+        }
+      }
+      if (a.trustClass === "lan-inference" && nextClass !== "lan-inference") {
+        alert("Downgrade stub: incompatible private grants would be disabled immediately.");
+      }
+      a.name = (document.getElementById("wiz-cfg-name")?.value || a.name).trim() || a.name;
+      a.trustClass = nextClass;
+      a.status = document.getElementById("wiz-cfg-status")?.value || "active";
+      a.note = document.getElementById("wiz-cfg-note")?.value || "";
+      renderAgentLists();
+      fillAgentConfig();
+      refreshWizardExtras();
+    });
+    document.getElementById("wiz-cfg-forget")?.addEventListener("click", () => {
+      if (agents.length <= 1) {
+        alert("Keep at least one agent in this prototype.");
+        return;
+      }
+      const a = selectedAgent();
+      if (!a || !confirm(`Forget ${a.name}? Credentials and assignments destroyed (ticket 07).`)) return;
+      const idx = agents.findIndex((x) => x.id === a.id);
+      agents.splice(idx, 1);
+      selectedAgentId = agents[0].id;
+      renderAgentLists();
+      fillAgentConfig();
+      refreshWizardExtras();
+    });
+
+    document.getElementById("desk-pair-agent")?.addEventListener("click", () => {
+      if (typeof showDeskPair === "function") showDeskPair();
+    });
+    document.getElementById("desk-add-cancel")?.addEventListener("click", () => {
+      const fallback = selectedAgentId || agents[0]?.id;
+      if (fallback && typeof selectDeskAgent === "function") selectDeskAgent(fallback);
+      else document.getElementById("desk-pair-editor")?.classList.add("hidden");
+    });
+    document.getElementById("desk-add-save")?.addEventListener("click", () => {
+      pairAgent({
+        name: document.getElementById("desk-add-name")?.value,
+        trustClass: document.getElementById("desk-add-class")?.value,
+        from: "desk",
+      });
+    });
+    document.getElementById("desk-add-class")?.addEventListener("change", (e) => {
+      syncTrustUi(e.target.value, document.getElementById("desk-add-warn"), document.getElementById("desk-add-ceil"));
+    });
+    document.getElementById("desk-cfg-class")?.addEventListener("change", (e) => {
+      syncTrustUi(e.target.value, document.getElementById("desk-cfg-warn"), document.getElementById("desk-cfg-ceil"));
+    });
+    document.getElementById("desk-cfg-save")?.addEventListener("click", () => {
+      const a = selectedAgent();
+      if (!a) return;
+      const nextClass = document.getElementById("desk-cfg-class").value;
+      if (nextClass === "lan-inference" && a.trustClass !== "lan-inference" && !confirm("Touch ID stub: promote to lan-inference?\n\nMailGent cannot verify model locality.")) return;
+      a.name = document.getElementById("desk-cfg-name").value.trim() || a.name;
+      a.trustClass = nextClass;
+      a.status = document.getElementById("desk-cfg-status").value;
+      a.note = document.getElementById("desk-cfg-note").value;
+      renderAgentLists();
+      selectDeskAgent(a.id);
+    });
+    document.getElementById("desk-cfg-forget")?.addEventListener("click", () => {
+      const a = selectedAgent();
+      if (!a || agents.length <= 1 || !confirm(`Forget ${a.name}? Credentials and assignments destroyed (ticket 07).`)) return;
+      for (let i = deskGrants.length - 1; i >= 0; i--) if (deskGrants[i].agentId === a.id) deskGrants.splice(i, 1);
+      agents.splice(agents.findIndex((x) => x.id === a.id), 1);
+      selectDeskAgent(agents[0].id);
+    });
+
+    syncTrustUi("machine-local", document.getElementById("wiz-add-warn"), document.getElementById("wiz-add-ceil"));
+    syncTrustUi("machine-local", document.getElementById("desk-add-warn"), document.getElementById("desk-add-ceil"));
+
+    // --- Shared v1 selector model (ticket 07) ---
+    const PROVIDER_PLACEMENTS = {
+      gmail: [
+        { id: "inbox", label: "Inbox" },
+        { id: "projects", label: "Projects" },
+        { id: "sent", label: "Sent" },
+        { id: "archived", label: "Archived (virtual)" },
+      ],
+      yahoo: [
+        { id: "inbox", label: "Inbox" },
+        { id: "archive", label: "Archive" },
+        { id: "archived", label: "Archived (virtual)" },
+      ],
+    };
+    const ALL_SNAPSHOT_PLACEMENTS = [
+      { id: "inbox", label: "Inbox" },
+      { id: "archived", label: "Archived (virtual)" },
+    ];
+    const mailAccounts = [
+      { id: "work", label: "Work Gmail", provider: "gmail", email: "you@company.com", approxCount: 640 },
+      { id: "personal", label: "Personal Yahoo", provider: "yahoo", email: "you@yahoo.com", approxCount: 280 },
+    ];
+    const ROLE_LABEL = { from: "From", to: "To", cc: "Cc", bcc: "Bcc", any: "Any participant" };
+    const SMART_LABEL = { "": null, receipts: "Receipts", vendors: "Work vendors", family: "Family" };
+
+    const providerIcon = (provider) =>
+      provider === "yahoo"
+        ? `<svg class="icon brand yahoo" aria-hidden="true"><use href="#i-yahoo"/></svg>`
+        : `<svg class="icon brand gmail" aria-hidden="true"><use href="#i-gmail"/></svg>`;
+
+    const getProviderPick = (hostId) =>
+      document.querySelector(`#${hostId} .chip-pick.on`)?.dataset.provider || "gmail";
+
+    const setProviderPick = (hostId, provider) => {
+      document.querySelectorAll(`#${hostId} .chip-pick`).forEach((btn) => {
+        btn.classList.toggle("on", btn.dataset.provider === provider);
+      });
+    };
+
+    document.querySelectorAll(".provider-picks").forEach((host) => {
+      host.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-provider]");
+        if (!btn || !host.contains(btn)) return;
+        setProviderPick(host.id, btn.dataset.provider);
+      });
+    });
+
+    const accountLabel = (id) => {
+      if (id === "all") return "All current accounts";
+      return mailAccounts.find((a) => a.id === id)?.label || id;
+    };
+    const placementsForAccount = (id) => {
+      if (id === "all") return ALL_SNAPSHOT_PLACEMENTS;
+      const acct = mailAccounts.find((a) => a.id === id);
+      return PROVIDER_PLACEMENTS[acct?.provider || "gmail"] || [];
+    };
+    const allPlacementPool = () => {
+      const pool = new Map();
+      Object.values(PROVIDER_PLACEMENTS).forEach((list) => list.forEach((p) => pool.set(p.id, p.label)));
+      ALL_SNAPSHOT_PLACEMENTS.forEach((p) => pool.set(p.id, p.label));
+      return pool;
+    };
+
+    const makeScope = (partial = {}) => ({
+      accounts: new Set(partial.accounts || ["work"]),
+      placements: new Set(partial.placements || []),
+      role: partial.role || "from",
+      participants: [...(partial.participants || [])],
+      includeSubdomains: !!partial.includeSubdomains,
+      dateMode: partial.dateMode || "rolling",
+      rollingDays: partial.rollingDays ?? 90,
+      dateFrom: partial.dateFrom || "2026-01-01",
+      dateTo: partial.dateTo || "2026-08-16",
+      smartFolder: partial.smartFolder || "",
+    });
+
+    const cloneScope = (s) => makeScope({
+      accounts: [...s.accounts],
+      placements: [...s.placements],
+      role: s.role,
+      participants: s.participants,
+      includeSubdomains: s.includeSubdomains,
+      dateMode: s.dateMode,
+      rollingDays: s.rollingDays,
+      dateFrom: s.dateFrom,
+      dateTo: s.dateTo,
+      smartFolder: s.smartFolder,
+    });
+
+    const estimateMatches = (scope) => {
+      if (!scope.accounts.size) return 0;
+      let n = 0;
+      if (scope.accounts.has("all")) {
+        n = mailAccounts.reduce((sum, a) => sum + (a.approxCount || 200), 0);
+      } else {
+        [...scope.accounts].forEach((id) => {
+          n += mailAccounts.find((a) => a.id === id)?.approxCount || 200;
+        });
+      }
+      if (scope.placements.size) n = Math.round(n * (0.35 + 0.12 * Math.min(scope.placements.size, 3)));
+      if (scope.participants.length) n = Math.round(n * (0.28 + 0.08 * Math.min(scope.participants.length, 3)));
+      if (scope.dateMode === "rolling") n = Math.round(n * Math.min(1, scope.rollingDays / 180));
+      if (scope.dateMode === "absolute") n = Math.round(n * 0.55);
+      if (scope.smartFolder) n = Math.round(n * 0.4);
+      return Math.max(scope.accounts.size ? 3 : 0, n);
+    };
+
+    const placementLabels = (scope) => {
+      const pool = allPlacementPool();
+      return [...scope.placements].map((id) => pool.get(id) || id);
+    };
+
+    const scopeEnglish = (scope) => {
+      const parts = [];
+      const accts = [...scope.accounts].map((a) => accountLabel(a)).filter(Boolean);
+      parts.push(accts.length ? accts.join(" + ") : "no account");
+      if (scope.placements.size) parts.push(placementLabels(scope).join(", "));
+      else parts.push("any placement");
+      if (scope.participants.length) {
+        const sub = scope.includeSubdomains ? " (incl. subdomains)" : "";
+        parts.push(`${ROLE_LABEL[scope.role] || scope.role} ${scope.participants.join(" OR ")}${sub}`);
+      }
+      if (scope.dateMode === "rolling") parts.push(`last ${scope.rollingDays}d`);
+      else if (scope.dateMode === "absolute") parts.push(`${scope.dateFrom} → ${scope.dateTo}`);
+      if (scope.smartFolder) parts.push(`smart folder: ${SMART_LABEL[scope.smartFolder]}`);
+      return parts.join(" · ");
+    };
+
+    /** Desk list: account names → overlapping provider badges; rest stays text. */
+    const scopeEnglishRest = (scope) => {
+      const parts = [];
+      if (scope.placements.size) parts.push(placementLabels(scope).join(", "));
+      else parts.push("any placement");
+      if (scope.participants.length) {
+        const sub = scope.includeSubdomains ? " (incl. subdomains)" : "";
+        parts.push(`${ROLE_LABEL[scope.role] || scope.role} ${scope.participants.join(" OR ")}${sub}`);
+      }
+      if (scope.dateMode === "rolling") parts.push(`last ${scope.rollingDays}d`);
+      else if (scope.dateMode === "absolute") parts.push(`${scope.dateFrom} → ${scope.dateTo}`);
+      if (scope.smartFolder) parts.push(`smart folder: ${SMART_LABEL[scope.smartFolder]}`);
+      return parts.join(" · ");
+    };
+
+    const accountBadges = (scope) => {
+      const accts = scope.accounts.has("all")
+        ? [...mailAccounts]
+        : [...scope.accounts].map((id) => mailAccounts.find((a) => a.id === id)).filter(Boolean);
+      if (!accts.length) {
+        return `<span class="acct-dot" title="No account" aria-label="No account"><svg class="icon"><use href="#i-mail"/></svg></span>`;
+      }
+      const bits = accts.map((a, i) =>
+        `<span class="acct-dot" title="${a.label}${a.email ? ` · ${a.email}` : ""}" aria-label="${a.label}" style="z-index:${i + 1}">${providerIcon(a.provider)}</span>`
+      );
+      return `<span class="acct-stack">${bits.join("")}</span>`;
+    };
+
+    /** Line-by-line scope values for wizard steps rail (icons match selector sections). */
+    const scopeStepLines = (scope) => {
+      const accts = [...scope.accounts].map((a) => accountLabel(a)).filter(Boolean);
+      const date =
+        scope.dateMode === "rolling" ? `Last ${scope.rollingDays}d`
+        : scope.dateMode === "absolute" ? `${scope.dateFrom} → ${scope.dateTo}`
+        : "Any time";
+      let participants = "Any participant";
+      if (scope.participants.length) {
+        const sub = scope.includeSubdomains ? " · +subdomains" : "";
+        participants = `${ROLE_LABEL[scope.role] || scope.role} ${scope.participants.join(" OR ")}${sub}`;
+      }
+      return [
+        { icon: "i-mail", v: accts.length ? accts.join(" + ") : "Pick ≥1 account" },
+        { icon: "i-folder", v: scope.placements.size ? placementLabels(scope).join(", ") : "Anywhere" },
+        { icon: "i-people", v: participants },
+        { icon: "i-calendar", v: date },
+        { icon: "i-spark", v: scope.smartFolder ? (SMART_LABEL[scope.smartFolder] || scope.smartFolder) : "No smart folder" },
+      ];
+    };
+
+    const scopeTableHtml = (scope) => {
+      const accts = [...scope.accounts].map((a) => accountLabel(a)).join(" + ") || "no account";
+      const pool = allPlacementPool();
+      const place = scope.placements.size
+        ? [...scope.placements].map((id) => pool.get(id) || id).join(", ")
+        : "any";
+      const bits = [];
+      if (scope.participants.length) bits.push(`${ROLE_LABEL[scope.role]} ${scope.participants.join(", ")}`);
+      if (scope.dateMode === "rolling") bits.push(`${scope.rollingDays}d`);
+      else if (scope.dateMode === "absolute") bits.push(`${scope.dateFrom} → ${scope.dateTo}`);
+      if (scope.smartFolder) bits.push(`Smart folder: ${SMART_LABEL[scope.smartFolder]}`);
+      return `${accts} · ${place}<br><span style="color:var(--muted)">${bits.join(" · ") || "no extra filters"}</span>`;
+    };
+
+    /** Bind account/placement/participants/date/smart-folder UI. prefix: "sel" | "desk-sel" */
+    const bindSelector = ({ prefix, getScope, onChange }) => {
+      const id = (suffix) => document.getElementById(`${prefix}-${suffix}`);
+      const renderAccounts = () => {
+        const scope = getScope();
+        const host = id("accounts");
+        if (!host) return;
+        host.innerHTML = "";
+        mailAccounts.forEach((a) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "chip-pick" + (scope.accounts.has(a.id) ? " on" : "");
+          btn.dataset.account = a.id;
+          btn.dataset.provider = a.provider;
+          btn.innerHTML = `${providerIcon(a.provider)} ${a.label}`;
+          btn.title = a.email || a.label;
+          host.appendChild(btn);
+        });
+        const allBtn = document.createElement("button");
+        allBtn.type = "button";
+        allBtn.className = "chip-pick" + (scope.accounts.has("all") ? " on" : "");
+        allBtn.dataset.account = "all";
+        allBtn.textContent = "All current accounts";
+        host.appendChild(allBtn);
+      };
+      const renderPlacements = () => {
+        const scope = getScope();
+        const host = id("placements");
+        if (!host) return;
+        const pool = new Map();
+        [...scope.accounts].forEach((a) => placementsForAccount(a).forEach((p) => pool.set(p.id, p.label)));
+        [...scope.placements].forEach((pid) => { if (!pool.has(pid)) scope.placements.delete(pid); });
+        host.innerHTML = "";
+        if (!pool.size) {
+          host.innerHTML = `<span style="color:var(--muted);font-size:12px">Select an account first</span>`;
+          return;
+        }
+        pool.forEach((label, pid) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "chip-pick" + (scope.placements.has(pid) ? " on" : "");
+          btn.textContent = label;
+          btn.addEventListener("click", () => {
+            if (scope.placements.has(pid)) scope.placements.delete(pid);
+            else scope.placements.add(pid);
+            renderPlacements();
+            onChange();
+          });
+          host.appendChild(btn);
+        });
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "chip-pick";
+        clear.textContent = "Clear (any)";
+        clear.addEventListener("click", () => {
+          scope.placements.clear();
+          renderPlacements();
+          onChange();
+        });
+        host.appendChild(clear);
+      };
+
+      const renderParticipants = () => {
+        const scope = getScope();
+        const host = id("participants");
+        if (!host) return;
+        host.innerHTML = "";
+        scope.participants.forEach((p, i) => {
+          const chip = document.createElement("span");
+          chip.className = "chip-pick on";
+          chip.innerHTML = `<span>${p}</span>`;
+          const x = document.createElement("button");
+          x.type = "button";
+          x.className = "x";
+          x.setAttribute("aria-label", `Remove ${p}`);
+          x.textContent = "×";
+          x.addEventListener("click", () => {
+            scope.participants.splice(i, 1);
+            renderParticipants();
+            onChange();
+          });
+          chip.appendChild(x);
+          host.appendChild(chip);
+        });
+        if (!scope.participants.length) {
+          host.innerHTML = `<span style="color:var(--muted);font-size:12px">No address filter</span>`;
+        }
+      };
+
+      const syncControlsFromState = () => {
+        const scope = getScope();
+        renderAccounts();
+        id("role")?.querySelectorAll("[data-role]").forEach((b) => {
+          b.classList.toggle("on", b.dataset.role === scope.role);
+        });
+        const sub = id("subdomains");
+        if (sub) sub.checked = scope.includeSubdomains;
+        id("date-mode")?.querySelectorAll("[data-date-mode]").forEach((b) => {
+          b.classList.toggle("on", b.dataset.dateMode === scope.dateMode);
+        });
+        id("date-rolling")?.classList.toggle("hidden", scope.dateMode !== "rolling");
+        id("date-absolute")?.classList.toggle("hidden", scope.dateMode !== "absolute");
+        const roll = id("rolling-days");
+        if (roll) roll.value = String(scope.rollingDays);
+        const from = id("date-from");
+        const to = id("date-to");
+        if (from) from.value = scope.dateFrom;
+        if (to) to.value = scope.dateTo;
+        const smart = id("smart-folder");
+        if (smart) smart.value = scope.smartFolder;
+        renderPlacements();
+        renderParticipants();
+        const countEl = id("match-count");
+        const engEl = id("match-english");
+        const n = estimateMatches(scope);
+        if (countEl) countEl.textContent = `~${n}`;
+        if (engEl) engEl.textContent = scopeEnglish(scope) + (scope.accounts.size ? "" : " — add an account");
+      };
+
+      id("accounts")?.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-account]");
+        if (!btn || !id("accounts").contains(btn)) return;
+        const scope = getScope();
+        const aid = btn.dataset.account;
+        if (aid === "all") {
+          scope.accounts.clear();
+          scope.accounts.add("all");
+        } else {
+          scope.accounts.delete("all");
+          if (scope.accounts.has(aid)) scope.accounts.delete(aid);
+          else scope.accounts.add(aid);
+          if (!scope.accounts.size) scope.accounts.add(aid);
+        }
+        syncControlsFromState();
+        onChange();
+      });
+
+      id("role")?.querySelectorAll("[data-role]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          getScope().role = btn.dataset.role;
+          syncControlsFromState();
+          onChange();
+        });
+      });
+
+      const addParticipant = () => {
+        const input = id("participant-input");
+        const raw = (input?.value || "").trim().toLowerCase();
+        if (!raw) return;
+        const scope = getScope();
+        if (!scope.participants.includes(raw)) scope.participants.push(raw);
+        if (input) input.value = "";
+        renderParticipants();
+        onChange();
+      };
+      id("participant-add")?.addEventListener("click", addParticipant);
+      id("participant-input")?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); addParticipant(); }
+      });
+      id("subdomains")?.addEventListener("change", (e) => {
+        getScope().includeSubdomains = e.target.checked;
+        onChange();
+      });
+      id("date-mode")?.querySelectorAll("[data-date-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          getScope().dateMode = btn.dataset.dateMode;
+          syncControlsFromState();
+          onChange();
+        });
+      });
+      id("rolling-days")?.addEventListener("change", (e) => {
+        getScope().rollingDays = Number(e.target.value);
+        onChange();
+      });
+      id("date-from")?.addEventListener("change", (e) => {
+        getScope().dateFrom = e.target.value;
+        onChange();
+      });
+      id("date-to")?.addEventListener("change", (e) => {
+        getScope().dateTo = e.target.value;
+        onChange();
+      });
+      id("smart-folder")?.addEventListener("change", (e) => {
+        getScope().smartFolder = e.target.value;
+        onChange();
+      });
+
+      return { syncControlsFromState, renderPlacements, renderParticipants, renderAccounts };
+    };
+
+    // Wizard A scope
+    const wizardScope = makeScope({
+      accounts: ["work"],
+      placements: ["inbox", "projects"],
+      participants: ["*@company.com"],
+      dateMode: "rolling",
+      rollingDays: 90,
+    });
+
+    const accessStepFlags = () => {
+      const top = document.querySelector('#variant-a [data-access-group="wizard-top"]');
+      if (!top) return { deny: false, read: false, write: false };
+      const deny = top.querySelector('[data-access="deny"]')?.getAttribute("aria-pressed") === "true";
+      return {
+        deny,
+        read: !deny && top.querySelector('[data-access="read"]')?.getAttribute("aria-pressed") === "true",
+        write: !deny && top.querySelector('[data-access="write"]')?.getAttribute("aria-pressed") === "true",
+      };
+    };
+
+    const accessStepSummary = () => {
+      const { deny, read, write } = accessStepFlags();
+      if (deny) return "Deny";
+      if (read && write) return "Read + Write";
+      if (read) return "Read";
+      if (write) return "Write";
+      return "Not set";
+    };
+
+    const agentStepLines = (agent) => {
+      if (!agent) return [{ icon: "i-bot", v: "None selected" }];
+      const lines = [
+        { icon: agent.status === "suspended" || agent.trustClass === "remote" ? "i-lock" : "i-bot", v: agent.name },
+        { icon: "i-shield", v: agent.trustClass },
+      ];
+      if (agent.status === "suspended") lines.push({ icon: "i-ban", v: "Suspended" });
+      if (agent.note) lines.push({ icon: "i-info", v: agent.note });
+      return lines;
+    };
+
+    const accessStepLines = () => {
+      const { deny, read, write } = accessStepFlags();
+      if (deny) return [{ icon: "i-ban", v: "Deny" }];
+      const lines = [];
+      if (read) lines.push({ icon: "i-eye", v: "Read" });
+      if (write) lines.push({ icon: "i-pen", v: "Write" });
+      if (!lines.length) lines.push({ icon: "i-info", v: "Not set" });
+      return lines;
+    };
+
+    const reviewStepLines = (agent, n) => {
+      if (!agent || !wizardScope.accounts.size) return [];
+      return [{ icon: "i-mail", v: `~${n} messages` }];
+    };
+
+    const paintStepLines = (id, lines) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!lines.length) {
+        el.innerHTML = "";
+        return;
+      }
+      const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      el.innerHTML = lines.map(({ icon, v }) =>
+        `<span class="step-line"><svg class="icon" aria-hidden="true"><use href="#${icon}"/></svg><span class="v">${esc(v)}</span></span>`
+      ).join("");
+    };
+
+    const refreshWizardExtras = () => {
+      const n = estimateMatches(wizardScope);
+      const english = scopeEnglish(wizardScope);
+      const agent = selectedAgent();
+      const agentLabel = agent ? `${agent.name} · ${agent.trustClass}` : "—";
+      const accessLabel = accessStepSummary();
+      const pill = document.getElementById("wiz-agent-pill");
+      if (pill) pill.innerHTML = `<svg class="icon"><use href="#i-bot"/></svg> ${agentLabel}`;
+      const mailTitle = document.getElementById("wiz-mail-title");
+      if (mailTitle && agent) mailTitle.textContent = `Which mail may ${agent.name} use?`;
+      const accessTitle = document.getElementById("wiz-access-title");
+      if (accessTitle && agent) accessTitle.textContent = `Choose what ${agent.name} may do with this mail`;
+      const subEl = document.getElementById("access-scope-sub");
+      const reviewEl = document.getElementById("review-english");
+      if (subEl) {
+        subEl.innerHTML = `${english} · <span class="pill neutral"><svg class="icon"><use href="#i-bot"/></svg> ${agentLabel}</span>`;
+      }
+      if (reviewEl && agent) {
+        reviewEl.innerHTML = `<div class="explain-main">Grant for ${agent.name} (${agent.trustClass}${agent.status === "suspended" ? ", suspended" : ""})</div>
+          <div class="explain-sub" style="margin-top:6px">Scope: ${english}</div>
+          <div class="explain-sub" style="margin-top:4px">Match estimate: ~${n} messages. Access: ${accessLabel}. Regex not available in v1.</div>`;
+      }
+      const wizMain = document.querySelector("#wizard-explain .explain-main");
+      if (wizMain && !wizMain.innerHTML.includes("Denied")) {
+        const proposeOn = document.querySelector('#variant-a [data-resource="messages"] [data-cap="propose"]')?.getAttribute("aria-pressed") === "true";
+        const readOn = document.querySelector('#variant-a [data-resource="messages"] [data-cap="read"]')?.getAttribute("aria-pressed") === "true";
+        if (readOn) {
+          wizMain.innerHTML = `<span class="count">~${n}</span> messages readable` + (proposeOn ? ` · write proposals allowed on those` : ` · no write proposals`);
+        }
+      }
+
+      paintStepLines("wiz-step-agent-meta", agentStepLines(agent));
+      paintStepLines("wiz-step-mail-meta", scopeStepLines(wizardScope));
+      paintStepLines("wiz-step-access-meta", accessStepLines());
+      paintStepLines("wiz-step-review-meta", reviewStepLines(agent, n));
+    };
+
+    const wizardSel = bindSelector({
+      prefix: "sel",
+      getScope: () => wizardScope,
+      onChange: () => {
+        wizardSel.syncControlsFromState();
+        refreshWizardExtras();
+        if (wizardAccess) wizardAccess.refreshExplain();
+      },
+    });
+
+    document.getElementById("sel-test")?.addEventListener("click", () => {
+      const eng = document.getElementById("sel-match-english");
+      if (eng) eng.textContent = `${scopeEnglish(wizardScope)} — preview stub: showing estimate only`;
+    });
+
+    const goWizardStep = (step) => {
+      const s = String(step);
+      document.querySelectorAll("#variant-a [data-wizard-step]").forEach((el) => {
+        el.classList.toggle("hidden", el.getAttribute("data-wizard-step") !== s);
+      });
+      document.querySelectorAll("#wizard-steps .step[data-goto]").forEach((el) => {
+        const g = el.getAttribute("data-goto");
+        const n = Number(g);
+        const cur = Number(s);
+        el.classList.toggle("active", g === s);
+        el.classList.toggle("done", n < cur);
+        if (g === s) el.setAttribute("aria-current", "step");
+        else el.removeAttribute("aria-current");
+        const badge = el.querySelector(".n");
+        if (!badge) return;
+        if (n < cur) badge.innerHTML = `<svg class="icon sm"><use href="#i-check"/></svg>`;
+        else badge.textContent = g;
+      });
+      if (s === "1") {
+        renderAgentLists();
+        fillAgentConfig();
+      }
+      if (s === "2" || s === "3" || s === "4") {
+        wizardSel.syncControlsFromState();
+      }
+      refreshWizardExtras();
+    };
+
+    document.querySelectorAll("[data-wizard-nav]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const next = btn.getAttribute("data-wizard-nav");
+        if (next === "3" && !wizardScope.accounts.size) {
+          alert("Pick at least one account (ticket 07).");
+          return;
+        }
+        if (next === "2" && !selectedAgent()) {
+          alert("Pick or pair an agent first.");
+          return;
+        }
+        goWizardStep(next);
+      });
+    });
+    document.querySelectorAll("#wizard-steps [data-goto]").forEach((btn) => {
+      btn.addEventListener("click", () => goWizardStep(btn.getAttribute("data-goto")));
+    });
+
+    // --- Variant B: grants with full selector parity ---
+    const deskGrants = [
+      {
+        id: "g-work", agentId: "a-cursor",
+        read: true, write: false, deny: false,
+        caps: { "messages:read": true, "messages:propose": false, "messages:move": false, "messages:trash": false, "drafts:read": true, "drafts:create": false, "drafts:edit": false, "drafts:trash": false, "attachments:read": false },
+        scope: makeScope({ accounts: ["work"], placements: ["inbox", "projects"], participants: ["*@company.com"], rollingDays: 90 }),
+      },
+      {
+        id: "g-receipts", agentId: "a-hermes",
+        read: true, write: true, deny: false,
+        caps: { "messages:read": true, "messages:propose": true, "messages:move": true, "messages:trash": true, "drafts:read": true, "drafts:create": true, "drafts:edit": true, "drafts:trash": true, "attachments:read": false },
+        scope: makeScope({ accounts: ["personal"], placements: ["archive"], participants: [], dateMode: "any", smartFolder: "receipts" }),
+      },
+      {
+        id: "g-drafts", agentId: "a-cursor",
+        read: false, write: true, deny: false,
+        caps: { "messages:read": false, "messages:propose": true, "messages:move": true, "messages:trash": true, "drafts:read": false, "drafts:create": true, "drafts:edit": true, "drafts:trash": true, "attachments:read": false },
+        scope: makeScope({ accounts: ["work"], placements: [], participants: [], dateMode: "any" }),
+      },
+      {
+        id: "g-hr", agentId: "a-cursor",
+        read: false, write: false, deny: true,
+        caps: { "messages:read": false, "messages:propose": false, "messages:move": false, "messages:trash": false, "drafts:read": false, "drafts:create": false, "drafts:edit": false, "drafts:trash": false, "attachments:read": false },
+        scope: makeScope({ accounts: ["work"], placements: [], participants: ["hr@company.com"], dateMode: "any" }),
+      },
+    ];
+    let deskIndex = 0;
+    let deskScope = cloneScope(deskGrants[0].scope);
+    let deskSelection = { type: "grant", id: deskGrants[0].id };
+
+    const modePills = (g) => {
+      if (g.deny) return `<span class="mode-dot deny" title="Deny" aria-label="Deny"><svg class="icon"><use href="#i-ban"/></svg></span>`;
+      const bits = [];
+      if (g.read) bits.push(`<span class="mode-dot read" title="Read" aria-label="Read"><svg class="icon"><use href="#i-eye"/></svg></span>`);
+      if (g.write) bits.push(`<span class="mode-dot write" title="Write" aria-label="Write"><svg class="icon"><use href="#i-pen"/></svg></span>`);
+      return bits.length
+        ? `<span class="mode-stack">${bits.join("")}</span>`
+        : `<span class="mode-dot none" title="None" aria-label="None">—</span>`;
+    };
+
+    const opsLabel = (g) => {
+      if (g.deny) return "All access blocked";
+      if (g.write && !g.read) return "Drafts / proposals · no mailbox browse";
+      if (g.read && g.write) return "Read · propose move/trash";
+      if (g.read) return "Locator, envelope, body";
+      return "—";
+    };
+
+    const effectLabel = (g) => {
+      if (g.deny) return "Overrides allows";
+      if (g.write && !g.read) return "No mailbox browse";
+      return `${estimateMatches(g.scope)} msgs`;
+    };
+
+    const refreshDeskTableRow = (i) => {
+      const g = deskGrants[i];
+      const tr = document.querySelector(`#variant-b table tbody tr[data-grant="${g.id}"]`);
+      if (tr) {
+        tr.children[0].innerHTML = modePills(g);
+        tr.children[1].innerHTML = scopeTableHtml(g.scope);
+        tr.children[2].textContent = opsLabel(g);
+        tr.children[3].textContent = effectLabel(g);
+        tr.children[3].className = g.deny || (g.write && !g.read) ? "" : "count";
+      }
+      renderDeskList();
+    };
+
+    const renderDeskList = () => {
+      const host = document.getElementById("desk-agent-list");
+      if (!host) return;
+      host.innerHTML = "";
+      agents.forEach((agent) => {
+        const group = document.createElement("div");
+        group.className = "desk-agent-group";
+        const agentRow = document.createElement("button");
+        agentRow.type = "button";
+        agentRow.className = "desk-agent-row" + (deskSelection.type === "agent" && deskSelection.id === agent.id ? " active" : "");
+        agentRow.innerHTML = `<span class="avatar"><svg class="icon"><use href="#${agent.status === "suspended" ? "i-lock" : "i-bot"}"/></svg></span><span class="agent-meta"><strong>${agent.name}</strong><small>${agent.trustClass} · ${agent.status}</small></span>`;
+        agentRow.addEventListener("click", () => selectDeskAgent(agent.id));
+        group.appendChild(agentRow);
+        deskGrants.filter((g) => g.agentId === agent.id).forEach((g) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "desk-grant-row" + (deskSelection.type === "grant" && deskSelection.id === g.id ? " active" : "");
+          row.innerHTML = `${modePills(g)}${accountBadges(g.scope)}<span class="grant-summary">${scopeEnglishRest(g.scope)}</span>`;
+          row.addEventListener("click", () => selectDeskGrant(deskGrants.indexOf(g)));
+          group.appendChild(row);
+        });
+        const addRow = document.createElement("button");
+        addRow.type = "button";
+        addRow.className = "desk-add-grant-row";
+        addRow.innerHTML = `<svg class="icon"><use href="#i-plus"/></svg> Add grant`;
+        addRow.addEventListener("click", () => addDeskGrant(false, agent.id));
+        group.appendChild(addRow);
+        host.appendChild(group);
+      });
+    };
+
+    const applyDeskAccessUI = (g) => {
+      const group = document.querySelector('[data-access-group="desk-top"]');
+      if (!group) return;
+      const setPressed = (btn, on) => {
+        const kind = btn.dataset.access;
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.classList.toggle("on-read", kind === "read" && on);
+        btn.classList.toggle("on-write", kind === "write" && on);
+        btn.classList.toggle("on-deny", kind === "deny" && on);
+      };
+      group.querySelectorAll("[data-access]").forEach((btn) => {
+        const kind = btn.dataset.access;
+        if (kind === "deny") setPressed(btn, g.deny);
+        else if (kind === "read") setPressed(btn, g.read && !g.deny);
+        else if (kind === "write") setPressed(btn, g.write && !g.deny);
+      });
+      document.querySelectorAll("#desk-resources [data-resource]").forEach((resource) => resource.classList.toggle("denied", g.deny));
+    };
+
+    const showDeskEditors = ({ agent = false, pair = false, grant = false } = {}) => {
+      document.getElementById("desk-agent-editor")?.classList.toggle("hidden", !agent);
+      document.getElementById("desk-pair-editor")?.classList.toggle("hidden", !pair);
+      document.getElementById("desk-grant-editor")?.classList.toggle("hidden", !grant);
+    };
+
+    const showDeskPair = () => {
+      deskSelection = { type: "pair", id: null };
+      showDeskEditors({ pair: true });
+      document.getElementById("desk-add-name").value = "";
+      document.getElementById("desk-add-class").value = "machine-local";
+      syncTrustUi("machine-local", document.getElementById("desk-add-warn"), document.getElementById("desk-add-ceil"));
+      renderDeskList();
+      document.getElementById("desk-add-name")?.focus();
+    };
+
+    const selectDeskGrant = (i) => {
+      deskIndex = i;
+      const g = deskGrants[i];
+      selectedAgentId = g.agentId;
+      deskSelection = { type: "grant", id: g.id };
+      deskScope = cloneScope(g.scope);
+      showDeskEditors({ grant: true });
+      document.getElementById("desk-grant-title").textContent = `${selectedAgent()?.name || "Agent"} · grant settings`;
+      deskSel.syncControlsFromState();
+      applyDeskAccessUI(g);
+      applyDeskCaps(g);
+      refreshDeskLayout();
+      renderDeskList();
+    };
+
+    const selectDeskAgent = (id) => {
+      selectedAgentId = id;
+      deskSelection = { type: "agent", id };
+      const agent = selectedAgent();
+      showDeskEditors({ agent: true });
+      document.getElementById("desk-agent-title").textContent = `${agent.name} · identity`;
+      ["name", "class", "status", "note"].forEach((field) => {
+        const el = document.getElementById(`desk-cfg-${field}`);
+        if (el) el.value = field === "class" ? agent.trustClass : agent[field] || "";
+      });
+      syncTrustUi(agent.trustClass, document.getElementById("desk-cfg-warn"), document.getElementById("desk-cfg-ceil"));
+      renderAgentLists();
+    };
+
+    const applyDeskCaps = (g) => {
+      document.querySelectorAll("#desk-resources [data-cap]").forEach((btn) => {
+        const key = `${btn.closest("[data-resource]")?.dataset.resource}:${btn.dataset.cap}`;
+        setCap(btn, !!g.caps?.[key]);
+      });
+    };
+
+    const persistDeskCaps = () => {
+      const g = deskGrants[deskIndex];
+      if (!g) return;
+      g.caps = {};
+      document.querySelectorAll("#desk-resources [data-cap]").forEach((btn) => {
+        const key = `${btn.closest("[data-resource]")?.dataset.resource}:${btn.dataset.cap}`;
+        g.caps[key] = btn.getAttribute("aria-pressed") === "true";
+      });
+      refreshDeskTableRow(deskIndex);
+    };
+
+    let deskView = "scope";
+    const refreshDeskLayout = () => {
+      if (deskView === "review") deskView = "scope";
+      document.querySelectorAll("[data-desk-view]").forEach((btn) => btn.classList.toggle("active", btn.dataset.deskView === deskView));
+      document.querySelectorAll("[data-desk-section]").forEach((section) => {
+        section.classList.toggle("hidden-by-layout", section.dataset.deskSection !== deskView);
+      });
+    };
+
+    document.querySelectorAll("[data-desk-view]").forEach((btn) => btn.addEventListener("click", () => {
+      deskView = btn.dataset.deskView;
+      refreshDeskLayout();
+    }));
+
+    const persistDeskScope = () => {
+      deskGrants[deskIndex].scope = cloneScope(deskScope);
+      refreshDeskTableRow(deskIndex);
+      deskSel.syncControlsFromState();
+      refreshDeskLayout();
+      if (deskAccess) deskAccess.refreshExplain();
+    };
+
+    const deskSel = bindSelector({
+      prefix: "desk-sel",
+      getScope: () => deskScope,
+      onChange: persistDeskScope,
+    });
+
+    document.getElementById("desk-test")?.addEventListener("click", () => {
+      const eng = document.getElementById("desk-sel-match-english");
+      if (eng) eng.textContent = `${scopeEnglish(deskScope)} — preview stub`;
+    });
+
+    const connectMailAccount = ({ name, provider, email, from, selectInto }) => {
+      const trimmed = (name || "").trim();
+      const addr = (email || "").trim().toLowerCase();
+      if (!trimmed) {
+        alert("Display name required.");
+        return null;
+      }
+      if (!addr || !addr.includes("@")) {
+        alert("Email required (OAuth stub).");
+        return null;
+      }
+      const providerLabel = provider === "yahoo" ? "Yahoo" : "Gmail";
+      const ok = confirm(`OAuth stub: connect ${providerLabel} as “${trimmed}” (${addr})?\n\nNew accounts never join existing “All current” grants.`);
+      if (!ok) return null;
+      const acct = {
+        id: "acct-" + Date.now(),
+        label: trimmed,
+        provider: provider === "yahoo" ? "yahoo" : "gmail",
+        email: addr,
+        approxCount: 180 + Math.floor(Math.random() * 220),
+      };
+      mailAccounts.push(acct);
+      selectInto.accounts.delete("all");
+      selectInto.accounts.add(acct.id);
+      wizardSel.syncControlsFromState();
+      deskSel.syncControlsFromState();
+      persistDeskScope();
+      refreshWizardExtras();
+      if (from === "wiz") {
+        document.getElementById("sel-add-account-panel")?.classList.add("hidden");
+        document.getElementById("sel-add-acct-name").value = "";
+        document.getElementById("sel-add-acct-email").value = "";
+        setProviderPick("sel-add-acct-provider", "gmail");
+      }
+      if (from === "desk") {
+        document.getElementById("desk-sel-add-account-panel")?.classList.add("hidden");
+        document.getElementById("desk-sel-add-acct-name").value = "";
+        document.getElementById("desk-sel-add-acct-email").value = "";
+        setProviderPick("desk-sel-add-acct-provider", "gmail");
+      }
+      return acct;
+    };
+
+    document.getElementById("sel-show-add-account")?.addEventListener("click", () => {
+      document.getElementById("sel-add-account-panel")?.classList.remove("hidden");
+      document.getElementById("sel-add-acct-name")?.focus();
+    });
+    document.getElementById("sel-add-acct-cancel")?.addEventListener("click", () => {
+      document.getElementById("sel-add-account-panel")?.classList.add("hidden");
+    });
+    document.getElementById("sel-add-acct-save")?.addEventListener("click", () => {
+      connectMailAccount({
+        name: document.getElementById("sel-add-acct-name")?.value,
+        provider: getProviderPick("sel-add-acct-provider"),
+        email: document.getElementById("sel-add-acct-email")?.value,
+        from: "wiz",
+        selectInto: wizardScope,
+      });
+    });
+    document.getElementById("desk-sel-show-add-account")?.addEventListener("click", () => {
+      document.getElementById("desk-sel-add-account-panel")?.classList.toggle("hidden");
+      document.getElementById("desk-sel-add-acct-name")?.focus();
+    });
+    document.getElementById("desk-sel-add-acct-cancel")?.addEventListener("click", () => {
+      document.getElementById("desk-sel-add-account-panel")?.classList.add("hidden");
+    });
+    document.getElementById("desk-sel-add-acct-save")?.addEventListener("click", () => {
+      connectMailAccount({
+        name: document.getElementById("desk-sel-add-acct-name")?.value,
+        provider: getProviderPick("desk-sel-add-acct-provider"),
+        email: document.getElementById("desk-sel-add-acct-email")?.value,
+        from: "desk",
+        selectInto: deskScope,
+      });
+    });
+
+    // Cap toggles (resource-level switches)
+    const syncCapLabel = (btn) => {
+      const on = btn.getAttribute("aria-pressed") === "true";
+      const state = btn.querySelector(".cap-state, .attach-state");
+      if (!state) return;
+      if (btn.hasAttribute("data-attach-read")) {
+        state.textContent = on ? "Readable" : "Not readable";
+        return;
+      }
+      const cap = btn.dataset.cap;
+      if (cap === "trash") state.textContent = on ? "On · Trash" : "Off";
+      else state.textContent = on ? "On" : "Off";
+    };
+
+    const setCap = (btn, on) => {
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      syncCapLabel(btn);
+    };
+
+    let wizardAccess;
+    let deskAccess;
+
+    const makeAccessPanel = ({ root, topGroup, explainSel, matchScope, onChange }) => {
+      const resources = () => [...(root?.querySelectorAll("[data-resource]") || [])];
+      const caps = (names) => {
+        const set = new Set(names);
+        return [...(root?.querySelectorAll("[data-cap]") || [])].filter((btn) => set.has(btn.dataset.cap));
+      };
+      const refreshExplain = () => {
+        const top = root?.querySelector(`[data-access-group="${topGroup}"]`);
+        const explain = document.querySelector(`${explainSel} .explain-main`);
+        if (!explain) return;
+        if (top?.querySelector('[data-access="deny"]')?.getAttribute("aria-pressed") === "true") {
+          explain.innerHTML = `<strong>Denied</strong> — no read or write on messages, drafts, or attachments in this scope.`;
+          onChange?.();
+          return;
+        }
+        const msgRead = root.querySelector('[data-resource="messages"] [data-cap="read"]')?.getAttribute("aria-pressed") === "true";
+        const propose = root.querySelector('[data-resource="messages"] [data-cap="propose"]')?.getAttribute("aria-pressed") === "true";
+        const n = estimateMatches(matchScope());
+        explain.innerHTML = [
+          msgRead ? `<span class="count">~${n}</span> messages readable` : `messages not readable`,
+          propose ? `write proposals allowed` : `no write proposals`,
+        ].join(" · ");
+        onChange?.();
+      };
+      const applyBulk = () => {
+        const top = root?.querySelector(`[data-access-group="${topGroup}"]`);
+        if (!top) return;
+        const deny = top.querySelector('[data-access="deny"]')?.getAttribute("aria-pressed") === "true";
+        const read = top.querySelector('[data-access="read"]')?.getAttribute("aria-pressed") === "true";
+        const write = top.querySelector('[data-access="write"]')?.getAttribute("aria-pressed") === "true";
+        resources().forEach((res) => res.classList.toggle("denied", deny));
+        if (deny) {
+          root.querySelectorAll("[data-cap]").forEach((btn) => setCap(btn, false));
+        } else {
+          caps(["read"]).forEach((btn) => setCap(btn, read));
+          caps(["propose", "move", "trash", "create", "edit"]).forEach((btn) => setCap(btn, write));
+        }
+        // Sync grant mode for desk
+        if (topGroup === "desk-top" && deskGrants[deskIndex]) {
+          deskGrants[deskIndex].deny = deny;
+          deskGrants[deskIndex].read = !deny && read;
+          deskGrants[deskIndex].write = !deny && write;
+          refreshDeskTableRow(deskIndex);
+          persistDeskCaps();
+        }
+        refreshExplain();
+      };
+      root?.querySelectorAll(".cap-toggle, .attach-toggle").forEach((btn) => {
+        syncCapLabel(btn);
+        btn.addEventListener("click", () => {
+          const top = root.querySelector(`[data-access-group="${topGroup}"]`);
+          if (top?.querySelector('[data-access="deny"]')?.getAttribute("aria-pressed") === "true") return;
+          setCap(btn, btn.getAttribute("aria-pressed") !== "true");
+          if (topGroup === "desk-top") persistDeskCaps();
+          refreshExplain();
+        });
+      });
+      return { applyBulk, topGroup, refreshExplain };
+    };
+
+    wizardAccess = makeAccessPanel({
+      root: document.querySelector('#variant-a [data-wizard-step="3"] .wizard-panel'),
+      topGroup: "wizard-top",
+      explainSel: "#wizard-explain",
+      matchScope: () => wizardScope,
+      onChange: () => refreshWizardExtras(),
+    });
+    deskAccess = makeAccessPanel({
+      root: document.querySelector("#variant-b #desk-resources")?.closest(".inspector"),
+      topGroup: "desk-top",
+      explainSel: "#desk-explain",
+      matchScope: () => deskScope,
+    });
+    const bulkByGroup = {
+      [wizardAccess.topGroup]: wizardAccess.applyBulk,
+      [deskAccess.topGroup]: deskAccess.applyBulk,
+    };
+
+    // Access controls: Read/Write are multi-select; Deny is exclusive
+    document.querySelectorAll("[data-access-group]").forEach((group) => {
+      const setPressed = (btn, on) => {
+        const kind = btn.dataset.access;
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.classList.toggle("on-read", kind === "read" && on);
+        btn.classList.toggle("on-write", kind === "write" && on);
+        btn.classList.toggle("on-deny", kind === "deny" && on);
+      };
+      group.querySelectorAll("[data-access]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const kind = btn.dataset.access;
+          const turningOn = btn.getAttribute("aria-pressed") !== "true";
+          if (kind === "deny") {
+            group.querySelectorAll("[data-access]").forEach((b) => setPressed(b, false));
+            setPressed(btn, turningOn);
+          } else {
+            const deny = group.querySelector('[data-access="deny"]');
+            if (deny) setPressed(deny, false);
+            setPressed(btn, turningOn);
+          }
+          const bulk = bulkByGroup[group.getAttribute("data-access-group")];
+          if (bulk) bulk();
+        });
+      });
+    });
+
+    const addDeskGrant = (deny, forAgentId) => {
+      const agentId = forAgentId
+        || (deskSelection.type === "agent" ? deskSelection.id : deskGrants[deskIndex]?.agentId || selectedAgentId);
+      const grant = {
+        id: `g-${Date.now()}`, agentId, read: !deny, write: false, deny: !!deny,
+        caps: { "messages:read": !deny, "messages:propose": false, "messages:move": false, "messages:trash": false, "drafts:read": !deny, "drafts:create": false, "drafts:edit": false, "drafts:trash": false, "attachments:read": false },
+        scope: makeScope({ accounts: ["work"], dateMode: "any" }),
+      };
+      deskGrants.push(grant);
+      selectDeskGrant(deskGrants.length - 1);
+    };
+    document.getElementById("desk-save")?.addEventListener("click", () => {
+      persistDeskScope();
+      persistDeskCaps();
+      alert("Save stub: grant retained in this prototype session.");
+    });
+    document.getElementById("desk-revoke")?.addEventListener("click", () => {
+      const grant = deskGrants[deskIndex];
+      if (!grant || !confirm("Revoke this grant? This prototype removes only the selected grant.")) return;
+      deskGrants.splice(deskIndex, 1);
+      if (!deskGrants.length) addDeskGrant(false);
+      else selectDeskGrant(Math.max(0, deskIndex - 1));
+    });
+
+    wizardSel.syncControlsFromState();
+    renderAgentLists();
+    fillAgentConfig();
+    refreshWizardExtras();
+    goWizardStep(2);
+    selectDeskGrant(0);
+    wizardAccess.applyBulk();
+    window.addEventListener("keydown", (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag) || e.target?.isContentEditable) return;
+      const cur = normalizeVariant(new URLSearchParams(location.search).get("variant") || "a");
+      const i = Math.max(0, keys.indexOf(cur));
+      if (e.key === "ArrowLeft") choose(keys[(i + keys.length - 1) % keys.length]);
+      if (e.key === "ArrowRight") choose(keys[(i + 1) % keys.length]);
+    });
+    const initial = normalizeVariant(new URLSearchParams(location.search).get("variant") || "a");
+    if (keys.includes(initial)) choose(initial);
+  </script>
+</body>
+</html>
