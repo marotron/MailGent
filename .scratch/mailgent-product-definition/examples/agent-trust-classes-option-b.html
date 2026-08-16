@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailGent — Trust class option B</title>
+  <style>
+    :root {
+      --bg: #f4f6f3;
+      --ink: #152018;
+      --muted: #5a645c;
+      --line: #d5ddd6;
+      --card: #fffcf7;
+      --trusted: #0f6b3c;
+      --trusted-soft: #e4f3ea;
+      --untrusted: #8a5a00;
+      --untrusted-soft: #fff4d6;
+      --remote: #1d4f91;
+      --remote-soft: #e8f0fb;
+      --deny: #9b1c1c;
+      --deny-soft: #fde8e8;
+      --ask: #3d3a6b;
+      --ask-soft: #eeecf8;
+      --shadow: 0 1px 0 rgba(21, 32, 24, 0.04), 0 14px 36px rgba(21, 32, 24, 0.07);
+      --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --ui: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--ui);
+      line-height: 1.5;
+      background:
+        radial-gradient(1000px 520px at 0% -10%, #e7efe6 0%, transparent 55%),
+        radial-gradient(900px 480px at 100% 0%, #e8eef8 0%, transparent 50%),
+        var(--bg);
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 24px 88px;
+    }
+    h1 {
+      font-family: var(--sans);
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin: 0 0 12px;
+    }
+    .lede {
+      max-width: 46rem;
+      color: var(--muted);
+      font-size: 1.12rem;
+      margin: 0 0 28px;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+    .badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: var(--card);
+    }
+    .badge.trusted { background: var(--trusted-soft); border-color: #b7dfc7; color: var(--trusted); }
+    .badge.untrusted { background: var(--untrusted-soft); border-color: #ecd89a; color: var(--untrusted); }
+    .badge.remote { background: var(--remote-soft); border-color: #b7cceb; color: var(--remote); }
+
+    h2 {
+      font-family: var(--sans);
+      font-size: 1.55rem;
+      margin: 48px 0 12px;
+      letter-spacing: -0.01em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 0 0 8px;
+    }
+    p { margin: 0 0 14px; }
+    .note {
+      max-width: 46rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .diagram {
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin: 18px 0 28px;
+    }
+    .mac {
+      border: 2px solid var(--ink);
+      border-radius: 18px;
+      padding: 18px;
+      background: linear-gradient(180deg, #fbfaf6, #f3f1ea);
+    }
+    .mac-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .lanes {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 820px) {
+      .lanes { grid-template-columns: 1fr; }
+    }
+    .lane {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 180px;
+      background: #fff;
+    }
+    .lane.trusted { border-color: #9fd0b1; background: var(--trusted-soft); }
+    .lane.untrusted { border-color: #e4c778; background: var(--untrusted-soft); }
+    .lane.remote { border-color: #9bb8e0; background: var(--remote-soft); }
+    .lane-label {
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .lane.trusted .lane-label { color: var(--trusted); }
+    .lane.untrusted .lane-label { color: var(--untrusted); }
+    .lane.remote .lane-label { color: var(--remote); }
+    .agent-chip {
+      display: block;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 8px 0 0;
+      font-size: 0.92rem;
+    }
+    .agent-chip small {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-top: 2px;
+    }
+    .outside {
+      margin-top: 14px;
+      border: 1px dashed #9bb8e0;
+      border-radius: 12px;
+      padding: 14px;
+      background: #f7faff;
+    }
+    .wire {
+      text-align: center;
+      color: var(--remote);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      margin: 8px 0;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 18px 0 28px;
+    }
+    @media (max-width: 820px) {
+      .compare { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    .card ul {
+      margin: 8px 0 0;
+      padding-left: 1.1rem;
+    }
+    .card li { margin: 4px 0; }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      margin: 16px 0 28px;
+      font-size: 0.94rem;
+    }
+    .matrix th, .matrix td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .matrix th {
+      background: #eef2ee;
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .yes { color: var(--trusted); font-weight: 700; }
+    .maybe { color: var(--untrusted); font-weight: 700; }
+    .no { color: var(--deny); font-weight: 700; }
+
+    .scenario {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 12px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      margin: 0 0 14px;
+    }
+    @media (max-width: 640px) {
+      .scenario { grid-template-columns: 1fr; }
+    }
+    .scenario .tag {
+      align-self: start;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .tag.trusted { background: var(--trusted-soft); color: var(--trusted); }
+    .tag.untrusted { background: var(--untrusted-soft); color: var(--untrusted); }
+    .tag.remote { background: var(--remote-soft); color: var(--remote); }
+    .tag.ask { background: var(--ask-soft); color: var(--ask); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: #eef2ee;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .callout {
+      background: var(--ask-soft);
+      border: 1px solid #cfcbe8;
+      padding: 16px 18px;
+      margin: 24px 0 0;
+      max-width: 46rem;
+    }
+    .footer {
+      margin-top: 40px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Option B: three trust classes</h1>
+    <p class="lede">
+      Same Mac can host strong and weak local agents. Remote agents stay in a third class that can never receive private scopes — even if the user tries to grant them.
+    </p>
+    <div class="badge-row">
+      <span class="badge trusted">local-trusted</span>
+      <span class="badge untrusted">local-untrusted</span>
+      <span class="badge remote">remote</span>
+      <span class="badge">vs Option A: local / remote only</span>
+    </div>
+
+    <h2>1. Picture on one Mac</h2>
+    <p class="note">
+      Trust class is a <strong>ceiling</strong>, not a permission grant. An agent still needs explicit grants inside that ceiling. Deny-by-default still applies to all three.
+    </p>
+
+    <div class="diagram">
+      <div class="mac">
+        <div class="mac-title">Your Mac · MailGent owns the session</div>
+        <div class="lanes">
+          <div class="lane trusted">
+            <div class="lane-label">local-trusted</div>
+            <div class="agent-chip">
+              Cursor / Claude Desktop
+              <small>Paired as trusted local · can hold private scopes</small>
+            </div>
+            <div class="agent-chip">
+              Your personal agent harness
+              <small>You marked it trusted after pairing</small>
+            </div>
+          </div>
+          <div class="lane untrusted">
+            <div class="lane-label">local-untrusted</div>
+            <div class="agent-chip">
+              Random npm CLI / experiment
+              <small>Still on localhost/UDS · capped like a cautious guest</small>
+            </div>
+            <div class="agent-chip">
+              One-off script
+              <small>Useful for drafts/search · no private mail</small>
+            </div>
+          </div>
+          <div class="lane remote">
+            <div class="lane-label">remote (on this Mac’s session)</div>
+            <div class="agent-chip">
+              Cloud agent over relay
+              <small>Only while you open an expiring remote session</small>
+            </div>
+            <p style="margin:10px 0 0;font-size:0.86rem;color:var(--muted);">
+              Hard ceiling: no private scopes, ever.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="outside">
+        <div class="mac-title">Outside the Mac</div>
+        <div class="wire">end-to-end encrypted temporary relay → selected Mac</div>
+        <div class="agent-chip" style="display:inline-block;min-width:280px;">
+          Hosted agent product
+          <small>Remembers identity; cannot stay connected unattended</small>
+        </div>
+      </div>
+    </div>
+
+    <h2>2. What “private scope” means</h2>
+    <p class="note">
+      Private scopes are mailbox regions you treat as especially sensitive. Exact list is decided later in this ticket; examples below show the <em>idea</em>.
+    </p>
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th>Example scope</th>
+          <th>local-trusted</th>
+          <th>local-untrusted</th>
+          <th>remote</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Work inbox, last 30 days, no attachments</td>
+          <td class="yes">Grantable</td>
+          <td class="yes">Grantable</td>
+          <td class="yes">Grantable</td>
+        </tr>
+        <tr>
+          <td>Personal bank / medical / family labels</td>
+          <td class="yes">Grantable</td>
+          <td class="no">Blocked by class</td>
+          <td class="no">Blocked by class</td>
+        </tr>
+        <tr>
+          <td>Full message bodies + attachments</td>
+          <td class="yes">Grantable</td>
+          <td class="maybe">Optional / narrower default</td>
+          <td class="maybe">Optional / narrower default</td>
+        </tr>
+        <tr>
+          <td>Propose send / trash / move</td>
+          <td class="yes">Still needs human approval</td>
+          <td class="yes">Still needs human approval</td>
+          <td class="yes">Still needs human approval</td>
+        </tr>
+        <tr>
+          <td>Hard delete</td>
+          <td class="no">Never</td>
+          <td class="no">Never</td>
+          <td class="no">Never</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Option A vs Option B</h2>
+    <div class="compare">
+      <div class="card">
+        <h3>A — Two classes</h3>
+        <p>Only <code>local</code> and <code>remote</code>.</p>
+        <ul>
+          <li>Any paired local agent can be given private scopes.</li>
+          <li>Simpler mental model and UI.</li>
+          <li>Risk: a throwaway local script gets the same ceiling as Cursor.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>B — Three classes</h3>
+        <p><code>local-trusted</code>, <code>local-untrusted</code>, <code>remote</code>.</p>
+        <ul>
+          <li>Local is split: trusted vs cautious guest.</li>
+          <li>Private scopes reserved for agents you explicitly elevate.</li>
+          <li>Cost: one more choice at pairing / in agent settings.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>4. Concrete stories</h2>
+
+    <div class="scenario">
+      <div class="tag trusted">Trusted</div>
+      <div>
+        <h3>Daily coding agent on this Mac</h3>
+        <p>
+          You pair Cursor over UDS, mark it <strong>local-trusted</strong>, and grant work mail plus a private “family” smart folder.
+          It reconnects without re-pairing. Private grant is legal because the class ceiling allows it.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="tag untrusted">Untrusted</div>
+      <div>
+        <h3>Trying a new local MCP client</h3>
+        <p>
+          You pair an unknown CLI. MailGent defaults it to <strong>local-untrusted</strong>.
+          You can grant “newsletter@… last 7 days, subject+snippet only.”
+          If you try to attach the private family folder, MailGent refuses: class ceiling, not a missing grant checkbox.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="tag remote">Remote</div>
+      <div>
+        <h3>Cloud agent for one afternoon</h3>
+        <p>
+          You open a 1-hour remote session. The agent can only receive non-private grants you already allow for remote.
+          Even if UI showed a private folder toggle, saving it would fail closed. Session ends → reachability ends.
+        </p>
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="tag ask">Promotion</div>
+      <div>
+        <h3>Promoting untrusted → trusted</h3>
+        <p>
+          After the CLI proves useful, you elevate it in MailGent (extra confirmation / Touch ID).
+          Only then can private scopes be attached. Demotion or revoke immediately drops private grants and kills sessions.
+        </p>
+      </div>
+    </div>
+
+    <h2>5. Decision flow at pairing</h2>
+    <div class="diagram">
+      <ol style="margin:0;padding-left:1.2rem;">
+        <li>Agent connects (UDS preferred, or hardened loopback HTTP).</li>
+        <li>MailGent shows pairing challenge — not yet trusted.</li>
+        <li>You approve pairing and choose class:
+          <ul>
+            <li><strong>local-trusted</strong> — full local ceiling, private scopes allowed later</li>
+            <li><strong>local-untrusted</strong> — local guest ceiling, private scopes impossible</li>
+            <li>If the connection arrived via remote relay → class is forced to <strong>remote</strong></li>
+          </ul>
+        </li>
+        <li>Separately, you attach concrete grants (accounts, folders, dates, fields).</li>
+        <li>Deny-by-default: anything not granted is invisible / refused.</li>
+      </ol>
+    </div>
+
+    <h2>6. Why B exists</h2>
+    <p class="note">
+      Topology already proved “local vs remote.” Option B answers a different fear:
+      <em>not every process on my Mac deserves the same mailbox ceiling.</em>
+      It does not replace grants, approvals, audit, or revocation — it only caps what those systems are allowed to offer.
+    </p>
+
+    <div class="callout">
+      <strong>Tradeoff to decide:</strong> is the extra pairing choice worth preventing a careless private grant to a throwaway local tool?
+      If yes → B. If you would almost always mark local agents trusted anyway → A is enough for v1.
+    </div>
+
+    <p class="footer">
+      Ticket: Define Per-Agent Authorization and Exposure · example for trust-class option B
+    </p>
+  </main>
+</body>
+</html>

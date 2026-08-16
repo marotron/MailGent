@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailGent — Agent vs model trust</title>
+  <style>
+    :root {
+      --bg: #f3f5f2;
+      --ink: #142018;
+      --muted: #5a645c;
+      --line: #d4dbd5;
+      --card: #fffcf7;
+      --model: #0f5c4c;
+      --model-soft: #e3f3ef;
+      --agent: #1d4f91;
+      --agent-soft: #e8f0fb;
+      --warn: #8a5a00;
+      --warn-soft: #fff4d6;
+      --deny: #9b1c1c;
+      --deny-soft: #fde8e8;
+      --ok: #0f6b3c;
+      --ok-soft: #e4f3ea;
+      --shadow: 0 1px 0 rgba(20, 32, 24, 0.04), 0 14px 36px rgba(20, 32, 24, 0.07);
+      --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --ui: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--ui);
+      line-height: 1.5;
+      background:
+        radial-gradient(1000px 520px at 0% -10%, #e4efe9 0%, transparent 55%),
+        radial-gradient(900px 480px at 100% 0%, #e8eef8 0%, transparent 50%),
+        var(--bg);
+    }
+    main { max-width: 1080px; margin: 0 auto; padding: 48px 24px 88px; }
+    h1 {
+      font-family: var(--sans);
+      font-size: clamp(2rem, 4vw, 2.7rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin: 0 0 12px;
+    }
+    .lede { max-width: 46rem; color: var(--muted); font-size: 1.1rem; margin: 0 0 28px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+    .badge {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; padding: 6px 10px; border: 1px solid var(--line); background: var(--card);
+    }
+    .badge.model { background: var(--model-soft); border-color: #9dccc1; color: var(--model); }
+    .badge.agent { background: var(--agent-soft); border-color: #b7cceb; color: var(--agent); }
+    .badge.warn { background: var(--warn-soft); border-color: #ecd89a; color: var(--warn); }
+    h2 {
+      font-family: var(--sans);
+      font-size: 1.5rem;
+      margin: 44px 0 12px;
+      letter-spacing: -0.01em;
+    }
+    h3 { font-size: 1.02rem; margin: 0 0 8px; }
+    p { margin: 0 0 14px; }
+    .note { max-width: 48rem; color: var(--muted); margin-bottom: 18px; }
+    .diagram, .card, .scenario, .callout {
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .diagram { padding: 22px; margin: 16px 0 26px; }
+    .flow {
+      display: grid;
+      grid-template-columns: 1.1fr 40px 1fr 40px 1.2fr;
+      align-items: stretch;
+      gap: 0;
+    }
+    @media (max-width: 860px) {
+      .flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); height: 28px; }
+    }
+    .box {
+      border-radius: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+    }
+    .box.model { background: var(--model-soft); border-color: #9dccc1; }
+    .box.agent { background: var(--agent-soft); border-color: #9bb8e0; }
+    .box.mailgent { background: #f7f4ef; border-color: #cfc5b4; }
+    .box .kicker {
+      font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em;
+      text-transform: uppercase; margin-bottom: 6px; color: var(--muted);
+    }
+    .arrow {
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); color: var(--muted); font-size: 0.85rem;
+    }
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 16px 0 26px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .card { padding: 16px 18px; }
+    .card ul { margin: 8px 0 0; padding-left: 1.1rem; }
+    .card li { margin: 4px 0; }
+    .ladder {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0 26px;
+    }
+    .rung {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    @media (max-width: 640px) { .rung { grid-template-columns: 1fr; } }
+    .rank {
+      font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em;
+      text-transform: uppercase; padding: 8px 10px; border-radius: 8px; text-align: center;
+      align-self: start;
+    }
+    .rank.high { background: var(--ok-soft); color: var(--ok); }
+    .rank.mid { background: var(--warn-soft); color: var(--warn); }
+    .rank.low { background: var(--agent-soft); color: var(--agent); }
+    .rank.problem { background: var(--deny-soft); color: var(--deny); }
+    code {
+      font-family: var(--mono); font-size: 0.86em;
+      background: #eef2ee; padding: 1px 5px; border-radius: 4px;
+    }
+    .matrix {
+      width: 100%; border-collapse: collapse; background: var(--card);
+      box-shadow: var(--shadow); margin: 16px 0 26px; font-size: 0.93rem;
+    }
+    .matrix th, .matrix td {
+      border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top;
+    }
+    .matrix th {
+      background: #eef2ee; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .yes { color: var(--ok); font-weight: 700; }
+    .no { color: var(--deny); font-weight: 700; }
+    .maybe { color: var(--warn); font-weight: 700; }
+    .callout {
+      padding: 16px 18px; margin: 22px 0 0; max-width: 48rem;
+      background: var(--warn-soft); border-color: #ecd89a;
+    }
+    .options {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 16px 0 0;
+    }
+    .opt {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    .opt strong { display: block; margin-bottom: 6px; }
+    .footer { margin-top: 40px; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Agent vs model — where your trust ladder fits</h1>
+    <p class="lede">
+      Your intended order is: LAN model → local Cursor agent → remote agent.
+      MailGent can enforce trust on <em>who connects</em>. It cannot reliably prove <em>which model</em> that agent is using unless MailGent itself hosts the model — and v1 has no built-in assistant.
+    </p>
+    <div class="badge-row">
+      <span class="badge model">Model = inference brain</span>
+      <span class="badge agent">Agent = tool-using host</span>
+      <span class="badge warn">MailGent grants attach to agents</span>
+    </div>
+
+    <h2>1. Two different things</h2>
+    <div class="diagram">
+      <div class="flow">
+        <div class="box model">
+          <div class="kicker">Model</div>
+          <strong>LAN LLM / Ollama / vLLM box</strong>
+          <p style="margin:8px 0 0;font-size:0.92rem;color:var(--muted);">
+            Sees prompts and any mail text the agent chooses to paste into the prompt.
+            Does not hold MailGent credentials. Does not call MCP tools by itself.
+          </p>
+        </div>
+        <div class="arrow">← prompts</div>
+        <div class="box agent">
+          <div class="kicker">Agent / host</div>
+          <strong>Cursor, Claude Desktop, custom agent</strong>
+          <p style="margin:8px 0 0;font-size:0.92rem;color:var(--muted);">
+            Connects to MailGent, holds grants, searches mail, creates drafts, proposes mutations.
+            Chooses which model receives mail content.
+          </p>
+        </div>
+        <div class="arrow">MCP →</div>
+        <div class="box mailgent">
+          <div class="kicker">MailGent</div>
+          <strong>Policy + mailbox gate</strong>
+          <p style="margin:8px 0 0;font-size:0.92rem;color:var(--muted);">
+            Authenticates the agent, enforces scopes, approvals, audit.
+            In v1 it does not talk to your model directly.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="card">
+        <h3>What “trust the LAN model most” really buys</h3>
+        <ul>
+          <li>Inference stays on your network.</li>
+          <li>Less chance mail text is sent to a cloud model API.</li>
+          <li>Good for <em>privacy after an agent already fetched mail</em>.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What it does not automatically buy</h3>
+        <ul>
+          <li>The LAN model still only sees what the agent sends it.</li>
+          <li>A local Cursor agent can still exfiltrate via tools, logs, or by switching models.</li>
+          <li>MailGent cannot cryptographically prove “this Cursor session only uses LAN inference.”</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>2. Your ladder, restated as MailGent can use it</h2>
+    <p class="note">
+      If we take your intent seriously, the ladder is really about <strong>agent deployments</strong>, not bare models:
+    </p>
+
+    <div class="ladder">
+      <div class="rung">
+        <div class="rank high">Highest</div>
+        <div>
+          <h3>LAN-local agent stack</h3>
+          <p>
+            A custom agent (or bridge) that lives on your LAN and is configured to use only your LAN model.
+            This is the thing MailGent can pair and label as most trusted — because it is an <em>agent identity</em>.
+          </p>
+          <p style="margin:0;color:var(--muted);font-size:0.92rem;">
+            Example: home GPU box runs model + a small MailGent MCP client that only you operate.
+          </p>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="rank mid">Middle</div>
+        <div>
+          <h3>On-machine agent host (Cursor on this Mac)</h3>
+          <p>
+            Local transport (UDS / loopback), but the host may use cloud models, mix tools, or change backends.
+            Still stronger than remote reachability into MailGent.
+          </p>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="rank low">Lowest</div>
+        <div>
+          <h3>Remote agent</h3>
+          <p>
+            Cloud host over temporary relay. No private scopes. Expiring session. Separate approval for mutations.
+          </p>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="rank problem">Not a MailGent peer</div>
+        <div>
+          <h3>Bare LAN model alone</h3>
+          <p>
+            The model endpoint is not what MailGent authenticates. Treating “model trust” as MailGent trust mixes layers.
+            Model locality is either a property you assert about an agent, or a separate privacy preference outside MailGent grants.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <h2>3. Can MailGent enforce “uses only LAN model”?</h2>
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th>Approach</th>
+          <th>v1 realism</th>
+          <th>What it means</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Trust the <strong>agent identity</strong> you pair (LAN agent / Cursor / remote)</td>
+          <td class="yes">Enforceable</td>
+          <td>Matches topology + pairing. Private scopes only for highest class.</td>
+        </tr>
+        <tr>
+          <td>Ask user to mark agent as “LAN-inference only”</td>
+          <td class="maybe">Honor system</td>
+          <td>Useful UX signal; not proof. Cursor could still call a cloud model.</td>
+        </tr>
+        <tr>
+          <td>Cryptographically attest model endpoint</td>
+          <td class="no">Out of v1</td>
+          <td>Needs agent cooperation / attestation MailGent cannot force on third-party hosts.</td>
+        </tr>
+        <tr>
+          <td>MailGent hosts / routes the model itself</td>
+          <td class="no">Out of scope</td>
+          <td>Map forbids built-in assistant in v1.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Recommended product framing for your ladder</h2>
+    <p class="note">
+      Keep three (or four) <strong>agent trust classes</strong>, and treat model locality as a labeled intent on that agent — not a separate MailGent principal.
+    </p>
+
+    <div class="options">
+      <div class="opt">
+        <strong>B2 — Three agent classes aligned to your ladder (recommended if you keep B)</strong>
+        <code>lan-local</code> → custom LAN agent stack (highest ceiling, private scopes allowed)<br />
+        <code>machine-local</code> → Cursor / desktop hosts on this Mac<br />
+        <code>remote</code> → cloud agents over mediated sessions<br />
+        Optional field on each agent: “intended inference: LAN / mixed / cloud” (informational, not proof).
+      </div>
+      <div class="opt">
+        <strong>B3 — Four classes</strong>
+        Split machine-local further into trusted vs untrusted (throwaway CLIs), plus lan-local and remote.
+        More precise, more pairing friction.
+      </div>
+      <div class="opt">
+        <strong>A+ — Two classes + inference label</strong>
+        Only <code>local</code> / <code>remote</code> for enforcement. Your LAN model preference is a tag on local agents for your own hygiene, not a separate ceiling.
+        Simplest, weakest match to “LAN model is most trusted.”
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Challenge:</strong> if Cursor on this Mac is pointed at your LAN model, do you want it treated as
+      <em>machine-local</em> (honest about what MailGent can see) or elevated to <em>lan-local</em> (matches your feeling, but MailGent cannot verify the model stays LAN-only)?
+    </div>
+
+    <p class="footer">
+      Ticket: Define Per-Agent Authorization and Exposure · agent vs model clarification
+    </p>
+  </main>
+</body>
+</html>

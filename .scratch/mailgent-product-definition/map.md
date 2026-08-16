@@ -32,6 +32,7 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - Soft vs hard delete — Agent-facing `delete` means soft delete to Trash (approval-gated). Hard/permanent delete is available only in the human companion UI for Gmail and Yahoo; never exposed to agents
 - [Define the Canonical Mailbox Model](issues/05-define-canonical-mailbox-model.md) — Placement vs flags (Yahoo max one placement); archive = Gmail drop INBOX / Yahoo Archive folder + virtual Archived view; no cross-account threads; drafts owned by one account+From; unified search merges hits with account+placement; hard delete human-only (agent trash detail in 08)
 - [Choose Agent Runtime and Cross-Device Topology](issues/06-choose-agent-runtime-topology.md) — MailGent owns sessions; v1 supports UDS plus hardened loopback MCP; agent trust is per-device; iCloud syncs only non-sensitive UI preferences; remote access uses explicit, expiring sessions over an opaque end-to-end encrypted relay
+- [Define Per-Agent Authorization and Exposure](issues/07-define-agent-authorization.md) — Deny-by-default; product-agnostic agents (not models); classes `lan-inference` / `machine-local` / `remote`; private/regular/remote-eligible scopes; deny wins; AND/OR selectors; field groups; smart folders; duration/revocation/explanation without leak; data grants separate from capabilities
 
 ## Not yet specified
 
