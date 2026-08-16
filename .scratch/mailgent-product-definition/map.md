@@ -35,12 +35,12 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Define Per-Agent Authorization and Exposure](issues/07-define-agent-authorization.md) — Deny-by-default; product-agnostic agents (not models); classes `lan-inference` / `machine-local` / `remote`; private/regular/remote-eligible scopes; deny wins; AND/OR selectors; field groups; smart folders; duration/revocation/explanation without leak; data grants separate from capabilities
 - [Define Agent Operations and Redaction Contract](issues/08-define-agent-operation-contract.md) — Read ops capability-only; drafts capability-only; send/trash/move/label/archive/flags need approval; hard delete absent; search deny-filtered with cursor pages; omit without redaction stubs; no v1 persistent auto-approve
 - [Define Companion Human-Surface Behaviors](issues/12-define-human-mail-baseline.md) — Companion control plane (not daily client): OAuth accounts + sync health; unified/per-account search-read; open in Apple Mail; draft inspect/edit; approval queue; policy/audit; soft + hard delete human-only with confirm
+- [Define Security, Audit, and Recovery Behavior](issues/13-define-security-audit-recovery.md) — Keychain-only credentials; lock pauses sessions; fail closed; stale reads only; append-only local audit with Touch ID manual purge; local severity notifications; confirmed destructive recovery
 
 ## Not yet specified
 
 - MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
 - Gmail push under device-first still open ([14](issues/14-decide-gmail-push-posture.md); unblocked by Apple research).
-- Failure, recovery, and degraded/offline behavior still open until security/audit/recovery grilling ([13](issues/13-define-security-audit-recovery.md)).
 
 ## Out of scope
 
