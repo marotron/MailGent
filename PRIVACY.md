@@ -6,7 +6,7 @@ This policy describes how MailGent (“MailGent,” “we,” “us”) handles 
 
 MailGent is an early-stage product. This document reflects the intended v1 design. If a shipped build behaves differently, that build’s in-app disclosures control until this policy is updated.
 
-**Contact:** Replace with your contact email before publishing — e.g. `privacy@yourdomain` or your personal developer email.
+**Contact:** marotron@gmail.com
 
 ---
 
@@ -187,6 +187,6 @@ We may update this policy as the product evolves. The “Last updated” date wi
 
 ## 12. Contact
 
-Questions about privacy: myredbike2007@yahoo.com
+Questions about privacy: marotron@gmail.com
 
 Project repository: the public GitHub repository where this `PRIVACY.md` is published.
