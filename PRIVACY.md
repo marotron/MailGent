@@ -6,7 +6,7 @@ This policy describes how MailGent (“MailGent,” “we,” “us”) handles 
 
 MailGent is an early-stage product. This document reflects the intended v1 design. If a shipped build behaves differently, that build’s in-app disclosures control until this policy is updated.
 
-**Contact:** Replace with your contact email before publishing — e.g.  or your personal developer email.
+**Contact:** Replace with your contact email before publishing — e.g. `privacy@yourdomain` or your personal developer email.
 
 ---
 
@@ -21,7 +21,7 @@ MailGent helps you:
 - Inspect and edit drafts
 - Approve or deny agent-proposed mail mutations (such as send, move, trash, or permanent delete)
 - Manage per-agent access policies and a local audit log
-- Open source messag
+- Open source messages in Apple Mail
 
 MailGent also lets you grant **scoped, revocable** access to **external AI agents** that you choose to pair. MailGent does not ship a built-in AI assistant in v1.
 
@@ -49,7 +49,7 @@ To provide search, read, draft review, approvals, and sync, MailGent may store o
 - Message bodies and attachments needed for local features
 - A local search index
 - Drafts you or an agent create in MailGent
-- Pending mutatn proposals and approval decisions
+- Pending mutation proposals and approval decisions
 
 ### 2.3 Agent, policy, and audit data
 
@@ -79,7 +79,8 @@ We do **not** use mailbox content for:
 
 - Advertising or ad targeting
 - Building marketing profiles
-- Selling or brokering personal dataraining foundational / general-purpose AI models on your mail
+- Selling or brokering personal data
+- Training foundational / general-purpose AI models on your mail
 
 ---
 
@@ -104,7 +105,7 @@ When you connect Yahoo, Google, or another provider, that provider processes you
 
 ### 5.2 AI agents you pair
 
-Mail content may be disclosed to an external agent ly when you**:
+Mail content may be disclosed to an external agent **only when you**:
 
 - Pair / connect that agent
 - Grant it scopes and capabilities
@@ -127,7 +128,7 @@ If we ever operate infrastructure that holds non-mail operational data and are l
 ## 6. Retention
 
 - Local mailbox cache, index, tokens, policies, and audit logs remain on your Mac until you delete them, disconnect the account, revoke the agent, or uninstall / reset MailGent
-- Manual purge of audit data (when fered) may require local authentication (for example Touch ID), consistent with the product’s security design
+- Manual purge of audit data (when offered) may require local authentication (for example Touch ID), consistent with the product’s security design
 - Provider tokens remain until you disconnect the account or the provider revokes them
 
 ---
@@ -155,7 +156,7 @@ MailGent is not directed at children under 16 (or the minimum age required in yo
 
 MailGent is designed so that mailbox content and credentials stay on your device, and so that agent access and mutations require your explicit control.
 
-Before broad public distribution, we in to:
+Before broad public distribution, we intend to:
 
 - Keep this privacy policy accurate and accessible
 - Align consent and disclosures with applicable laws (including GDPR and CCPA/CPRA where they apply)
@@ -186,7 +187,6 @@ We may update this policy as the product evolves. The “Last updated” date wi
 
 ## 12. Contact
 
-Questions about privacy: **[YOUR EMAIL HERE]**
+Questions about privacy: myredbike2007@yahoo.com
 
-Project repository: the public GitHub repository where this  is published.
-
+Project repository: the public GitHub repository where this `PRIVACY.md` is published.
