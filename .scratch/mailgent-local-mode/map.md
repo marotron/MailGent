@@ -17,7 +17,7 @@ Decide whether MailGent should read Apple Mail's already-downloaded store (`~/Li
 
 ## Decisions so far
 
-_(none yet)_
+- [Research ArchMail and Apple Mail On-Disk Viability](issues/01-research-archmail-ondisk-viability.md) — ArchMail-style read of `~/Library/Mail` is viable with FDA or a security-scoped bookmark; FSEvents + on-open sweep; no Envelope Index; no store writes; surface partial/undownloaded mail
 
 ## Not yet specified
 
@@ -51,5 +51,5 @@ flowchart TD
 
 | # | Title | Type | Status |
 |---|-------|------|--------|
-| 01 | [Research ArchMail and Apple Mail On-Disk Viability](issues/01-research-archmail-ondisk-viability.md) | research | open |
-| 02 | [Decide Local-Mode Product Posture](issues/02-decide-local-mode-posture.md) | grilling | open |
+| 01 | [Research ArchMail and Apple Mail On-Disk Viability](issues/01-research-archmail-ondisk-viability.md) | research | resolved |
+| 02 | [Decide Local-Mode Product Posture](issues/02-decide-local-mode-posture.md) | grilling | claimed |

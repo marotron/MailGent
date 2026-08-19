@@ -1,7 +1,7 @@
 # Research ArchMail and Apple Mail On-Disk Viability
 
 Type: research
-Status: claimed
+Status: resolved
 
 ## Question
 
@@ -32,4 +32,13 @@ Can MailGent rely on ArchMail-style filesystem reads of `~/Library/Mail` as a te
 
 ## Answer
 
-_(to be written by the research agent)_
+**Viable with caveats.** ArchMail-style read-only walks of `~/Library/Mail` can be MailGent’s first-ship mail source. There is no public Apple API for the store.
+
+- **`.emlx`:** byte-count line + RFC822 + trailing plist `flags`. Attachments under `Attachments/<id>/`. Partial is the `.partial.emlx` suffix; never treat as full. Only draft bit `0x10` is proven in ArchMail code.
+- **Catalog:** newest `Mail/V*` → UUID account folders; names from `Accounts4.sqlite` or headers. Mailboxes are `.mbox` stems, not IMAP paths. Undownloaded mailboxes are silent gaps.
+- **Incremental:** FSEvents on the granted tree while running + on-open sweep keyed by path/mtime/inode. Do not use Envelope Index or filename-sequence gaps. No daemon.
+- **Access:** TCC Full Disk Access cannot be skipped by entitlement; NSOpenPanel + security-scoped bookmark is the sandbox extension. MAS sandbox is hostile (no Mail-folder entitlement). Developer ID + notarization + FDA, with bookmark fallback, matches first-ship.
+- **Writes:** do not write `.emlx` or Envelope Index; sandbox forbids arbitrary Apple Events. Copy-paste (or a later MailGent ledger) is the outbound path.
+- **Break risk:** `.emlx` + newest-`V*` is shippable; Envelope Index is the trap.
+
+Full findings (cited): [../research/archmail-ondisk-viability.md](../research/archmail-ondisk-viability.md)
