@@ -44,23 +44,6 @@ final class MailAccessSession {
     }
 }
 
-struct RootView: View {
-    @Bindable var session: MailAccessSession
-
-    var body: some View {
-        Group {
-            switch session.snapshot.access {
-            case .denied:
-                GrantAccessView(session: session)
-            case .granted:
-                AccessGrantedPlaceholder()
-            }
-        }
-        .frame(minWidth: 480, minHeight: 360)
-        .onAppear(perform: session.refresh)
-    }
-}
-
 struct GrantAccessView: View {
     var session: MailAccessSession
 
@@ -91,19 +74,5 @@ struct GrantAccessView: View {
             }
         }
         .padding(28)
-    }
-}
-
-struct AccessGrantedPlaceholder: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Mail access granted")
-                .font(.title2)
-                .bold()
-            Text("Companion search and the Mail store reader land in later tickets. MailGent will not write Apple Mail’s store.")
-                .foregroundStyle(.secondary)
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

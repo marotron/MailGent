@@ -1,7 +1,7 @@
 # Companion Read UI Prototype Then Shell
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 03
 
 ## Question
@@ -25,6 +25,11 @@ Prototype **sub-shape B**: a clearly named `PrototypeReadRoot` with **three stru
 A variant is picked; companion can search/read fixture (and, manually, live Mail after FDA).
 
 YAGNI: no draft UI, no approval queue, no policy authoring, no pairing wizard yet.
+
+## Comments
+
+- Claimed on `proto/companion-read-ui`. Three layouts live in `MailGent/Prototype/` behind a floating A/B/C switcher. Menu bar extra launches a detached `Window`; `LSUIElement = YES`. Fixture data is always available. Live Mail is a control-first toggle after FDA.
+- HITL pick: **A Control-first**. Shell: popover stays launcher; layouts live in a detached window.
 
 ## Inputs
 

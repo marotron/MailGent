@@ -40,6 +40,7 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 | `feat/01-app-skeleton` | `train/local-read` | 01 | `train/local-read` |
 | `feat/02-mail-store` | `train/local-read` | 02 | `train/local-read` |
 | `feat/03-mailbox-index` | `train/local-read` | 03 | `train/local-read` |
+| `proto/companion-read-ui` | `feat/03-mailbox-index` | 04 | throwaway (pointer on issue; not `main`) |
 
 ## Out of scope
 

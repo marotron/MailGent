@@ -44,6 +44,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: MailGent
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026
         CODE_SIGN_ENTITLEMENTS: MailGent/MailGent.entitlements
         ENABLE_HARDENED_RUNTIME: YES
