@@ -1,7 +1,7 @@
 # MailStore Reader TDD
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 
 ## Question
@@ -35,3 +35,20 @@ YAGNI: no index, no MCP, no UI beyond what ticket 01 already launched.
 
 - [01 · App Skeleton, FDA Onboarding, Confirm TDD Seams](01-app-skeleton-fda-seams.md) — seams must be confirmed first.
 - ArchMail: `EmlxReader.swift`, `MailAccountCatalog.swift`, `MimeMessageParser.swift` and tests/fixtures.
+
+## Answer
+
+**Yes.** `feat/02-mail-store` (parent `train/local-read`, after fast-forwarding ticket 01) exposes a public `MailStore` seam over fixture `V*` trees. `make test`: 6 MailStore tests + 3 access tests. CI never opens live `~/Library/Mail`.
+
+Public API:
+
+- `accounts()` — UUID folders under newest `V*`; empty UUID dirs skipped
+- `mailboxes(in:)` / `messageIDs(in:mailbox:)` — `.mbox` stems; one id per `.emlx` / `.partial.emlx` pair
+- `message(accountID:mailbox:id:)` — From/To/Subject + plain body; `isPartial` from filename; `isDraft` from plist `flags` bit `0x10`
+- `attachmentData(...)` — bytes only when asked; `MailMessage.attachments` is filename + `byteCount` from the filesystem
+
+Partial wins when both `7.emlx` and `7.partial.emlx` exist. Read/flagged bits are **not** named: only draft `0x10` is fixture-proven (ArchMail). Accounts4.sqlite display names and full MIME multipart/RFC2047 walk are YAGNI until index/UI need them.
+
+## Comments
+
+- 2026-08-19 — TDD six vertical slices on the MailStore seam. Internals (`parseEmlx`, catalog walk) are not tested directly.

@@ -10,4 +10,4 @@ generate:
 	xcodegen generate
 
 test: generate
-	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' test
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES test
