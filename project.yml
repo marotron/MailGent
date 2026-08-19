@@ -1,0 +1,79 @@
+name: MailGent
+options:
+  bundleIdPrefix: app.mailgent
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+targets:
+  MailStore:
+    type: framework
+    platform: macOS
+    sources:
+      - MailStore/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailStore
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: YES
+        MACH_O_TYPE: mh_dylib
+        DEFINES_MODULE: YES
+
+  MailGent:
+    type: application
+    platform: macOS
+    sources:
+      - MailGent
+    dependencies:
+      - target: MailStore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailGent
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: MailGent
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026
+        CODE_SIGN_ENTITLEMENTS: MailGent/MailGent.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        COMBINE_HIDPI_IMAGES: YES
+        CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets:
+        - MailStoreTests
+        - MailGentTests
+
+  MailStoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - MailStore/Tests
+    dependencies:
+      - target: MailStore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailStoreTests
+        GENERATE_INFOPLIST_FILE: YES
+
+  MailGentTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - MailGentTests
+    dependencies:
+      - target: MailGent
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailGentTests
+        GENERATE_INFOPLIST_FILE: YES

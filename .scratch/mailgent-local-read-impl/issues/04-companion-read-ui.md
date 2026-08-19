@@ -14,6 +14,8 @@ Which of three structurally different companion read layouts should first ship k
 
 Locked IA from product ticket 09: **control-first** default, not a Mail.app clone (Guideline 5.2.5). First-ship surfaces only: access health (FDA + last ingest), account/mailbox picker, search/read, open in Apple Mail if handoff works.
 
+**Menu bar shell (locked):** MailGent has no Dock icon and no normal app window. Replace `WindowGroup` with `MenuBarExtra` + `Settings` scene; set `LSUIElement = YES` in the generated Info.plist (add to `project.yml` `INFOPLIST_KEY_*` settings). The companion UI opens as the `MenuBarExtra` popover or as a detached `Window` scene launched from it. The three layout variants must be prototyped inside this shell, not a standalone `WindowGroup`.
+
 Prototype **sub-shape B**: a clearly named `PrototypeReadRoot` with **three structurally different** layouts and a floating variant switcher. Variants must differ in hierarchy (control-first vs search-first vs review desk), not color. Real fixture data behind all three.
 
 **Stop and ask** which variant (or mix) to keep. Then implement only that on `feat/04-companion-shell`. Point this issue at the prototype branch; do not merge prototype chrome to `main`.

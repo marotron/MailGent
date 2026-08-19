@@ -13,7 +13,8 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - Agent: MailGent is the MCP **server**; first ship is hardened loopback HTTP, one paired `machine-local` agent, account + mailbox allows, read ops only, append-only audit.
 - Distribution working assumption: Developer ID + notarization + Full Disk Access (or security-scoped bookmark). MAS sandbox is hostile.
 - Reuse ArchMail cores (`EmlxReader`, `MailAccountCatalog`, `MimeMessageParser`, tests/fixtures) into a MailGent `MailStore` target. Do not submodule ArchMail.
-- TDD seams (confirm in writing on ticket 01 before the first failing test): MailStore, MailboxIndex, ReadAPI, GrantGate, Pairing, AuditLog.
+- TDD seams (confirmed on ticket 01): MailStore, MailboxIndex, ReadAPI, GrantGate, Pairing, AuditLog.
+- One command: `make test` (`xcodegen generate` + `xcodebuild test`).
 - Git: long-lived `train/local-read`; topic branches fork from it and PR back. Do not commit live mail, FDA bookmarks, or pairing secrets.
 - YAGNI: no OAuth, no helper daemon, no draft ledger, no Mail writes, no Spotlight donation of bodies, no iOS, no built-in assistant.
 
@@ -21,12 +22,20 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 
 - [Research ArchMail and Apple Mail On-Disk Viability](../mailgent-local-mode/issues/01-research-archmail-ondisk-viability.md) — read path viable; FDA or bookmark; FSEvents + on-open; no Envelope Index; no writes
 - [Decide Local-Mode Product Posture](../mailgent-local-mode/issues/02-decide-local-mode-posture.md) — lasting first-ship source; OAuth next train; outbound deferred
+- [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) — SwiftUI app + MailStore; FDA fail-closed; six seams confirmed; `make test`
 
 ## Not yet specified
 
-- Six TDD seams confirmed in writing (ticket 01 HITL).
 - Companion read IA among three layouts (ticket 04).
 - Copy-paste vs MailGent draft ledger (ticket 06; after read+MCP).
+- Menu bar mode: replace `WindowGroup` with `MenuBarExtra` + `Settings` scene so MailGent lives as a status-bar icon with no Dock presence (`LSUIElement = YES` in Info.plist). Companion window opens from the menu bar popover or as a detached panel. Decide at ticket 04 (companion UI) whether the popover is the primary shell or launches a separate window.
+
+## Branches
+
+| Branch | Parent | Issue | Merge target |
+| --- | --- | --- | --- |
+| `train/local-read` | `research/archmail-ondisk` | — | `main` (ticket 07) |
+| `feat/01-app-skeleton` | `train/local-read` | 01 | `train/local-read` |
 
 ## Out of scope
 
@@ -59,7 +68,7 @@ flowchart TD
 
 | # | Title | Type | Status |
 |---|-------|------|--------|
-| 01 | [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) | task | open |
+| 01 | [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) | task | resolved |
 | 02 | [MailStore Reader TDD](issues/02-mail-store-reader.md) | task | open |
 | 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | open |
 | 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | open |
