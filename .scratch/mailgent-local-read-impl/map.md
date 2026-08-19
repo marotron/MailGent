@@ -24,6 +24,7 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - [Decide Local-Mode Product Posture](../mailgent-local-mode/issues/02-decide-local-mode-posture.md) — lasting first-ship source; OAuth next train; outbound deferred
 - [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) — SwiftUI app + MailStore; FDA fail-closed; six seams confirmed; `make test`
 - [MailStore Reader TDD](issues/02-mail-store-reader.md) — fixture `V*` catalog; `.emlx` headers/body; partial + draft `0x10`; attachment metadata + on-demand bytes
+- [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) — SQLite FTS ingest; identity skip; search/get/list pages; partial marked; empty body `not_available`
 
 ## Not yet specified
 
@@ -38,6 +39,7 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 | `train/local-read` | `research/archmail-ondisk` | — | `main` (ticket 07) |
 | `feat/01-app-skeleton` | `train/local-read` | 01 | `train/local-read` |
 | `feat/02-mail-store` | `train/local-read` | 02 | `train/local-read` |
+| `feat/03-mailbox-index` | `train/local-read` | 03 | `train/local-read` |
 
 ## Out of scope
 
@@ -72,7 +74,7 @@ flowchart TD
 |---|-------|------|--------|
 | 01 | [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) | task | resolved |
 | 02 | [MailStore Reader TDD](issues/02-mail-store-reader.md) | task | resolved |
-| 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | open |
+| 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | resolved |
 | 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | open |
 | 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | open |
 | 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | open |

@@ -1,7 +1,7 @@
 # MailboxIndex and ReadAPI TDD
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 02
 
 ## Question
@@ -32,3 +32,26 @@ YAGNI: no GrantGate, no MCP, no daemon.
 - [02 · MailStore Reader TDD](02-mail-store-reader.md)
 - Canonical mailbox model: `.scratch/mailgent-product-definition/issues/05-define-canonical-mailbox-model.md`
 - Cadence: [ArchMail on-disk viability](../../mailgent-local-mode/research/archmail-ondisk-viability.md)
+
+## Answer
+
+**Yes.** `feat/03-mailbox-index` adds `MailboxIndex` (SQLite FTS5 cache) and `ReadAPI` (paged list/search/get/listPlacements) over fixture `V*` trees. `make test`: 16 MailStore-module tests + 3 access tests. No live `~/Library/Mail`. No prototype CLI — identity skip (path/inode/mtime/size via `lstat`) was clear on paper.
+
+**MailboxIndex**
+
+- `ingest()` walks `MailStore`, upserts account + placement + from/to/date/subject/body + `isPartial`
+- Second ingest of an unchanged tree returns `new: []`; a planted `.emlx` is the only new ref
+- Same id with changed file identity is re-parsed and reported as new
+- `search` is FTS5 `MATCH`; `get` returns fixture literals including account + placement
+
+**ReadAPI** (wraps the index; MCP will wrap this later)
+
+- `list` / `search`: cursor pages, default 25, hard max 100; every hit shows account + placement
+- `listPlacements`: account + mailbox stem
+- `get`: partial messages searchable and marked; empty body is `ReadBody.notAvailable`
+
+Ingest is the on-open sweep. FSEvents stays a later caller. YAGNI held: no GrantGate, no MCP, no daemon.
+
+## Comments
+
+- 2026-08-19 — TDD MailboxIndex + ReadAPI on `feat/03-mailbox-index`. SQLite schema and FTS triggers are not seams.

@@ -29,6 +29,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         MACH_O_TYPE: mh_dylib
         DEFINES_MODULE: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-lsqlite3"]
 
   MailGent:
     type: application

@@ -12,10 +12,15 @@
 		13771BED0D84BBCA0EA39A67 /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 		1573478E39DB506C19875AE8 /* MailLibraryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815D87541071517935ECCA01 /* MailLibraryAccess.swift */; };
 		21629E10E42E380734295197 /* MailStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0494EF0811DFF9341CED4AE3 /* MailStore.swift */; };
+		282D6FFA46C18C58C3878014 /* ReadAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F004EF060971BC18270103 /* ReadAPI.swift */; };
+		2F5324489BAA27248291B03D /* MailboxIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */; };
+		8EE07415CA516522A9387635 /* MailboxIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A130C2141FC978EE3E739149 /* MailboxIndexTests.swift */; };
 		8FCB79BE0D4E3C7B824931C2 /* MailStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A6DFFC17F55A3C09E8F42F /* MailStoreTests.swift */; };
 		AEF71C91C5910871BC3F8F5B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D46E33C5C81175285853B22F /* RootView.swift */; };
+		BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */; };
 		C0CBA840E379580044926FD5 /* MailGentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */; };
 		E23BD62991A7F29E5F665642 /* MailLibraryAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */; };
+		E68C204CCBE51F19C7846D13 /* FixtureTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */; };
 		FA7235AA34AF51978124BDCB /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 /* End PBXBuildFile section */
 
@@ -71,6 +76,8 @@
 /* Begin PBXFileReference section */
 		0494EF0811DFF9341CED4AE3 /* MailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStore.swift; sourceTree = "<group>"; };
 		23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailGentApp.swift; sourceTree = "<group>"; };
+		2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixtureTree.swift; sourceTree = "<group>"; };
+		324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxIndex.swift; sourceTree = "<group>"; };
 		4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccessTests.swift; sourceTree = "<group>"; };
 		4D4FE71A2E9E5ADD630382FC /* MailGent.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MailGent.entitlements; sourceTree = "<group>"; };
 		64A6DFFC17F55A3C09E8F42F /* MailStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStoreTests.swift; sourceTree = "<group>"; };
@@ -78,7 +85,10 @@
 		815D87541071517935ECCA01 /* MailLibraryAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccess.swift; sourceTree = "<group>"; };
 		89C27982E6EEAFA280B25066 /* MailStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MailStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		901A863964E54353B610B7C0 /* MailStore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MailStore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A130C2141FC978EE3E739149 /* MailboxIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxIndexTests.swift; sourceTree = "<group>"; };
 		B51E76726BD4BE2DD190F0CA /* MailGent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MailGent.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAPITests.swift; sourceTree = "<group>"; };
+		C2F004EF060971BC18270103 /* ReadAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAPI.swift; sourceTree = "<group>"; };
 		D46E33C5C81175285853B22F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -105,7 +115,9 @@
 		22AB82005DF8283886055BF7 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */,
 				0494EF0811DFF9341CED4AE3 /* MailStore.swift */,
+				C2F004EF060971BC18270103 /* ReadAPI.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -162,7 +174,10 @@
 		D14F9D2103ED18598B976EDC /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */,
+				A130C2141FC978EE3E739149 /* MailboxIndexTests.swift */,
 				64A6DFFC17F55A3C09E8F42F /* MailStoreTests.swift */,
+				B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -305,6 +320,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				21629E10E42E380734295197 /* MailStore.swift in Sources */,
+				2F5324489BAA27248291B03D /* MailboxIndex.swift in Sources */,
+				282D6FFA46C18C58C3878014 /* ReadAPI.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -312,7 +329,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E68C204CCBE51F19C7846D13 /* FixtureTree.swift in Sources */,
 				8FCB79BE0D4E3C7B824931C2 /* MailStoreTests.swift in Sources */,
+				8EE07415CA516522A9387635 /* MailboxIndexTests.swift in Sources */,
+				BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -552,6 +572,10 @@
 					"@executable_path/../Frameworks",
 				);
 				MACH_O_TYPE = mh_dylib;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailStore;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -576,6 +600,10 @@
 					"@executable_path/../Frameworks",
 				);
 				MACH_O_TYPE = mh_dylib;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailStore;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;

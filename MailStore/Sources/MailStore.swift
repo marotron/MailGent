@@ -41,6 +41,7 @@ public struct MailStore: Sendable {
             id: id,
             from: parsed.from,
             to: parsed.to,
+            date: parsed.date,
             subject: parsed.subject,
             body: parsed.body,
             isPartial: url.lastPathComponent.lowercased().hasSuffix(".partial.emlx"),
@@ -91,6 +92,7 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let id: String
     public let from: String
     public let to: String
+    public let date: String
     public let subject: String
     public let body: String
     public let isPartial: Bool
@@ -361,7 +363,7 @@ extension MailStore {
         return nil
     }
 
-    static func parseRFC822(_ data: Data) throws -> (from: String, to: String, subject: String, body: String) {
+    static func parseRFC822(_ data: Data) throws -> (from: String, to: String, date: String, subject: String, body: String) {
         guard !data.isEmpty else { throw MailStoreError.malformed }
         let text = String(decoding: data, as: UTF8.self)
         let (headerBlock, bodyBlock) = splitHeadersAndBody(text)
@@ -369,6 +371,7 @@ extension MailStore {
         return (
             from: headers["from"] ?? "",
             to: headers["to"] ?? "",
+            date: headers["date"] ?? "",
             subject: headers["subject"] ?? "",
             body: bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
         )
