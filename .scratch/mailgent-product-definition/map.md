@@ -41,10 +41,11 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Prototype Agent Access Policy Authoring](issues/10-prototype-policy-authoring.md) — Ship wizard A + grant desk B; scope-then-access selectors; resource caps (not free-form Write); explicit Deny carve-outs; pairing finish-setup deferred to 17
 - [Prototype Agent Mutation Approval](issues/11-prototype-mutation-approval.md) — Ship queue A + focus B + batch C; approve/deny/edit-then-approve; soft + hard delete with stronger hard-delete confirm; no auto-approve; expiry cancels pending
 - [Prototype Agent Pairing and Finish-Setup](issues/17-prototype-agent-pairing-setup.md) — Ship wizard A (required) + connection desk B (nice-to-have); challenge + credential + UDS/loopback/relay; remote sessions; revoke/suspend/forget; drop checklist C
+- [Apply for Yahoo Mail OAuth Developer Access](issues/15-apply-yahoo-oauth-access.md) — Sender Hub mail form submitted 2026-08-17; awaiting Yahoo review; IMAP only; partner IMAP `NAME` + `mail-r`/`mail-w` TBD at approval
 
 ## Not yet specified
 
-- MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps, still open ([16](issues/16-decide-early-distribution.md); unblocked after Yahoo access task).
+- MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps ([16](issues/16-decide-early-distribution.md); unblocked now that Yahoo access was applied for).
 
 ## Out of scope
 

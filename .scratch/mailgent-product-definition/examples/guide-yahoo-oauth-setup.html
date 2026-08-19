@@ -1,0 +1,660 @@
+<!doctype html>
+<!-- MailGent helper guide for issue 15. Open in a browser. Sources: research/yahoo-oauth-application.md (2026-08-16). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Yahoo Mail OAuth setup guide</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #62708a;
+      --line: #dbe1ec;
+      --canvas: #f4f6fa;
+      --paper: #fff;
+      --blue: #3258d4;
+      --blue-soft: #eaf0ff;
+      --amber: #bd7200;
+      --amber-soft: #fff6e8;
+      --green: #14805e;
+      --green-soft: #e8f7f1;
+      --red: #ba3c47;
+      --red-soft: #fff1f2;
+      --rail: 280px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--blue); }
+    code, .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: var(--rail) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .toc {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      overflow: auto;
+      padding: 22px 16px 40px;
+      border-right: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+    .toc .brand { font-weight: 750; font-size: 16px; margin-bottom: 4px; }
+    .toc .meta { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+    .toc nav { display: grid; gap: 2px; }
+    .toc a {
+      text-decoration: none;
+      color: #34415a;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .toc a:hover { background: #eef2f8; }
+    .toc a.active { background: var(--blue-soft); color: #163aaf; font-weight: 650; }
+    .toc .progress {
+      margin-top: 22px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .toc .progress strong { color: var(--ink); display: block; margin-bottom: 6px; font-size: 13px; }
+    main { padding: 28px 36px 80px; max-width: 920px; }
+    .hero h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.02em; }
+    .hero p { margin: 0 0 18px; color: var(--muted); max-width: 62ch; }
+    .callouts { display: grid; gap: 10px; margin-bottom: 28px; }
+    .callout {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: var(--paper);
+      font-size: 14px;
+    }
+    .callout.ok { background: var(--green-soft); border-color: #b7e2d1; }
+    .callout.warn { background: var(--amber-soft); border-color: #f0d7a8; }
+    .callout.bad { background: var(--red-soft); border-color: #f0c4c8; }
+    .callout strong { display: block; margin-bottom: 2px; }
+    section.block {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px 24px 24px;
+      margin-bottom: 18px;
+      box-shadow: 0 8px 28px #1720330b;
+    }
+    section.block > h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: #163aaf;
+      font-size: 13px;
+      font-weight: 750;
+      flex-shrink: 0;
+    }
+    .lede { margin: 0 0 16px; color: var(--muted); }
+    h3 { margin: 18px 0 8px; font-size: 15px; }
+    ol.steps, ul.clean { margin: 0; padding-left: 1.2em; }
+    ol.steps li, ul.clean li { margin: 6px 0; }
+    .checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    .checklist li {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfcfe;
+    }
+    .checklist input { margin-top: 3px; }
+    .checklist label { cursor: pointer; }
+    .checklist .hint { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 8px 0 4px;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    th { color: var(--muted); font-weight: 650; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .links { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn:hover { background: #f3f6fb; }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn.primary:hover { background: #2748b8; }
+    .btn.ghost { background: transparent; }
+    .paste {
+      position: relative;
+      margin: 8px 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f7f9fc;
+      overflow: hidden;
+    }
+    .paste header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: #eef2f8;
+      font-size: 12px;
+      font-weight: 650;
+      color: #44516a;
+    }
+    .paste pre {
+      margin: 0;
+      padding: 12px 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .copied { color: var(--green) !important; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 14px 0 4px;
+    }
+    .flow .node {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfcfe;
+      font-size: 13px;
+    }
+    .flow .node b { display: block; margin-bottom: 4px; }
+    .flow .node span { color: var(--muted); font-size: 12px; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--blue-soft);
+      color: #163aaf;
+      vertical-align: middle;
+    }
+    .pill.warn { background: var(--amber-soft); color: #8c5300; }
+    .pill.ok { background: var(--green-soft); color: #0f6a4c; }
+    footer.note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .toc {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .toc nav { grid-template-columns: repeat(2, 1fr); }
+      .flow { grid-template-columns: 1fr 1fr; }
+      main { padding: 20px 16px 60px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="toc">
+      <div class="brand">MailGent</div>
+      <div class="meta">Yahoo Mail OAuth · issue 15</div>
+      <nav id="toc-nav">
+        <a href="#overview">Overview</a>
+        <a href="#prep">0 · Prepare</a>
+        <a href="#ydn">1 · YDN app</a>
+        <a href="#privacy">2 · Privacy URL</a>
+        <a href="#form">3 · Sender Hub form</a>
+        <a href="#answers">Form answers</a>
+        <a href="#wait">4 · Wait / follow up</a>
+        <a href="#after">5 · After approval</a>
+        <a href="#pitfalls">Pitfalls</a>
+        <a href="#not-gmail">Not Gmail</a>
+        <a href="#links">Links</a>
+      </nav>
+      <div class="progress">
+        <strong>Your checklist</strong>
+        <span id="progress-label">0 / 8 done</span>
+      </div>
+    </aside>
+
+    <main>
+      <header class="hero" id="overview">
+        <h1>Yahoo Mail OAuth setup</h1>
+        <p>
+          Easy path for MailGent: create a Yahoo Developer app once, publish a privacy page on the same domain as your product URL, then apply for commercial IMAP access on Sender Hub. Mail scopes are <strong>not</strong> self-serve.
+        </p>
+      </header>
+
+      <div class="callouts">
+        <div class="callout ok">
+          <strong>Once per app — not per Yahoo address</strong>
+          You do this for MailGent. End users (and your test accounts) only Sign in with Yahoo + consent later.
+        </div>
+        <div class="callout warn">
+          <strong>Two different Yahoo portals</strong>
+          <span class="mono">developer.yahoo.com</span> = create Client ID/Secret.
+          <span class="mono">senders.yahooinc.com</span> = request mail API access. Ignore Sender Hub DKIM pages — those are for outbound senders, not IMAP OAuth.
+        </div>
+        <div class="callout bad">
+          <strong>Hard gate</strong>
+          No published review SLA. No status dashboard. Questions → <span class="mono">mail-api@yahooinc.com</span>.
+        </div>
+      </div>
+
+      <section class="block">
+        <h2>Big picture</h2>
+        <p class="lede">Four stages. You can finish 1–3 in one sitting if privacy URL is ready.</p>
+        <div class="flow">
+          <div class="node"><b>1. YDN app</b><span>Client ID + Secret</span></div>
+          <div class="node"><b>2. Privacy page</b><span>Same domain as product URL</span></div>
+          <div class="node"><b>3. Sender Hub form</b><span>Request IMAP access</span></div>
+          <div class="node"><b>4. Approval</b><span>mail-r / mail-w appear</span></div>
+        </div>
+      </section>
+
+      <section class="block" id="prep">
+        <h2><span class="step-num">0</span> Prepare before you click anything</h2>
+        <p class="lede">Gather these. Form rejects empty or mismatched domains.</p>
+        <ul class="checklist" data-group="prep">
+          <li>
+            <input type="checkbox" id="c-name" data-key="prep-name">
+            <label for="c-name">Your real <strong>name</strong>, <strong>company</strong> (or product name), and <strong>contact email</strong>
+              <span class="hint">Honesty policy — do not invent a company.</span>
+            </label>
+          </li>
+          <li>
+            <input type="checkbox" id="c-yahoo" data-key="prep-yahoo">
+            <label for="c-yahoo">A Yahoo account for developer work
+              <span class="hint">Same account you will use on YDN and list as “Your YDN account” on the form.</span>
+            </label>
+          </li>
+          <li>
+            <input type="checkbox" id="c-product-url" data-key="prep-url">
+            <label for="c-product-url">Public <strong>product URL</strong>
+              <span class="hint">Repo, site, or landing page. Domain must match privacy URL (e.g. both on <span class="mono">github.com</span>).</span>
+            </label>
+          </li>
+          <li>
+            <input type="checkbox" id="c-privacy" data-key="prep-privacy">
+            <label for="c-privacy">Public <strong>privacy policy URL</strong> on that same domain
+              <span class="hint">No privacy page yet → finish step 2 before submitting the form.</span>
+            </label>
+          </li>
+        </ul>
+      </section>
+
+      <section class="block" id="ydn">
+        <h2><span class="step-num">1</span> Create the YDN application</h2>
+        <p class="lede">This gives you Client ID + Client Secret. It does <em>not</em> unlock mail scopes by itself.</p>
+        <ol class="steps">
+          <li>Open <a href="https://developer.yahoo.com/apps/create/" target="_blank" rel="noopener">Create Application</a> and sign in with your Yahoo account.</li>
+          <li>Fill app name (e.g. <strong>MailGent</strong>), description, homepage / callback URLs.</li>
+          <li>For a native macOS app, use a custom scheme and/or loopback redirect, e.g. <span class="mono">mailgent://oauth/callback</span> and/or <span class="mono">http://127.0.0.1:&lt;port&gt;/callback</span>.</li>
+          <li>Avoid trademarked words like “Yahoo” in the description text — the create form often rejects them.</li>
+          <li>Create the app → copy <strong>Client ID</strong> and <strong>Client Secret</strong>.</li>
+          <li>Store locally in <span class="mono">.env</span> (gitignored). Production later → Keychain / secure storage, not the app binary.</li>
+        </ol>
+        <div class="callout warn" style="margin-top:14px">
+          <strong>Mail checkbox on create is misleading</strong>
+          OpenID tutorials may show Mail → Read. Commercial mail scopes still require Sender Hub approval. Prefer the commercial-access path.
+        </div>
+        <ul class="checklist" data-group="ydn" style="margin-top:14px">
+          <li>
+            <input type="checkbox" id="c-ydn" data-key="ydn-done">
+            <label for="c-ydn">YDN app created; Client ID + Secret saved in <span class="mono">.env</span></label>
+          </li>
+        </ul>
+        <div class="links">
+          <a class="btn primary" href="https://developer.yahoo.com/apps/create/" target="_blank" rel="noopener">Open Create Application</a>
+          <a class="btn" href="https://developer.yahoo.com/oauth2/guide/" target="_blank" rel="noopener">OAuth 2.0 guide</a>
+        </div>
+      </section>
+
+      <section class="block" id="privacy">
+        <h2><span class="step-num">2</span> Publish a privacy policy on the same domain</h2>
+        <p class="lede">Sender Hub: “domain of this URL needs to match the domain of your privacy URL.”</p>
+        <table>
+          <thead><tr><th>Product URL</th><th>Privacy URL must be on</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">https://github.com/you/MailGent</span></td>
+              <td><span class="mono">github.com</span> — e.g. <span class="mono">…/blob/main/PRIVACY.md</span></td>
+            </tr>
+            <tr>
+              <td><span class="mono">https://mailgent.example</span></td>
+              <td><span class="mono">mailgent.example</span> — e.g. <span class="mono">/privacy</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>Minimum topics the policy should cover</h3>
+        <ul class="clean">
+          <li>What MailGent is (companion beside Apple Mail; not a replacement daily client)</li>
+          <li>Yahoo OAuth; mailbox data stored on-device; tokens in Keychain</li>
+          <li>No MailGent cloud that reads mailbox bodies (device-first)</li>
+          <li>Agents only see what the user grants; mutations need human approval</li>
+          <li>No ads / sale of mail content; how to revoke / disconnect</li>
+          <li>Contact email</li>
+        </ul>
+        <ul class="checklist" data-group="privacy" style="margin-top:14px">
+          <li>
+            <input type="checkbox" id="c-priv-pub" data-key="privacy-done">
+            <label for="c-priv-pub">Privacy page is public and domain-matches product URL</label>
+          </li>
+        </ul>
+      </section>
+
+      <section class="block" id="form">
+        <h2><span class="step-num">3</span> Submit the Sender Hub mail form</h2>
+        <p class="lede">This is the real application for IMAP (and optional CardDAV/CalDAV).</p>
+        <ol class="steps">
+          <li>Open <a href="https://senders.yahooinc.com/developer/developer-access-mail-form/" target="_blank" rel="noopener">Yahoo Mail API Access form</a>.</li>
+          <li>Sign in if asked (Sender Hub may show your Yahoo profile name).</li>
+          <li>Fill every required field. Use the paste blocks in <a href="#answers">Form answers</a> below.</li>
+          <li><strong>API required:</strong> check <strong>IMAP</strong> only for MailGent v1. Leave CardDAV / CalDAV unchecked.</li>
+          <li><strong>Your YDN account:</strong> email of the Yahoo account that owns the YDN app.</li>
+          <li>Existing Yahoo/AOL contract? Usually <strong>No</strong>. Recent 3rd-party security audit? Usually <strong>No</strong> (Yes can help expedite if you have one).</li>
+          <li>Submit. Keep a copy of what you pasted.</li>
+        </ol>
+        <ul class="checklist" data-group="form" style="margin-top:14px">
+          <li>
+            <input type="checkbox" id="c-form" data-key="form-done">
+            <label for="c-form">Sender Hub form submitted</label>
+          </li>
+        </ul>
+        <div class="links">
+          <a class="btn primary" href="https://senders.yahooinc.com/developer/developer-access-mail-form/" target="_blank" rel="noopener">Open mail access form</a>
+          <a class="btn" href="https://senders.yahooinc.com/developer/developer-access/" target="_blank" rel="noopener">Developer Access policy</a>
+        </div>
+      </section>
+
+      <section class="block" id="answers">
+        <h2>Form answers <span class="pill">MailGent paste-ready</span></h2>
+        <p class="lede">Edit names/URLs to match yours. Do not invent compliance you have not done.</p>
+
+        <h3>Description of your application / service</h3>
+        <div class="paste" data-copy>
+          <header>
+            <span>Description</span>
+            <button type="button" class="btn ghost copy-btn">Copy</button>
+          </header>
+          <pre>MailGent is a macOS companion app used alongside Apple Mail (not a replacement daily mail client). Users connect their own Yahoo Mail accounts via OAuth so MailGent can sync and display mail locally for search, read, draft review, and human-approved mutations (send, move, trash, permanent delete). The product also lets the user grant scoped, revocable access to external AI agents running on their device or via short-lived mediated remote sessions. MailGent uses Yahoo IMAP/SMTP only to serve that user’s own mailbox for these features; it does not resell API access.</pre>
+        </div>
+
+        <h3>Data collection and processing</h3>
+        <div class="paste" data-copy>
+          <header>
+            <span>Data collection and processing</span>
+            <button type="button" class="btn ghost copy-btn">Copy</button>
+          </header>
+          <pre>MailGent accesses the user’s Yahoo mailbox via OAuth-authorized IMAP/SMTP after the user explicitly connects the account. On the user’s Mac, MailGent stores mailbox content needed for sync, local search/indexing, draft inspection, and mutation approval. OAuth tokens are stored in the macOS Keychain. MailGent does not operate a cloud service that reads mailbox bodies. External agents only receive mail content the user has explicitly granted (scopes, capabilities, and approval for mutations). We do not scan mail to build advertising profiles. Contacts and calendar (CardDAV/CalDAV) are not requested for v1.</pre>
+        </div>
+
+        <h3>Data use</h3>
+        <div class="paste" data-copy>
+          <header>
+            <span>Data use</span>
+            <button type="button" class="btn ghost copy-btn">Copy</button>
+          </header>
+          <pre>Yahoo mailbox data is used only to provide MailGent’s user-facing email companion features: account connection, local sync, search/read, draft review/edit, human approval of agent-proposed mutations, policy/audit surfaces, and opening messages in Apple Mail. Data is not used for advertising segments, profiling, engagement tracking, data brokerage, or model training on user mailbox content.</pre>
+        </div>
+
+        <h3>Data sharing</h3>
+        <div class="paste" data-copy>
+          <header>
+            <span>Data sharing</span>
+            <button type="button" class="btn ghost copy-btn">Copy</button>
+          </header>
+          <pre>MailGent does not sell or transfer Yahoo mailbox content to advertisers or data brokers. Content stays on the user’s device by default. The only third parties that may see mail content are AI agents the user deliberately pairs and grants access to, under deny-by-default scopes; send/trash/delete/move and similar mutations still require one-shot human approval. There is no unattended public endpoint that redistributes mailbox data.</pre>
+        </div>
+
+        <h3>Compliance with Laws</h3>
+        <p class="lede" style="margin-bottom:8px">If you can honestly claim GDPR consent + CCPA readiness → choose <strong>Yes</strong>. Otherwise choose <strong>Other</strong> and paste:</p>
+        <div class="paste" data-copy>
+          <header>
+            <span>Compliance · Other</span>
+            <button type="button" class="btn ghost copy-btn">Copy</button>
+          </header>
+          <pre>MailGent is device-first: mailbox content and tokens stay on the user’s Mac; users connect accounts via OAuth and control agent grants, revocation, and mutation approvals. We will publish a privacy policy and obtain appropriate consent for each use case before distributing broadly. Formal GDPR/CCPA counsel review is planned before public release.</pre>
+        </div>
+
+        <h3>Users / API calls</h3>
+        <div class="paste" data-copy>
+          <header>
+            <span>Users / API calls · early estimates</span>
+            <button type="button" class="btn ghost copy-btn">Copy</button>
+          </header>
+          <pre>Initial phase: under 100 Yahoo users (developer and early testers). Expected API usage roughly 50–500 IMAP operations per user per hour during active use (sync, IDLE/poll, search fetch), far lower when idle. Growth after public release TBD; we will stay within Yahoo rate limits.</pre>
+        </div>
+
+        <h3>Quick field cheat sheet</h3>
+        <table>
+          <thead><tr><th>Field</th><th>Suggested value</th></tr></thead>
+          <tbody>
+            <tr><td>App name</td><td>MailGent</td></tr>
+            <tr><td>API required</td><td>IMAP only</td></tr>
+            <tr><td>YDN account</td><td>Yahoo email that owns the YDN app</td></tr>
+            <tr><td>Existing contract</td><td>No (unless you have one)</td></tr>
+            <tr><td>3rd party security audit</td><td>No (unless you can share results)</td></tr>
+            <tr><td>Privacy Policy</td><td>Public URL; same domain as product URL</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="block" id="wait">
+        <h2><span class="step-num">4</span> Wait and follow up</h2>
+        <ul class="clean">
+          <li>No public status portal; no published SLA.</li>
+          <li>Questions / nudges: <a href="mailto:mail-api@yahooinc.com">mail-api@yahooinc.com</a></li>
+          <li>Sharing a recent 3rd-party security audit “might expedite” (per form wording).</li>
+          <li>Meanwhile: finish other MailGent work (issue 16 distribution; Gmail is a separate Google track).</li>
+        </ul>
+        <ul class="checklist" data-group="wait" style="margin-top:14px">
+          <li>
+            <input type="checkbox" id="c-wait" data-key="wait-note">
+            <label for="c-wait">Saved submission date + copy of answers; know to email <span class="mono">mail-api@yahooinc.com</span> if silent too long</label>
+          </li>
+        </ul>
+      </section>
+
+      <section class="block" id="after">
+        <h2><span class="step-num">5</span> After approval</h2>
+        <ol class="steps">
+          <li>Confirm <span class="mono">mail-r</span> / <span class="mono">mail-w</span> appear on your YDN application profile.</li>
+          <li>Record the partner name / ID Yahoo assigns — IMAP clients must send IMAP <span class="mono">ID</span> with <span class="mono">NAME</span> = that value (plus VERSION, OS, OS-VERSION).</li>
+          <li>Implement OAuth Authorization Code flow; then IMAP/SMTP with the OAuth token.</li>
+          <li>Yahoo hosts (from Sender Hub docs): IMAP <span class="mono">imap.mail.yahoo.com</span>, SMTP <span class="mono">smtp.mail.yahoo.com</span>.</li>
+          <li>If you later support AOL: same commercial form covers AOL customers, but you need a <strong>separate</strong> OAuth client credential set for the AOL namespace.</li>
+        </ol>
+        <ul class="checklist" data-group="after" style="margin-top:14px">
+          <li>
+            <input type="checkbox" id="c-after" data-key="after-scopes">
+            <label for="c-after">Scopes visible on YDN; partner IMAP <span class="mono">NAME</span> recorded</label>
+          </li>
+        </ul>
+        <div class="links">
+          <a class="btn" href="https://senders.yahooinc.com/developer/documentation/" target="_blank" rel="noopener">IMAP/SMTP OAuth docs</a>
+        </div>
+      </section>
+
+      <section class="block" id="pitfalls">
+        <h2>Pitfalls <span class="pill warn">read once</span></h2>
+        <table>
+          <thead><tr><th>Trap</th><th>What to do instead</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Filling Sender Hub <strong>DKIM / sender</strong> setup</td>
+              <td>That path is for outbound sending reputation. MailGent needs the <strong>Mail API Access</strong> form.</td>
+            </tr>
+            <tr>
+              <td>Thinking each new Yahoo inbox needs this form</td>
+              <td>App approval is once. Each mailbox only does OAuth consent in the app.</td>
+            </tr>
+            <tr>
+              <td>Product URL on GitHub, privacy on another domain</td>
+              <td>Domains must match. Host privacy on the same domain or change both URLs.</td>
+            </tr>
+            <tr>
+              <td>Description says “Yahoo email client”</td>
+              <td>Avoid “Yahoo” in YDN create text; describe a companion beside Apple Mail.</td>
+            </tr>
+            <tr>
+              <td>Checking CardDAV/CalDAV “just in case”</td>
+              <td>v1 is mail-only. Request IMAP only; expand later if needed.</td>
+            </tr>
+            <tr>
+              <td>Committing <span class="mono">.env</span></td>
+              <td>Keep secrets local / Keychain. Repo should gitignore <span class="mono">.env</span>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="block" id="not-gmail">
+        <h2>This is not the Gmail setup <span class="pill ok">separate track</span></h2>
+        <p class="lede">Do not put Gmail API details on the Yahoo form. Gmail uses Google Cloud + restricted-scope OAuth verification (≈100-user cap until verified). That lands under issue 16 / implementation — not this guide.</p>
+        <table>
+          <thead><tr><th></th><th>Yahoo</th><th>Gmail</th></tr></thead>
+          <tbody>
+            <tr><td>API</td><td>IMAP/SMTP OAuth</td><td>Gmail API + OAuth</td></tr>
+            <tr><td>Where</td><td>YDN + Sender Hub</td><td>Google Cloud Console</td></tr>
+            <tr><td>Gate</td><td>Commercial mail approval</td><td>Restricted-scope verification</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="block" id="links">
+        <h2>Official links</h2>
+        <div class="links">
+          <a class="btn primary" href="https://senders.yahooinc.com/developer/developer-access-mail-form/" target="_blank" rel="noopener">Mail API Access form</a>
+          <a class="btn" href="https://senders.yahooinc.com/developer/developer-access/" target="_blank" rel="noopener">Developer Access</a>
+          <a class="btn" href="https://senders.yahooinc.com/developer/documentation/" target="_blank" rel="noopener">IMAP/SMTP docs</a>
+          <a class="btn" href="https://developer.yahoo.com/apps/create/" target="_blank" rel="noopener">Create YDN app</a>
+          <a class="btn" href="https://developer.yahoo.com/oauth2/guide/" target="_blank" rel="noopener">OAuth guide</a>
+          <a class="btn" href="https://developer.yahoo.com/mail/" target="_blank" rel="noopener">Yahoo Mail developer hub</a>
+          <a class="btn" href="mailto:mail-api@yahooinc.com">mail-api@yahooinc.com</a>
+        </div>
+        <p class="footer note">
+          Facts aligned with MailGent research note <span class="mono">research/yahoo-oauth-application.md</span> (accessed 2026-08-16). Checklist state saves in this browser only (localStorage).
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "mailgent-yahoo-oauth-guide-v1";
+
+    const load = () => {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+      catch { return {}; }
+    };
+    const save = (state) => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+    const state = load();
+    const boxes = [...document.querySelectorAll('input[type="checkbox"][data-key]')];
+    boxes.forEach((box) => {
+      box.checked = Boolean(state[box.dataset.key]);
+      box.addEventListener("change", () => {
+        state[box.dataset.key] = box.checked;
+        save(state);
+        updateProgress();
+      });
+    });
+
+    const progressLabel = document.getElementById("progress-label");
+    const updateProgress = () => {
+      const done = boxes.filter((b) => b.checked).length;
+      progressLabel.textContent = `${done} / ${boxes.length} done`;
+    };
+    updateProgress();
+
+    document.querySelectorAll("[data-copy]").forEach((block) => {
+      const btn = block.querySelector(".copy-btn");
+      const pre = block.querySelector("pre");
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(pre.textContent);
+          btn.textContent = "Copied";
+          btn.classList.add("copied");
+          setTimeout(() => {
+            btn.textContent = "Copy";
+            btn.classList.remove("copied");
+          }, 1400);
+        } catch {
+          const range = document.createRange();
+          range.selectNodeContents(pre);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          btn.textContent = "Select → ⌘C";
+        }
+      });
+    });
+
+    const tocLinks = [...document.querySelectorAll("#toc-nav a")];
+    const sections = tocLinks
+      .map((a) => document.querySelector(a.getAttribute("href")))
+      .filter(Boolean);
+
+    const setActive = () => {
+      const y = window.scrollY + 80;
+      let current = sections[0];
+      for (const section of sections) {
+        if (section.offsetTop <= y) current = section;
+      }
+      tocLinks.forEach((a) => {
+        a.classList.toggle("active", a.getAttribute("href") === `#${current.id}`);
+      });
+    };
+    window.addEventListener("scroll", setActive, { passive: true });
+    setActive();
+  </script>
+</body>
+</html>

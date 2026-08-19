@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# Editor history
+.history/
+
+# Firecrawl scratch dumps
+.firecrawl/
+
