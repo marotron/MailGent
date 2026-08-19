@@ -46,6 +46,7 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 ## Not yet specified
 
 - MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps ([16](issues/16-decide-early-distribution.md); unblocked now that Yahoo access was applied for).
+- Apple Mail local-read as a possible temporary source before OAuth lands — see [Apple Mail Local-Mode map](../mailgent-local-mode/map.md).
 
 ## Out of scope
 
