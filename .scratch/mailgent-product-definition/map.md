@@ -42,11 +42,12 @@ Produce a locked, implementation-ready v1 product specification for MailGent: a 
 - [Prototype Agent Mutation Approval](issues/11-prototype-mutation-approval.md) — Ship queue A + focus B + batch C; approve/deny/edit-then-approve; soft + hard delete with stronger hard-delete confirm; no auto-approve; expiry cancels pending
 - [Prototype Agent Pairing and Finish-Setup](issues/17-prototype-agent-pairing-setup.md) — Ship wizard A (required) + connection desk B (nice-to-have); challenge + credential + UDS/loopback/relay; remote sessions; revoke/suspend/forget; drop checklist C
 - [Apply for Yahoo Mail OAuth Developer Access](issues/15-apply-yahoo-oauth-access.md) — Sender Hub mail form submitted 2026-08-17; awaiting Yahoo review; IMAP only; partner IMAP `NAME` + `mail-r`/`mail-w` TBD at approval
+- [Decide Local-Mode Product Posture](../mailgent-local-mode/issues/02-decide-local-mode-posture.md) — first ship is Apple Mail local-read (`~/Library/Mail`); Gmail/Yahoo OAuth is the next train; local-read stays as an offline / Apple Mail source. Outbound for local-read is unnamed until after read+MCP. See [Apple Mail Local-Mode](../mailgent-local-mode/map.md) and [local-read impl](../mailgent-local-read-impl/map.md)
 
 ## Not yet specified
 
-- MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps ([16](issues/16-decide-early-distribution.md); unblocked now that Yahoo access was applied for).
-- Apple Mail local-read as a possible temporary source before OAuth lands — see [Apple Mail Local-Mode map](../mailgent-local-mode/map.md).
+- MAS sandbox vs Developer ID + notarization, and how early distribution works under Gmail/Yahoo approval caps ([16](issues/16-decide-early-distribution.md); unblocked now that Yahoo access was applied for). Local-read first ship’s working assumption is Developer ID + notarization + Full Disk Access; MAS sandbox is hostile to `~/Library/Mail`.
+- Local-read outbound path (copy-paste vs MailGent draft ledger) — deferred until after the read+MCP prototype; no Mail-store writes.
 
 ## Out of scope
 
