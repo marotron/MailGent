@@ -35,7 +35,37 @@ struct LoopbackMCPServerTests {
 
         #expect(response.status == 200)
         #expect(response.body.contains("Invoice due"))
+        #expect(response.body.contains("accountID"))
+        #expect(response.body.contains("placement"))
+        #expect(response.body.contains("items"))
         #expect(env.audit.entries().contains { $0.kind == .search && $0.detail == "invoice" })
+    }
+
+    @Test func authenticatedGetReturnsMessage() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("Invoice due"))
+        #expect(response.body.contains("Please pay"))
+        #expect(response.body.contains("alice@example.com"))
+        #expect(env.audit.entries().contains { $0.kind == .get })
     }
 
     @Test func initializeReturnsServerCapabilities() throws {

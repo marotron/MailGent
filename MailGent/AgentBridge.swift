@@ -42,6 +42,7 @@ final class AgentBridge {
 
     init() {
         pairing = Pairing(audit: audit)
+        restorePersistedPairing()
     }
 
     func ensureMachineLocalAgent(named name: String = "Cursor") {
@@ -55,6 +56,8 @@ final class AgentBridge {
             )
             agent = paired
             credential = token
+            persistPairing()
+            syncCursorMCPConfig()
         } catch {
             MailGentLog.trace("agent pair failed: \(error)")
         }
@@ -122,6 +125,84 @@ final class AgentBridge {
         grants.revokeAll(agentID: agent.id)
         self.agent = nil
         credential = nil
+        clearPersistedPairing()
+    }
+
+    private func restorePersistedPairing() {
+        guard
+            let data = try? Data(contentsOf: Self.pairingFileURL),
+            let saved = try? JSONDecoder().decode(PersistedPairing.self, from: data),
+            let trust = AgentTrustClass(rawValue: saved.trustClass),
+            !saved.credential.isEmpty
+        else {
+            return
+        }
+        let restored = PairedAgent(id: saved.agentID, name: saved.name, trustClass: trust)
+        pairing.restore(agent: restored, credential: saved.credential)
+        agent = restored
+        credential = saved.credential
+        syncCursorMCPConfig()
+    }
+
+    private func persistPairing() {
+        guard let agent, let credential else { return }
+        let saved = PersistedPairing(
+            agentID: agent.id,
+            name: agent.name,
+            trustClass: agent.trustClass.rawValue,
+            credential: credential
+        )
+        do {
+            try FileManager.default.createDirectory(
+                at: Self.pairingFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try JSONEncoder().encode(saved).write(to: Self.pairingFileURL, options: .atomic)
+        } catch {
+            MailGentLog.trace("agent pair persist failed: \(error)")
+        }
+    }
+
+    private func clearPersistedPairing() {
+        try? FileManager.default.removeItem(at: Self.pairingFileURL)
+    }
+
+    /// Keep Cursor's local MCP entry aligned with the current Bearer (machine-local only).
+    func syncCursorMCPConfig() {
+        guard let credential else { return }
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cursor/mcp.json")
+        guard
+            let data = try? Data(contentsOf: url),
+            var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return
+        }
+        var servers = root["mcpServers"] as? [String: Any] ?? [:]
+        var mailgent = servers["mailgent"] as? [String: Any] ?? [:]
+        mailgent["url"] = loopbackURL
+        var headers = mailgent["headers"] as? [String: Any] ?? [:]
+        headers["Authorization"] = "Bearer \(credential)"
+        mailgent["headers"] = headers
+        servers["mailgent"] = mailgent
+        root["mcpServers"] = servers
+        guard
+            let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        else {
+            return
+        }
+        do {
+            try out.write(to: url, options: .atomic)
+            MailGentLog.trace("synced Cursor mcp.json Bearer")
+        } catch {
+            MailGentLog.trace("Cursor mcp.json sync failed: \(error)")
+        }
+    }
+
+    private static var pairingFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MailGent", isDirectory: true)
+            .appendingPathComponent("pairing.json")
     }
 
     private static func makeCredential() -> String {
@@ -131,4 +212,11 @@ final class AgentBridge {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
+}
+
+private struct PersistedPairing: Codable {
+    let agentID: String
+    let name: String
+    let trustClass: String
+    let credential: String
 }

@@ -5,6 +5,12 @@ public struct PairedAgent: Equatable, Sendable {
     public let id: String
     public let name: String
     public let trustClass: AgentTrustClass
+
+    public init(id: String, name: String, trustClass: AgentTrustClass) {
+        self.id = id
+        self.name = name
+        self.trustClass = trustClass
+    }
 }
 
 public enum AgentTrustClass: String, Equatable, Sendable {
@@ -74,6 +80,15 @@ public final class Pairing: @unchecked Sendable {
         audit?.append(
             AuditEntry(kind: .revoke, agentID: agentID, agentName: name)
         )
+    }
+
+    /// Rehydrate a previously paired agent without emitting a new pair audit event.
+    public func restore(agent: PairedAgent, credential: String) {
+        let record = Record(agent: agent, credentialHash: Self.hash(credential))
+        lock.lock()
+        records.removeAll { $0.agent.id == agent.id }
+        records.append(record)
+        lock.unlock()
     }
 
     private static func hash(_ credential: String) -> Data {

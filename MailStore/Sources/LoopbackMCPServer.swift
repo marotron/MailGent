@@ -137,13 +137,13 @@ public struct LoopbackMCPServer {
             let query = arguments["query"] as? String ?? ""
             let page = try gateway.search(query, credential: credential)
             return try jsonString([
-                "subjects": page.items.map(\.subject),
+                "items": page.items.map(Self.messageSummary),
                 "count": page.items.count
             ])
         case "list":
             let page = try gateway.list(credential: credential)
             return try jsonString([
-                "subjects": page.items.map(\.subject),
+                "items": page.items.map(Self.messageSummary),
                 "count": page.items.count
             ])
         case "listPlacements":
@@ -164,14 +164,39 @@ public struct LoopbackMCPServer {
                 placement: placement,
                 id: messageID
             )
+            let bodyText: String
+            switch message.body {
+            case .text(let text):
+                bodyText = text
+            case .notAvailable:
+                bodyText = ""
+            }
             return try jsonString([
                 "id": message.id,
+                "accountID": message.accountID,
+                "placement": message.placement,
                 "subject": message.subject,
-                "from": message.from
+                "from": message.from,
+                "to": message.to,
+                "date": message.date,
+                "isPartial": message.isPartial,
+                "body": bodyText
             ])
         default:
             throw CallError.unknownTool
         }
+    }
+
+    private static func messageSummary(_ message: IndexedMessage) -> [String: Any] {
+        [
+            "accountID": message.accountID,
+            "placement": message.placement,
+            "id": message.id,
+            "subject": message.subject,
+            "from": message.from,
+            "date": message.date,
+            "isPartial": message.isPartial
+        ]
     }
 
     private func rpcOK(id: Any, result: [String: Any]) throws -> LoopbackMCPResponse {

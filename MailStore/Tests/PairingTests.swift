@@ -57,4 +57,20 @@ struct PairingTests {
             try pairing.authenticate(credential: "secret-token")
         }
     }
+
+    @Test func restoreRehydratesMatchingCredential() throws {
+        let pairing = Pairing()
+        let agent = PairedAgent(
+            id: "agent-1",
+            name: "Cursor",
+            trustClass: .machineLocal
+        )
+        pairing.restore(agent: agent, credential: "persisted-token")
+
+        let authenticated = try pairing.authenticate(credential: "persisted-token")
+        #expect(authenticated.id == "agent-1")
+        #expect(throws: PairingError.unauthorized) {
+            try pairing.authenticate(credential: "other-token")
+        }
+    }
 }

@@ -26,6 +26,7 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - [MailStore Reader TDD](issues/02-mail-store-reader.md) — fixture `V*` catalog; `.emlx` headers/body; partial + draft `0x10`; attachment metadata + on-demand bytes
 - [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) — SQLite FTS ingest; identity skip; search/get/list pages; partial marked; empty body `not_available`
 - [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) — control-first; menu-bar popover launches detached window; proto on `proto/companion-read-ui`
+- [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) — loopback MCP `127.0.0.1:8787`; Pairing/GrantGate/AuditLog; Cursor list/search/get E2E
 
 ## Not yet specified
 
@@ -77,6 +78,6 @@ flowchart TD
 | 02 | [MailStore Reader TDD](issues/02-mail-store-reader.md) | task | resolved |
 | 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | resolved |
 | 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | resolved |
-| 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | open |
+| 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | resolved |
 | 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | open |
 | 07 | [Merge Local-Read Train](issues/07-merge-train.md) | task | open |
