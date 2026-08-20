@@ -553,10 +553,10 @@ extension MailStore {
             body = String(body.prefix(maxIndexedBodyBytes))
         }
         return (
-            from: headers["from"] ?? "",
-            to: headers["to"] ?? "",
+            from: decodeRFC2047(headers["from"] ?? ""),
+            to: decodeRFC2047(headers["to"] ?? ""),
             date: headers["date"] ?? "",
-            subject: headers["subject"] ?? "",
+            subject: decodeRFC2047(headers["subject"] ?? ""),
             body: body
         )
     }
@@ -659,4 +659,80 @@ extension MailStore {
         }
         return files
     }
+}
+
+/// RFC 2047 encoded-word: `=?charset?Q?text?=` or `=?charset?B?text?=`.
+private func decodeRFC2047(_ input: String) -> String {
+    let pattern = #"=\?([^?]+)\?([BbQq])\?([^?]*)\?="#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return input }
+
+    let ns = input as NSString
+    let matches = regex.matches(in: input, range: NSRange(location: 0, length: ns.length))
+    guard !matches.isEmpty else { return input }
+
+    var result = ""
+    var lastEnd = 0
+    for match in matches {
+        let fullRange = match.range
+        let gap = ns.substring(with: NSRange(location: lastEnd, length: fullRange.location - lastEnd))
+        // RFC 2047 §6.2: linear whitespace between adjacent encoded-words is discarded.
+        if !(lastEnd > 0 && gap.allSatisfy(\.isWhitespace)) {
+            result += gap
+        }
+
+        let charset = ns.substring(with: match.range(at: 1))
+        let encoding = ns.substring(with: match.range(at: 2)).uppercased()
+        let text = ns.substring(with: match.range(at: 3))
+
+        if encoding == "Q" {
+            let qText = text.replacingOccurrences(of: "_", with: " ")
+            result += decodeRFC2047Bytes(decodeQuotedPrintableBytes(qText), charset: charset)
+        } else {
+            result += decodeRFC2047Bytes(Data(base64Encoded: text) ?? Data(), charset: charset)
+        }
+        lastEnd = fullRange.location + fullRange.length
+    }
+    result += ns.substring(from: lastEnd)
+    return result.trimmingCharacters(in: .whitespaces)
+}
+
+private func decodeQuotedPrintableBytes(_ input: String) -> Data {
+    var output = Data()
+    let bytes = Array(input.utf8)
+    var i = 0
+    while i < bytes.count {
+        let b = bytes[i]
+        if b == UInt8(ascii: "="),
+           i + 2 < bytes.count,
+           let hi = hexNibble(bytes[i + 1]),
+           let lo = hexNibble(bytes[i + 2])
+        {
+            output.append(UInt8(hi * 16 + lo))
+            i += 3
+            continue
+        }
+        output.append(b)
+        i += 1
+    }
+    return output
+}
+
+private func hexNibble(_ byte: UInt8) -> Int? {
+    switch byte {
+    case UInt8(ascii: "0")...UInt8(ascii: "9"): return Int(byte - UInt8(ascii: "0"))
+    case UInt8(ascii: "A")...UInt8(ascii: "F"): return Int(byte - UInt8(ascii: "A") + 10)
+    case UInt8(ascii: "a")...UInt8(ascii: "f"): return Int(byte - UInt8(ascii: "a") + 10)
+    default: return nil
+    }
+}
+
+private func decodeRFC2047Bytes(_ data: Data, charset: String) -> String {
+    let encoding: String.Encoding
+    switch charset.lowercased() {
+    case "utf-8", "utf8": encoding = .utf8
+    case "iso-8859-1", "latin1": encoding = .isoLatin1
+    case "us-ascii", "ascii": encoding = .ascii
+    default: encoding = .utf8
+    }
+    return String(data: data, encoding: encoding) ?? String(decoding: data, as: UTF8.self)
 }

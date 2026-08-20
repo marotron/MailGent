@@ -85,6 +85,125 @@ struct MailStoreTests {
         #expect(message.isDraft == false)
     }
 
+    @Test func decodesRFC2047EncodedSubjectAndFrom() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: "stiff =?UTF-8?Q?joints=3F=20-=20Pam=20=26=20Liss?=" <contact@example.com>
+            To: Bob <bob@example.com>
+            Subject: =?UTF-8?Q?=F0=9F=8D=AE=20eat=20this=2E=2E=2E?=
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            body
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: =?UTF-8?Q?Caf=C3=A9_menu?=
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            body
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "3.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: =?UTF-8?Q?=C2=A0=28All=20natural=29=20Do=20THIS=20before=20bed=20to=20era?= =?UTF-8?Q?se=20knee=20pain=20under=20=35=20min?=
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            body
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        let emoji = try store.message(accountID: accountID, mailbox: "INBOX", id: "1")
+        #expect(emoji.subject == "🍮 eat this...")
+        #expect(emoji.from == "\"stiff joints? - Pam & Liss\" <contact@example.com>")
+
+        let cafe = try store.message(accountID: accountID, mailbox: "INBOX", id: "2")
+        #expect(cafe.subject == "Café menu")
+
+        let joined = try store.message(accountID: accountID, mailbox: "INBOX", id: "3")
+        #expect(joined.subject == "(All natural) Do THIS before bed to erase knee pain under 5 min")
+    }
+
+    @Test func decodesQuotedPrintableAndMultipartPlainBody() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: patrick@example.com
+            To: bob@example.com
+            Subject: Sale
+            Date: Sat, 03 Sep 2022 01:31:30 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="a502d7581ce404de"
+
+            --a502d7581ce404de
+            Content-Transfer-Encoding: quoted-printable
+            Content-Type: text/plain; charset=utf-8
+
+            Labor Day=C2=A0Sale is live.
+            Soft break whi=
+            ch continues.
+            --a502d7581ce404de
+            Content-Type: text/html; charset=utf-8
+
+            <p>HTML sale</p>
+            --a502d7581ce404de--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: a@example.com
+            To: b@example.com
+            Subject: Plain QP
+            Date: Sat, 03 Sep 2022 01:31:30 +0000
+            Content-Type: text/plain; charset=utf-8
+            Content-Transfer-Encoding: quoted-printable
+
+            Caf=C3=A9 au lait
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        let multi = try store.message(accountID: accountID, mailbox: "INBOX", id: "1")
+        #expect(multi.body == "Labor Day\u{00A0}Sale is live.\nSoft break which continues.")
+        #expect(!multi.body.contains("Content-Transfer-Encoding"))
+        #expect(!multi.body.contains("<p>HTML"))
+        #expect(multi.rawBody.contains("Content-Transfer-Encoding: quoted-printable"))
+
+        let plain = try store.message(accountID: accountID, mailbox: "INBOX", id: "2")
+        #expect(plain.body == "Café au lait")
+        #expect(plain.rawBody.contains("Caf=C3=A9 au lait"))
+    }
+
     @Test func prefersPartialEmlxAndMarksIncomplete() throws {
         let root = try FixtureTree()
         defer { root.remove() }

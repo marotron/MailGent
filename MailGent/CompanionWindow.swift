@@ -13,6 +13,19 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var access: NSWindow?
 
     func showCompanion(session: CompanionSession) {
+        // MenuBarExtra dismisses after the click; present on the next turn so it stays key.
+        DispatchQueue.main.async {
+            self.presentCompanion(session: session)
+        }
+    }
+
+    func showAccess(session: MailAccessSession) {
+        DispatchQueue.main.async {
+            self.presentAccess(session: session)
+        }
+    }
+
+    private func presentCompanion(session: CompanionSession) {
         if companion == nil {
             companion = makeWindow(
                 title: "MailGent",
@@ -24,7 +37,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         bringForward(companion)
     }
 
-    func showAccess(session: MailAccessSession) {
+    private func presentAccess(session: MailAccessSession) {
         if access == nil {
             access = makeWindow(
                 title: "Grant access",
@@ -60,6 +73,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         window.contentView = NSHostingView(rootView: root)
         window.minSize = minSize
         window.isReleasedWhenClosed = false
+        window.hidesOnDeactivate = false
         window.delegate = self
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()
@@ -76,7 +90,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
+        // MenuBarExtra teardown can still race the first present; poke again next turn.
         DispatchQueue.main.async {
+            NSApp.setActivationPolicy(.regular)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -319,8 +335,13 @@ private struct CompanionSearchPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                Button("Control center") {
+                Button {
                     session.openHome()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Control center")
+                    }
                 }
                 Text("Search mail")
                     .font(.title2.bold())
@@ -388,8 +409,13 @@ private struct CompanionReadPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Button("Search mail") {
+                Button {
                     session.page = .search
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Search mail")
+                    }
                 }
                 if let detail = session.detail {
                     Text(detail.subject.isEmpty ? "(no subject)" : detail.subject)
