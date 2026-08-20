@@ -1,7 +1,7 @@
 # Companion Read UI Prototype Then Shell
 
 Type: prototype
-Status: open
+Status: resolved
 Blocked by: 03
 
 ## Question
@@ -31,3 +31,32 @@ YAGNI: no draft UI, no approval queue, no policy authoring, no pairing wizard ye
 - [03 · MailboxIndex and ReadAPI TDD](03-mailbox-index-read-api.md)
 - Product ticket 09: `.scratch/mailgent-product-definition/issues/09-prototype-mailbox-navigation.md`
 - Product ticket 12: `.scratch/mailgent-product-definition/issues/12-define-human-mail-baseline.md`
+
+## Answer
+
+**Keep A Control-first.** Menu-bar popover is the launcher; layouts live in a detached `Window`. Prototype chrome stays on `proto/companion-read-ui` (`b7252e6`); first-ship shell is `feat/04-companion-shell`.
+
+### HITL
+
+- Layout: **A — Control-first** (health + placements land; search is a separate destination). Not B Search-first, not C Review desk.
+- Shell: compact `MenuBarExtra` popover (status + Open Companion) launches `Window(id: "companion")`. Not popover-as-primary.
+
+### Prototype (`proto/companion-read-ui`)
+
+`MailGent/Prototype/PrototypeReadRoot` + floating A/B/C switcher over fixture `ReadAPI` data:
+
+- A Control-first — dashboard, then NavigationStack search/read
+- B Search-first — hero search + NavigationSplitView detail
+- C Review desk — HSplitView queue + inspector
+
+### Shell (`feat/04-companion-shell`)
+
+- `LSUIElement = YES`; no `WindowGroup`; `MenuBarExtra` + `Settings` + detached `Window`
+- Control center: FDA health, last ingest, placement list, Search mail
+- Fixture ingest by default; live `~/Library/Mail` toggle after FDA
+- Partial marked; empty body `not_available`; Open in Apple Mail fails closed (Message-ID not indexed)
+- `make test` green; `make run` launches the menu-bar app
+
+## Comments
+
+- HITL pick recorded after running the proto switcher.

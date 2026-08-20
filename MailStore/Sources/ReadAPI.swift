@@ -7,12 +7,48 @@ public struct ReadAPI {
         self.index = index
     }
 
-    public func list(limit: Int = 25, cursor: String? = nil) throws -> Page<IndexedMessage> {
-        try page(index.allMessages(), limit: limit, cursor: cursor)
+    public func list(
+        limit: Int = 25,
+        cursor: String? = nil,
+        accountID: String? = nil,
+        placement: String? = nil
+    ) throws -> Page<IndexedMessage> {
+        let offset = cursor.flatMap(Int.init) ?? 0
+        let clamped = min(max(limit, 1), 100)
+        let fetched = try index.listMessages(
+            limit: clamped + 1,
+            offset: max(offset, 0),
+            accountID: accountID,
+            placement: placement
+        )
+        let hasMore = fetched.count > clamped
+        return Page(
+            items: Array(fetched.prefix(clamped)),
+            nextCursor: hasMore ? String(max(offset, 0) + clamped) : nil
+        )
     }
 
-    public func search(_ query: String, limit: Int = 25, cursor: String? = nil) throws -> Page<IndexedMessage> {
-        try page(index.search(query), limit: limit, cursor: cursor)
+    public func search(
+        _ query: String,
+        limit: Int = 25,
+        cursor: String? = nil,
+        accountID: String? = nil,
+        placement: String? = nil
+    ) throws -> Page<IndexedMessage> {
+        let offset = cursor.flatMap(Int.init) ?? 0
+        let clamped = min(max(limit, 1), 100)
+        let fetched = try index.searchMessages(
+            query,
+            limit: clamped + 1,
+            offset: max(offset, 0),
+            accountID: accountID,
+            placement: placement
+        )
+        let hasMore = fetched.count > clamped
+        return Page(
+            items: Array(fetched.prefix(clamped)),
+            nextCursor: hasMore ? String(max(offset, 0) + clamped) : nil
+        )
     }
 
     public func get(accountID: String, placement: String, id: String) throws -> ReadMessage {
@@ -20,15 +56,15 @@ public struct ReadAPI {
     }
 
     public func listPlacements() throws -> [Placement] {
-        var seen = Set<Placement>()
-        var placements: [Placement] = []
-        for message in try index.allMessages() {
-            let placement = Placement(accountID: message.accountID, id: message.placement)
-            if seen.insert(placement).inserted {
-                placements.append(placement)
-            }
-        }
-        return placements
+        try index.distinctPlacements().map { Placement(accountID: $0.accountID, id: $0.placement) }
+    }
+
+    public func totalIndexed() throws -> Int {
+        try index.messageCount()
+    }
+
+    public func placementIndexedCounts() throws -> [String: Int] {
+        try index.placementIndexedCounts()
     }
 }
 
@@ -74,12 +110,4 @@ public struct ReadMessage: Equatable, Sendable {
 public struct Page<T: Equatable>: Equatable {
     public let items: [T]
     public let nextCursor: String?
-}
-
-private func page<T>(_ items: [T], limit: Int, cursor: String?) -> Page<T> {
-    let clamped = min(max(limit, 1), 100)
-    let offset = cursor.flatMap(Int.init) ?? 0
-    let slice = Array(items.dropFirst(max(offset, 0)).prefix(clamped))
-    let next = max(offset, 0) + slice.count
-    return Page(items: slice, nextCursor: next < items.count ? String(next) : nil)
 }

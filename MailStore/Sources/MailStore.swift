@@ -19,24 +19,32 @@ public struct MailStore: Sendable {
     public func mailboxes(in accountID: String) throws -> [Mailbox] {
         let account = try accountURL(id: accountID)
         return try Self.mboxPackages(in: account)
-            .map { Mailbox(id: Self.mailboxStem(from: $0.lastPathComponent)) }
+            .map { Mailbox(id: Self.mailboxID(for: $0, in: account)) }
             .sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
     }
 
     public func messageIDs(in accountID: String, mailbox mailboxID: String) throws -> [String] {
+        try emlxEntries(in: accountID, mailbox: mailboxID).map(\.id)
+    }
+
+    public func messageCount(in accountID: String, mailbox mailboxID: String) throws -> Int {
+        try emlxEntries(in: accountID, mailbox: mailboxID).count
+    }
+
+    public func emlxEntries(in accountID: String, mailbox mailboxID: String) throws -> [EmlxEntry] {
         let directory = try mailboxURL(accountID: accountID, mailboxID: mailboxID)
-        let files = try Self.emlxFiles(under: directory)
-        var ids = Set<String>()
-        for file in files {
-            ids.insert(Self.messageID(from: file.lastPathComponent))
-        }
-        return ids.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        return try Self.emlxEntries(under: directory)
     }
 
     public func message(accountID: String, mailbox mailboxID: String, id: String) throws -> MailMessage {
         let url = try emlxURL(accountID: accountID, mailboxID: mailboxID, id: id)
+        return try message(at: url)
+    }
+
+    public func message(at url: URL) throws -> MailMessage {
         let parsedEmlx = try Self.parseEmlx(url)
         let parsed = try Self.parseRFC822(parsedEmlx.data)
+        let id = Self.messageID(from: url.lastPathComponent)
         return MailMessage(
             id: id,
             from: parsed.from,
@@ -67,6 +75,16 @@ public struct MailStore: Sendable {
         } catch {
             throw MailStoreError.unreadable
         }
+    }
+}
+
+public struct EmlxEntry: Equatable, Sendable {
+    public let id: String
+    public let url: URL
+
+    public init(id: String, url: URL) {
+        self.id = id
+        self.url = url
     }
 }
 
@@ -119,6 +137,11 @@ public enum MailStoreError: Error, Equatable {
     case messageNotFound
     case malformed
     case attachmentNotFound
+}
+
+private extension MailStore {
+    /// Cap indexed body size so one HTML megamail cannot blow the RSS during ingest.
+    static let maxIndexedBodyBytes = 32_768
 }
 
 extension MailStore {
@@ -196,25 +219,75 @@ extension MailStore {
     }
 
     static func hasMailboxContent(_ accountURL: URL) -> Bool {
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: accountURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        for child in children {
+            if isMailboxPackage(child) {
+                return true
+            }
+        }
+
         guard let enumerator = FileManager.default.enumerator(
             at: accountURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return false }
 
-        var depth = 0
         for case let item as URL in enumerator {
-            depth += 1
-            if depth > 200 { break }
-            let name = item.lastPathComponent.lowercased()
-            if name.hasSuffix(".mbox") || name.hasSuffix(".emlx") || name.hasSuffix(".partial.emlx") {
+            if isMailboxPackage(item) {
                 return true
             }
-            if name == "messages" || name == "table_of_contents" {
+            if isEmlxFile(item) {
                 return true
+            }
+            if item.lastPathComponent == "table_of_contents" {
+                return true
+            }
+            if item.lastPathComponent.lowercased() == "data" {
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                   isDirectory.boolValue
+                {
+                    enumerator.skipDescendants()
+                }
             }
         }
         return false
+    }
+
+    static func isMailboxPackage(_ url: URL) -> Bool {
+        switch url.pathExtension.lowercased() {
+        case "mbox", "imapmbox": true
+        default: false
+        }
+    }
+
+    static func messagesScanRoots(in mbox: URL) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: mbox,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        let mboxPath = mbox.standardizedFileURL.path
+        var roots: [URL] = []
+        for case let item as URL in enumerator {
+            if isMailboxPackage(item), item.standardizedFileURL.path != mboxPath {
+                enumerator.skipDescendants()
+                continue
+            }
+            guard item.lastPathComponent == "Messages" else { continue }
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+               isDirectory.boolValue
+            {
+                roots.append(item)
+            }
+        }
+        return roots
     }
 
     func accountURL(id: String) throws -> URL {
@@ -231,50 +304,154 @@ extension MailStore {
 
     func mailboxURL(accountID: String, mailboxID: String) throws -> URL {
         let account = try accountURL(id: accountID)
-        let url = account.appendingPathComponent("\(mailboxID).mbox", isDirectory: true)
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              isDirectory.boolValue
-        else {
-            throw MailStoreError.mailboxNotFound
+        var url = account
+        for part in mailboxID.split(separator: "/").map(String.init) {
+            url = try Self.resolveMailboxPackage(named: part, under: url)
         }
         return url
     }
 
-    static func mboxPackages(in accountURL: URL) throws -> [URL] {
-        let children: [URL]
-        do {
-            children = try FileManager.default.contentsOfDirectory(
-                at: accountURL,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
-        } catch {
-            throw MailStoreError.unreadable
-        }
-        return children.filter { url in
+    static func resolveMailboxPackage(named stem: String, under parent: URL) throws -> URL {
+        for ext in ["mbox", "imapmbox"] {
+            let candidate = parent.appendingPathComponent("\(stem).\(ext)", isDirectory: true)
             var isDirectory: ObjCBool = false
-            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-                && isDirectory.boolValue
-                && url.pathExtension.lowercased() == "mbox"
+            if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
+               isDirectory.boolValue
+            {
+                return candidate
+            }
         }
+        throw MailStoreError.mailboxNotFound
     }
 
-    static func emlxFiles(under root: URL) throws -> [URL] {
+    static func mailboxID(for package: URL, in accountURL: URL) -> String {
+        let accountParts = accountURL.standardizedFileURL.pathComponents
+        let packageParts = package.standardizedFileURL.pathComponents
+        guard packageParts.starts(with: accountParts) else {
+            return mailboxStem(from: package.lastPathComponent)
+        }
+        return packageParts
+            .dropFirst(accountParts.count)
+            .map { mailboxStem(from: $0) }
+            .joined(separator: "/")
+    }
+
+    static func mboxPackages(in accountURL: URL) throws -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            at: accountURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
             throw MailStoreError.unreadable
         }
-        var files: [URL] = []
+        var packages: [URL] = []
         for case let item as URL in enumerator {
-            if isEmlxFile(item) {
-                files.append(item)
+            guard isMailboxPackage(item) else { continue }
+            if hasDirectMessageContent(item) {
+                packages.append(item)
             }
         }
+        return packages
+    }
+
+    static func hasDirectMessageContent(_ mbox: URL) -> Bool {
+        if !messagesScanRoots(in: mbox).isEmpty {
+            return true
+        }
+        if FileManager.default.fileExists(atPath: mbox.appendingPathComponent("table_of_contents").path) {
+            return true
+        }
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: mbox,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return children.contains { isEmlxFile($0) }
+    }
+
+    static func emlxFiles(under mbox: URL) throws -> [URL] {
+        var files: [URL] = []
+        try collectEmlxURLs(into: &files, under: mbox)
         return files
+    }
+
+    static func collectEmlxURLs(into files: inout [URL], under mbox: URL) throws {
+        let roots = messagesScanRoots(in: mbox)
+        let scanRoots = roots.isEmpty ? [mbox] : roots
+        for scanRoot in scanRoots {
+            guard let enumerator = FileManager.default.enumerator(
+                at: scanRoot,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                if roots.isEmpty {
+                    throw MailStoreError.unreadable
+                }
+                continue
+            }
+            for case let item as URL in enumerator {
+                if isMailboxPackage(item) {
+                    enumerator.skipDescendants()
+                    continue
+                }
+                if isEmlxFile(item) {
+                    files.append(item)
+                }
+            }
+        }
+    }
+
+    static func collectEmlxEntries(into byID: inout [String: URL], under mbox: URL) throws {
+        let roots = messagesScanRoots(in: mbox)
+        let scanRoots = roots.isEmpty ? [mbox] : roots
+        for scanRoot in scanRoots {
+            guard let enumerator = FileManager.default.enumerator(
+                at: scanRoot,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                if roots.isEmpty {
+                    throw MailStoreError.unreadable
+                }
+                continue
+            }
+            for case let item as URL in enumerator {
+                if isMailboxPackage(item) {
+                    enumerator.skipDescendants()
+                    continue
+                }
+                guard isEmlxFile(item) else { continue }
+                let id = messageID(from: item.lastPathComponent)
+                if item.lastPathComponent.lowercased().hasSuffix(".partial.emlx") {
+                    byID[id] = item
+                } else if byID[id] == nil {
+                    byID[id] = item
+                }
+            }
+        }
+    }
+
+    static func forEachEmlxEntry(under mbox: URL, _ body: (EmlxEntry) throws -> Void) throws {
+        var byID: [String: URL] = [:]
+        try collectEmlxEntries(into: &byID, under: mbox)
+        for id in byID.keys.sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }) {
+            guard let url = byID[id] else { continue }
+            try body(EmlxEntry(id: id, url: url))
+        }
+    }
+
+    static func emlxEntries(under mbox: URL) throws -> [EmlxEntry] {
+        var entries: [EmlxEntry] = []
+        try forEachEmlxEntry(under: mbox) { entry in
+            entries.append(entry)
+        }
+        return entries
+    }
+
+    static func countEmlxFiles(under mbox: URL) throws -> Int {
+        var byID: [String: URL] = [:]
+        try collectEmlxEntries(into: &byID, under: mbox)
+        return byID.count
     }
 
     static func isEmlxFile(_ url: URL) -> Bool {
@@ -295,10 +472,12 @@ extension MailStore {
 
     static func mailboxStem(from lastPathComponent: String) -> String {
         let name = lastPathComponent as NSString
-        if name.pathExtension.lowercased() == "mbox" {
+        switch name.pathExtension.lowercased() {
+        case "mbox", "imapmbox":
             return name.deletingPathExtension
+        default:
+            return lastPathComponent
         }
-        return lastPathComponent
     }
 
     func emlxURL(accountID: String, mailboxID: String, id: String) throws -> URL {
@@ -365,15 +544,20 @@ extension MailStore {
 
     static func parseRFC822(_ data: Data) throws -> (from: String, to: String, date: String, subject: String, body: String) {
         guard !data.isEmpty else { throw MailStoreError.malformed }
-        let text = String(decoding: data, as: UTF8.self)
+        let scan = data.prefix(min(data.count, 256_000))
+        let text = String(decoding: scan, as: UTF8.self)
         let (headerBlock, bodyBlock) = splitHeadersAndBody(text)
         let headers = parseHeaders(headerBlock)
+        var body = bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.utf8.count > maxIndexedBodyBytes {
+            body = String(body.prefix(maxIndexedBodyBytes))
+        }
         return (
             from: headers["from"] ?? "",
             to: headers["to"] ?? "",
             date: headers["date"] ?? "",
             subject: headers["subject"] ?? "",
-            body: bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+            body: body
         )
     }
 

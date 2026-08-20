@@ -36,6 +36,16 @@ enum MailLibraryProbe {
             return false
         }
     }
+
+    static func resolvedMailRoot() -> URL? {
+        if canList(defaultMailDirectory) {
+            return defaultMailDirectory
+        }
+        if let bookmark = MailFolderBookmark.resolvedURL(), canList(bookmark) {
+            return bookmark
+        }
+        return nil
+    }
 }
 
 enum MailFolderBookmark {

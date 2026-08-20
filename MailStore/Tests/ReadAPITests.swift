@@ -276,4 +276,56 @@ struct ReadAPITests {
         #expect(message.body == .notAvailable)
         #expect(message.isPartial == false)
     }
+
+    @Test func listScopesToAccountAndPlacementBeforePaging() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let first = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let second = "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF"
+        for i in 1...3 {
+            try root.writeEmlx(
+                named: "\(i).emlx",
+                rfc822: """
+                From: a@example.com
+                To: b@example.com
+                Subject: First \(i)
+                Date: Mon, 1 Jan 2024 00:00:00 +0000
+                Content-Type: text/plain
+
+                body \(i)
+                """,
+                account: first,
+                mailbox: "INBOX.mbox"
+            )
+        }
+        try root.writeEmlx(
+            named: "9.emlx",
+            rfc822: """
+            From: a@example.com
+            To: b@example.com
+            Subject: Second only
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            yahoo body
+            """,
+            account: second,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let api = ReadAPI(index: index)
+
+        // Global first page would be dominated by `first` if we filtered after LIMIT.
+        let page = try api.list(limit: 2, accountID: second, placement: "INBOX")
+        #expect(page.items.map(\.id) == ["9"])
+        #expect(page.items.map(\.subject) == ["Second only"])
+        #expect(page.nextCursor == nil)
+    }
 }

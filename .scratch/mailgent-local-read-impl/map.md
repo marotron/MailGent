@@ -25,12 +25,11 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) — SwiftUI app + MailStore; FDA fail-closed; six seams confirmed; `make test`
 - [MailStore Reader TDD](issues/02-mail-store-reader.md) — fixture `V*` catalog; `.emlx` headers/body; partial + draft `0x10`; attachment metadata + on-demand bytes
 - [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) — SQLite FTS ingest; identity skip; search/get/list pages; partial marked; empty body `not_available`
+- [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) — control-first; menu-bar popover launches detached window; proto on `proto/companion-read-ui`
 
 ## Not yet specified
 
-- Companion read IA among three layouts (ticket 04).
 - Copy-paste vs MailGent draft ledger (ticket 06; after read+MCP).
-- Menu bar mode: replace `WindowGroup` with `MenuBarExtra` + `Settings` scene so MailGent lives as a status-bar icon with no Dock presence (`LSUIElement = YES` in Info.plist). Companion window opens from the menu bar popover or as a detached panel. Decide at ticket 04 (companion UI) whether the popover is the primary shell or launches a separate window.
 
 ## Branches
 
@@ -40,6 +39,8 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 | `feat/01-app-skeleton` | `train/local-read` | 01 | `train/local-read` |
 | `feat/02-mail-store` | `train/local-read` | 02 | `train/local-read` |
 | `feat/03-mailbox-index` | `train/local-read` | 03 | `train/local-read` |
+| `proto/companion-read-ui` | `feat/03-mailbox-index` | 04 | throwaway (pointer on issue; not `main`) |
+| `feat/04-companion-shell` | `feat/03-mailbox-index` | 04 | `train/local-read` |
 
 ## Out of scope
 
@@ -75,7 +76,7 @@ flowchart TD
 | 01 | [App Skeleton, FDA Onboarding, Confirm TDD Seams](issues/01-app-skeleton-fda-seams.md) | task | resolved |
 | 02 | [MailStore Reader TDD](issues/02-mail-store-reader.md) | task | resolved |
 | 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | resolved |
-| 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | open |
+| 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | resolved |
 | 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | open |
 | 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | open |
 | 07 | [Merge Local-Read Train](issues/07-merge-train.md) | task | open |

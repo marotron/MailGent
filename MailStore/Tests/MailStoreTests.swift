@@ -48,6 +48,9 @@ struct MailStoreTests {
 
         #expect(try store.messageIDs(in: accountID, mailbox: "INBOX") == ["1"])
         #expect(try store.messageIDs(in: accountID, mailbox: "Sent Messages") == ["2"])
+        #expect(try store.messageCount(in: accountID, mailbox: "INBOX") == 1)
+        #expect(try store.messageCount(in: accountID, mailbox: "Sent Messages") == 1)
+        #expect(try store.emlxEntries(in: accountID, mailbox: "INBOX").map(\.id) == ["1"])
     }
 
     @Test func parsesFullEmlxHeadersAndBody() throws {
@@ -204,5 +207,88 @@ struct MailStoreTests {
             filename: "docs.zip"
         )
         #expect(String(data: bytes, encoding: .utf8) == "ZIP-PAYLOAD!!")
+    }
+
+    @Test func listsAccountWhenDataFolderHasManyFiles() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let account = root.version("V10").appendingPathComponent(accountID, isDirectory: true)
+        let data = account.appendingPathComponent("Data", isDirectory: true)
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        for index in 0..<250 {
+            try Data("x".utf8).write(to: data.appendingPathComponent("file-\(index)"))
+        }
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: "From: a@example.com\nTo: b@example.com\nSubject: Inbox\n\nHi\n",
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        #expect(try store.accounts().map(\.id) == [accountID])
+        #expect(try store.messageIDs(in: accountID, mailbox: "INBOX") == ["1"])
+    }
+
+    @Test func listsNestedMboxPackagesAsPlacements() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: "From: a@example.com\nTo: b@example.com\nSubject: All Mail\n\nHi\n",
+            account: accountID,
+            mailbox: "[Gmail].mbox/All Mail.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        #expect(try store.mailboxes(in: accountID).map(\.id) == ["[Gmail]/All Mail"])
+        #expect(try store.messageIDs(in: accountID, mailbox: "[Gmail]/All Mail") == ["1"])
+        #expect(try store.message(accountID: accountID, mailbox: "[Gmail]/All Mail", id: "1").subject == "All Mail")
+    }
+
+    @Test func listsV10DataMessagesLayout() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlxV10(
+            named: "1.emlx",
+            rfc822: "From: a@example.com\nTo: b@example.com\nSubject: V10 inbox\n\nHi\n",
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        #expect(try store.mailboxes(in: accountID).map(\.id) == ["INBOX"])
+        #expect(try store.messageIDs(in: accountID, mailbox: "INBOX") == ["1"])
+        #expect(try store.message(accountID: accountID, mailbox: "INBOX", id: "1").subject == "V10 inbox")
+    }
+
+    @Test func listsShardedV10DataMessagesLayout() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlxV10Sharded(
+            named: "1.emlx",
+            rfc822: "From: a@example.com\nTo: b@example.com\nSubject: Sharded\n\nOne\n",
+            shard: "0/9",
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlxV10Sharded(
+            named: "2.emlx",
+            rfc822: "From: a@example.com\nTo: b@example.com\nSubject: Sharded two\n\nTwo\n",
+            shard: "1/4/1",
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        #expect(try store.messageIDs(in: accountID, mailbox: "INBOX") == ["1", "2"])
     }
 }

@@ -11,20 +11,39 @@
 		0FE82B29B41F840FC45E43C7 /* MailStore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		13771BED0D84BBCA0EA39A67 /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 		1573478E39DB506C19875AE8 /* MailLibraryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815D87541071517935ECCA01 /* MailLibraryAccess.swift */; };
+		16039F6CC83DA36012B97DCB /* CompanionFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD769090806F0A641969B4D /* CompanionFixture.swift */; };
 		21629E10E42E380734295197 /* MailStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0494EF0811DFF9341CED4AE3 /* MailStore.swift */; };
 		282D6FFA46C18C58C3878014 /* ReadAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F004EF060971BC18270103 /* ReadAPI.swift */; };
+		2F4FE3368AA28992C7B23BBA /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 		2F5324489BAA27248291B03D /* MailboxIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */; };
+		73ADAE58F64F12D0081594BC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3095DC18600D385E203F8310 /* Assets.xcassets */; };
 		8EE07415CA516522A9387635 /* MailboxIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A130C2141FC978EE3E739149 /* MailboxIndexTests.swift */; };
 		8FCB79BE0D4E3C7B824931C2 /* MailStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A6DFFC17F55A3C09E8F42F /* MailStoreTests.swift */; };
+		A68BB082B9C58CE8CF977A72 /* CompanionWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17049D8016849D2AC6897A7 /* CompanionWindow.swift */; };
+		AD7984854C2D208FE3FD31EB /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FD2BE993542F41B69F61935A /* AppKit.framework */; };
 		AEF71C91C5910871BC3F8F5B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D46E33C5C81175285853B22F /* RootView.swift */; };
 		BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */; };
 		C0CBA840E379580044926FD5 /* MailGentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */; };
+		C9A6961CFF589066E3C6AAB5 /* MailGentLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C75F2A82AE11253A13A02AA7 /* MailGentLog.swift */; };
+		D18A6F9F67CC4F3430E74D23 /* CompanionBits.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FA154D45D5CE917C4FFF9B /* CompanionBits.swift */; };
+		D86CC75F0A31E72D4B46A3E3 /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 648AC073DE4FD69431D88DED /* MenuBarStatus.swift */; };
+		DA5906F5786FBAF94D685572 /* MailAccountIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D934E3CB26D68565D5D5BC /* MailAccountIdentity.swift */; };
+		DD1F80AE5991797E4FAB7A9D /* MailIndexWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1178A79BA573EF9F021FCAA2 /* MailIndexWorker.swift */; };
+		DE79955A8BF5D44603961455 /* CompanionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C26E596BC3082684F009221C /* CompanionSession.swift */; };
 		E23BD62991A7F29E5F665642 /* MailLibraryAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */; };
 		E68C204CCBE51F19C7846D13 /* FixtureTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */; };
+		F6D6220F9DBF28497533287D /* AccountIdentityPrototype.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C67DBE07135F0EF7C2CD87B /* AccountIdentityPrototype.swift */; };
 		FA7235AA34AF51978124BDCB /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		45C2A0BB940C1F260148FFC6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C44C0CEA5E9E09D381DF4BB6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0435D1E5DE65171075DE0221;
+			remoteInfo = MailStore;
+		};
 		6701E9E546ACE52920629B97 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = C44C0CEA5E9E09D381DF4BB6 /* Project object */;
@@ -75,21 +94,33 @@
 
 /* Begin PBXFileReference section */
 		0494EF0811DFF9341CED4AE3 /* MailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStore.swift; sourceTree = "<group>"; };
+		1178A79BA573EF9F021FCAA2 /* MailIndexWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailIndexWorker.swift; sourceTree = "<group>"; };
 		23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailGentApp.swift; sourceTree = "<group>"; };
 		2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixtureTree.swift; sourceTree = "<group>"; };
+		3095DC18600D385E203F8310 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxIndex.swift; sourceTree = "<group>"; };
 		4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccessTests.swift; sourceTree = "<group>"; };
 		4D4FE71A2E9E5ADD630382FC /* MailGent.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MailGent.entitlements; sourceTree = "<group>"; };
+		55FA154D45D5CE917C4FFF9B /* CompanionBits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionBits.swift; sourceTree = "<group>"; };
+		648AC073DE4FD69431D88DED /* MenuBarStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatus.swift; sourceTree = "<group>"; };
 		64A6DFFC17F55A3C09E8F42F /* MailStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStoreTests.swift; sourceTree = "<group>"; };
 		738EC54BEBF392C6FDDFFEA0 /* MailGentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MailGentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		778B721780C50949015C932F /* AccountIdentityPrototype */ = {isa = PBXFileReference; includeInIndex = 0; path = AccountIdentityPrototype; sourceTree = BUILT_PRODUCTS_DIR; };
 		815D87541071517935ECCA01 /* MailLibraryAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccess.swift; sourceTree = "<group>"; };
 		89C27982E6EEAFA280B25066 /* MailStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MailStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		901A863964E54353B610B7C0 /* MailStore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MailStore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		9BD769090806F0A641969B4D /* CompanionFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionFixture.swift; sourceTree = "<group>"; };
+		9C67DBE07135F0EF7C2CD87B /* AccountIdentityPrototype.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountIdentityPrototype.swift; sourceTree = "<group>"; };
 		A130C2141FC978EE3E739149 /* MailboxIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxIndexTests.swift; sourceTree = "<group>"; };
+		B2D934E3CB26D68565D5D5BC /* MailAccountIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailAccountIdentity.swift; sourceTree = "<group>"; };
 		B51E76726BD4BE2DD190F0CA /* MailGent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MailGent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAPITests.swift; sourceTree = "<group>"; };
+		C26E596BC3082684F009221C /* CompanionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSession.swift; sourceTree = "<group>"; };
 		C2F004EF060971BC18270103 /* ReadAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAPI.swift; sourceTree = "<group>"; };
+		C75F2A82AE11253A13A02AA7 /* MailGentLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailGentLog.swift; sourceTree = "<group>"; };
 		D46E33C5C81175285853B22F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F17049D8016849D2AC6897A7 /* CompanionWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionWindow.swift; sourceTree = "<group>"; };
+		FD2BE993542F41B69F61935A /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +129,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				13771BED0D84BBCA0EA39A67 /* MailStore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CB273EEDD130D9A7C1FE1A5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2F4FE3368AA28992C7B23BBA /* MailStore.framework in Frameworks */,
+				AD7984854C2D208FE3FD31EB /* AppKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +155,7 @@
 		22AB82005DF8283886055BF7 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				B2D934E3CB26D68565D5D5BC /* MailAccountIdentity.swift */,
 				324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */,
 				0494EF0811DFF9341CED4AE3 /* MailStore.swift */,
 				C2F004EF060971BC18270103 /* ReadAPI.swift */,
@@ -125,6 +166,7 @@
 		35F140A0C7E3E78AC023523C /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				778B721780C50949015C932F /* AccountIdentityPrototype */,
 				B51E76726BD4BE2DD190F0CA /* MailGent.app */,
 				738EC54BEBF392C6FDDFFEA0 /* MailGentTests.xctest */,
 				901A863964E54353B610B7C0 /* MailStore.framework */,
@@ -139,13 +181,23 @@
 				84AD2FC5AAC7FB479E4FAEC0 /* MailGent */,
 				B08DCDF67BA344FA6439CE8E /* MailGentTests */,
 				686640842B223DA6FFA4D3CC /* MailStore */,
+				92BA2DF401791EE7D9BBD5C3 /* Frameworks */,
 				35F140A0C7E3E78AC023523C /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		420F4B1695E864D2083987E4 /* Prototype */ = {
+			isa = PBXGroup;
+			children = (
+				9C67DBE07135F0EF7C2CD87B /* AccountIdentityPrototype.swift */,
+			);
+			path = Prototype;
 			sourceTree = "<group>";
 		};
 		686640842B223DA6FFA4D3CC /* MailStore */ = {
 			isa = PBXGroup;
 			children = (
+				420F4B1695E864D2083987E4 /* Prototype */,
 				22AB82005DF8283886055BF7 /* Sources */,
 				D14F9D2103ED18598B976EDC /* Tests */,
 			);
@@ -155,12 +207,28 @@
 		84AD2FC5AAC7FB479E4FAEC0 /* MailGent */ = {
 			isa = PBXGroup;
 			children = (
+				3095DC18600D385E203F8310 /* Assets.xcassets */,
+				55FA154D45D5CE917C4FFF9B /* CompanionBits.swift */,
+				9BD769090806F0A641969B4D /* CompanionFixture.swift */,
+				C26E596BC3082684F009221C /* CompanionSession.swift */,
+				F17049D8016849D2AC6897A7 /* CompanionWindow.swift */,
 				4D4FE71A2E9E5ADD630382FC /* MailGent.entitlements */,
 				23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */,
+				C75F2A82AE11253A13A02AA7 /* MailGentLog.swift */,
+				1178A79BA573EF9F021FCAA2 /* MailIndexWorker.swift */,
 				815D87541071517935ECCA01 /* MailLibraryAccess.swift */,
+				648AC073DE4FD69431D88DED /* MenuBarStatus.swift */,
 				D46E33C5C81175285853B22F /* RootView.swift */,
 			);
 			path = MailGent;
+			sourceTree = "<group>";
+		};
+		92BA2DF401791EE7D9BBD5C3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FD2BE993542F41B69F61935A /* AppKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		B08DCDF67BA344FA6439CE8E /* MailGentTests */ = {
@@ -227,8 +295,10 @@
 			buildConfigurationList = 50F98B03DB689270845C993B /* Build configuration list for PBXNativeTarget "MailGent" */;
 			buildPhases = (
 				3D32E6E922294E6C79650839 /* Sources */,
+				BBBD504B0C5989E58983E1AF /* Resources */,
 				ACCEF24BCCBD44505A105412 /* Frameworks */,
 				12D08EE3CC7F04F5C83CF81D /* Embed Frameworks */,
+				5D3203235A689C608FA67424 /* Ensure AppIcon assets */,
 			);
 			buildRules = (
 			);
@@ -241,6 +311,25 @@
 			productName = MailGent;
 			productReference = B51E76726BD4BE2DD190F0CA /* MailGent.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7FFA1134A66F78FC1787C563 /* AccountIdentityPrototype */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E41585C95210BB9CE043812A /* Build configuration list for PBXNativeTarget "AccountIdentityPrototype" */;
+			buildPhases = (
+				03607517D8D694F160C8B459 /* Sources */,
+				1CB273EEDD130D9A7C1FE1A5 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				551334A2059B0624CD780842 /* PBXTargetDependency */,
+			);
+			name = AccountIdentityPrototype;
+			packageProductDependencies = (
+			);
+			productName = AccountIdentityPrototype;
+			productReference = 778B721780C50949015C932F /* AccountIdentityPrototype */;
+			productType = "com.apple.product-type.tool";
 		};
 		91C909D101D90C5C24353619 /* MailGentTests */ = {
 			isa = PBXNativeTarget;
@@ -291,18 +380,67 @@
 				0435D1E5DE65171075DE0221 /* MailStore */,
 				7C292B6B4B10BDF22A120262 /* MailGent */,
 				332BA15019888F7DD9E04FF6 /* MailStoreTests */,
+				7FFA1134A66F78FC1787C563 /* AccountIdentityPrototype */,
 				91C909D101D90C5C24353619 /* MailGentTests */,
 			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		BBBD504B0C5989E58983E1AF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				73ADAE58F64F12D0081594BC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		5D3203235A689C608FA67424 /* Ensure AppIcon assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Ensure AppIcon assets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nRES=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/Resources\"\nmkdir -p \"$RES\"\ncp -f \"${SRCROOT}/MailGent/Resources/AppIcon.icns\" \"$RES/AppIcon.icns\"\nrm -rf \"$RES/AppIcon.icon\"\ncp -R \"${SRCROOT}/MailGent/Resources/AppIcon.icon\" \"$RES/AppIcon.icon\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		03607517D8D694F160C8B459 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6D6220F9DBF28497533287D /* AccountIdentityPrototype.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3D32E6E922294E6C79650839 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D18A6F9F67CC4F3430E74D23 /* CompanionBits.swift in Sources */,
+				16039F6CC83DA36012B97DCB /* CompanionFixture.swift in Sources */,
+				DE79955A8BF5D44603961455 /* CompanionSession.swift in Sources */,
+				A68BB082B9C58CE8CF977A72 /* CompanionWindow.swift in Sources */,
 				C0CBA840E379580044926FD5 /* MailGentApp.swift in Sources */,
+				C9A6961CFF589066E3C6AAB5 /* MailGentLog.swift in Sources */,
+				DD1F80AE5991797E4FAB7A9D /* MailIndexWorker.swift in Sources */,
 				1573478E39DB506C19875AE8 /* MailLibraryAccess.swift in Sources */,
+				D86CC75F0A31E72D4B46A3E3 /* MenuBarStatus.swift in Sources */,
 				AEF71C91C5910871BC3F8F5B /* RootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -319,6 +457,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA5906F5786FBAF94D685572 /* MailAccountIdentity.swift in Sources */,
 				21629E10E42E380734295197 /* MailStore.swift in Sources */,
 				2F5324489BAA27248291B03D /* MailboxIndex.swift in Sources */,
 				282D6FFA46C18C58C3878014 /* ReadAPI.swift in Sources */,
@@ -343,6 +482,11 @@
 			isa = PBXTargetDependency;
 			target = 0435D1E5DE65171075DE0221 /* MailStore */;
 			targetProxy = FBB8227D2288E192D2951EAC /* PBXContainerItemProxy */;
+		};
+		551334A2059B0624CD780842 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0435D1E5DE65171075DE0221 /* MailStore */;
+			targetProxy = 45C2A0BB940C1F260148FFC6 /* PBXContainerItemProxy */;
 		};
 		77D64F17D3B8863D677D4186 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -506,7 +650,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = MailGent;
+				INFOPLIST_KEY_CFBundleIconFile = AppIcon;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -544,7 +691,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = MailGent;
+				INFOPLIST_KEY_CFBundleIconFile = AppIcon;
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -554,6 +704,24 @@
 				SDKROOT = macosx;
 			};
 			name = Debug;
+		};
+		6575F318237DF44C0C062760 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.AccountIdentityPrototype;
+				SDKROOT = macosx;
+			};
+			name = Release;
 		};
 		E710D6126AB2B35810AC169E /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -582,6 +750,24 @@
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		E9747106188620132D63F68C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lsqlite3",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.AccountIdentityPrototype;
+				SDKROOT = macosx;
+			};
+			name = Debug;
 		};
 		F4D93FFA3204F7A5D1CC550C /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -688,6 +874,15 @@
 			buildConfigurations = (
 				F4D93FFA3204F7A5D1CC550C /* Debug */,
 				E710D6126AB2B35810AC169E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E41585C95210BB9CE043812A /* Build configuration list for PBXNativeTarget "AccountIdentityPrototype" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E9747106188620132D63F68C /* Debug */,
+				6575F318237DF44C0C062760 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

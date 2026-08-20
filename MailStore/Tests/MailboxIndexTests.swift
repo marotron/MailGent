@@ -205,4 +205,39 @@ struct MailboxIndexTests {
 
         #expect(try index.search("nosuchtoken").isEmpty)
     }
+
+    @Test func ingestSkipsMalformedEmlxAndKeepsReadableNeighbors() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        let junk = root.mailboxURL(account: accountID, mailbox: "INBOX.mbox")
+            .appendingPathComponent("Messages", isDirectory: true)
+            .appendingPathComponent("2.emlx")
+        try Data("not-an-emlx".utf8).write(to: junk)
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        #expect(try index.ingest().new == [
+            IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
+        ])
+        #expect(try index.get(accountID: accountID, placement: "INBOX", id: "1").subject == "Hello")
+    }
 }

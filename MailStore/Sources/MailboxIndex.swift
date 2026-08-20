@@ -58,19 +58,41 @@ public final class MailboxIndex {
             """)
     }
 
-    public func ingest() throws -> IngestResult {
+    public func ingest(onProgress: (@Sendable (IngestProgress) -> Void)? = nil) throws -> IngestResult {
         var new: [IndexedMessageRef] = []
+        var processed = 0
         for account in try store.accounts() {
+            try Task.checkCancellation()
             for mailbox in try store.mailboxes(in: account.id) {
-                for id in try store.messageIDs(in: account.id, mailbox: mailbox.id) {
-                    let url = try store.emlxURL(accountID: account.id, mailboxID: mailbox.id, id: id)
-                    let identity = try FileIdentity(url: url)
-                    if try storedIdentity(accountID: account.id, placement: mailbox.id, id: id) == identity {
-                        continue
+                try Task.checkCancellation()
+                let directory = try store.mailboxURL(accountID: account.id, mailboxID: mailbox.id)
+                try MailStore.forEachEmlxEntry(under: directory) { entry in
+                    try autoreleasepool {
+                        processed += 1
+                        let id = entry.id
+                        let url = entry.url
+                        let identity: FileIdentity
+                        do {
+                            identity = try FileIdentity(url: url)
+                        } catch {
+                            reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                            return
+                        }
+                        if try storedIdentity(accountID: account.id, placement: mailbox.id, id: id) == identity {
+                            reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                            return
+                        }
+                        let message: MailMessage
+                        do {
+                            message = try store.message(at: url)
+                        } catch {
+                            reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                            return
+                        }
+                        try upsert(accountID: account.id, placement: mailbox.id, id: id, message: message, identity: identity)
+                        new.append(IndexedMessageRef(accountID: account.id, placement: mailbox.id, id: id))
+                        reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
                     }
-                    let message = try store.message(accountID: account.id, mailbox: mailbox.id, id: id)
-                    try upsert(accountID: account.id, placement: mailbox.id, id: id, message: message, identity: identity)
-                    new.append(IndexedMessageRef(accountID: account.id, placement: mailbox.id, id: id))
                 }
             }
         }
@@ -78,6 +100,29 @@ public final class MailboxIndex {
             ($0.accountID, $0.placement, $0.id) < ($1.accountID, $1.placement, $1.id)
         }
         return IngestResult(new: new)
+    }
+
+    private func reportProgress(
+        _ onProgress: (@Sendable (IngestProgress) -> Void)?,
+        processed: Int,
+        inserted: Int,
+        accountID: String,
+        mailboxID: String
+    ) {
+        guard let onProgress else { return }
+        guard processed == 1 || processed % 25 == 0 else { return }
+        onProgress(
+            IngestProgress(
+                processed: processed,
+                inserted: inserted,
+                accountID: accountID,
+                mailboxID: mailboxID
+            )
+        )
+    }
+
+    public func ingest() throws -> IngestResult {
+        try ingest(onProgress: nil)
     }
 
     public func search(_ query: String) throws -> [IndexedMessage] {
@@ -115,6 +160,129 @@ public final class MailboxIndex {
         return rows
     }
 
+    func messageCount() throws -> Int {
+        var count = 0
+        try db.query(
+            "SELECT COUNT(*) FROM messages",
+            row: { stmt in
+                count = Int(sqlite3_column_int64(stmt, 0))
+            }
+        )
+        return count
+    }
+
+    func distinctPlacements() throws -> [(accountID: String, placement: String)] {
+        var rows: [(String, String)] = []
+        try db.query(
+            """
+            SELECT DISTINCT account_id, placement
+            FROM messages
+            ORDER BY account_id, placement
+            """,
+            row: { stmt in
+                rows.append((sqlite3_column_string(stmt, 0), sqlite3_column_string(stmt, 1)))
+            }
+        )
+        return rows
+    }
+
+    func placementIndexedCounts() throws -> [String: Int] {
+        var counts: [String: Int] = [:]
+        try db.query(
+            """
+            SELECT account_id, placement, COUNT(*)
+            FROM messages
+            GROUP BY account_id, placement
+            """,
+            row: { stmt in
+                let key = "\(sqlite3_column_string(stmt, 0))/\(sqlite3_column_string(stmt, 1))"
+                counts[key] = Int(sqlite3_column_int64(stmt, 2))
+            }
+        )
+        return counts
+    }
+
+    func listMessages(
+        limit: Int,
+        offset: Int,
+        accountID: String? = nil,
+        placement: String? = nil
+    ) throws -> [IndexedMessage] {
+        var rows: [IndexedMessage] = []
+        var clauses: [String] = []
+        if accountID != nil { clauses.append("account_id = ?") }
+        if placement != nil { clauses.append("placement = ?") }
+        let whereSQL = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
+        try db.query(
+            """
+            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, is_partial
+            FROM messages
+            \(whereSQL)
+            ORDER BY account_id, placement, message_id
+            LIMIT ? OFFSET ?
+            """,
+            bind: { stmt in
+                var index: Int32 = 1
+                if let accountID {
+                    sqlite3_bind_text(stmt, index, accountID, -1, SQLITE_TRANSIENT)
+                    index += 1
+                }
+                if let placement {
+                    sqlite3_bind_text(stmt, index, placement, -1, SQLITE_TRANSIENT)
+                    index += 1
+                }
+                sqlite3_bind_int(stmt, index, Int32(limit))
+                sqlite3_bind_int(stmt, index + 1, Int32(offset))
+            },
+            row: { stmt in
+                rows.append(indexedMessageSummary(from: stmt))
+            }
+        )
+        return rows
+    }
+
+    func searchMessages(
+        _ query: String,
+        limit: Int,
+        offset: Int,
+        accountID: String? = nil,
+        placement: String? = nil
+    ) throws -> [IndexedMessage] {
+        var hits: [IndexedMessage] = []
+        var clauses = ["messages_fts MATCH ?"]
+        if accountID != nil { clauses.append("m.account_id = ?") }
+        if placement != nil { clauses.append("m.placement = ?") }
+        try db.query(
+            """
+            SELECT m.account_id, m.placement, m.message_id, m.from_addr, m.to_addr, m.date, m.subject, m.is_partial
+            FROM messages_fts
+            JOIN messages m ON m.rowid = messages_fts.rowid
+            WHERE \(clauses.joined(separator: " AND "))
+            ORDER BY m.account_id, m.placement, m.message_id
+            LIMIT ? OFFSET ?
+            """,
+            bind: { stmt in
+                var index: Int32 = 1
+                sqlite3_bind_text(stmt, index, query, -1, SQLITE_TRANSIENT)
+                index += 1
+                if let accountID {
+                    sqlite3_bind_text(stmt, index, accountID, -1, SQLITE_TRANSIENT)
+                    index += 1
+                }
+                if let placement {
+                    sqlite3_bind_text(stmt, index, placement, -1, SQLITE_TRANSIENT)
+                    index += 1
+                }
+                sqlite3_bind_int(stmt, index, Int32(limit))
+                sqlite3_bind_int(stmt, index + 1, Int32(offset))
+            },
+            row: { stmt in
+                hits.append(indexedMessageSummary(from: stmt))
+            }
+        )
+        return hits
+    }
+
     public func get(accountID: String, placement: String, id: String) throws -> IndexedMessage {
         var found: IndexedMessage?
         try db.query(
@@ -147,6 +315,20 @@ public final class MailboxIndex {
             subject: sqlite3_column_string(stmt, 6),
             body: sqlite3_column_string(stmt, 7),
             isPartial: sqlite3_column_int(stmt, 8) != 0
+        )
+    }
+
+    private func indexedMessageSummary(from stmt: OpaquePointer) -> IndexedMessage {
+        IndexedMessage(
+            id: sqlite3_column_string(stmt, 2),
+            accountID: sqlite3_column_string(stmt, 0),
+            placement: sqlite3_column_string(stmt, 1),
+            from: sqlite3_column_string(stmt, 3),
+            to: sqlite3_column_string(stmt, 4),
+            date: sqlite3_column_string(stmt, 5),
+            subject: sqlite3_column_string(stmt, 6),
+            body: "",
+            isPartial: sqlite3_column_int(stmt, 7) != 0
         )
     }
 
@@ -240,6 +422,20 @@ private struct FileIdentity: Equatable {
         self.inode = info.st_ino
         self.mtime = Double(info.st_mtimespec.tv_sec) + Double(info.st_mtimespec.tv_nsec) / 1_000_000_000
         self.size = Int(info.st_size)
+    }
+}
+
+public struct IngestProgress: Sendable, Equatable {
+    public let processed: Int
+    public let inserted: Int
+    public let accountID: String
+    public let mailboxID: String
+
+    public init(processed: Int, inserted: Int, accountID: String, mailboxID: String) {
+        self.processed = processed
+        self.inserted = inserted
+        self.accountID = accountID
+        self.mailboxID = mailboxID
     }
 }
 

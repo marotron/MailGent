@@ -35,25 +35,37 @@ targets:
     type: application
     platform: macOS
     sources:
-      - MailGent
+      - path: MailGent
+        excludes:
+          - Resources/**
     dependencies:
       - target: MailStore
+    postbuildScripts:
+      - name: Ensure AppIcon assets
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          RES="${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/Resources"
+          mkdir -p "$RES"
+          cp -f "${SRCROOT}/MailGent/Resources/AppIcon.icns" "$RES/AppIcon.icns"
+          rm -rf "$RES/AppIcon.icon"
+          cp -R "${SRCROOT}/MailGent/Resources/AppIcon.icon" "$RES/AppIcon.icon"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailGent
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: MailGent
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026
+        INFOPLIST_KEY_CFBundleIconFile: AppIcon
+        INFOPLIST_KEY_CFBundleIconName: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: MailGent/MailGent.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
         COMBINE_HIDPI_IMAGES: YES
         CODE_SIGN_STYLE: Automatic
-    scheme:
-      testTargets:
-        - MailStoreTests
-        - MailGentTests
 
   MailStoreTests:
     type: bundle.unit-test
@@ -67,6 +79,20 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailStoreTests
         GENERATE_INFOPLIST_FILE: YES
 
+  AccountIdentityPrototype:
+    type: tool
+    platform: macOS
+    sources:
+      - MailStore/Prototype
+    dependencies:
+      - target: MailStore
+      - sdk: AppKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.AccountIdentityPrototype
+        GENERATE_INFOPLIST_FILE: YES
+        OTHER_LDFLAGS: ["$(inherited)", "-lsqlite3"]
+
   MailGentTests:
     type: bundle.unit-test
     platform: macOS
@@ -78,3 +104,32 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailGentTests
         GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  AccountIdentityPrototype:
+    build:
+      targets:
+        AccountIdentityPrototype: all
+    run:
+      config: Debug
+
+  MailGent:
+    build:
+      targets:
+        MailGent: all
+    run:
+      config: Debug
+      environmentVariables:
+        OS_ACTIVITY_MODE: disable
+        MAILGENT_VERBOSE: "1"
+    test:
+      config: Debug
+      targets:
+        - MailStoreTests
+        - MailGentTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
