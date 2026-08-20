@@ -443,7 +443,6 @@ final class CompanionSession {
         scanMailboxes = catalog.mailboxesCount
         scanMessages = max(catalog.messagesCount, 0)
         agents.ensureMachineLocalAgent()
-        agents.syncGrants(accountIDs: catalog.accounts.map(\.id))
     }
 
     private func applyIngestProgress(_ progress: IngestProgress) {

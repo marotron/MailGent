@@ -11,6 +11,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     private var companion: NSWindow?
     private var access: NSWindow?
+    private var grantDesk: NSWindow?
 
     func showCompanion(session: CompanionSession) {
         // MenuBarExtra dismisses after the click; present on the next turn so it stays key.
@@ -22,6 +23,12 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     func showAccess(session: MailAccessSession) {
         DispatchQueue.main.async {
             self.presentAccess(session: session)
+        }
+    }
+
+    func showGrantDesk(session: CompanionSession) {
+        DispatchQueue.main.async {
+            self.presentGrantDesk(session: session)
         }
     }
 
@@ -49,9 +56,26 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         bringForward(access)
     }
 
+    private func presentGrantDesk(session: CompanionSession) {
+        if grantDesk == nil {
+            grantDesk = makeWindow(
+                title: "Grant desk",
+                size: NSSize(width: 520, height: 560),
+                minSize: NSSize(width: 420, height: 360),
+                root: GrantDeskView(session: session)
+            )
+        } else if let grantDesk {
+            grantDesk.contentView = NSHostingView(rootView: GrantDeskView(session: session))
+        }
+        bringForward(grantDesk)
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
-        if companion?.isVisible != true, access?.isVisible != true {
+        if companion?.isVisible != true,
+           access?.isVisible != true,
+           grantDesk?.isVisible != true
+        {
             NSApp.setActivationPolicy(.accessory)
         }
         return false
@@ -181,15 +205,24 @@ struct CompanionWindow: View {
                 Button("Revoke credential") {
                     session.agents.revoke()
                     session.agents.ensureMachineLocalAgent()
-                    session.agents.syncGrants(accountIDs: session.scanCatalog.map(\.id))
                 }
             } else {
                 Text("No agent paired")
                     .foregroundStyle(.secondary)
                 Button("Pair Cursor") {
                     session.agents.ensureMachineLocalAgent()
-                    session.agents.syncGrants(accountIDs: session.scanCatalog.map(\.id))
                 }
+            }
+
+            if session.agents.agent != nil {
+                Button("Open grant desk…") {
+                    DetachedWindowHost.shared.showGrantDesk(session: session)
+                }
+                Text(session.agents.currentGrants.isEmpty
+                     ? "Nothing granted — agent search stays empty."
+                     : "\(session.agents.currentGrants.count) grant(s) active · edit in grant desk")
+                    .font(.caption)
+                    .foregroundStyle(session.agents.currentGrants.isEmpty ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
             }
 
             Text("Access log")

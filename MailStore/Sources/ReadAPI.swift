@@ -126,6 +126,54 @@ public struct ReadMessage: Equatable, Sendable {
         self.rawBody = rawBody
         self.isPartial = message.isPartial
     }
+
+    /// Omits body/html/raw without hinting that content exists (agent field caps).
+    public func omittingBody() -> ReadMessage {
+        applying(GrantFields(envelope: true, body: false))
+    }
+
+    /// Applies field caps: denied header values become empty; denied body → `.notAvailable`.
+    public func applying(_ fields: GrantFields) -> ReadMessage {
+        ReadMessage(
+            id: id,
+            accountID: accountID,
+            placement: placement,
+            from: fields.from ? from : "",
+            to: fields.to ? to : "",
+            date: fields.date ? date : "",
+            subject: fields.subject ? subject : "",
+            body: fields.body ? body : .notAvailable,
+            htmlBody: fields.body ? htmlBody : nil,
+            rawBody: fields.body ? rawBody : "",
+            isPartial: isPartial
+        )
+    }
+
+    private init(
+        id: String,
+        accountID: String,
+        placement: String,
+        from: String,
+        to: String,
+        date: String,
+        subject: String,
+        body: ReadBody,
+        htmlBody: String?,
+        rawBody: String,
+        isPartial: Bool
+    ) {
+        self.id = id
+        self.accountID = accountID
+        self.placement = placement
+        self.from = from
+        self.to = to
+        self.date = date
+        self.subject = subject
+        self.body = body
+        self.htmlBody = htmlBody
+        self.rawBody = rawBody
+        self.isPartial = isPartial
+    }
 }
 
 public struct Page<T: Equatable>: Equatable {

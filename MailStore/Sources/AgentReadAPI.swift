@@ -77,10 +77,21 @@ public struct AgentReadAPI {
         id: String
     ) throws -> ReadMessage {
         let agent = try authenticate(credential)
-        guard grants.allows(agentID: agent.id, accountID: accountID, placement: placement) else {
+        let message = try read.get(accountID: accountID, placement: placement, id: id)
+        let probe = IndexedMessage(
+            id: message.id,
+            accountID: message.accountID,
+            placement: message.placement,
+            from: message.from,
+            to: message.to,
+            date: message.date,
+            subject: message.subject,
+            body: "",
+            isPartial: message.isPartial
+        )
+        guard let fields = grants.effectiveFields(for: probe, agentID: agent.id) else {
             throw PairingError.unauthorized
         }
-        let message = try read.get(accountID: accountID, placement: placement, id: id)
         audit?.append(
             AuditEntry(
                 kind: .get,
@@ -89,7 +100,7 @@ public struct AgentReadAPI {
                 detail: "\(accountID)/\(placement)/\(id)"
             )
         )
-        return message
+        return message.applying(fields)
     }
 
     public func listPlacements(credential: String?) throws -> [Placement] {

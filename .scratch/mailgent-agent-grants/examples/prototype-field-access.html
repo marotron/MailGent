@@ -1,0 +1,588 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: pick Access field-exposure model for Grant Desk.
+     Question: how should humans toggle what of each message the agent can read?
+     Variants via ?variant=A|B|C|D — also ← → keys / bottom bar.
+     A · Product groups (envelope / body / attach names / attach content)
+     B · Split headers (subject / from / to / date + body + attach)
+     C · Presets first, then fine toggles
+     D · Combined: presets + envelope expanded to split headers + attach caps -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Field access prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #e1e6ef;
+      --line-strong: #c9d1df;
+      --canvas: #e8ebf0;
+      --paper: #ffffff;
+      --blue: #2a4fc7;
+      --blue-ink: #1a3aa8;
+      --blue-soft: #eef2ff;
+      --green: #0b7a56;
+      --amber: #9a6700;
+      --red: #b4232f;
+      --shadow: 0 1px 2px #15203308, 0 12px 32px #1520330c;
+      --radius: 12px;
+      --focus: 0 0 0 3px #2a4fc733;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(900px 400px at 15% -5%, #dfe6ff 0%, transparent 55%),
+        var(--canvas);
+      color: var(--ink);
+      font: 13px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      padding: 28px 24px 110px;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: none; box-shadow: var(--focus); }
+    .intro {
+      max-width: 980px; margin: 0 auto 18px;
+      display: flex; justify-content: space-between; gap: 16px; align-items: end;
+    }
+    .intro h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; font-weight: 650; }
+    .intro p { margin: 6px 0 0; color: var(--muted); max-width: 520px; }
+    .badge {
+      font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--blue); background: var(--blue-soft); border: 1px solid #b4c2f5;
+      padding: 6px 10px; border-radius: 999px; white-space: nowrap;
+    }
+    .stage {
+      max-width: 980px; margin: 0 auto;
+      display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 16px; align-items: start;
+    }
+    @media (max-width: 860px) {
+      .stage { grid-template-columns: 1fr; }
+    }
+    .desk {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .desk-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+    }
+    .desk-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+    .desk-head .agent { color: var(--muted); font-size: 12px; }
+    .tabs {
+      display: flex; gap: 0; padding: 0 12px;
+      border-bottom: 1px solid var(--line); background: #fafbfc;
+    }
+    .tab {
+      border: 0; background: transparent; padding: 10px 14px;
+      color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab.on { color: var(--ink); border-bottom-color: var(--blue); }
+    .pane { padding: 14px 16px 16px; }
+    .hint { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+    .row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid #f0f2f6;
+    }
+    .row:last-child { border-bottom: 0; }
+    .row input[type="checkbox"] { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--blue); }
+    .row .label { flex: 1; }
+    .row .title { font-weight: 600; }
+    .row .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .row.indent { padding-left: 24px; }
+    .group-title {
+      margin: 12px 0 4px; font-size: 11px; font-weight: 700;
+      letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+    }
+    .presets { display: grid; gap: 8px; margin-bottom: 14px; }
+    .preset {
+      text-align: left; border: 1px solid var(--line); background: #fff;
+      border-radius: 10px; padding: 10px 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .preset:hover { border-color: var(--line-strong); }
+    .preset.on { border-color: #b4c2f5; background: var(--blue-soft); }
+    .preset .name { font-weight: 650; }
+    .preset .desc { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .fine { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+    .fine summary {
+      cursor: pointer; font-weight: 650; color: var(--blue-ink); font-size: 12px;
+      list-style: none;
+    }
+    .fine summary::-webkit-details-marker { display: none; }
+    .state-dump {
+      margin-top: 14px; padding: 10px 12px; border-radius: 8px;
+      background: #f4f6fa; border: 1px solid var(--line);
+      font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #334155; white-space: pre-wrap;
+    }
+
+    .preview {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .preview-head {
+      padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+    }
+    .preview-head h3 { margin: 0; font-size: 15px; font-weight: 650; }
+    .preview-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .msg { padding: 14px 16px; }
+    .kv { display: grid; grid-template-columns: 88px 1fr; gap: 6px 10px; margin-bottom: 12px; }
+    .kv .k { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; }
+    .kv .v { font-size: 13px; word-break: break-word; }
+    .kv .v.missing {
+      color: var(--muted); font-style: italic; font-size: 12px;
+    }
+    .body-box {
+      border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+      background: #fafbfc; min-height: 72px; white-space: pre-wrap;
+    }
+    .body-box.missing { color: var(--muted); font-style: italic; }
+    .attach {
+      margin-top: 12px; display: grid; gap: 6px;
+    }
+    .attach-item {
+      display: flex; justify-content: space-between; gap: 8px; align-items: center;
+      border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+      font-size: 12px;
+    }
+    .attach-item .meta { color: var(--muted); }
+    .attach-item.blocked { opacity: 0.55; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
+      font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 999px;
+      background: #eef1f6; color: #516079;
+    }
+    .chip.ok { background: #e8f7f0; color: var(--green); }
+    .chip.off { background: #fdecee; color: var(--red); }
+
+    .switcher {
+      position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 10px;
+      background: #111827; color: #fff; border-radius: 999px;
+      padding: 8px 10px 8px 8px; box-shadow: 0 8px 28px #00000040;
+      z-index: 50; user-select: none;
+    }
+    .switcher button {
+      width: 34px; height: 34px; border-radius: 999px; border: 0;
+      background: #374151; color: #fff; font-size: 16px; line-height: 1;
+    }
+    .switcher button:hover { background: #4b5563; }
+    .switcher .label { min-width: 260px; text-align: center; font-size: 12px; font-weight: 650; }
+    .switcher .label span { display: block; font-weight: 500; color: #9ca3af; font-size: 10px; margin-top: 1px; }
+    .pick {
+      border: 0; border-radius: 999px; padding: 8px 14px;
+      background: #34d399; color: #064e3b; font-weight: 750; font-size: 12px;
+    }
+    .pick:hover { filter: brightness(1.05); }
+    .toast {
+      position: fixed; right: 20px; bottom: 88px;
+      background: #064e3b; color: #ecfdf5; padding: 10px 14px; border-radius: 10px;
+      font-size: 12px; font-weight: 600; box-shadow: var(--shadow);
+      opacity: 0; transform: translateY(6px); transition: .2s ease; pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: none; }
+  </style>
+</head>
+<body>
+  <div class="intro">
+    <div>
+      <h1>Access · what of each message?</h1>
+      <p>Throwaway. Flip variants, toggle caps, watch the agent preview. Pick the model that matches how you want to grant “headers yes / body no” (and rarer configs).</p>
+    </div>
+    <div class="badge">prototype · not shipping</div>
+  </div>
+
+  <div class="stage">
+    <section class="desk" aria-label="Grant desk Access tab">
+      <div class="desk-head">
+        <h2>Grant desk</h2>
+        <div class="agent">Cursor · machine-local</div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" type="button" disabled>Scope</button>
+        <button class="tab on" type="button">Access</button>
+      </div>
+      <div class="pane" id="access-pane"></div>
+    </section>
+
+    <section class="preview" aria-label="Agent view of one message">
+      <div class="preview-head">
+        <h3>Agent sees (sample get)</h3>
+        <p>Omitted fields disappear — no redaction stubs. Locator always stays.</p>
+      </div>
+      <div class="msg" id="agent-view"></div>
+    </section>
+  </div>
+
+  <div class="switcher" role="navigation" aria-label="Prototype variants">
+    <button type="button" id="prev" aria-label="Previous variant">←</button>
+    <div class="label" id="variant-label"></div>
+    <button type="button" id="next" aria-label="Next variant">→</button>
+    <button type="button" class="pick" id="pick">Use this</button>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const SAMPLE = {
+      id: "msg-1842",
+      accountID: "yahoo-demo",
+      placement: "INBOX",
+      subject: "Invoice #4412 — March hosting",
+      from: "billing@hostco.example",
+      to: "you@yahoo.com",
+      date: "2026-03-12T09:14:00Z",
+      body: "Hi,\n\nAttached is your March invoice ($48.00).\nCard ending 4412 was charged.\n\nThanks,\nHostCo billing",
+      attachments: [
+        { name: "invoice-4412.pdf", bytes: 84211, contentNote: "PDF bytes (invoice)" },
+        { name: "receipt.png", bytes: 21044, contentNote: "PNG bytes (receipt)" },
+      ],
+    };
+
+    const GRANULAR_DEFAULTS = {
+      subject: true, from: true, to: true, date: true,
+      body: false, attachmentMetadata: false, attachmentContent: false,
+    };
+
+    const VARIANTS = {
+      A: {
+        key: "A",
+        name: "Product groups",
+        blurb: "Envelope · Body · Attach names · Attach content",
+        defaults: { envelope: true, body: false, attachmentMetadata: false, attachmentContent: false },
+      },
+      B: {
+        key: "B",
+        name: "Split headers",
+        blurb: "Subject / From / To / Date each",
+        defaults: { ...GRANULAR_DEFAULTS },
+      },
+      C: {
+        key: "C",
+        name: "Presets + fine",
+        blurb: "Common configs first, expand for detail",
+        defaults: { ...GRANULAR_DEFAULTS },
+      },
+      D: {
+        key: "D",
+        name: "Combined",
+        blurb: "Presets + split envelope + body/attach",
+        defaults: { ...GRANULAR_DEFAULTS },
+      },
+    };
+
+    const PRESETS = [
+      {
+        id: "headers",
+        name: "List + headers only",
+        desc: "Subject, From, To, Date — no body, no files",
+        fields: { subject: true, from: true, to: true, date: true, body: false, attachmentMetadata: false, attachmentContent: false },
+      },
+      {
+        id: "read",
+        name: "Read mail (no files)",
+        desc: "Headers + body; attachments still off",
+        fields: { subject: true, from: true, to: true, date: true, body: true, attachmentMetadata: false, attachmentContent: false },
+      },
+      {
+        id: "names",
+        name: "Headers + attachment names",
+        desc: "See that files exist; cannot open bytes",
+        fields: { subject: true, from: true, to: true, date: true, body: false, attachmentMetadata: true, attachmentContent: false },
+      },
+      {
+        id: "full",
+        name: "Full message",
+        desc: "Headers, body, attachment names + content",
+        fields: { subject: true, from: true, to: true, date: true, body: true, attachmentMetadata: true, attachmentContent: true },
+      },
+    ];
+
+    let variant = new URLSearchParams(location.search).get("variant") || "D";
+    if (!VARIANTS[variant]) variant = "D";
+    let fields = { ...VARIANTS[variant].defaults };
+
+    function toGranular(f) {
+      if ("envelope" in f) {
+        return {
+          subject: !!f.envelope, from: !!f.envelope, to: !!f.envelope, date: !!f.envelope,
+          body: !!f.body,
+          attachmentMetadata: !!f.attachmentMetadata,
+          attachmentContent: !!f.attachmentContent && !!f.attachmentMetadata,
+        };
+      }
+      return {
+        subject: !!f.subject, from: !!f.from, to: !!f.to, date: !!f.date,
+        body: !!f.body,
+        attachmentMetadata: !!f.attachmentMetadata,
+        attachmentContent: !!f.attachmentContent && !!f.attachmentMetadata,
+      };
+    }
+
+    function toStored(f) {
+      const g = toGranular(f);
+      if (variant === "A") {
+        const envelope = g.subject && g.from && g.to && g.date;
+        return {
+          envelope,
+          body: g.body,
+          attachmentMetadata: g.attachmentMetadata,
+          attachmentContent: g.attachmentContent,
+        };
+      }
+      return g;
+    }
+
+    function setVariant(next) {
+      variant = next;
+      fields = { ...VARIANTS[variant].defaults };
+      const url = new URL(location.href);
+      url.searchParams.set("variant", variant);
+      history.replaceState(null, "", url);
+      render();
+    }
+
+    function cycle(delta) {
+      const keys = Object.keys(VARIANTS);
+      const i = keys.indexOf(variant);
+      setVariant(keys[(i + delta + keys.length) % keys.length]);
+    }
+
+    function checkbox(id, title, sub, checked, onChange, indent) {
+      return `
+        <label class="row ${indent ? "indent" : ""}">
+          <input type="checkbox" id="${id}" ${checked ? "checked" : ""}>
+          <span class="label">
+            <div class="title">${title}</div>
+            ${sub ? `<div class="sub">${sub}</div>` : ""}
+          </span>
+        </label>`;
+    }
+
+    function bindChecks(map) {
+      for (const [id, apply] of Object.entries(map)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.addEventListener("change", () => {
+          apply(el.checked);
+          // attachment content implies metadata
+          const g = toGranular(fields);
+          if (g.attachmentContent && !g.attachmentMetadata) {
+            if ("attachmentMetadata" in fields) fields.attachmentMetadata = true;
+          }
+          if (!g.attachmentMetadata && "attachmentContent" in fields) {
+            fields.attachmentContent = false;
+          }
+          render();
+        });
+      }
+    }
+
+    function renderAccessA() {
+      const f = fields;
+      return `
+        <p class="hint">Resource caps for the next allow you save on Scope. Locator (id / account / folder) always granted.</p>
+        ${checkbox("env", "Envelope", "Subject, From, To, and Date together", f.envelope, null)}
+        ${checkbox("body", "Body / snippet", "Message text on get; list rows stay body-free either way", f.body, null)}
+        ${checkbox("am", "Attachment names", "Filenames + sizes; never opens file bytes", f.attachmentMetadata, null)}
+        ${checkbox("ac", "Attachment content", "Requires names. Lets agent fetch file bytes", f.attachmentContent, null)}
+        <div class="state-dump">${JSON.stringify(toStored(fields), null, 2)}</div>`;
+    }
+
+    function renderAccessB() {
+      const f = fields;
+      return `
+        <p class="hint">Independent header fields. Locator always granted. Turn off Subject if the agent only needs From/Date for triage.</p>
+        <div class="group-title">Headers</div>
+        ${checkbox("sub", "Subject", null, f.subject, null)}
+        ${checkbox("from", "From", null, f.from, null)}
+        ${checkbox("to", "To", null, f.to, null)}
+        ${checkbox("date", "Date", null, f.date, null)}
+        <div class="group-title">Content</div>
+        ${checkbox("body", "Body / snippet", null, f.body, null)}
+        ${checkbox("am", "Attachment names", null, f.attachmentMetadata, null)}
+        ${checkbox("ac", "Attachment content", "Requires names", f.attachmentContent, null)}
+        <div class="state-dump">${JSON.stringify(toStored(fields), null, 2)}</div>`;
+    }
+
+    function matchingPresetId() {
+      const g = toGranular(fields);
+      const hit = PRESETS.find((p) =>
+        Object.keys(p.fields).every((k) => !!p.fields[k] === !!g[k])
+      );
+      return hit ? hit.id : null;
+    }
+
+    function renderAccessC() {
+      const active = matchingPresetId();
+      const f = fields;
+      return `
+        <p class="hint">Start from a common posture, then open fine controls if you need an odd mix.</p>
+        <div class="presets">
+          ${PRESETS.map((p) => `
+            <button type="button" class="preset ${active === p.id ? "on" : ""}" data-preset="${p.id}">
+              <div class="name">${p.name}</div>
+              <div class="desc">${p.desc}</div>
+            </button>`).join("")}
+        </div>
+        <details class="fine" open>
+          <summary>Fine-tune fields</summary>
+          ${checkbox("sub", "Subject", null, f.subject, null)}
+          ${checkbox("from", "From", null, f.from, null)}
+          ${checkbox("to", "To", null, f.to, null)}
+          ${checkbox("date", "Date", null, f.date, null)}
+          ${checkbox("body", "Body / snippet", null, f.body, null)}
+          ${checkbox("am", "Attachment names", null, f.attachmentMetadata, null)}
+          ${checkbox("ac", "Attachment content", null, f.attachmentContent, null)}
+        </details>
+        <div class="state-dump">${JSON.stringify(toStored(fields), null, 2)}</div>`;
+    }
+
+    function renderAccessD() {
+      const active = matchingPresetId();
+      const f = fields;
+      const allHeaders = f.subject && f.from && f.to && f.date;
+      const someHeaders = f.subject || f.from || f.to || f.date;
+      return `
+        <p class="hint">Presets set a posture. Envelope is expanded — Subject / From / To / Date are independent. Locator always granted.</p>
+        <div class="presets">
+          ${PRESETS.map((p) => `
+            <button type="button" class="preset ${active === p.id ? "on" : ""}" data-preset="${p.id}">
+              <div class="name">${p.name}</div>
+              <div class="desc">${p.desc}</div>
+            </button>`).join("")}
+        </div>
+        <div class="group-title">Envelope (headers)</div>
+        ${checkbox("envAll", "All headers", "Shortcut: Subject + From + To + Date", allHeaders, null)}
+        ${checkbox("sub", "Subject", null, f.subject, null, true)}
+        ${checkbox("from", "From", null, f.from, null, true)}
+        ${checkbox("to", "To", null, f.to, null, true)}
+        ${checkbox("date", "Date", null, f.date, null, true)}
+        ${!allHeaders && someHeaders ? `<p class="hint" style="margin:4px 0 0">Custom header mix — preset shows none until it matches again.</p>` : ""}
+        <div class="group-title">Content</div>
+        ${checkbox("body", "Body / snippet", "Message text on get; list rows stay body-free either way", f.body, null)}
+        ${checkbox("am", "Attachment names", "Filenames + sizes; never opens file bytes", f.attachmentMetadata, null)}
+        ${checkbox("ac", "Attachment content", "Requires names. Lets agent fetch file bytes", f.attachmentContent, null)}
+        <div class="state-dump">${JSON.stringify(toStored(fields), null, 2)}</div>`;
+    }
+
+    function omit(v) {
+      return `<span class="v missing">omitted</span>`;
+    }
+
+    function renderPreview() {
+      const g = toGranular(fields);
+      const chips = [
+        ["locator", true],
+        ["subject", g.subject],
+        ["from", g.from],
+        ["to", g.to],
+        ["date", g.date],
+        ["body", g.body],
+        ["attach names", g.attachmentMetadata],
+        ["attach content", g.attachmentContent],
+      ].map(([n, on]) => `<span class="chip ${on ? "ok" : "off"}">${n}</span>`).join("");
+
+      const attachBlock = !g.attachmentMetadata
+        ? `<div class="attach"><div class="attach-item blocked"><span>Attachments</span><span class="meta">omitted</span></div></div>`
+        : `<div class="attach">${SAMPLE.attachments.map((a) => `
+            <div class="attach-item">
+              <span>${a.name} <span class="meta">· ${(a.bytes / 1024).toFixed(0)} KB</span></span>
+              <span class="meta">${g.attachmentContent ? "content: allowed" : "content: omitted"}</span>
+            </div>`).join("")}</div>`;
+
+      return `
+        <div class="kv">
+          <div class="k">Locator</div><div class="v">${SAMPLE.accountID} / ${SAMPLE.placement} / ${SAMPLE.id}</div>
+          <div class="k">Subject</div>${g.subject ? `<div class="v">${SAMPLE.subject}</div>` : omit()}
+          <div class="k">From</div>${g.from ? `<div class="v">${SAMPLE.from}</div>` : omit()}
+          <div class="k">To</div>${g.to ? `<div class="v">${SAMPLE.to}</div>` : omit()}
+          <div class="k">Date</div>${g.date ? `<div class="v">${SAMPLE.date}</div>` : omit()}
+        </div>
+        <div class="k" style="color:var(--muted);font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Body</div>
+        <div class="body-box ${g.body ? "" : "missing"}">${g.body ? SAMPLE.body : "omitted"}</div>
+        ${attachBlock}
+        <div class="chip-row">${chips}</div>`;
+    }
+
+    function render() {
+      const meta = VARIANTS[variant];
+      document.getElementById("variant-label").innerHTML =
+        `${meta.key} — ${meta.name}<span>${meta.blurb}</span>`;
+
+      const pane = document.getElementById("access-pane");
+      if (variant === "A") pane.innerHTML = renderAccessA();
+      else if (variant === "B") pane.innerHTML = renderAccessB();
+      else if (variant === "C") pane.innerHTML = renderAccessC();
+      else pane.innerHTML = renderAccessD();
+
+      document.getElementById("agent-view").innerHTML = renderPreview();
+
+      if (variant === "A") {
+        bindChecks({
+          env: (v) => { fields.envelope = v; },
+          body: (v) => { fields.body = v; },
+          am: (v) => { fields.attachmentMetadata = v; if (!v) fields.attachmentContent = false; },
+          ac: (v) => { fields.attachmentContent = v; if (v) fields.attachmentMetadata = true; },
+        });
+      } else {
+        bindChecks({
+          envAll: (v) => {
+            fields.subject = v;
+            fields.from = v;
+            fields.to = v;
+            fields.date = v;
+          },
+          sub: (v) => { fields.subject = v; },
+          from: (v) => { fields.from = v; },
+          to: (v) => { fields.to = v; },
+          date: (v) => { fields.date = v; },
+          body: (v) => { fields.body = v; },
+          am: (v) => { fields.attachmentMetadata = v; if (!v) fields.attachmentContent = false; },
+          ac: (v) => { fields.attachmentContent = v; if (v) fields.attachmentMetadata = true; },
+        });
+        pane.querySelectorAll("[data-preset]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const p = PRESETS.find((x) => x.id === btn.dataset.preset);
+            if (!p) return;
+            fields = { ...p.fields };
+            render();
+          });
+        });
+      }
+    }
+
+    document.getElementById("prev").onclick = () => cycle(-1);
+    document.getElementById("next").onclick = () => cycle(1);
+    document.getElementById("pick").onclick = () => {
+      const toast = document.getElementById("toast");
+      const stored = toStored(fields);
+      toast.textContent = `Picked ${variant}: ${JSON.stringify(stored)} — tell the agent this choice.`;
+      toast.classList.add("show");
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => toast.classList.remove("show"), 4500);
+      console.log("PROTOTYPE_PICK", { variant, fields: stored, granular: toGranular(fields) });
+    };
+
+    document.addEventListener("keydown", (e) => {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.key === "ArrowLeft") cycle(-1);
+      if (e.key === "ArrowRight") cycle(1);
+    });
+
+    render();
+  </script>
+</body>
+</html>
