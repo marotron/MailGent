@@ -131,6 +131,8 @@ struct CompanionWindow: View {
                     ingestCard
                 }
 
+                agentCard
+
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Detected on disk")
                         .font(.headline)
@@ -155,6 +157,75 @@ struct CompanionWindow: View {
             .padding(24)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var agentCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Paired agent")
+                .font(.headline)
+            if let agent = session.agents.agent {
+                Text("\(agent.name) · \(agent.trustClass.rawValue)")
+                Text(session.agents.loopbackURL)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Text("Loopback HTTP bind lands next; policy seams already reject unsigned calls.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(session.agents.cursorConfigSnippet)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                Button("Revoke credential") {
+                    session.agents.revoke()
+                    session.agents.ensureMachineLocalAgent()
+                    session.agents.syncGrants(accountIDs: session.scanCatalog.map(\.id))
+                }
+            } else {
+                Text("No agent paired")
+                    .foregroundStyle(.secondary)
+                Button("Pair Cursor") {
+                    session.agents.ensureMachineLocalAgent()
+                    session.agents.syncGrants(accountIDs: session.scanCatalog.map(\.id))
+                }
+            }
+
+            Text("Access log")
+                .font(.subheadline.weight(.semibold))
+                .padding(.top, 4)
+            if session.agents.recentAudit.isEmpty {
+                Text("No agent calls yet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(session.agents.recentAudit) { entry in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(entry.kind.rawValue)
+                            .font(.caption.monospaced())
+                        Text(entry.agentName)
+                            .font(.caption)
+                        if !entry.detail.isEmpty {
+                            Text(entry.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(entry.at.formatted(date: .omitted, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).stroke(.separator)
+        }
     }
 
     private var healthCard: some View {

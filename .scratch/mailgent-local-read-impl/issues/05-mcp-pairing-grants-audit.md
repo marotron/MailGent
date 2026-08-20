@@ -1,7 +1,7 @@
 # MCP Read, Pairing, Grants, Audit
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 04
 
 ## Question
@@ -32,7 +32,14 @@ Unauthorized call fails; granted agent sees only allowed mail; audit contains th
 
 YAGNI: no UDS/App Group required; no stdio; no remote relay; no mutation tools; no draft tools.
 
-## Inputs
+## Comments
 
-- [04 · Companion Read UI Prototype Then Shell](04-companion-read-ui.md)
-- Product tickets 04, 06, 07, 08, 17 (MCP wire, topology, authz, ops contract, pairing)
+- 2026-08-20 — Claimed on `feat/05-mcp-read`. Policy seams landed under MailStore TDD:
+  - `Pairing` (hashed credential, revoke, fail-closed)
+  - `GrantGate` (deny-by-default; account ± mailbox allow)
+  - `AuditLog` (pair/search/get/revoke; inspect via API)
+  - `AgentReadAPI` wraps ReadAPI with auth + grant filter + audit
+  - `LoopbackMCPServer` thin JSON-RPC `tools/call` for search/list/get/listPlacements (401 without Bearer)
+  - Companion `AgentBridge` + control-center card: pair Cursor, Cursor config snippet, access log
+  - Still open: real `127.0.0.1` NWListener bind, Swift MCP SDK / Streamable HTTP session, grant mailbox UI, Cursor host E2E
+

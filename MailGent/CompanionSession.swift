@@ -75,6 +75,7 @@ final class CompanionSession {
     var ingestTotal: Int?
     var ingestInserted = 0
     var ingestCurrentTask = ""
+    let agents = AgentBridge()
 
     var isBusy: Bool { isIndexing || isUpdating }
 
@@ -117,6 +118,7 @@ final class CompanionSession {
             .appendingPathComponent("MailGent-index-\(stamp).sqlite")
         liveDatabaseURL = Self.liveMailDatabaseURL()
         refreshAccess()
+        agents.ensureMachineLocalAgent()
         scheduleReload(reason: "startup")
     }
 
@@ -438,6 +440,8 @@ final class CompanionSession {
         scanAccounts = catalog.accountsCount
         scanMailboxes = catalog.mailboxesCount
         scanMessages = max(catalog.messagesCount, 0)
+        agents.ensureMachineLocalAgent()
+        agents.syncGrants(accountIDs: catalog.accounts.map(\.id))
     }
 
     private func applyIngestProgress(_ progress: IngestProgress) {
