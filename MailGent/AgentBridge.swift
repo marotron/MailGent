@@ -9,6 +9,7 @@ final class AgentBridge {
     let audit = AuditLog()
     let pairing: Pairing
     let grants = GrantGate()
+    let ledger = DraftLedger()
 
     private(set) var agent: PairedAgent?
     private(set) var credential: String?
@@ -84,6 +85,7 @@ final class AgentBridge {
             )
             let listener = LoopbackHTTPListener(
                 gateway: gateway,
+                ledger: ledger,
                 host: "127.0.0.1",
                 port: loopbackPort
             )

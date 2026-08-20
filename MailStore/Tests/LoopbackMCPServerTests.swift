@@ -105,6 +105,51 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"list\""))
         #expect(response.body.contains("\"name\":\"get\""))
         #expect(response.body.contains("\"name\":\"listPlacements\""))
+        #expect(response.body.contains("\"name\":\"create_draft\""))
+        #expect(response.body.contains("\"name\":\"update_draft\""))
+    }
+
+    @Test func authenticatedCreateAndUpdateDraft() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let create = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "create_draft",
+                    arguments: ["body": "Hello Ava"]
+                )
+            )
+        )
+        #expect(create.status == 200)
+        #expect(create.body.contains("Hello Ava"))
+        #expect(create.body.contains("draftID"))
+        #expect(create.body.contains("v1"))
+        #expect(env.audit.entries().contains { $0.kind == .createDraft })
+
+        let draftID = try Self.extractJSONString(create.body, key: "draftID")
+        let update = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "update_draft",
+                    arguments: ["draftID": draftID, "body": "Hello Ava — revised"]
+                )
+            )
+        )
+        #expect(update.status == 200)
+        #expect(update.body.contains("Hello Ava — revised"))
+        #expect(update.body.contains("v2"))
+        #expect(env.audit.entries().contains { $0.kind == .updateDraft })
+
+        let versions = try env.server.ledger.list(draftID: draftID)
+        #expect(versions.map(\.label) == ["v2", "v1"])
+        #expect(try env.server.ledger.copy(versionID: versions[0].id) == "Hello Ava — revised")
     }
 
     @Test func initializedNotificationReturnsAccepted() throws {
@@ -132,6 +177,28 @@ struct LoopbackMCPServerTests {
         {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"\(name)","arguments":{\(args)}}}
         """
         return Data(json.utf8)
+    }
+
+    /// Pull a string value from the nested MCP tool JSON text payload.
+    private static func extractJSONString(_ responseBody: String, key: String) throws -> String {
+        struct RPC: Decodable {
+            struct Result: Decodable {
+                struct Content: Decodable {
+                    let text: String
+                }
+                let content: [Content]
+            }
+            let result: Result
+        }
+        let rpc = try JSONDecoder().decode(RPC.self, from: Data(responseBody.utf8))
+        guard let text = rpc.result.content.first?.text,
+              let data = text.data(using: .utf8),
+              let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let value = obj[key] as? String
+        else {
+            throw DraftLedgerError.notFound
+        }
+        return value
     }
 }
 

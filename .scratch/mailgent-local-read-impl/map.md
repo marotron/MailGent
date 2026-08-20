@@ -10,13 +10,13 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 
 - Source: `~/Library/Mail` `.emlx` / `.partial.emlx` only. Surface partial and undownloaded mail; never treat as full. No Envelope Index. No store writes.
 - Incremental: FSEvents while running + on-open sweep keyed by path/mtime/inode. No always-on daemon.
-- Agent: MailGent is the MCP **server**; first ship is hardened loopback HTTP, one paired `machine-local` agent, account + mailbox allows, read ops only, append-only audit.
+- Agent: MailGent is the MCP **server**; first ship is hardened loopback HTTP, one paired `machine-local` agent, account + mailbox allows, read ops + draft ledger create/update, append-only audit.
 - Distribution working assumption: Developer ID + notarization + Full Disk Access (or security-scoped bookmark). MAS sandbox is hostile.
 - Reuse ArchMail cores (`EmlxReader`, `MailAccountCatalog`, `MimeMessageParser`, tests/fixtures) into a MailGent `MailStore` target. Do not submodule ArchMail.
-- TDD seams (confirmed on ticket 01): MailStore, MailboxIndex, ReadAPI, GrantGate, Pairing, AuditLog.
+- TDD seams (confirmed on ticket 01; extended on 07): MailStore, MailboxIndex, ReadAPI, GrantGate, Pairing, AuditLog, DraftLedger.
 - One command: `make test` (`xcodegen generate` + `xcodebuild test`).
 - Git: long-lived `train/local-read`; topic branches fork from it and PR back. Do not commit live mail, FDA bookmarks, or pairing secrets.
-- YAGNI: no OAuth, no helper daemon, no draft ledger, no Mail writes, no Spotlight donation of bodies, no iOS, no built-in assistant.
+- YAGNI: no OAuth, no helper daemon, no Mail writes, no Spotlight donation of bodies, no iOS, no built-in assistant. Draft ledger is in-scope after ticket 06 picked B.
 
 ## Decisions so far
 
@@ -27,26 +27,31 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) — SQLite FTS ingest; identity skip; search/get/list pages; partial marked; empty body `not_available`
 - [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) — control-first; menu-bar popover launches detached window; proto on `proto/companion-read-ui`
 - [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) — loopback MCP `127.0.0.1:8787`; Pairing/GrantGate/AuditLog; Cursor list/search/get E2E
+- [Draft Outbound Prototype](issues/06-draft-outbound.md) — **B wins** (versioned draft ledger); proto on `proto/draft-outbound`; feat on `feat/07-draft-ledger`
 
 ## Not yet specified
 
-- Copy-paste vs MailGent draft ledger (ticket 06; after read+MCP).
+- Rich draft formatting (bold/italic/lists) after ledger lands.
+- DraftLedger persistence across relaunch (in-memory first).
 
 ## Branches
 
 | Branch | Parent | Issue | Merge target |
 | --- | --- | --- | --- |
-| `train/local-read` | `research/archmail-ondisk` | — | `main` (ticket 07) |
+| `train/local-read` | `research/archmail-ondisk` | — | `main` (ticket 08) |
 | `feat/01-app-skeleton` | `train/local-read` | 01 | `train/local-read` |
 | `feat/02-mail-store` | `train/local-read` | 02 | `train/local-read` |
 | `feat/03-mailbox-index` | `train/local-read` | 03 | `train/local-read` |
 | `proto/companion-read-ui` | `feat/03-mailbox-index` | 04 | throwaway (pointer on issue; not `main`) |
 | `feat/04-companion-shell` | `feat/03-mailbox-index` | 04 | `train/local-read` |
+| `feat/05-mcp-read` | `feat/04-companion-shell` | 05 | `train/local-read` |
+| `proto/draft-outbound` | `feat/05-mcp-read` | 06 | throwaway (pointer on issue; not `main`) |
+| `feat/07-draft-ledger` | `feat/05-mcp-read` | 07 | `train/local-read` |
 
 ## Out of scope
 
 - Gmail/Yahoo OAuth (later `train/oauth`).
-- Writing Apple Mail’s store; AppleScript; `mailto:`; MessageUI unless ticket 06 rejects copy-paste.
+- Writing Apple Mail’s store; AppleScript; `mailto:`; MessageUI.
 - Remote agents, mutation approvals, send/trash/delete, smart folders, private scopes, `lan-inference`.
 - Mac App Store distribution on this train.
 - Submoduling ArchMail.
@@ -55,20 +60,23 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 
 ```mermaid
 flowchart TD
-  chart["Chart map + seven stage tickets"]
+  chart["Chart map + eight stage tickets"]
   skeleton["01 · App skeleton, FDA, confirm seams"]
   store["02 · MailStore reader TDD"]
   index["03 · MailboxIndex + ReadAPI TDD"]
   ui["04 · Companion read UI prototype then shell"]
   mcp["05 · MCP read, pairing, grants, audit"]
   drafts["06 · Draft outbound prototype"]
-  merge["07 · Merge train, leave OAuth later"]
+  ledger["07 · Draft ledger seam + MCP"]
+  merge["08 · Merge train, leave OAuth later"]
   chart --> skeleton
   skeleton --> store
   store --> index
   index --> ui
   ui --> mcp
   mcp --> drafts
+  drafts --> ledger
+  ledger --> merge
   mcp --> merge
 ```
 
@@ -79,5 +87,6 @@ flowchart TD
 | 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | resolved |
 | 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | resolved |
 | 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | resolved |
-| 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | claimed |
-| 07 | [Merge Local-Read Train](issues/07-merge-train.md) | task | open |
+| 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | resolved |
+| 07 | [Draft Ledger Seam + MCP](issues/07-draft-ledger.md) | task | claimed |
+| 08 | [Merge Local-Read Train](issues/08-merge-train.md) | task | open |

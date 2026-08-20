@@ -4,6 +4,8 @@ public enum AuditKind: String, Equatable, Sendable {
     case pair
     case search
     case get
+    case createDraft
+    case updateDraft
     case revoke
 }
 

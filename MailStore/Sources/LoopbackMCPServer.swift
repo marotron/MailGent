@@ -34,12 +34,14 @@ public struct LoopbackMCPResponse: Sendable {
     }
 }
 
-/// Thin JSON-RPC MCP surface over AgentReadAPI (Streamable HTTP POST /mcp).
+/// Thin JSON-RPC MCP surface over AgentReadAPI + DraftLedger (Streamable HTTP POST /mcp).
 public struct LoopbackMCPServer {
     public let gateway: AgentReadAPI
+    public let ledger: DraftLedger
 
-    public init(gateway: AgentReadAPI) {
+    public init(gateway: AgentReadAPI, ledger: DraftLedger = DraftLedger()) {
         self.gateway = gateway
+        self.ledger = ledger
     }
 
     public func handle(_ request: LoopbackMCPRequest) -> LoopbackMCPResponse {
@@ -182,6 +184,39 @@ public struct LoopbackMCPServer {
                 "isPartial": message.isPartial,
                 "body": bodyText
             ])
+        case "create_draft":
+            let body = arguments["body"] as? String ?? ""
+            let version = ledger.create(body: body)
+            if let agent = try? gateway.authenticate(credential) {
+                gateway.audit?.append(
+                    AuditEntry(
+                        kind: .createDraft,
+                        agentID: agent.id,
+                        agentName: agent.name,
+                        detail: version.draftID
+                    )
+                )
+            }
+            return try jsonString(Self.versionSummary(version))
+        case "update_draft":
+            guard
+                let draftID = arguments["draftID"] as? String,
+                let body = arguments["body"] as? String
+            else {
+                throw CallError.badArguments
+            }
+            let version = try ledger.update(draftID: draftID, body: body)
+            if let agent = try? gateway.authenticate(credential) {
+                gateway.audit?.append(
+                    AuditEntry(
+                        kind: .updateDraft,
+                        agentID: agent.id,
+                        agentName: agent.name,
+                        detail: "\(version.draftID)/\(version.label)"
+                    )
+                )
+            }
+            return try jsonString(Self.versionSummary(version))
         default:
             throw CallError.unknownTool
         }
@@ -196,6 +231,15 @@ public struct LoopbackMCPServer {
             "from": message.from,
             "date": message.date,
             "isPartial": message.isPartial
+        ]
+    }
+
+    private static func versionSummary(_ version: DraftVersion) -> [String: Any] {
+        [
+            "draftID": version.draftID,
+            "versionID": version.id,
+            "label": version.label,
+            "body": version.body
         ]
     }
 
@@ -258,6 +302,29 @@ public struct LoopbackMCPServer {
                         "id": ["type": "string"]
                     ],
                     "required": ["accountID", "placement", "id"]
+                ]
+            ],
+            [
+                "name": "create_draft",
+                "description": "Create a MailGent-owned draft and its first version. Does not write Apple Mail.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "body": ["type": "string", "description": "Draft body text"]
+                    ],
+                    "required": ["body"]
+                ]
+            ],
+            [
+                "name": "update_draft",
+                "description": "Append a new version to an existing MailGent draft. Does not write Apple Mail.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "draftID": ["type": "string"],
+                        "body": ["type": "string", "description": "Updated draft body text"]
+                    ],
+                    "required": ["draftID", "body"]
                 ]
             ]
         ]

@@ -29,8 +29,13 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
         return listener != nil
     }
 
-    public init(gateway: AgentReadAPI, host: String = "127.0.0.1", port: UInt16 = 8787) {
-        self.mcp = LoopbackMCPServer(gateway: gateway)
+    public init(
+        gateway: AgentReadAPI,
+        ledger: DraftLedger = DraftLedger(),
+        host: String = "127.0.0.1",
+        port: UInt16 = 8787
+    ) {
+        self.mcp = LoopbackMCPServer(gateway: gateway, ledger: ledger)
         self.host = host
         self.port = port
     }

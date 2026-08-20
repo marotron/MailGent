@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 05
+Blocked by: 05, 07
 
 ## Question
 
@@ -10,13 +10,13 @@ Is `train/local-read` ready to merge to `main` as the first usable product, with
 
 ## Context
 
-Merge `train/local-read` → `main` when tickets 01–05 (and 06 if the ledger won) are green.
+Merge `train/local-read` → `main` when tickets 01–07 are green (06 resolved with B; 07 DraftLedger on the train).
 
 - Capture prototypes as primary sources (branch pointers on issues 04 and 06).
 - Next train `train/oauth`: Gmail API + Yahoo IMAP OAuth, provider-faithful mailbox model, mutation approvals, richer grants. Local-read remains a source, not a discarded bridge.
 - Do not commit live mail, FDA bookmarks, or pairing secrets.
 
-Ticket 06 does not block this merge unless variant B (draft ledger) won and `feat/07-draft-ledger` is still open — then finish that feat first.
+Finish `feat/07-draft-ledger` before this merge.
 
 ## Verify
 
@@ -27,4 +27,5 @@ YAGNI: do not start OAuth work on the merge PR.
 ## Inputs
 
 - [05 · MCP Read, Pairing, Grants, Audit](05-mcp-pairing-grants-audit.md) — first-ship acceptance slice
-- [06 · Draft Outbound Prototype](06-draft-outbound.md) — blocks merge only if ledger won
+- [06 · Draft Outbound Prototype](06-draft-outbound.md) — B won; ledger required
+- [07 · Draft Ledger Seam + MCP](07-draft-ledger.md) — must land before merge
