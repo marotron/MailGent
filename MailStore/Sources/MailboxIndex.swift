@@ -151,6 +151,7 @@ public final class MailboxIndex {
     }
 
     public func search(_ query: String) throws -> [IndexedMessage] {
+        guard let match = FTSQuery.literalTokens(query) else { return [] }
         var hits: [IndexedMessage] = []
         try db.query(
             """
@@ -161,7 +162,7 @@ public final class MailboxIndex {
             ORDER BY m.account_id, m.placement, m.message_id
             """,
             bind: { stmt in
-                sqlite3_bind_text(stmt, 1, query, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 1, match, -1, SQLITE_TRANSIENT)
             },
             row: { stmt in
                 hits.append(indexedMessage(from: stmt))
@@ -273,6 +274,7 @@ public final class MailboxIndex {
         accountID: String? = nil,
         placement: String? = nil
     ) throws -> [IndexedMessage] {
+        guard let match = FTSQuery.literalTokens(query) else { return [] }
         var hits: [IndexedMessage] = []
         var clauses = ["messages_fts MATCH ?"]
         if accountID != nil { clauses.append("m.account_id = ?") }
@@ -288,7 +290,7 @@ public final class MailboxIndex {
             """,
             bind: { stmt in
                 var index: Int32 = 1
-                sqlite3_bind_text(stmt, index, query, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, index, match, -1, SQLITE_TRANSIENT)
                 index += 1
                 if let accountID {
                     sqlite3_bind_text(stmt, index, accountID, -1, SQLITE_TRANSIENT)
@@ -511,6 +513,18 @@ public struct IndexedMessage: Equatable, Sendable {
 public enum MailboxIndexError: Error, Equatable {
     case unreadable
     case messageNotFound
+}
+
+/// Builds FTS5 MATCH expressions that treat free text as literal tokens (no operators).
+enum FTSQuery {
+    /// Whitespace-split tokens, each double-quoted for FTS5. Empty input → nil (caller returns []).
+    static func literalTokens(_ raw: String) -> String? {
+        let tokens = raw.split { $0.isWhitespace || $0.isNewline }.map(String.init).filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return nil }
+        return tokens.map { token in
+            "\"" + token.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }.joined(separator: " ")
+    }
 }
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

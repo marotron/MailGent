@@ -57,14 +57,18 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private func presentGrantDesk(session: CompanionSession) {
+        let size = NSSize(width: 600, height: 640)
+        let minSize = NSSize(width: 560, height: 520)
         if grantDesk == nil {
             grantDesk = makeWindow(
                 title: "Grant desk",
-                size: NSSize(width: 520, height: 560),
-                minSize: NSSize(width: 420, height: 360),
+                size: size,
+                minSize: minSize,
                 root: GrantDeskView(session: session)
             )
         } else if let grantDesk {
+            grantDesk.minSize = minSize
+            grantDesk.setContentSize(size)
             grantDesk.contentView = NSHostingView(rootView: GrantDeskView(session: session))
         }
         bringForward(grantDesk)

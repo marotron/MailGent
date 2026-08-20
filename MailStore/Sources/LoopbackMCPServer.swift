@@ -107,17 +107,33 @@ public struct LoopbackMCPServer {
                     return LoopbackMCPResponse(status: 400, body: #"{"error":"bad_request"}"#)
                 }
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
-                let text = try callTool(name: name, arguments: arguments, credential: credential)
-                let envelope: [String: Any] = [
-                    "jsonrpc": "2.0",
-                    "id": id ?? NSNull(),
-                    "result": [
-                        "content": [
-                            ["type": "text", "text": text]
+                do {
+                    let text = try callTool(name: name, arguments: arguments, credential: credential)
+                    let envelope: [String: Any] = [
+                        "jsonrpc": "2.0",
+                        "id": id ?? NSNull(),
+                        "result": [
+                            "content": [
+                                ["type": "text", "text": text]
+                            ]
                         ]
                     ]
-                ]
-                return LoopbackMCPResponse(status: 200, body: try jsonString(envelope))
+                    return LoopbackMCPResponse(status: 200, body: try jsonString(envelope))
+                } catch PairingError.unauthorized {
+                    return LoopbackMCPResponse(status: 401, body: #"{"error":"unauthorized"}"#)
+                } catch {
+                    let envelope: [String: Any] = [
+                        "jsonrpc": "2.0",
+                        "id": id ?? NSNull(),
+                        "result": [
+                            "content": [
+                                ["type": "text", "text": String(describing: error)]
+                            ],
+                            "isError": true
+                        ]
+                    ]
+                    return LoopbackMCPResponse(status: 200, body: try jsonString(envelope))
+                }
 
             default:
                 return LoopbackMCPResponse(status: 400, body: #"{"error":"unknown_method"}"#)

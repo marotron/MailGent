@@ -206,6 +206,41 @@ struct MailboxIndexTests {
         #expect(try index.search("nosuchtoken").isEmpty)
     }
 
+    @Test func searchTreatsFTSOperatorsAsLiteralTokens() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        #expect(try index.search("OR").isEmpty)
+        #expect(try index.search("from:amazon OR invoice").isEmpty)
+        #expect(try index.search("").isEmpty)
+        #expect(try index.search("Hello").map(\.id) == ["1"])
+        #expect(try index.search("Hello there").map(\.id) == ["1"])
+        #expect(try index.search("Hello OR nosuch").isEmpty)
+    }
+
     @Test func ingestSkipsMalformedEmlxAndKeepsReadableNeighbors() throws {
         let root = try FixtureTree()
         defer { root.remove() }

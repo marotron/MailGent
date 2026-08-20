@@ -41,6 +41,43 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .search && $0.detail == "invoice" })
     }
 
+    @Test func searchWithFTSOperatorSyntaxReturnsHitsNotInternalError() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "search", arguments: ["query": "from:amazon OR invoice"])
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains(#""error":"internal""#))
+        #expect(response.body.contains("items"))
+        #expect(!response.body.contains("Invoice due"))
+    }
+
+    @Test func unknownToolReturnsIsErrorResultNotHTTP500() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "nope", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(!response.body.contains(#""error":"internal""#))
+    }
+
     @Test func authenticatedGetReturnsMessage() throws {
         let env = try LoopbackFixture()
         defer { env.remove() }

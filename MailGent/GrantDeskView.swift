@@ -5,8 +5,6 @@ import SwiftUI
 struct GrantDeskView: View {
     @Bindable var session: CompanionSession
     @State private var tab: Tab = .scope
-    /// Hatch+label for headers; censor bars for body / attachment bytes.
-    @State private var previewStyle: DeniedPreviewStyle = .mixed
 
     enum Tab: String, CaseIterable, Identifiable {
         case scope = "Scope"
@@ -14,32 +12,16 @@ struct GrantDeskView: View {
         var id: String { rawValue }
     }
 
-    enum DeniedPreviewStyle: String, CaseIterable, Identifiable {
-        case hatch = "Hatch"
-        case censor = "Censor"
-        case mixed = "Mixed"
-        var id: String { rawValue }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Grant desk")
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                if let agent = session.agents.agent {
-                    Text("\(agent.name) · \(agent.trustClass.rawValue)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Picker("Tab", selection: $tab) {
+            Picker("", selection: $tab) {
                 ForEach(Tab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel("Grant desk section")
 
             switch tab {
             case .scope:
@@ -51,7 +33,7 @@ struct GrantDeskView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(minWidth: 520, minHeight: 480)
+        .frame(minWidth: 600, minHeight: 560)
         .id(session.agents.grantRevision)
     }
 
@@ -116,24 +98,13 @@ struct GrantDeskView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         fieldEditor(for: selected)
                         Divider()
-                        HStack {
-                            Text("What this means")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer()
-                            Picker("Style", selection: $previewStyle) {
-                                ForEach(DeniedPreviewStyle.allCases) { style in
-                                    Text(style.rawValue).tag(style)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(maxWidth: 220)
-                        }
-                        Text("Sample message under this placement’s caps. Denied fields use \(previewStyle.rawValue.lowercased()) treatment.")
+                        Text("Preview")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Sample message under this placement’s caps. Denied fields use hatch treatment.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                         AgentAccessPreview(
                             fields: selected.fields,
-                            style: previewStyle,
                             pathLabel: pathLabel(selected)
                         )
                     }
@@ -185,34 +156,59 @@ struct GrantDeskView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("Presets")
-                .font(.caption.weight(.semibold))
-                .padding(.top, 4)
-            HStack(spacing: 6) {
-                presetButton("Headers only", GrantFields.headersOnly, grant)
-                presetButton("Read mail", GrantFields(
-                    subject: true, from: true, to: true, date: true,
-                    body: true, attachmentMetadata: false, attachmentContent: false
-                ), grant)
-                presetButton("Full", GrantFields(
-                    subject: true, from: true, to: true, date: true,
-                    body: true, attachmentMetadata: true, attachmentContent: true
-                ), grant)
+            HStack(alignment: .center, spacing: 8) {
+                Text("Presets")
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 8)
+                HStack(spacing: 6) {
+                    presetButton("Headers only", GrantFields.headersOnly, grant)
+                    presetButton("Read mail", GrantFields(
+                        subject: true, from: true, to: true, date: true,
+                        body: true, attachmentMetadata: false, attachmentContent: false
+                    ), grant)
+                    presetButton("Full", GrantFields(
+                        subject: true, from: true, to: true, date: true,
+                        body: true, attachmentMetadata: true, attachmentContent: true
+                    ), grant)
+                }
             }
+            .padding(.top, 4)
 
             Text("Envelope")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
-            fieldToggle("Subject", fields.subject, grant, \.subject)
-            fieldToggle("From", fields.from, grant, \.from)
-            fieldToggle("To", fields.to, grant, \.to)
-            fieldToggle("Date", fields.date, grant, \.date)
+            HStack(spacing: 6) {
+                fieldBadge("Subject", fields.subject, grant, \.subject, systemImage: "text.alignleft")
+                fieldBadge("From", fields.from, grant, \.from, systemImage: "envelope")
+                fieldBadge("To", fields.to, grant, \.to, systemImage: "envelope")
+                fieldBadge("Date & Time", fields.date, grant, \.date, systemImage: "calendar")
+            }
             Text("Content")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
-            fieldToggle("Body / snippet", fields.body, grant, \.body)
-            fieldToggle("Attachment names", fields.attachmentMetadata, grant, \.attachmentMetadata)
-            fieldToggle("Attachment content", fields.attachmentContent, grant, \.attachmentContent)
+            HStack(spacing: 6) {
+                fieldBadge(
+                    "Body / snippet",
+                    fields.body,
+                    grant,
+                    \.body,
+                    systemImage: "text.alignleft"
+                )
+                fieldBadge(
+                    "Attachment names",
+                    fields.attachmentMetadata,
+                    grant,
+                    \.attachmentMetadata,
+                    systemImage: "paperclip"
+                )
+                fieldBadge(
+                    "Attachment content",
+                    fields.attachmentContent,
+                    grant,
+                    \.attachmentContent,
+                    systemImage: "paperclip"
+                )
+            }
         }
     }
 
@@ -230,19 +226,44 @@ struct GrantDeskView: View {
         .controlSize(.small)
     }
 
-    private func fieldToggle(
+    private func fieldBadge(
         _ title: String,
         _ isOn: Bool,
         _ grant: Grant,
-        _ keyPath: WritableKeyPath<GrantFields, Bool>
+        _ keyPath: WritableKeyPath<GrantFields, Bool>,
+        systemImage: String? = nil
     ) -> some View {
-        GrantCheckRow(title: title, isOn: isOn) {
+        Button {
             session.agents.toggleAllowField(
                 accountID: grant.accountID,
                 placement: grant.placement,
                 keyPath: keyPath
             )
+        } label: {
+            HStack(spacing: 4) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.caption2)
+                }
+                Text(title)
+                    .font(.caption)
+            }
+            .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(isOn ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(
+                        isOn ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.25),
+                        lineWidth: isOn ? 1.5 : 0.5
+                    )
+            )
         }
+        .buttonStyle(.plain)
         .disabled(session.agents.draftDenyMode)
     }
 
@@ -384,11 +405,10 @@ private struct FieldBadgeRow: View {
     }
 }
 
-// MARK: - Access sample preview (hatch / censor)
+// MARK: - Access sample preview (hatch)
 
 private struct AgentAccessPreview: View {
     let fields: GrantFields
-    let style: GrantDeskView.DeniedPreviewStyle
     let pathLabel: String
 
     private let sample = SampleMessage.invoice
@@ -404,50 +424,27 @@ private struct AgentAccessPreview: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            previewRow("Subject", sample.subject, fields.subject, treatment: headerTreatment)
-            previewRow("From", sample.from, fields.from, treatment: headerTreatment)
-            previewRow("To", sample.to, fields.to, treatment: headerTreatment)
-            previewRow("Date", sample.date, fields.date, treatment: headerTreatment)
+            previewRow("Subject", sample.subject, fields.subject)
+            previewRow("From", sample.from, fields.from)
+            previewRow("To", sample.to, fields.to)
+            previewRow("Date & Time", sample.date, fields.date)
             Text("Body")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
-            deniedOrVisible(
-                granted: fields.body,
-                treatment: bodyTreatment,
-                visible: {
-                    Text(sample.body)
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.06))
-                        .cornerRadius(8)
-                },
-                placeholder: sample.body
-            )
-            ForEach(sample.attachments, id: \.name) { att in
-                HStack {
-                    deniedOrVisible(
-                        granted: fields.attachmentMetadata,
-                        treatment: headerTreatment,
-                        visible: {
-                            Text("\(att.name) · \(att.kb) KB")
-                                .font(.caption)
-                        },
-                        placeholder: att.name
+            bodyPreview(granted: fields.body)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                ForEach(sample.attachments, id: \.name) { att in
+                    attachmentTile(
+                        label: "\(att.name) · \(att.kb) KB",
+                        granted: fields.attachmentMetadata
                     )
-                    Spacer()
-                    deniedOrVisible(
-                        granted: fields.attachmentContent,
-                        treatment: bodyTreatment,
-                        visible: { Text("content").font(.caption2) },
-                        placeholder: "content"
+                    attachmentTile(
+                        label: "\(att.name) content",
+                        granted: fields.attachmentContent
                     )
                 }
-                .padding(6)
-                .background(Color.secondary.opacity(0.05))
-                .cornerRadius(6)
             }
-            Text(legend)
+            Text("Hatched + “not granted” = agent cannot read")
                 .font(.system(size: 9))
                 .foregroundStyle(.tertiary)
         }
@@ -455,34 +452,32 @@ private struct AgentAccessPreview: View {
         .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
     }
 
-    private var headerTreatment: DeniedTreatment {
-        switch style {
-        case .hatch, .mixed: return .hatch
-        case .censor: return .censor
-        }
+    private func bodyPreview(granted: Bool) -> some View {
+        Text(sample.body)
+            .font(.caption)
+            .foregroundStyle(granted ? Color.primary : Color.clear)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background {
+                if granted {
+                    Color.secondary.opacity(0.06)
+                } else {
+                    HatchPattern()
+                        .opacity(0.9)
+                }
+            }
+            .overlay {
+                if !granted {
+                    Text("not granted")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.4)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var bodyTreatment: DeniedTreatment {
-        switch style {
-        case .censor, .mixed: return .censor
-        case .hatch: return .hatch
-        }
-    }
-
-    private var legend: String {
-        switch style {
-        case .hatch: return "Hatched + “not granted” = agent cannot read"
-        case .censor: return "Black bars = redacted from agent"
-        case .mixed: return "Headers: hatch · Body/bytes: censor bars"
-        }
-    }
-
-    private func previewRow(
-        _ label: String,
-        _ value: String,
-        _ granted: Bool,
-        treatment: DeniedTreatment
-    ) -> some View {
+    private func previewRow(_ label: String, _ value: String, _ granted: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .bold))
@@ -490,75 +485,77 @@ private struct AgentAccessPreview: View {
                 .frame(width: 52, alignment: .leading)
             deniedOrVisible(
                 granted: granted,
-                treatment: treatment,
                 visible: { Text(value).font(.caption) },
                 placeholder: value
             )
         }
     }
 
+    private func attachmentTile(label: String, granted: Bool) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Image(systemName: "paperclip")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Group {
+                if granted {
+                    Text(label)
+                        .font(.caption)
+                        .lineLimit(1)
+                } else {
+                    HatchDeniedLabel(fixedHeight: 18)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .leading)
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(6)
+    }
+
     @ViewBuilder
     private func deniedOrVisible<V: View>(
         granted: Bool,
-        treatment: DeniedTreatment,
         @ViewBuilder visible: () -> V,
         placeholder: String
     ) -> some View {
         if granted {
             visible()
         } else {
-            switch treatment {
-            case .hatch:
-                HatchDeniedLabel(placeholder: placeholder)
-            case .censor:
-                CensorBar(placeholder: placeholder)
-            }
+            HatchDeniedLabel(placeholder: placeholder)
         }
     }
 }
 
-private enum DeniedTreatment {
-    case hatch
-    case censor
-}
-
 private struct HatchDeniedLabel: View {
-    let placeholder: String
+    var placeholder: String = " "
+    var fixedHeight: CGFloat? = nil
 
     var body: some View {
-        Text(placeholder)
-            .font(.caption)
-            .foregroundStyle(.clear)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
-            .padding(.horizontal, 4)
-            .background {
-                HatchPattern()
-                    .opacity(0.9)
+        Group {
+            if let fixedHeight {
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: fixedHeight, maxHeight: fixedHeight)
+            } else {
+                Text(placeholder)
+                    .font(.caption)
+                    .foregroundStyle(.clear)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 2)
             }
-            .overlay {
-                Text("not granted")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .tracking(0.4)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-}
-
-private struct CensorBar: View {
-    let placeholder: String
-
-    var body: some View {
-        Text(placeholder)
-            .font(.caption)
-            .foregroundStyle(.clear)
-            .frame(maxWidth: .infinity, minHeight: 16, alignment: .leading)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 4)
-            .background(Color.primary)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .accessibilityLabel("Redacted")
+        }
+        .padding(.horizontal, 4)
+        .background {
+            HatchPattern()
+                .opacity(0.9)
+        }
+        .overlay {
+            Text("not granted")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 
