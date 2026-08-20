@@ -1,7 +1,7 @@
 # Merge Local-Read Train
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 05, 07
 
 ## Question

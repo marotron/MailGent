@@ -42,9 +42,9 @@ YAGNI: no send, no Mail.app scripting, no approval queue.
 - Outbound: **B — Draft ledger** (in-memory versions, copy current to clipboard for Mail.app paste). Not A clipboard-only.
 - Formatting (bold/italic/lists): deferred; decide ownership first, then rich body later.
 
-### Prototype (`proto/draft-outbound`)
+### Prototype (`proto/draft-outbound` @ `52cb9e0`)
 
-`MailGent/Prototype/PrototypeDraftRoot` + A/B switcher:
+`MailGent/Prototype/PrototypeDraftRoot` + A/B switcher (`make prototype-draft` on that branch):
 
 - A Copy-paste — composer → clipboard → open Mail.app
 - B Draft ledger — History rail, save versions, load, copy current

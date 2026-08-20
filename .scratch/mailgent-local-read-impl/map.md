@@ -91,4 +91,4 @@ flowchart TD
 | 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | resolved |
 | 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | resolved |
 | 07 | [Draft Ledger Seam + MCP](issues/07-draft-ledger.md) | task | resolved |
-| 08 | [Merge Local-Read Train](issues/08-merge-train.md) | task | open |
+| 08 | [Merge Local-Read Train](issues/08-merge-train.md) | task | claimed |
