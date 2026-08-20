@@ -429,7 +429,7 @@ private struct CompanionReadPage: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Divider()
-                    MessageBodyView(readBody: detail.body)
+                    MessageBodyView(readBody: detail.body, rawBody: detail.rawBody)
                     OpenInMailButton(session: session)
                 } else {
                     Text("Message not available")

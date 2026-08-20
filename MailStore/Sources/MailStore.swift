@@ -52,6 +52,7 @@ public struct MailStore: Sendable {
             date: parsed.date,
             subject: parsed.subject,
             body: parsed.body,
+            rawBody: parsed.rawBody,
             isPartial: url.lastPathComponent.lowercased().hasSuffix(".partial.emlx"),
             isDraft: Self.isDraftFlag(parsedEmlx.flags),
             attachments: Self.externalAttachmentMetadata(forEmlx: url)
@@ -112,7 +113,10 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let to: String
     public let date: String
     public let subject: String
+    /// Decoded display body (text/plain preferred; QP/base64 applied).
     public let body: String
+    /// Original MIME body block after headers (before transfer-decoding).
+    public let rawBody: String
     public let isPartial: Bool
     public let isDraft: Bool
     public let attachments: [MailAttachment]
@@ -542,13 +546,21 @@ extension MailStore {
         return nil
     }
 
-    static func parseRFC822(_ data: Data) throws -> (from: String, to: String, date: String, subject: String, body: String) {
+    static func parseRFC822(_ data: Data) throws -> (
+        from: String,
+        to: String,
+        date: String,
+        subject: String,
+        body: String,
+        rawBody: String
+    ) {
         guard !data.isEmpty else { throw MailStoreError.malformed }
         let scan = data.prefix(min(data.count, 256_000))
         let text = String(decoding: scan, as: UTF8.self)
         let (headerBlock, bodyBlock) = splitHeadersAndBody(text)
         let headers = parseHeaders(headerBlock)
-        var body = bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawBody = bodyBlock
+        var body = decodeDisplayBody(bodyBlock: bodyBlock, headers: headers)
         if body.utf8.count > maxIndexedBodyBytes {
             body = String(body.prefix(maxIndexedBodyBytes))
         }
@@ -557,8 +569,102 @@ extension MailStore {
             to: decodeRFC2047(headers["to"] ?? ""),
             date: headers["date"] ?? "",
             subject: decodeRFC2047(headers["subject"] ?? ""),
-            body: body
+            body: body,
+            rawBody: rawBody
         )
+    }
+
+    /// Prefer first `text/plain` part; apply Content-Transfer-Encoding.
+    static func decodeDisplayBody(bodyBlock: String, headers: [String: String]) -> String {
+        let contentType = headers["content-type"] ?? "text/plain"
+        if contentType.lowercased().hasPrefix("multipart/") {
+            guard let boundary = extractParameter(contentType, named: "boundary") else {
+                return bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return firstPlainText(fromMultipart: bodyBlock, boundary: boundary)
+                ?? bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let transfer = headers["content-transfer-encoding"]
+        let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
+        return decodeTransferEncodedBody(bodyBlock, transferEncoding: transfer, charset: charset)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func firstPlainText(fromMultipart body: String, boundary: String) -> String? {
+        for part in splitMultipart(body, boundary: boundary) {
+            let (partHeaders, partBody) = splitHeadersAndBody(part)
+            let headers = parseHeaders(partHeaders)
+            let contentType = headers["content-type"] ?? "text/plain"
+            if contentType.lowercased().hasPrefix("multipart/") {
+                if let nested = extractParameter(contentType, named: "boundary"),
+                   let found = firstPlainText(fromMultipart: partBody, boundary: nested)
+                {
+                    return found
+                }
+                continue
+            }
+            guard contentType.lowercased().hasPrefix("text/plain") else { continue }
+            let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
+            return decodeTransferEncodedBody(
+                partBody,
+                transferEncoding: headers["content-transfer-encoding"],
+                charset: charset
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
+    }
+
+    static func splitMultipart(_ body: String, boundary: String) -> [String] {
+        let normalized = body.replacingOccurrences(of: "\r\n", with: "\n")
+        let delimiter = "--" + boundary
+        var parts: [String] = []
+        for chunk in normalized.components(separatedBy: delimiter) {
+            var part = chunk
+            if part.hasPrefix("--") { continue }
+            if part.hasPrefix("\n") { part.removeFirst() }
+            if part.hasSuffix("\n") { part.removeLast() }
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed == "--" { continue }
+            if part.hasSuffix("--") {
+                part = String(part.dropLast(2))
+            }
+            parts.append(part.trimmingCharacters(in: CharacterSet(charactersIn: "\n")))
+        }
+        return parts
+    }
+
+    static func extractParameter(_ headerValue: String, named name: String) -> String? {
+        for part in headerValue.split(separator: ";").dropFirst() {
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            guard let eq = trimmed.firstIndex(of: "=") else { continue }
+            let key = trimmed[..<eq].trimmingCharacters(in: .whitespaces).lowercased()
+            guard key == name.lowercased() else { continue }
+            var value = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+                value = String(value.dropFirst().dropLast())
+            }
+            return String(value)
+        }
+        return nil
+    }
+
+    static func decodeTransferEncodedBody(
+        _ body: String,
+        transferEncoding: String?,
+        charset: String
+    ) -> String {
+        let encoding = (transferEncoding ?? "7bit").lowercased().trimmingCharacters(in: .whitespaces)
+        let data: Data
+        switch encoding {
+        case "base64":
+            let cleaned = body.filter { !$0.isWhitespace }
+            data = Data(base64Encoded: cleaned) ?? Data()
+        case "quoted-printable":
+            data = decodeQuotedPrintableBytes(body)
+        default:
+            data = Data(body.utf8)
+        }
+        return decodeRFC2047Bytes(data, charset: charset)
     }
 
     static func splitHeadersAndBody(_ text: String) -> (String, String) {
@@ -702,14 +808,26 @@ private func decodeQuotedPrintableBytes(_ input: String) -> Data {
     var i = 0
     while i < bytes.count {
         let b = bytes[i]
-        if b == UInt8(ascii: "="),
-           i + 2 < bytes.count,
-           let hi = hexNibble(bytes[i + 1]),
-           let lo = hexNibble(bytes[i + 2])
-        {
-            output.append(UInt8(hi * 16 + lo))
-            i += 3
-            continue
+        if b == UInt8(ascii: "=") {
+            // Soft line break: =\r\n or =\n
+            if i + 1 < bytes.count, bytes[i + 1] == UInt8(ascii: "\r"),
+               i + 2 < bytes.count, bytes[i + 2] == UInt8(ascii: "\n")
+            {
+                i += 3
+                continue
+            }
+            if i + 1 < bytes.count, bytes[i + 1] == UInt8(ascii: "\n") {
+                i += 2
+                continue
+            }
+            if i + 2 < bytes.count,
+               let hi = hexNibble(bytes[i + 1]),
+               let lo = hexNibble(bytes[i + 2])
+            {
+                output.append(UInt8(hi * 16 + lo))
+                i += 3
+                continue
+            }
         }
         output.append(b)
         i += 1

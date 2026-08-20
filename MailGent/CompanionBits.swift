@@ -32,15 +32,43 @@ struct PartialBadge: View {
 
 struct MessageBodyView: View {
     let readBody: ReadBody
+    var rawBody: String = ""
+    @State private var showRaw = false
+
+    private var canToggleRaw: Bool {
+        !rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
-        switch readBody {
-        case .text(let text):
-            Text(text)
-        case .notAvailable:
-            Text("Body not available")
-                .foregroundStyle(.secondary)
-                .italic()
+        VStack(alignment: .leading, spacing: 8) {
+            if canToggleRaw {
+                Picker("Body format", selection: $showRaw) {
+                    Text("Pretty").tag(false)
+                    Text("Raw").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 220)
+            }
+            bodyContent
+                .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private var bodyContent: some View {
+        if showRaw, canToggleRaw {
+            Text(rawBody)
+                .font(.body.monospaced())
+        } else {
+            switch readBody {
+            case .text(let text):
+                Text(text)
+            case .notAvailable:
+                Text("Body not available")
+                    .foregroundStyle(.secondary)
+                    .italic()
+            }
         }
     }
 }

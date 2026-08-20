@@ -52,7 +52,11 @@ public struct ReadAPI {
     }
 
     public func get(accountID: String, placement: String, id: String) throws -> ReadMessage {
-        ReadMessage(try index.get(accountID: accountID, placement: placement, id: id))
+        let indexed = try index.get(accountID: accountID, placement: placement, id: id)
+        guard let mail = try? index.store.message(accountID: accountID, mailbox: placement, id: id) else {
+            return ReadMessage(indexed)
+        }
+        return ReadMessage(indexed, prettyBody: mail.body, rawBody: mail.rawBody)
     }
 
     public func listPlacements() throws -> [Placement] {
@@ -92,9 +96,11 @@ public struct ReadMessage: Equatable, Sendable {
     public let date: String
     public let subject: String
     public let body: ReadBody
+    /// Original MIME body block; empty when only the index row is available.
+    public let rawBody: String
     public let isPartial: Bool
 
-    init(_ message: IndexedMessage) {
+    init(_ message: IndexedMessage, prettyBody: String? = nil, rawBody: String = "") {
         self.id = message.id
         self.accountID = message.accountID
         self.placement = message.placement
@@ -102,7 +108,9 @@ public struct ReadMessage: Equatable, Sendable {
         self.to = message.to
         self.date = message.date
         self.subject = message.subject
-        self.body = message.body.isEmpty ? .notAvailable : .text(message.body)
+        let text = prettyBody ?? message.body
+        self.body = text.isEmpty ? .notAvailable : .text(text)
+        self.rawBody = rawBody
         self.isPartial = message.isPartial
     }
 }

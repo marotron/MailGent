@@ -277,6 +277,38 @@ struct ReadAPITests {
         #expect(message.isPartial == false)
     }
 
+    @Test func getReturnsDecodedBodyAndRawMIMEBody() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "9.emlx",
+            rfc822: """
+            From: a@example.com
+            To: b@example.com
+            Subject: Plain QP
+            Date: Sat, 03 Sep 2022 01:31:30 +0000
+            Content-Type: text/plain; charset=utf-8
+            Content-Transfer-Encoding: quoted-printable
+
+            Caf=C3=A9 au lait
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let message = try ReadAPI(index: index).get(accountID: accountID, placement: "INBOX", id: "9")
+        #expect(message.body == .text("Café au lait"))
+        #expect(message.rawBody.contains("Caf=C3=A9 au lait"))
+    }
+
     @Test func listScopesToAccountAndPlacementBeforePaging() throws {
         let root = try FixtureTree()
         defer { root.remove() }
