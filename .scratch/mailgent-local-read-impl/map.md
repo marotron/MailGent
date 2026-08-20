@@ -28,11 +28,13 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) — control-first; menu-bar popover launches detached window; proto on `proto/companion-read-ui`
 - [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) — loopback MCP `127.0.0.1:8787`; Pairing/GrantGate/AuditLog; Cursor list/search/get E2E
 - [Draft Outbound Prototype](issues/06-draft-outbound.md) — **B wins** (versioned draft ledger); proto on `proto/draft-outbound`; feat on `feat/07-draft-ledger`
+- [Draft Ledger Seam + MCP](issues/07-draft-ledger.md) — in-memory DraftLedger; MCP `create_draft` / `update_draft`; audit; no Mail writes
 
 ## Not yet specified
 
 - Rich draft formatting (bold/italic/lists) after ledger lands.
 - DraftLedger persistence across relaunch (in-memory first).
+- Companion UI for ledger (prototype only for now; agent path is MCP).
 
 ## Branches
 
@@ -88,5 +90,5 @@ flowchart TD
 | 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | resolved |
 | 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | resolved |
 | 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | resolved |
-| 07 | [Draft Ledger Seam + MCP](issues/07-draft-ledger.md) | task | claimed |
+| 07 | [Draft Ledger Seam + MCP](issues/07-draft-ledger.md) | task | resolved |
 | 08 | [Merge Local-Read Train](issues/08-merge-train.md) | task | open |

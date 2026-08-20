@@ -1,7 +1,7 @@
 # Draft Ledger Seam + MCP
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 06
 
 ## Question
@@ -28,3 +28,17 @@ YAGNI: no rich text, no persistence, no send, no Mail.app scripting, no approval
 
 - [06 · Draft Outbound Prototype](06-draft-outbound.md) — B wins; proto on `proto/draft-outbound`
 - [05 · MCP Read, Pairing, Grants, Audit](05-mcp-pairing-grants-audit.md)
+
+## Answer
+
+Yes. In-memory **DraftLedger** seam + MCP wrappers on `feat/07-draft-ledger`.
+
+- Seam: `create` → `v1`; `update` appends `vN` (list newest-first); `copy(versionID)` returns body (no pasteboard in MailStore).
+- MCP: authenticated `create_draft` / `update_draft`; audit kinds `createDraft` / `updateDraft`.
+- `AgentBridge` shares one ledger with the loopback listener. Still no Mail writes / send.
+- `make test` green (DraftLedger + MCP draft round-trip).
+
+## Comments
+
+- 2026-08-20 — Claimed; TDD DraftLedger then MCP wrappers.
+- 2026-08-20 — Resolved on `feat/07-draft-ledger`.
