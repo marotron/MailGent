@@ -1,3 +1,4 @@
+import AppKit
 import MailStore
 import SwiftUI
 
@@ -138,10 +139,12 @@ struct MessageBodyView: View {
             if canShowRaw {
                 Text(rawBody)
                     .font(.body.monospaced())
+                    .textSelection(.enabled)
             } else {
                 switch readBody {
                 case .text(let text):
-                    Text(Self.prettyAttributed(text))
+                    LinkAwareBodyText(attributed: Self.prettyAttributed(text))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 case .notAvailable:
                     Text("Body not available")
                         .foregroundStyle(.secondary)
@@ -149,13 +152,129 @@ struct MessageBodyView: View {
                 }
             }
         }
-        .textSelection(.enabled)
     }
 
+    /// Email bodies break full Markdown parses; linkify `[label](url)` + bare URLs instead.
     private static func prettyAttributed(_ text: String) -> AttributedString {
         var options = AttributedString.MarkdownParsingOptions()
         options.interpretedSyntax = .inlineOnlyPreservingWhitespace
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        if let attributed = try? AttributedString(markdown: text, options: options),
+           attributed.runs.contains(where: { $0.link != nil })
+        {
+            return attributed
+        }
+        return linkified(text)
+    }
+
+    private static func linkified(_ text: String) -> AttributedString {
+        var output = AttributedString()
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\[([^\]\n]+)\]\(([^)\s]+)\)|(https?://[^\s<>\]\)]+)"#
+        ) else {
+            return AttributedString(text)
+        }
+
+        var cursor = 0
+        for match in regex.matches(in: text, range: full) {
+            if match.range.location > cursor {
+                output.append(AttributedString(
+                    ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+                ))
+            }
+
+            if match.range(at: 1).location != NSNotFound {
+                let label = ns.substring(with: match.range(at: 1))
+                let urlString = ns.substring(with: match.range(at: 2))
+                output.append(linkRun(label: label, urlString: urlString))
+            } else if match.range(at: 3).location != NSNotFound {
+                let urlString = ns.substring(with: match.range(at: 3))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)"))
+                output.append(linkRun(label: urlString, urlString: urlString))
+            }
+
+            cursor = match.range.location + match.range.length
+        }
+        if cursor < ns.length {
+            output.append(AttributedString(ns.substring(from: cursor)))
+        }
+        return output
+    }
+
+    private static func linkRun(label: String, urlString: String) -> AttributedString {
+        var run = AttributedString(label)
+        if let url = URL(string: urlString) {
+            run.link = url
+            run.foregroundColor = .accentColor
+            run.underlineStyle = .single
+        }
+        return run
+    }
+}
+
+/// AppKit text view so link hover shows the pointing-hand cursor (SwiftUI `Text` does not).
+private struct LinkAwareBodyText: NSViewRepresentable {
+    let attributed: AttributedString
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSTextView {
+        let textView = NSTextView()
+        textView.drawsBackground = false
+        textView.isEditable = false
+        textView.isRichText = true
+        textView.isSelectable = true
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textView.setContentHuggingPriority(.required, for: .vertical)
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor.linkColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .cursor: NSCursor.pointingHand,
+        ]
+        textView.delegate = context.coordinator
+        return textView
+    }
+
+    func updateNSView(_ textView: NSTextView, context: Context) {
+        let bridged = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
+        let font = NSFont.preferredFont(forTextStyle: .body)
+        bridged.addAttribute(.font, value: font, range: NSRange(location: 0, length: bridged.length))
+        textView.textStorage?.setAttributedString(bridged)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? nsView.bounds.width
+        guard width > 0, let container = nsView.textContainer, let layout = nsView.layoutManager else {
+            return nil
+        }
+        container.containerSize = CGSize(width: width, height: .greatestFiniteMagnitude)
+        nsView.frame.size.width = width
+        layout.ensureLayout(for: container)
+        let used = layout.usedRect(for: container)
+        return CGSize(width: width, height: ceil(used.height))
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            if let url = link as? URL {
+                NSWorkspace.shared.open(url)
+                return true
+            }
+            if let string = link as? String, let url = URL(string: string) {
+                NSWorkspace.shared.open(url)
+                return true
+            }
+            return false
+        }
     }
 }
 
