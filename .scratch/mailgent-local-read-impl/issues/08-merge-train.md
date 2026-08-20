@@ -1,7 +1,7 @@
 # Merge Local-Read Train
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: 05, 07
 
 ## Question
@@ -29,3 +29,16 @@ YAGNI: do not start OAuth work on the merge PR.
 - [05 · MCP Read, Pairing, Grants, Audit](05-mcp-pairing-grants-audit.md) — first-ship acceptance slice
 - [06 · Draft Outbound Prototype](06-draft-outbound.md) — B won; ledger required
 - [07 · Draft Ledger Seam + MCP](07-draft-ledger.md) — must land before merge
+
+## Answer
+
+Yes. `train/local-read` fast-forwarded onto the ticket-07 tip and merged to `main` (`8720b8a`). Local-read first ship is on `main`.
+
+- Prototypes stay off `main`: `proto/companion-read-ui` @ `b7252e6`; `proto/draft-outbound` @ `52cb9e0`.
+- Throwaway draft A/B UI removed from the train before merge; agent path is MCP `create_draft` / `update_draft` + in-memory DraftLedger.
+- OAuth not started; next train remains `train/oauth` with local-read kept as a source.
+
+## Comments
+
+- 2026-08-20 — Claimed; FF `feat/07-draft-ledger` → `train/local-read` → `main`; capture proto tips; strip draft prototype from train.
+- 2026-08-20 — Resolved. First usable local-read product on `main`.
