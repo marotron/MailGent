@@ -317,6 +317,7 @@ final class CompanionSession {
             ingestPassNote = "Full reindex"
             items = []
             detail = nil
+            agents.bindLoopback(store: store, databaseURL: databaseURL)
             await refreshFromWorker()
             MailGentLog.trace(
                 "reload finished indexed=\(snapshot.indexedCount) onDisk=\(snapshot.catalog.messagesCount)"
@@ -344,6 +345,7 @@ final class CompanionSession {
             ingestPassNote = "Loaded from disk"
             items = []
             detail = nil
+            agents.bindLoopback(store: store, databaseURL: databaseURL)
             await refreshFromWorker()
             MailGentLog.trace("opened existing index indexed=\(opened.indexedCount)")
             return true
@@ -477,6 +479,7 @@ final class CompanionSession {
     }
 
     private func clearIndexState(status: String) {
+        agents.stopLoopback()
         clearDetectedCatalog()
         indexedCount = 0
         placements = []

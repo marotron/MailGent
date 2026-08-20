@@ -12,8 +12,11 @@ final class AgentBridge {
 
     private(set) var agent: PairedAgent?
     private(set) var credential: String?
-    /// Placeholder until NWListener binds; Cursor config uses this host/port.
+    private(set) var isListening = false
+    private(set) var listenNote = "Loopback MCP not bound yet"
     let loopbackURL = "http://127.0.0.1:8787/mcp"
+    private let loopbackPort: UInt16 = 8787
+    private var http: LoopbackHTTPListener?
 
     var recentAudit: [AuditEntry] {
         Array(audit.entries().suffix(12).reversed())
@@ -63,6 +66,54 @@ final class AgentBridge {
         for accountID in accountIDs {
             try? grants.allow(agentID: agent.id, accountID: accountID)
         }
+    }
+
+    func bindLoopback(store: MailStore, databaseURL: URL) {
+        stopLoopback()
+        ensureMachineLocalAgent()
+        do {
+            let index = try MailboxIndex(store: store, databaseURL: databaseURL)
+            let gateway = AgentReadAPI(
+                read: ReadAPI(index: index),
+                pairing: pairing,
+                grants: grants,
+                audit: audit
+            )
+            let listener = LoopbackHTTPListener(
+                gateway: gateway,
+                host: "127.0.0.1",
+                port: loopbackPort
+            )
+            http = listener
+            Task { @MainActor in
+                do {
+                    try await listener.start()
+                    guard self.http === listener else {
+                        listener.stop()
+                        return
+                    }
+                    self.isListening = true
+                    self.listenNote = "Listening on \(self.loopbackURL)"
+                    MailGentLog.trace("mcp loopback ready \(self.loopbackURL)")
+                } catch {
+                    self.isListening = false
+                    self.listenNote = "Bind failed: \(error)"
+                    self.http = nil
+                    MailGentLog.trace("mcp loopback bind failed: \(error)")
+                }
+            }
+        } catch {
+            isListening = false
+            listenNote = "Bind failed: \(error)"
+            MailGentLog.trace("mcp gateway open failed: \(error)")
+        }
+    }
+
+    func stopLoopback() {
+        http?.stop()
+        http = nil
+        isListening = false
+        listenNote = "Loopback MCP not bound yet"
     }
 
     func revoke() {

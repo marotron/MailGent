@@ -38,6 +38,62 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .search && $0.detail == "invoice" })
     }
 
+    @Test func initializeReturnsServerCapabilities() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cursor","version":"1"}}}"#.utf8)
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("\"protocolVersion\":\"2025-03-26\""))
+        #expect(response.body.contains("\"name\":\"mailgent\""))
+        #expect(response.body.contains("\"tools\""))
+    }
+
+    @Test func toolsListReturnsReadTools() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#.utf8)
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("\"name\":\"search\""))
+        #expect(response.body.contains("\"name\":\"list\""))
+        #expect(response.body.contains("\"name\":\"get\""))
+        #expect(response.body.contains("\"name\":\"listPlacements\""))
+    }
+
+    @Test func initializedNotificationReturnsAccepted() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#.utf8)
+            )
+        )
+
+        #expect(response.status == 202)
+        #expect(response.body.isEmpty)
+    }
+
     private static func toolCallJSON(name: String, arguments: [String: String]) -> Data {
         let args = arguments
             .map { "\"\($0.key)\":\"\($0.value)\"" }

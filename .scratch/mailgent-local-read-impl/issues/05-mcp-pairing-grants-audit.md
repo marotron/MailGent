@@ -42,4 +42,5 @@ YAGNI: no UDS/App Group required; no stdio; no remote relay; no mutation tools; 
   - `LoopbackMCPServer` thin JSON-RPC `tools/call` for search/list/get/listPlacements (401 without Bearer)
   - Companion `AgentBridge` + control-center card: pair Cursor, Cursor config snippet, access log
   - Still open: real `127.0.0.1` NWListener bind, Swift MCP SDK / Streamable HTTP session, grant mailbox UI, Cursor host E2E
+- 2026-08-20 — Loopback HTTP bind landed (`LoopbackHTTPListener` → `127.0.0.1:8787`). MCP handler now covers Cursor handshake: `initialize`, `notifications/initialized`, `tools/list`, `tools/call`. Companion binds after index open/rebuild. Still open: grant mailbox UI polish, full Cursor host E2E confirmation after app relaunch + fresh Bearer snippet.
 
