@@ -169,12 +169,7 @@ struct CompanionWindow: View {
             Text("Last ingest")
                 .font(.headline)
             if session.isIndexing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(session.status)
-                        .foregroundStyle(.secondary)
-                }
+                ingestProgressBlock
                 if session.indexedCount > 0 {
                     Text("\(session.indexedCount) indexed so far")
                         .foregroundStyle(.secondary)
@@ -185,19 +180,22 @@ struct CompanionWindow: View {
                     .foregroundStyle(.secondary)
                 Text("\(session.scanAccounts) accounts · \(session.scanMailboxes) mailboxes · \(session.scanMessagesLabel) indexed")
                     .foregroundStyle(.secondary)
-                Text(session.ingestPassNote == "Full reindex"
-                    ? "Indexed \(session.indexedCount) from disk"
-                    : (session.lastNewCount == 0 ? "No new this pass" : "\(session.lastNewCount) new this pass"))
+                Text(ingestSummary)
                     .foregroundStyle(.secondary)
+                if session.isUpdating {
+                    ingestProgressBlock
+                }
             }
             HStack {
+                Button("Update", action: session.ingestAgain)
+                    .disabled(session.isBusy)
                 Button("Reindex now", action: session.reindexNow)
-                    .disabled(session.isIndexing)
+                    .disabled(session.isBusy)
                 if session.mailAccessGranted {
                     Button(session.source == .liveMail ? "Use fixture" : "Use live Mail") {
                         session.setSource(session.source == .liveMail ? .fixture : .liveMail)
                     }
-                    .disabled(session.isIndexing)
+                    .disabled(session.isBusy)
                 }
             }
         }
@@ -206,6 +204,37 @@ struct CompanionWindow: View {
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12).stroke(.separator)
+        }
+    }
+
+    private var ingestSummary: String {
+        switch session.ingestPassNote {
+        case "Full reindex":
+            return "Indexed \(session.indexedCount) from disk"
+        case "Loaded from disk":
+            return "Opened existing index"
+        default:
+            return session.lastNewCount == 0 ? "No new this pass" : "\(session.lastNewCount) new this pass"
+        }
+    }
+
+    @ViewBuilder
+    private var ingestProgressBlock: some View {
+        if let total = session.ingestTotal, total > 0 {
+            ProgressView(value: Double(min(session.ingestProcessed, total)), total: Double(total))
+            Text(session.ingestCurrentTask.isEmpty ? session.status : session.ingestCurrentTask)
+                .foregroundStyle(.secondary)
+        } else {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(session.ingestCurrentTask.isEmpty ? session.status : session.ingestCurrentTask)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        if session.ingestProcessed > 0 || session.ingestInserted > 0 {
+            Text("\(session.ingestInserted) new / \(session.ingestProcessed) scanned")
+                .foregroundStyle(.secondary)
         }
     }
 }

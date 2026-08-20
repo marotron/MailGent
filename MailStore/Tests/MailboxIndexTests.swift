@@ -240,4 +240,203 @@ struct MailboxIndexTests {
         ])
         #expect(try index.get(accountID: accountID, placement: "INBOX", id: "1").subject == "Hello")
     }
+
+    @Test func reopenedIndexReturnsPreviouslyIngestedMessage() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        do {
+            let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+            #expect(try index.ingest().new == [
+                IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
+            ])
+        }
+
+        let reopened = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        let message = try reopened.get(accountID: accountID, placement: "INBOX", id: "1")
+        #expect(message.subject == "Hello")
+        #expect(message.body == "Hi there")
+
+        let page = try ReadAPI(index: reopened).list(limit: 25)
+        #expect(page.items.map(\.id) == ["1"])
+        #expect(page.items[0].subject == "Hello")
+        #expect(page.items[0].accountID == accountID)
+        #expect(page.items[0].placement == "INBOX")
+    }
+
+    @Test func newIndexOnSameDatabaseIngestsOnlyPlantedArrival() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        do {
+            let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+            #expect(try index.ingest().new == [
+                IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
+            ])
+        }
+
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Follow up
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            New mail
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        #expect(try index.ingest().new == [
+            IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "2"),
+        ])
+        #expect(try index.get(accountID: accountID, placement: "INBOX", id: "1").subject == "Hello")
+        #expect(try index.search("Hello").map(\.id) == ["1"])
+        #expect(try index.search("Follow").map(\.id) == ["2"])
+    }
+
+    @Test func ingestProgressReportsMailboxAndMonotonicProcessed() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Follow up
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            New mail
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        nonisolated(unsafe) var reports: [IngestProgress] = []
+        _ = try index.ingest { progress in
+            reports.append(progress)
+        }
+
+        #expect(!reports.isEmpty)
+        #expect(reports.allSatisfy { $0.mailboxID == "INBOX" })
+        #expect(reports.allSatisfy { $0.accountID == accountID })
+        let processed = reports.map(\.processed)
+        #expect(processed.first == 1)
+        #expect(zip(processed, processed.dropFirst()).allSatisfy { $0 <= $1 })
+    }
+
+    @Test func ingestProgressIncludesKnownTotalHintAndIndexingPhase() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Follow up
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            New mail
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        nonisolated(unsafe) var reports: [IngestProgress] = []
+        _ = try index.ingest(totalHint: 2) { progress in
+            reports.append(progress)
+        }
+
+        #expect(!reports.isEmpty)
+        #expect(reports.allSatisfy { $0.totalHint == 2 })
+        #expect(reports.allSatisfy { $0.phase == .indexing })
+    }
 }

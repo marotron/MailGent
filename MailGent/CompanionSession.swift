@@ -70,6 +70,13 @@ final class CompanionSession {
     var handoffNote: String?
     var mailAccessGranted = false
     var isIndexing = false
+    var isUpdating = false
+    var ingestProcessed = 0
+    var ingestTotal: Int?
+    var ingestInserted = 0
+    var ingestCurrentTask = ""
+
+    var isBusy: Bool { isIndexing || isUpdating }
 
     var scanMessagesLabel: String {
         if scanCatalog.contains(where: \.hasPendingCounts) {
@@ -89,17 +96,26 @@ final class CompanionSession {
     }
 
     private var fixtureRoot: URL
-    private var databaseURL: URL
+    private var fixtureDatabaseURL: URL
+    private let liveDatabaseURL: URL
     private var arrivalWave = 0
     private let worker = MailIndexWorker()
     private var indexTask: Task<Void, Never>?
+
+    private var databaseURL: URL {
+        switch source {
+        case .fixture: fixtureDatabaseURL
+        case .liveMail: liveDatabaseURL
+        }
+    }
 
     init() {
         let stamp = UUID().uuidString
         fixtureRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("MailGent-index-\(stamp)", isDirectory: true)
-        databaseURL = FileManager.default.temporaryDirectory
+        fixtureDatabaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("MailGent-index-\(stamp).sqlite")
+        liveDatabaseURL = Self.liveMailDatabaseURL()
         refreshAccess()
         scheduleReload(reason: "startup")
     }
@@ -123,7 +139,7 @@ final class CompanionSession {
     }
 
     func ingestAgain() {
-        guard !isIndexing else { return }
+        guard !isBusy else { return }
         indexTask?.cancel()
         indexTask = Task {
             await performIncrementalIngest()
@@ -192,6 +208,8 @@ final class CompanionSession {
 
     private func performReload(reason: String) async {
         isIndexing = true
+        isUpdating = false
+        resetIngestProgress()
         clearDetectedCatalog()
         placements = []
         items = []
@@ -203,6 +221,7 @@ final class CompanionSession {
         let mailAccessGranted = self.mailAccessGranted
         let fixtureRoot = self.fixtureRoot
         let databaseURL = self.databaseURL
+        let wipe = reason == "reindex" || source == .fixture
 
         let prepResult: StorePrepResult
         do {
@@ -269,13 +288,19 @@ final class CompanionSession {
             status = "Listing \(structure.accountsCount) accounts…"
             MailGentLog.trace("structure ready accounts=\(structure.accountsCount) mailboxes=\(structure.mailboxesCount)")
 
-            let snapshot = try await worker.rebuild(store: store, databaseURL: databaseURL) { [weak self] line in
+            if !wipe,
+               source == .liveMail,
+               FileManager.default.fileExists(atPath: databaseURL.path),
+               try await openExistingIndex(store: store, databaseURL: databaseURL)
+            {
+                isIndexing = false
+                await performIncrementalIngest()
+                return
+            }
+
+            let snapshot = try await worker.rebuild(store: store, databaseURL: databaseURL) { [weak self] progress in
                 Task { @MainActor in
-                    guard let self else { return }
-                    self.status = line
-                    if line.hasPrefix("Indexing "), let indexed = Self.parseLeadingInt(after: "Indexing ", in: line) {
-                        self.indexedCount = indexed
-                    }
+                    self?.applyIngestProgress(progress)
                 }
             }
             guard !Task.isCancelled else {
@@ -305,9 +330,34 @@ final class CompanionSession {
         isIndexing = false
     }
 
+    private func openExistingIndex(store: MailStore, databaseURL: URL) async throws -> Bool {
+        do {
+            let opened = try await worker.open(store: store, databaseURL: databaseURL)
+            guard opened.indexedCount > 0 else { return false }
+            applyCatalog(opened.catalog)
+            indexedCount = opened.indexedCount
+            placements = opened.placements
+            lastIngestAt = Date()
+            lastNewCount = 0
+            ingestPassNote = "Loaded from disk"
+            items = []
+            detail = nil
+            await refreshFromWorker()
+            MailGentLog.trace("opened existing index indexed=\(opened.indexedCount)")
+            return true
+        } catch {
+            if error is CancellationError { throw error }
+            MailGentLog.trace("open failed, rebuilding: \(error)")
+            await worker.reset()
+            return false
+        }
+    }
+
     private func performIncrementalIngest() async {
-        isIndexing = true
+        isUpdating = true
+        resetIngestProgress()
         status = "Checking for new messages…"
+        ingestCurrentTask = "Checking for new messages…"
         MailGentLog.trace("incremental ingest scheduled source=\(source.rawValue)")
 
         if source == .fixture {
@@ -320,19 +370,19 @@ final class CompanionSession {
                 arrivalWave += 1
             } catch {
                 status = "Ingest failed"
-                isIndexing = false
+                isUpdating = false
                 return
             }
         }
 
         do {
-            let snapshot = try await worker.incrementalIngest { [weak self] line in
+            let snapshot = try await worker.incrementalIngest { [weak self] progress in
                 Task { @MainActor in
-                    self?.status = line
+                    self?.applyIngestProgress(progress)
                 }
             }
             guard !Task.isCancelled else {
-                isIndexing = false
+                isUpdating = false
                 return
             }
             applyCatalog(snapshot.catalog)
@@ -352,7 +402,7 @@ final class CompanionSession {
             status = "Ingest failed"
         }
 
-        isIndexing = false
+        isUpdating = false
     }
 
     private func refreshFromWorker() async {
@@ -390,6 +440,31 @@ final class CompanionSession {
         scanMessages = max(catalog.messagesCount, 0)
     }
 
+    private func applyIngestProgress(_ progress: IngestProgress) {
+        ingestProcessed = progress.processed
+        ingestTotal = progress.totalHint
+        ingestInserted = progress.inserted
+        let verb: String
+        switch progress.phase {
+        case .scanning:
+            verb = "Scanning"
+        case .indexing:
+            verb = isUpdating ? "Checking" : "Indexing"
+            if isIndexing {
+                indexedCount = progress.inserted
+            }
+        }
+        ingestCurrentTask = "\(verb) \(accountLabel(progress.accountID)) / \(progress.mailboxID)"
+        status = ingestCurrentTask
+    }
+
+    private func resetIngestProgress() {
+        ingestProcessed = 0
+        ingestTotal = nil
+        ingestInserted = 0
+        ingestCurrentTask = ""
+    }
+
     private func clearDetectedCatalog() {
         scanCatalog = []
         scanAccounts = 0
@@ -407,11 +482,11 @@ final class CompanionSession {
         self.status = status
     }
 
-    private static func parseLeadingInt(after prefix: String, in line: String) -> Int? {
-        guard line.hasPrefix(prefix) else { return nil }
-        let digits = line.dropFirst(prefix.count).prefix(while: \.isNumber)
-        guard !digits.isEmpty else { return nil }
-        return Int(digits)
+    private static func liveMailDatabaseURL() -> URL {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MailGent", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("live-mail.sqlite")
     }
 }
 

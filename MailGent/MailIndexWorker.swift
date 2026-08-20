@@ -37,31 +37,29 @@ actor MailIndexWorker {
     func rebuild(
         store: MailStore,
         databaseURL: URL,
-        onProgress: (@Sendable (String) -> Void)? = nil
+        onProgress: (@Sendable (IngestProgress) -> Void)? = nil
     ) async throws -> IndexRebuildSnapshot {
         MailGentLog.trace("rebuild start root=\(store.root.path)")
         try Task.checkCancellation()
         try? FileManager.default.removeItem(at: databaseURL)
 
-        onProgress?("Opening index database…")
         let index = try MailboxIndex(store: store, databaseURL: databaseURL)
+        let totalHint = try countMessages(store: store, onProgress: onProgress)
 
         try Task.checkCancellation()
-        MailGentLog.trace("ingest begin")
-        let ingest = try index.ingest { progress in
-            let line = "ingest processed=\(progress.processed) indexed=\(progress.inserted) \(progress.accountID)/\(progress.mailboxID)"
+        MailGentLog.trace("ingest begin totalHint=\(totalHint)")
+        let ingest = try index.ingest(totalHint: totalHint) { progress in
             if progress.processed == 1 || progress.processed % 100 == 0 {
-                MailGentLog.trace(line)
+                MailGentLog.trace(
+                    "ingest processed=\(progress.processed) indexed=\(progress.inserted) \(progress.accountID)/\(progress.mailboxID)"
+                )
             }
-            onProgress?(
-                "Indexing \(progress.inserted) messages (\(progress.processed) scanned) · \(progress.mailboxID)"
-            )
+            onProgress?(progress)
         }
         let api = ReadAPI(index: index)
         self.index = index
         self.api = api
 
-        onProgress?("Finalizing index…")
         let indexedCount = try api.totalIndexed()
         let placements = try api.listPlacements()
         let catalog = try Self.catalogFromIndex(
@@ -80,19 +78,41 @@ actor MailIndexWorker {
         )
     }
 
+    func open(store: MailStore, databaseURL: URL) async throws -> IndexRebuildSnapshot {
+        MailGentLog.trace("open start db=\(databaseURL.path)")
+        try Task.checkCancellation()
+        let index = try MailboxIndex(store: store, databaseURL: databaseURL)
+        let api = ReadAPI(index: index)
+        self.index = index
+        self.api = api
+
+        let indexedCount = try api.totalIndexed()
+        let placements = try api.listPlacements()
+        let catalog = try Self.catalogFromIndex(
+            structure: nil,
+            indexedCounts: try api.placementIndexedCounts(),
+            store: store
+        )
+        MailGentLog.trace("open done indexed=\(indexedCount)")
+        return IndexRebuildSnapshot(
+            catalog: catalog,
+            indexedCount: indexedCount,
+            placements: placements,
+            newCount: 0
+        )
+    }
+
     func scanStructure(store: MailStore) async throws -> IndexCatalogSnapshot {
         try Self.scanCatalogStructure(store: store)
     }
 
-    func incrementalIngest(onProgress: (@Sendable (String) -> Void)? = nil) async throws -> IndexIncrementalSnapshot {
+    func incrementalIngest(onProgress: (@Sendable (IngestProgress) -> Void)? = nil) async throws -> IndexIncrementalSnapshot {
         guard let index, let api else {
             throw MailIndexWorkerError.notReady
         }
         MailGentLog.trace("incremental ingest start")
         let ingest = try index.ingest { progress in
-            onProgress?(
-                "Checking mail · \(progress.inserted) new (\(progress.processed) scanned)"
-            )
+            onProgress?(progress)
         }
         let indexedCount = try api.totalIndexed()
         let placements = try api.listPlacements()
@@ -149,6 +169,31 @@ actor MailIndexWorker {
     func reset() {
         index = nil
         api = nil
+    }
+
+    private func countMessages(
+        store: MailStore,
+        onProgress: (@Sendable (IngestProgress) -> Void)?
+    ) throws -> Int {
+        var total = 0
+        for account in try store.accounts() {
+            try Task.checkCancellation()
+            for mailbox in try store.mailboxes(in: account.id) {
+                try Task.checkCancellation()
+                onProgress?(
+                    IngestProgress(
+                        processed: total,
+                        inserted: 0,
+                        accountID: account.id,
+                        mailboxID: mailbox.id,
+                        phase: .scanning,
+                        totalHint: nil
+                    )
+                )
+                total += try store.messageCount(in: account.id, mailbox: mailbox.id)
+            }
+        }
+        return total
     }
 
     nonisolated static func scanCatalogStructure(store: MailStore) throws -> IndexCatalogSnapshot {

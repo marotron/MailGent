@@ -58,14 +58,31 @@ public final class MailboxIndex {
             """)
     }
 
-    public func ingest(onProgress: (@Sendable (IngestProgress) -> Void)? = nil) throws -> IngestResult {
+    public func ingest(
+        totalHint: Int? = nil,
+        onProgress: (@Sendable (IngestProgress) -> Void)? = nil
+    ) throws -> IngestResult {
         var new: [IndexedMessageRef] = []
         var processed = 0
+        var lastReportedAccount = ""
+        var lastReportedMailbox = ""
         for account in try store.accounts() {
             try Task.checkCancellation()
             for mailbox in try store.mailboxes(in: account.id) {
                 try Task.checkCancellation()
                 let directory = try store.mailboxURL(accountID: account.id, mailboxID: mailbox.id)
+                func report() {
+                    reportProgress(
+                        onProgress,
+                        processed: processed,
+                        inserted: new.count,
+                        accountID: account.id,
+                        mailboxID: mailbox.id,
+                        totalHint: totalHint,
+                        lastAccount: &lastReportedAccount,
+                        lastMailbox: &lastReportedMailbox
+                    )
+                }
                 try MailStore.forEachEmlxEntry(under: directory) { entry in
                     try autoreleasepool {
                         processed += 1
@@ -75,23 +92,23 @@ public final class MailboxIndex {
                         do {
                             identity = try FileIdentity(url: url)
                         } catch {
-                            reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                            report()
                             return
                         }
                         if try storedIdentity(accountID: account.id, placement: mailbox.id, id: id) == identity {
-                            reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                            report()
                             return
                         }
                         let message: MailMessage
                         do {
                             message = try store.message(at: url)
                         } catch {
-                            reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                            report()
                             return
                         }
                         try upsert(accountID: account.id, placement: mailbox.id, id: id, message: message, identity: identity)
                         new.append(IndexedMessageRef(accountID: account.id, placement: mailbox.id, id: id))
-                        reportProgress(onProgress, processed: processed, inserted: new.count, accountID: account.id, mailboxID: mailbox.id)
+                        report()
                     }
                 }
             }
@@ -107,16 +124,24 @@ public final class MailboxIndex {
         processed: Int,
         inserted: Int,
         accountID: String,
-        mailboxID: String
+        mailboxID: String,
+        totalHint: Int?,
+        lastAccount: inout String,
+        lastMailbox: inout String
     ) {
         guard let onProgress else { return }
-        guard processed == 1 || processed % 25 == 0 else { return }
+        let mailboxChanged = accountID != lastAccount || mailboxID != lastMailbox
+        guard processed == 1 || processed % 25 == 0 || mailboxChanged else { return }
+        lastAccount = accountID
+        lastMailbox = mailboxID
         onProgress(
             IngestProgress(
                 processed: processed,
                 inserted: inserted,
                 accountID: accountID,
-                mailboxID: mailboxID
+                mailboxID: mailboxID,
+                phase: .indexing,
+                totalHint: totalHint
             )
         )
     }
@@ -425,17 +450,33 @@ private struct FileIdentity: Equatable {
     }
 }
 
+public enum IngestPhase: Sendable, Equatable {
+    case scanning
+    case indexing
+}
+
 public struct IngestProgress: Sendable, Equatable {
     public let processed: Int
     public let inserted: Int
     public let accountID: String
     public let mailboxID: String
+    public let phase: IngestPhase
+    public let totalHint: Int?
 
-    public init(processed: Int, inserted: Int, accountID: String, mailboxID: String) {
+    public init(
+        processed: Int,
+        inserted: Int,
+        accountID: String,
+        mailboxID: String,
+        phase: IngestPhase = .indexing,
+        totalHint: Int? = nil
+    ) {
         self.processed = processed
         self.inserted = inserted
         self.accountID = accountID
         self.mailboxID = mailboxID
+        self.phase = phase
+        self.totalHint = totalHint
     }
 }
 
