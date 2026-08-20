@@ -405,6 +405,7 @@ private struct CompanionSearchPage: View {
 
 private struct CompanionReadPage: View {
     @Bindable var session: CompanionSession
+    @State private var showRaw = false
 
     var body: some View {
         ScrollView {
@@ -420,16 +421,23 @@ private struct CompanionReadPage: View {
                 if let detail = session.detail {
                     Text(detail.subject.isEmpty ? "(no subject)" : detail.subject)
                         .font(.title2.bold())
-                    SourceChip(session: session, accountID: detail.accountID, placement: detail.placement)
-                    if detail.isPartial { PartialBadge() }
-                    Text("From \(detail.from)")
-                    Text("To \(detail.to)")
-                        .foregroundStyle(.secondary)
-                    Text(detail.date)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    AddressLine(label: "From", raw: detail.from)
+                    AddressLine(label: "To", raw: detail.to) {
+                        Text(detail.placement)
+                            .foregroundStyle(.secondary)
+                        if detail.isPartial { PartialBadge() }
+                    }
+                    HStack(alignment: .center) {
+                        Text(detail.date)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        if !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            BodyFormatPicker(showRaw: $showRaw)
+                        }
+                    }
                     Divider()
-                    MessageBodyView(readBody: detail.body, rawBody: detail.rawBody)
+                    MessageBodyView(readBody: detail.body, rawBody: detail.rawBody, showRaw: showRaw)
                     OpenInMailButton(session: session)
                 } else {
                     Text("Message not available")
@@ -437,6 +445,9 @@ private struct CompanionReadPage: View {
                 }
             }
             .padding(24)
+        }
+        .onChange(of: session.detail?.rowID) { _, _ in
+            showRaw = false
         }
     }
 }
