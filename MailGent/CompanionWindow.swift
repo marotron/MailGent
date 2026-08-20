@@ -408,46 +408,101 @@ private struct CompanionReadPage: View {
     @State private var showRaw = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Button {
-                    session.page = .search
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Search mail")
-                    }
-                }
-                if let detail = session.detail {
-                    Text(detail.subject.isEmpty ? "(no subject)" : detail.subject)
-                        .font(.title2.bold())
-                    AddressLine(label: "From", raw: detail.from)
-                    AddressLine(label: "To", raw: detail.to) {
-                        Text(detail.placement)
-                            .foregroundStyle(.secondary)
-                        if detail.isPartial { PartialBadge() }
-                    }
-                    HStack(alignment: .center) {
-                        Text(detail.date)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 8)
-                        if !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            BodyFormatPicker(showRaw: $showRaw)
+        Group {
+            if let detail = session.detail {
+                let htmlScroll = usesHTMLScroll(for: detail)
+                VStack(alignment: .leading, spacing: 0) {
+                    readHeader(detail: detail)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
+
+                    Divider()
+
+                    if htmlScroll {
+                        MessageBodyView(
+                            readBody: detail.body,
+                            htmlBody: detail.htmlBody,
+                            rawBody: detail.rawBody,
+                            showRaw: showRaw
+                        )
+                        .id(detail.rowID)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                        OpenInMailButton(session: session)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 12) {
+                                MessageBodyView(
+                                    readBody: detail.body,
+                                    htmlBody: detail.htmlBody,
+                                    rawBody: detail.rawBody,
+                                    showRaw: showRaw
+                                )
+                                .id(detail.rowID)
+                                OpenInMailButton(session: session)
+                            }
+                            .padding(24)
                         }
                     }
-                    Divider()
-                    MessageBodyView(readBody: detail.body, rawBody: detail.rawBody, showRaw: showRaw)
-                    OpenInMailButton(session: session)
-                } else {
-                    Text("Message not available")
-                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        backButton
+                        Text("Message not available")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(24)
                 }
             }
-            .padding(24)
         }
         .onChange(of: session.detail?.rowID) { _, _ in
             showRaw = false
+        }
+    }
+
+    private func usesHTMLScroll(for detail: ReadMessage) -> Bool {
+        let showingRaw = showRaw
+            && !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !showingRaw else { return false }
+        return !(detail.htmlBody ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var backButton: some View {
+        Button {
+            session.page = .search
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                Text("Search mail")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func readHeader(detail: ReadMessage) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            backButton
+            Text(detail.subject.isEmpty ? "(no subject)" : detail.subject)
+                .font(.title2.bold())
+            AddressLine(label: "From", raw: detail.from)
+            AddressLine(label: "To", raw: detail.to) {
+                Text(detail.placement)
+                    .foregroundStyle(.secondary)
+                if detail.isPartial { PartialBadge() }
+            }
+            HStack(alignment: .center) {
+                Text(detail.date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    BodyFormatPicker(showRaw: $showRaw)
+                }
+            }
         }
     }
 }

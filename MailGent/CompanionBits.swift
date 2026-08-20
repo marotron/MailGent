@@ -1,6 +1,7 @@
 import AppKit
 import MailStore
 import SwiftUI
+import WebKit
 
 struct SourceChip: View {
     let session: CompanionSession
@@ -127,11 +128,19 @@ struct BodyFormatPicker: View {
 
 struct MessageBodyView: View {
     let readBody: ReadBody
+    var htmlBody: String? = nil
     var rawBody: String = ""
     var showRaw: Bool = false
 
     private var canShowRaw: Bool {
         showRaw && !rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var prettyHTML: String? {
+        guard let htmlBody,
+              !htmlBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return htmlBody
     }
 
     var body: some View {
@@ -140,6 +149,10 @@ struct MessageBodyView: View {
                 Text(rawBody)
                     .font(.body.monospaced())
                     .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let html = prettyHTML {
+                HTMLMailView(html: Self.documentHTML(html))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 switch readBody {
                 case .text(let text):
@@ -152,6 +165,33 @@ struct MessageBodyView: View {
                 }
             }
         }
+    }
+
+    private static func documentHTML(_ html: String) -> String {
+        let trimmed = html.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.range(of: "<html", options: .caseInsensitive) != nil {
+            return trimmed
+        }
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+          :root { color-scheme: light dark; }
+          body {
+            font: -apple-system-body;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+          }
+          img { max-width: 100%; height: auto; }
+        </style>
+        </head>
+        <body>\(trimmed)</body>
+        </html>
+        """
     }
 
     /// Email bodies break full Markdown parses; linkify `[label](url)` + bare URLs instead.
@@ -213,6 +253,50 @@ struct MessageBodyView: View {
     }
 }
 
+/// Renders HTML mail; WebKit owns scrolling. Selection/copy work; links open in the browser.
+private struct HTMLMailView: NSViewRepresentable {
+    let html: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.navigationDelegate = context.coordinator
+        webView.allowsMagnification = true
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        guard context.coordinator.loadedHTML != html else { return }
+        context.coordinator.loadedHTML = html
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var loadedHTML: String?
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url
+            {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
+    }
+}
+
 /// AppKit text view so link hover shows the pointing-hand cursor (SwiftUI `Text` does not).
 private struct LinkAwareBodyText: NSViewRepresentable {
     let attributed: AttributedString
@@ -227,6 +311,7 @@ private struct LinkAwareBodyText: NSViewRepresentable {
         textView.isEditable = false
         textView.isRichText = true
         textView.isSelectable = true
+        textView.allowsUndo = false
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.widthTracksTextView = true

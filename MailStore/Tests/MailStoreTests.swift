@@ -197,11 +197,45 @@ struct MailStoreTests {
         #expect(multi.body == "Labor Day\u{00A0}Sale is live.\nSoft break which continues.")
         #expect(!multi.body.contains("Content-Transfer-Encoding"))
         #expect(!multi.body.contains("<p>HTML"))
+        #expect(multi.htmlBody == "<p>HTML sale</p>")
         #expect(multi.rawBody.contains("Content-Transfer-Encoding: quoted-printable"))
 
         let plain = try store.message(accountID: accountID, mailbox: "INBOX", id: "2")
         #expect(plain.body == "Café au lait")
+        #expect(plain.htmlBody == nil)
         #expect(plain.rawBody.contains("Caf=C3=A9 au lait"))
+    }
+
+    @Test func extractsQuotedPrintableHTMLOnlyBody() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "3.emlx",
+            rfc822: """
+            From: marketing@example.com
+            To: bob@example.com
+            Subject: Newsletter
+            Date: Sat, 4 Apr 2026 09:48:46 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="----=_Part_1"
+
+            ------=_Part_1
+            Content-Type: text/html; charset=UTF-8
+            Content-Transfer-Encoding: quoted-printable
+
+            <!doctype html><html><body><p>Hello=20Tapo</p></body></html>
+            ------=_Part_1--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let message = try MailStore(root: root.mail).message(accountID: accountID, mailbox: "INBOX", id: "3")
+        #expect(message.htmlBody == "<!doctype html><html><body><p>Hello Tapo</p></body></html>")
+        #expect(message.body.isEmpty || !message.body.contains("Content-Type"))
+        #expect(message.rawBody.contains("text/html"))
     }
 
     @Test func prefersPartialEmlxAndMarksIncomplete() throws {

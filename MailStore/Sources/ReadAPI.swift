@@ -56,7 +56,12 @@ public struct ReadAPI {
         guard let mail = try? index.store.message(accountID: accountID, mailbox: placement, id: id) else {
             return ReadMessage(indexed)
         }
-        return ReadMessage(indexed, prettyBody: mail.body, rawBody: mail.rawBody)
+        return ReadMessage(
+            indexed,
+            prettyBody: mail.body,
+            htmlBody: mail.htmlBody,
+            rawBody: mail.rawBody
+        )
     }
 
     public func listPlacements() throws -> [Placement] {
@@ -96,11 +101,18 @@ public struct ReadMessage: Equatable, Sendable {
     public let date: String
     public let subject: String
     public let body: ReadBody
+    /// Decoded HTML when present; Pretty prefers this over plain text.
+    public let htmlBody: String?
     /// Original MIME body block; empty when only the index row is available.
     public let rawBody: String
     public let isPartial: Bool
 
-    init(_ message: IndexedMessage, prettyBody: String? = nil, rawBody: String = "") {
+    init(
+        _ message: IndexedMessage,
+        prettyBody: String? = nil,
+        htmlBody: String? = nil,
+        rawBody: String = ""
+    ) {
         self.id = message.id
         self.accountID = message.accountID
         self.placement = message.placement
@@ -110,6 +122,7 @@ public struct ReadMessage: Equatable, Sendable {
         self.subject = message.subject
         let text = prettyBody ?? message.body
         self.body = text.isEmpty ? .notAvailable : .text(text)
+        self.htmlBody = htmlBody
         self.rawBody = rawBody
         self.isPartial = message.isPartial
     }

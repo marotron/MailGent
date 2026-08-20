@@ -309,6 +309,43 @@ struct ReadAPITests {
         #expect(message.rawBody.contains("Caf=C3=A9 au lait"))
     }
 
+    @Test func getReturnsHTMLBodyWhenPresent() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "10.emlx",
+            rfc822: """
+            From: a@example.com
+            To: b@example.com
+            Subject: HTML only
+            Date: Sat, 4 Apr 2026 09:48:46 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="b1"
+
+            --b1
+            Content-Type: text/html; charset=utf-8
+            Content-Transfer-Encoding: quoted-printable
+
+            <p>Hello=20there</p>
+            --b1--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let message = try ReadAPI(index: index).get(accountID: accountID, placement: "INBOX", id: "10")
+        #expect(message.htmlBody == "<p>Hello there</p>")
+        #expect(message.body == .notAvailable)
+    }
+
     @Test func listScopesToAccountAndPlacementBeforePaging() throws {
         let root = try FixtureTree()
         defer { root.remove() }

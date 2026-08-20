@@ -52,6 +52,7 @@ public struct MailStore: Sendable {
             date: parsed.date,
             subject: parsed.subject,
             body: parsed.body,
+            htmlBody: parsed.htmlBody,
             rawBody: parsed.rawBody,
             isPartial: url.lastPathComponent.lowercased().hasSuffix(".partial.emlx"),
             isDraft: Self.isDraftFlag(parsedEmlx.flags),
@@ -113,8 +114,10 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let to: String
     public let date: String
     public let subject: String
-    /// Decoded display body (text/plain preferred; QP/base64 applied).
+    /// Decoded plain text (text/plain preferred; QP/base64 applied). Empty when HTML-only.
     public let body: String
+    /// Decoded HTML body when a text/html part exists.
+    public let htmlBody: String?
     /// Original MIME body block after headers (before transfer-decoding).
     public let rawBody: String
     public let isPartial: Bool
@@ -552,6 +555,7 @@ extension MailStore {
         date: String,
         subject: String,
         body: String,
+        htmlBody: String?,
         rawBody: String
     ) {
         guard !data.isEmpty else { throw MailStoreError.malformed }
@@ -560,7 +564,8 @@ extension MailStore {
         let (headerBlock, bodyBlock) = splitHeadersAndBody(text)
         let headers = parseHeaders(headerBlock)
         let rawBody = bodyBlock
-        var body = decodeDisplayBody(bodyBlock: bodyBlock, headers: headers)
+        let (plain, html) = decodeBodies(bodyBlock: bodyBlock, headers: headers)
+        var body = plain
         if body.utf8.count > maxIndexedBodyBytes {
             body = String(body.prefix(maxIndexedBodyBytes))
         }
@@ -570,40 +575,62 @@ extension MailStore {
             date: headers["date"] ?? "",
             subject: decodeRFC2047(headers["subject"] ?? ""),
             body: body,
+            htmlBody: html,
             rawBody: rawBody
         )
     }
 
-    /// Prefer first `text/plain` part; apply Content-Transfer-Encoding.
-    static func decodeDisplayBody(bodyBlock: String, headers: [String: String]) -> String {
+    /// Plain for index/search; HTML when a text/html part exists.
+    static func decodeBodies(
+        bodyBlock: String,
+        headers: [String: String]
+    ) -> (plain: String, html: String?) {
         let contentType = headers["content-type"] ?? "text/plain"
         if contentType.lowercased().hasPrefix("multipart/") {
             guard let boundary = extractParameter(contentType, named: "boundary") else {
-                return bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines), nil)
             }
-            return firstPlainText(fromMultipart: bodyBlock, boundary: boundary)
-                ?? bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+            let plain = firstPart(
+                fromMultipart: bodyBlock,
+                boundary: boundary,
+                mimePrefix: "text/plain"
+            )
+            let html = firstPart(
+                fromMultipart: bodyBlock,
+                boundary: boundary,
+                mimePrefix: "text/html"
+            )
+            return (plain ?? "", html)
         }
+
         let transfer = headers["content-transfer-encoding"]
         let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
-        return decodeTransferEncodedBody(bodyBlock, transferEncoding: transfer, charset: charset)
+        let decoded = decodeTransferEncodedBody(bodyBlock, transferEncoding: transfer, charset: charset)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if contentType.lowercased().hasPrefix("text/html") {
+            return ("", decoded.isEmpty ? nil : decoded)
+        }
+        return (decoded, nil)
     }
 
-    static func firstPlainText(fromMultipart body: String, boundary: String) -> String? {
+    static func firstPart(
+        fromMultipart body: String,
+        boundary: String,
+        mimePrefix: String
+    ) -> String? {
         for part in splitMultipart(body, boundary: boundary) {
             let (partHeaders, partBody) = splitHeadersAndBody(part)
             let headers = parseHeaders(partHeaders)
             let contentType = headers["content-type"] ?? "text/plain"
             if contentType.lowercased().hasPrefix("multipart/") {
                 if let nested = extractParameter(contentType, named: "boundary"),
-                   let found = firstPlainText(fromMultipart: partBody, boundary: nested)
+                   let found = firstPart(fromMultipart: partBody, boundary: nested, mimePrefix: mimePrefix)
                 {
                     return found
                 }
                 continue
             }
-            guard contentType.lowercased().hasPrefix("text/plain") else { continue }
+            guard contentType.lowercased().hasPrefix(mimePrefix) else { continue }
             let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
             return decodeTransferEncodedBody(
                 partBody,
