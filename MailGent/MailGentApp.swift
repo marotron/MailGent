@@ -2,21 +2,21 @@ import SwiftUI
 
 @main
 struct MailGentApp: App {
-    @State private var session = CompanionSession()
+    @State private var session = PrototypeDraftSession()
 
     init() {
-        MailGentLog.trace("MailGent launched pid=\(ProcessInfo.processInfo.processIdentifier)")
+        MailGentLog.trace("MailGent PROTOTYPE draft-outbound pid=\(ProcessInfo.processInfo.processIdentifier)")
     }
 
     var body: some Scene {
         MenuBarExtra("MailGent", systemImage: "tray.full") {
-            MenuBarStatus(session: session)
+            PrototypeDraftMenuBar()
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
-            GrantAccessView(session: session.access)
-                .frame(minWidth: 420, minHeight: 240)
+        Window("Draft outbound prototype", id: "draft-prototype") {
+            PrototypeDraftRoot(session: session)
         }
+        .defaultSize(width: 1020, height: 680)
     }
 }

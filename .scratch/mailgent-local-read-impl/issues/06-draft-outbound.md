@@ -1,7 +1,7 @@
 # Draft Outbound Prototype
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 05
 
 ## Question
@@ -27,6 +27,10 @@ Two (max three) throwaway variants on one prototype surface, full state visible 
 A variant is picked in writing on this issue. Ledger lands on the train only if B wins.
 
 YAGNI: no send, no Mail.app scripting, no approval queue.
+
+## Comments
+
+- 2026-08-20 — Claimed on `proto/draft-outbound`. Throwaway A/B surface: `PrototypeDraftRoot` + switcher. A = clipboard → Mail.app; B = in-memory version ledger then copy. `make prototype-draft` (or `make run` on this branch). **Stop and ask** which wins before any train work.
 
 ## Inputs
 

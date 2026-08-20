@@ -79,5 +79,5 @@ flowchart TD
 | 03 | [MailboxIndex and ReadAPI TDD](issues/03-mailbox-index-read-api.md) | task | resolved |
 | 04 | [Companion Read UI Prototype Then Shell](issues/04-companion-read-ui.md) | prototype | resolved |
 | 05 | [MCP Read, Pairing, Grants, Audit](issues/05-mcp-pairing-grants-audit.md) | task | resolved |
-| 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | open |
+| 06 | [Draft Outbound Prototype](issues/06-draft-outbound.md) | prototype | claimed |
 | 07 | [Merge Local-Read Train](issues/07-merge-train.md) | task | open |
