@@ -6,6 +6,8 @@ Label: wayfinder:map
 
 Ship usable **per-agent data access control** on top of the local-read companion: persist grants, let humans pick account/mailbox (then richer selectors), support deny carve-outs and field caps, and land a grant desk matching product prototype 10. Stop when `train/agent-grants` merges to `main`. OAuth stays a later train; local-read source stays.
 
+**Reached.** `train/agent-grants` merged to `main` (ticket 07). Next train is OAuth.
+
 ## Notes
 
 - Builds on shipped `GrantGate` / `AgentReadAPI` / pairing (local-read ticket 05). Auto-allow-every-account removed (ticket 01).
@@ -24,6 +26,7 @@ Ship usable **per-agent data access control** on top of the local-read companion
 - [Explicit Deny Carve-Outs](issues/04-deny-carveouts.md) — Grant.mode deny; deny-mode checkbox in companion
 - [Field Exposure Caps](issues/05-field-exposure.md) — GrantFields; body-off get omits without stubs
 - [Grant Desk UI](issues/06-grant-desk.md) — lean Scope/Access desk window (prototype 10 IA subset)
+- [Merge Agent-Grants Train](issues/07-merge-train.md) — `train/agent-grants` → `main`; OAuth later
 
 ## Not yet specified
 
@@ -37,7 +40,7 @@ Ship usable **per-agent data access control** on top of the local-read companion
 
 | Branch | Parent | Issue | Merge target |
 | --- | --- | --- | --- |
-| `train/agent-grants` | `main` | — | `main` (ticket 07) |
+| `train/agent-grants` | `main` | — | **merged to `main`** (ticket 07) |
 | `feat/01-persist-grants` | `train/agent-grants` | 01 | `train/agent-grants` |
 | `feat/02-mailbox-grant-ui` | `train/agent-grants` | 02 | `train/agent-grants` |
 | `feat/03-selector-grants` | `train/agent-grants` | 03 | `train/agent-grants` |
@@ -81,4 +84,4 @@ flowchart TD
 | 04 | [Explicit Deny Carve-Outs](issues/04-deny-carveouts.md) | task | resolved |
 | 05 | [Field Exposure Caps](issues/05-field-exposure.md) | task | resolved |
 | 06 | [Grant Desk UI](issues/06-grant-desk.md) | task | resolved |
-| 07 | [Merge Agent-Grants Train](issues/07-merge-train.md) | task | open |
+| 07 | [Merge Agent-Grants Train](issues/07-merge-train.md) | task | resolved |

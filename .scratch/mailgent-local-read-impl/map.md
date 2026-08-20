@@ -37,7 +37,7 @@ Ship MailGent’s first usable product: a lightweight macOS companion that reads
 - DraftLedger persistence across relaunch (in-memory first).
 - Companion UI for ledger (prototype only for now; agent path is MCP).
 - `train/oauth` chart (Gmail/Yahoo; keep local-read as a source).
-- Agent grant authoring — see [Agent Grant Authoring](../mailgent-agent-grants/map.md) (`train/agent-grants`).
+- Agent grant authoring — **shipped** on `main` via [Agent Grant Authoring](../mailgent-agent-grants/map.md) (ticket 07).
 
 ## Branches
 
