@@ -163,7 +163,7 @@ struct GrantGateTests {
             id: "1"
         )
         #expect(message.subject == "Alpha A")
-        #expect(message.body == .notAvailable)
+        #expect(message.body == .notGranted)
     }
 
     @Test func subjectOffOmitsSubjectOnGet() throws {
@@ -191,7 +191,7 @@ struct GrantGateTests {
         )
         #expect(message.subject == "")
         #expect(!message.from.isEmpty)
-        #expect(message.body == .notAvailable)
+        #expect(message.body == .notGranted)
     }
 
     @Test func legacyEnvelopeJSONExpandsToHeaderFlags() throws {

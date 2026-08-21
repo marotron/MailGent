@@ -312,12 +312,12 @@ final class CompanionSession {
             applyCatalog(snapshot.catalog)
             indexedCount = snapshot.indexedCount
             placements = snapshot.placements
-            lastIngestAt = Date()
+            lastIngestAt = snapshot.lastIngestAt
             lastNewCount = 0
             ingestPassNote = "Full reindex"
             items = []
             detail = nil
-            agents.bindLoopback(store: store, databaseURL: databaseURL)
+            bindLoopbackWithUpdater(store: store, databaseURL: databaseURL)
             await refreshFromWorker()
             MailGentLog.trace(
                 "reload finished indexed=\(snapshot.indexedCount) onDisk=\(snapshot.catalog.messagesCount)"
@@ -340,12 +340,12 @@ final class CompanionSession {
             applyCatalog(opened.catalog)
             indexedCount = opened.indexedCount
             placements = opened.placements
-            lastIngestAt = Date()
+            lastIngestAt = opened.lastIngestAt
             lastNewCount = 0
             ingestPassNote = "Loaded from disk"
             items = []
             detail = nil
-            agents.bindLoopback(store: store, databaseURL: databaseURL)
+            bindLoopbackWithUpdater(store: store, databaseURL: databaseURL)
             await refreshFromWorker()
             MailGentLog.trace("opened existing index indexed=\(opened.indexedCount)")
             return true
@@ -380,23 +380,7 @@ final class CompanionSession {
         }
 
         do {
-            let snapshot = try await worker.incrementalIngest { [weak self] progress in
-                Task { @MainActor in
-                    self?.applyIngestProgress(progress)
-                }
-            }
-            guard !Task.isCancelled else {
-                isUpdating = false
-                return
-            }
-            applyCatalog(snapshot.catalog)
-            indexedCount = snapshot.indexedCount
-            placements = snapshot.placements
-            lastIngestAt = Date()
-            lastNewCount = snapshot.newCount
-            ingestPassNote = "Incremental"
-            status = snapshot.newCount == 0 ? "No new messages" : "Ingested \(snapshot.newCount) new"
-            await refreshFromWorker()
+            _ = try await runIncrementalIngestCore()
         } catch is CancellationError {
             status = "Ingest cancelled"
         } catch MailIndexWorkerError.notReady {
@@ -407,6 +391,64 @@ final class CompanionSession {
         }
 
         isUpdating = false
+    }
+
+    /// Shared path for UI Update and MCP `update` (waits for completion).
+    private func runIncrementalIngestCore() async throws -> IndexUpdateOutcome {
+        let snapshot = try await worker.incrementalIngest { [weak self] progress in
+            Task { @MainActor in
+                self?.applyIngestProgress(progress)
+            }
+        }
+        try Task.checkCancellation()
+        applyCatalog(snapshot.catalog)
+        indexedCount = snapshot.indexedCount
+        placements = snapshot.placements
+        lastIngestAt = snapshot.lastIngestAt
+        lastNewCount = snapshot.newCount
+        ingestPassNote = "Incremental"
+        status = snapshot.newCount == 0 ? "No new messages" : "Ingested \(snapshot.newCount) new"
+        await refreshFromWorker()
+        return IndexUpdateOutcome(
+            newCount: snapshot.newCount,
+            freshness: IndexFreshness(
+                lastIngestAt: snapshot.lastIngestAt,
+                newestMessageDate: snapshot.newestMessageDate,
+                indexedCount: snapshot.indexedCount
+            )
+        )
+    }
+
+    private func bindLoopbackWithUpdater(store: MailStore, databaseURL: URL) {
+        let updater = BlockingIndexUpdater { [weak self] in
+            guard let self else {
+                throw MailIndexWorkerError.notReady
+            }
+            return try await self.updateIndexForMCP()
+        }
+        agents.bindLoopback(store: store, databaseURL: databaseURL, indexUpdater: updater)
+    }
+
+    private func updateIndexForMCP() async throws -> IndexUpdateOutcome {
+        guard !isBusy else {
+            throw MailIndexWorkerError.notReady
+        }
+        isUpdating = true
+        resetIngestProgress()
+        status = "Checking for new messages…"
+        ingestCurrentTask = "Checking for new messages…"
+        defer { isUpdating = false }
+
+        if source == .fixture {
+            let mail = fixtureRoot.appendingPathComponent("Mail", isDirectory: true)
+            let wave = arrivalWave
+            try await Task.detached(priority: .userInitiated) {
+                try CompanionFixture.plantArrival(at: mail, wave: wave)
+            }.value
+            arrivalWave += 1
+        }
+
+        return try await runIncrementalIngestCore()
     }
 
     private func refreshFromWorker() async {

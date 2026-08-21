@@ -75,6 +75,10 @@ public struct ReadAPI {
     public func placementIndexedCounts() throws -> [String: Int] {
         try index.placementIndexedCounts()
     }
+
+    public func freshness() throws -> IndexFreshness {
+        try index.freshness()
+    }
 }
 
 public struct Placement: Hashable, Sendable {
@@ -89,7 +93,10 @@ public struct Placement: Hashable, Sendable {
 
 public enum ReadBody: Equatable, Sendable {
     case text(String)
+    /// Granted, but no plain-text body (empty message or HTML-only).
     case notAvailable
+    /// Active grant does not allow body access.
+    case notGranted
 }
 
 public struct ReadMessage: Equatable, Sendable {
@@ -127,12 +134,12 @@ public struct ReadMessage: Equatable, Sendable {
         self.isPartial = message.isPartial
     }
 
-    /// Omits body/html/raw without hinting that content exists (agent field caps).
+    /// Omits body/html/raw under agent field caps (`.notGranted`).
     public func omittingBody() -> ReadMessage {
         applying(GrantFields(envelope: true, body: false))
     }
 
-    /// Applies field caps: denied header values become empty; denied body → `.notAvailable`.
+    /// Applies field caps: denied header values become empty; denied body → `.notGranted`.
     public func applying(_ fields: GrantFields) -> ReadMessage {
         ReadMessage(
             id: id,
@@ -142,7 +149,7 @@ public struct ReadMessage: Equatable, Sendable {
             to: fields.to ? to : "",
             date: fields.date ? date : "",
             subject: fields.subject ? subject : "",
-            body: fields.body ? body : .notAvailable,
+            body: fields.body ? body : .notGranted,
             htmlBody: fields.body ? htmlBody : nil,
             rawBody: fields.body ? rawBody : "",
             isPartial: isPartial

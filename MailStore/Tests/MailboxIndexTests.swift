@@ -206,6 +206,59 @@ struct MailboxIndexTests {
         #expect(try index.search("nosuchtoken").isEmpty)
     }
 
+    @Test func searchRanksHeaderMatchesAboveBodyOnlyNoiseAcrossAccounts() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        // Lexicographically earlier account UUID — body-only noise that used to fill page 1.
+        let noisy = "0CC9826F-AE36-4353-92A8-F122E726F7B2"
+        let relevant = "2D1F6879-5270-4EB9-87A0-5A3D74ECFDCB"
+
+        for i in 1...30 {
+            try root.writeEmlx(
+                named: "\(i).emlx",
+                rfc822: """
+                From: Indeed <donotreply@jobalert.indeed.com>
+                To: user@example.com
+                Subject: Team Member at Shop. 29 more new jobs in b13
+                Date: Mon, \(String(format: "%02d", i)) Jul 2026 09:00:00 +0000
+                Content-Type: text/plain
+
+                Jobs near birmingham council area listings and more.
+                """,
+                account: noisy,
+                mailbox: "INBOX.mbox"
+            )
+        }
+
+        try root.writeEmlx(
+            named: "100.emlx",
+            rfc822: """
+            From: Revenues E-Mail Queries <Revenues.e-mail.queries@birmingham.gov.uk>
+            To: user@example.com
+            Subject: RE: Council Tax Account - Ref: 5064361661
+            Date: Tue, 18 Aug 2026 13:23:06 +0000
+            Content-Type: text/plain
+
+            Thank you for your enquiry.
+            """,
+            account: relevant,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        let page = try ReadAPI(index: index).search("birmingham council", limit: 25)
+        #expect(page.items.first?.accountID == relevant)
+        #expect(page.items.first?.id == "100")
+        #expect(page.items.first?.subject.contains("Council Tax Account") == true)
+    }
+
     @Test func searchTreatsFTSOperatorsAsLiteralTokens() throws {
         let root = try FixtureTree()
         defer { root.remove() }
@@ -473,5 +526,67 @@ struct MailboxIndexTests {
         #expect(!reports.isEmpty)
         #expect(reports.allSatisfy { $0.totalHint == 2 })
         #expect(reports.allSatisfy { $0.phase == .indexing })
+    }
+
+    @Test func ingestPersistsLastIngestAtAndNewestMessageDateAcrossReopen() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Older
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            First
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Newer
+            Date: Wed, 3 Jan 2024 12:00:00 +0000
+            Content-Type: text/plain
+
+            Second
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let before = Date()
+        let freshness: IndexFreshness
+        do {
+            let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+            #expect(try index.freshness().lastIngestAt == nil)
+            #expect(try index.freshness().newestMessageDate == nil)
+            _ = try index.ingest()
+            freshness = try index.freshness()
+        }
+        let after = Date()
+
+        #expect(freshness.newestMessageDate == "Wed, 3 Jan 2024 12:00:00 +0000")
+        #expect(freshness.indexedCount == 2)
+        let stamped = try #require(freshness.lastIngestAt)
+        #expect(stamped >= before.addingTimeInterval(-1))
+        #expect(stamped <= after.addingTimeInterval(1))
+
+        let reopened = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        let again = try reopened.freshness()
+        #expect(again.lastIngestAt == stamped)
+        #expect(again.newestMessageDate == "Wed, 3 Jan 2024 12:00:00 +0000")
+        #expect(again.indexedCount == 2)
     }
 }

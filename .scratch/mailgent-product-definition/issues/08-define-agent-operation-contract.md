@@ -78,3 +78,4 @@ Soft-delete and hard-delete are separate capabilities (not a single undifferenti
 
 - User approved the recommended v1 package in one shot: resources, read/write gates, search/pagination, omission-without-leak, draft cite rules, one-shot approvals, no v1 persistent automation, hard delete absent from agent surface.
 - **Superseded (user):** agents may request soft delete or hard delete; both still require human approval. Soft delete purpose = recoverable remove. Hard delete = permanent purge with stronger confirm.
+- **Superseded (user, 2026-08-21):** body field denial is **not** collapsed into generic `not_available` / empty string. MCP `get` must return `bodyAccess: "not_granted"` (and omit `body`) so agents know to ask for a grant upgrade rather than summarize as empty mail. Message-level deny and missing content still omit without redaction stubs.

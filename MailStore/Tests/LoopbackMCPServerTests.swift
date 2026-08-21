@@ -78,6 +78,64 @@ struct LoopbackMCPServerTests {
         #expect(!response.body.contains(#""error":"internal""#))
     }
 
+    @Test func statusReturnsLastIngestAndNewestMessageDate() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "status", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["newestMessageDate"] as? String == "Mon, 1 Jan 2024 00:00:00 +0000")
+        #expect((payload["indexedCount"] as? NSNumber)?.intValue == 1)
+        #expect(payload["lastIngestAt"] is String)
+    }
+
+    @Test func updateIngestsNewMailAndReturnsFreshness() throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try env.root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Arrival
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            New mail
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "update", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect((payload["newCount"] as? NSNumber)?.intValue == 1)
+        #expect(payload["newestMessageDate"] as? String == "Tue, 2 Jan 2024 00:00:00 +0000")
+        #expect((payload["indexedCount"] as? NSNumber)?.intValue == 2)
+        #expect(payload["lastIngestAt"] is String)
+        #expect(env.audit.entries().contains { $0.kind == .updateIndex })
+    }
+
     @Test func authenticatedGetReturnsMessage() throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
@@ -102,7 +160,36 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("Invoice due"))
         #expect(response.body.contains("Please pay"))
         #expect(response.body.contains("alice@example.com"))
+        #expect(try Self.extractJSONString(response.body, key: "bodyAccess") == "granted")
         #expect(env.audit.entries().contains { $0.kind == .get })
+    }
+
+    @Test func getWithBodyDeniedReportsNotGranted() throws {
+        let env = try LoopbackFixture(bodyGranted: false)
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("Invoice due"))
+        #expect(try Self.extractJSONString(response.body, key: "bodyAccess") == "not_granted")
+        #expect(try Self.extractJSONString(response.body, key: "note").contains("does not allow body access"))
+        #expect(!response.body.contains("Please pay"))
+        #expect(try Self.toolPayload(response.body)["body"] == nil)
     }
 
     @Test func initializeReturnsServerCapabilities() throws {
@@ -218,6 +305,14 @@ struct LoopbackMCPServerTests {
 
     /// Pull a string value from the nested MCP tool JSON text payload.
     private static func extractJSONString(_ responseBody: String, key: String) throws -> String {
+        let obj = try toolPayload(responseBody)
+        guard let value = obj[key] as? String else {
+            throw DraftLedgerError.notFound
+        }
+        return value
+    }
+
+    private static func toolPayload(_ responseBody: String) throws -> [String: Any] {
         struct RPC: Decodable {
             struct Result: Decodable {
                 struct Content: Decodable {
@@ -230,12 +325,11 @@ struct LoopbackMCPServerTests {
         let rpc = try JSONDecoder().decode(RPC.self, from: Data(responseBody.utf8))
         guard let text = rpc.result.content.first?.text,
               let data = text.data(using: .utf8),
-              let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let value = obj[key] as? String
+              let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             throw DraftLedgerError.notFound
         }
-        return value
+        return obj
     }
 }
 
@@ -246,7 +340,7 @@ private struct LoopbackFixture {
     let audit: AuditLog
     let server: LoopbackMCPServer
 
-    init() throws {
+    init(bodyGranted: Bool = true) throws {
         root = try FixtureTree()
         let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         try root.writeEmlx(
@@ -277,7 +371,11 @@ private struct LoopbackFixture {
             credential: credential
         )
         let grants = GrantGate()
-        try grants.allow(agentID: agent.id, accountID: accountID)
+        try grants.allow(
+            agentID: agent.id,
+            accountID: accountID,
+            fields: GrantFields(envelope: true, body: bodyGranted)
+        )
         let gateway = AgentReadAPI(
             read: ReadAPI(index: index),
             pairing: pairing,

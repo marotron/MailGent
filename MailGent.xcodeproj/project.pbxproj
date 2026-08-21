@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		010E6E3C6C9E158948903509 /* IndexUpdating.swift in Sources */ = {isa = PBXBuildFile; fileRef = A21B7287ADA02B5AC0843A1F /* IndexUpdating.swift */; };
 		07973F9636061403AFE12050 /* MailStore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		0FE82B29B41F840FC45E43C7 /* MailStore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		13771BED0D84BBCA0EA39A67 /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
@@ -138,6 +139,7 @@
 		9BD769090806F0A641969B4D /* CompanionFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionFixture.swift; sourceTree = "<group>"; };
 		9C67DBE07135F0EF7C2CD87B /* AccountIdentityPrototype.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountIdentityPrototype.swift; sourceTree = "<group>"; };
 		A130C2141FC978EE3E739149 /* MailboxIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailboxIndexTests.swift; sourceTree = "<group>"; };
+		A21B7287ADA02B5AC0843A1F /* IndexUpdating.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexUpdating.swift; sourceTree = "<group>"; };
 		A7DDF0FCE7FBAF23584F2ADC /* LoopbackHTTPListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackHTTPListener.swift; sourceTree = "<group>"; };
 		B2D934E3CB26D68565D5D5BC /* MailAccountIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailAccountIdentity.swift; sourceTree = "<group>"; };
 		B51E76726BD4BE2DD190F0CA /* MailGent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MailGent.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -191,6 +193,7 @@
 				CB1AFCF3E8F6D950BF92F5A2 /* AuditLog.swift */,
 				528FD978FC082F82F2816CBD /* DraftLedger.swift */,
 				071729EDED56C3E0C38CCCA6 /* GrantGate.swift */,
+				A21B7287ADA02B5AC0843A1F /* IndexUpdating.swift */,
 				A7DDF0FCE7FBAF23584F2ADC /* LoopbackHTTPListener.swift */,
 				5AF627201D28B0D28492127F /* LoopbackMCPServer.swift */,
 				B2D934E3CB26D68565D5D5BC /* MailAccountIdentity.swift */,
@@ -511,6 +514,7 @@
 				95048FE1C282B55B991FB796 /* AuditLog.swift in Sources */,
 				A4EA13775428F2E3541F9FC3 /* DraftLedger.swift in Sources */,
 				DF965FDAB5E9A8237D6ACC56 /* GrantGate.swift in Sources */,
+				010E6E3C6C9E158948903509 /* IndexUpdating.swift in Sources */,
 				A290E6CE0EFA3A08B876DE5F /* LoopbackHTTPListener.swift in Sources */,
 				F6139A27BC077F85DA7A127D /* LoopbackMCPServer.swift in Sources */,
 				DA5906F5786FBAF94D685572 /* MailAccountIdentity.swift in Sources */,

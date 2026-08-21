@@ -19,6 +19,7 @@ public final class MailboxIndex {
                 from_addr TEXT NOT NULL,
                 to_addr TEXT NOT NULL,
                 date TEXT NOT NULL,
+                date_sort REAL NOT NULL DEFAULT 0,
                 subject TEXT NOT NULL,
                 body TEXT NOT NULL,
                 is_partial INTEGER NOT NULL,
@@ -56,6 +57,50 @@ public final class MailboxIndex {
                 VALUES (new.rowid, new.from_addr, new.to_addr, new.date, new.subject, new.body);
             END
             """)
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL
+            )
+            """)
+        try migrateSchema()
+    }
+
+    /// Adds `date_sort` on older DBs and backfills from RFC822 `date` (user_version ≥ 1).
+    private func migrateSchema() throws {
+        var hasDateSort = false
+        try db.query("PRAGMA table_info(messages)") { stmt in
+            if sqlite3_column_string(stmt, 1) == "date_sort" {
+                hasDateSort = true
+            }
+        }
+        if !hasDateSort {
+            try db.execute("ALTER TABLE messages ADD COLUMN date_sort REAL NOT NULL DEFAULT 0")
+        }
+
+        var version = 0
+        try db.query("PRAGMA user_version") { stmt in
+            version = Int(sqlite3_column_int64(stmt, 0))
+        }
+        guard version < 1 else { return }
+
+        var updates: [(rowid: Int64, sort: Double)] = []
+        try db.query("SELECT rowid, date FROM messages") { stmt in
+            let rowid = sqlite3_column_int64(stmt, 0)
+            let raw = sqlite3_column_string(stmt, 1)
+            let sort = Grant.parseDate(raw)?.timeIntervalSince1970 ?? 0
+            updates.append((rowid, sort))
+        }
+        for update in updates {
+            try db.execute(
+                "UPDATE messages SET date_sort = ? WHERE rowid = ?",
+                bind: { stmt in
+                    sqlite3_bind_double(stmt, 1, update.sort)
+                    sqlite3_bind_int64(stmt, 2, update.rowid)
+                }
+            )
+        }
+        try db.execute("PRAGMA user_version = 1")
     }
 
     public func ingest(
@@ -116,8 +161,66 @@ public final class MailboxIndex {
         new.sort {
             ($0.accountID, $0.placement, $0.id) < ($1.accountID, $1.placement, $1.id)
         }
+        try markLastIngest(at: Date())
         return IngestResult(new: new)
     }
+
+    /// Last ingest stamp (persisted), newest indexed message date string, and row count.
+    public func freshness() throws -> IndexFreshness {
+        IndexFreshness(
+            lastIngestAt: try lastIngestAt(),
+            newestMessageDate: try newestMessageDate(),
+            indexedCount: try messageCount()
+        )
+    }
+
+    public func lastIngestAt() throws -> Date? {
+        var raw: String?
+        try db.query(
+            "SELECT value FROM meta WHERE key = ?",
+            bind: { stmt in
+                sqlite3_bind_text(stmt, 1, Self.lastIngestMetaKey, -1, SQLITE_TRANSIENT)
+            },
+            row: { stmt in
+                raw = sqlite3_column_string(stmt, 0)
+            }
+        )
+        guard let raw else { return nil }
+        return Grant.parseDate(raw)
+    }
+
+    public func newestMessageDate() throws -> String? {
+        var date: String?
+        try db.query(
+            """
+            SELECT date FROM messages
+            ORDER BY date_sort DESC, message_id DESC
+            LIMIT 1
+            """,
+            row: { stmt in
+                date = sqlite3_column_string(stmt, 0)
+            }
+        )
+        return date
+    }
+
+    private func markLastIngest(at date: Date) throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let value = formatter.string(from: date)
+        try db.execute(
+            """
+            INSERT INTO meta(key, value) VALUES(?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            bind: { stmt in
+                sqlite3_bind_text(stmt, 1, Self.lastIngestMetaKey, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 2, value, -1, SQLITE_TRANSIENT)
+            }
+        )
+    }
+
+    private static let lastIngestMetaKey = "last_ingest_at"
 
     private func reportProgress(
         _ onProgress: (@Sendable (IngestProgress) -> Void)?,
@@ -159,7 +262,7 @@ public final class MailboxIndex {
             FROM messages_fts
             JOIN messages m ON m.rowid = messages_fts.rowid
             WHERE messages_fts MATCH ?
-            ORDER BY m.account_id, m.placement, m.message_id
+            ORDER BY m.date_sort DESC, bm25(messages_fts, 5.0, 1.0, 0.1, 10.0, 0.5), m.message_id DESC
             """,
             bind: { stmt in
                 sqlite3_bind_text(stmt, 1, match, -1, SQLITE_TRANSIENT)
@@ -285,7 +388,7 @@ public final class MailboxIndex {
             FROM messages_fts
             JOIN messages m ON m.rowid = messages_fts.rowid
             WHERE \(clauses.joined(separator: " AND "))
-            ORDER BY m.account_id, m.placement, m.message_id
+            ORDER BY m.date_sort DESC, bm25(messages_fts, 5.0, 1.0, 0.1, 10.0, 0.5), m.message_id DESC
             LIMIT ? OFFSET ?
             """,
             bind: { stmt in
@@ -393,13 +496,14 @@ public final class MailboxIndex {
         try db.execute(
             """
             INSERT INTO messages (
-                account_id, placement, message_id, from_addr, to_addr, date, subject, body, is_partial,
+                account_id, placement, message_id, from_addr, to_addr, date, date_sort, subject, body, is_partial,
                 path, inode, mtime, size
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(account_id, placement, message_id) DO UPDATE SET
                 from_addr = excluded.from_addr,
                 to_addr = excluded.to_addr,
                 date = excluded.date,
+                date_sort = excluded.date_sort,
                 subject = excluded.subject,
                 body = excluded.body,
                 is_partial = excluded.is_partial,
@@ -409,19 +513,21 @@ public final class MailboxIndex {
                 size = excluded.size
             """,
             bind: { stmt in
+                let dateSort = Grant.parseDate(message.date)?.timeIntervalSince1970 ?? 0
                 sqlite3_bind_text(stmt, 1, accountID, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 2, placement, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 3, id, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 4, message.from, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 5, message.to, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 6, message.date, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_text(stmt, 7, message.subject, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_text(stmt, 8, message.body, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_int(stmt, 9, message.isPartial ? 1 : 0)
-                sqlite3_bind_text(stmt, 10, identity.path, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_int64(stmt, 11, Int64(bitPattern: identity.inode))
-                sqlite3_bind_double(stmt, 12, identity.mtime)
-                sqlite3_bind_int64(stmt, 13, Int64(identity.size))
+                sqlite3_bind_double(stmt, 7, dateSort)
+                sqlite3_bind_text(stmt, 8, message.subject, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 9, message.body, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_int(stmt, 10, message.isPartial ? 1 : 0)
+                sqlite3_bind_text(stmt, 11, identity.path, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_int64(stmt, 12, Int64(bitPattern: identity.inode))
+                sqlite3_bind_double(stmt, 13, identity.mtime)
+                sqlite3_bind_int64(stmt, 14, Int64(identity.size))
             }
         )
     }
@@ -484,6 +590,18 @@ public struct IngestProgress: Sendable, Equatable {
 
 public struct IngestResult: Equatable, Sendable {
     public let new: [IndexedMessageRef]
+}
+
+public struct IndexFreshness: Equatable, Sendable {
+    public let lastIngestAt: Date?
+    public let newestMessageDate: String?
+    public let indexedCount: Int
+
+    public init(lastIngestAt: Date?, newestMessageDate: String?, indexedCount: Int) {
+        self.lastIngestAt = lastIngestAt
+        self.newestMessageDate = newestMessageDate
+        self.indexedCount = indexedCount
+    }
 }
 
 public struct IndexedMessageRef: Equatable, Sendable {

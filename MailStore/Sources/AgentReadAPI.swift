@@ -108,6 +108,25 @@ public struct AgentReadAPI {
         return grants.filter(try read.listPlacements(), agentID: agent.id)
     }
 
+    public func freshness(credential: String?) throws -> IndexFreshness {
+        _ = try authenticate(credential)
+        return try read.freshness()
+    }
+
+    public func updateIndex(credential: String?, updater: any IndexUpdating) throws -> IndexUpdateOutcome {
+        let agent = try authenticate(credential)
+        let outcome = try updater.update()
+        audit?.append(
+            AuditEntry(
+                kind: .updateIndex,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: "new=\(outcome.newCount)"
+            )
+        )
+        return outcome
+    }
+
     private func filterPage(
         _ page: Page<IndexedMessage>,
         agentID: String,

@@ -275,7 +275,11 @@ final class AgentBridge {
         setMailbox(accountID: accountID, placement: placement, enabled: !on)
     }
 
-    func bindLoopback(store: MailStore, databaseURL: URL) {
+    func bindLoopback(
+        store: MailStore,
+        databaseURL: URL,
+        indexUpdater: (any IndexUpdating)? = nil
+    ) {
         stopLoopback()
         ensureMachineLocalAgent()
         do {
@@ -289,6 +293,7 @@ final class AgentBridge {
             let listener = LoopbackHTTPListener(
                 gateway: gateway,
                 ledger: ledger,
+                indexUpdater: indexUpdater,
                 host: "127.0.0.1",
                 port: loopbackPort
             )

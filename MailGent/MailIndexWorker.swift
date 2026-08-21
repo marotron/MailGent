@@ -13,6 +13,7 @@ struct IndexRebuildSnapshot: Sendable {
     let indexedCount: Int
     let placements: [Placement]
     let newCount: Int
+    let lastIngestAt: Date?
 }
 
 struct IndexIncrementalSnapshot: Sendable {
@@ -20,6 +21,8 @@ struct IndexIncrementalSnapshot: Sendable {
     let indexedCount: Int
     let placements: [Placement]
     let newCount: Int
+    let lastIngestAt: Date?
+    let newestMessageDate: String?
 }
 
 struct IndexPageSnapshot: Sendable {
@@ -70,11 +73,13 @@ actor MailIndexWorker {
         MailGentLog.trace(
             "rebuild done indexed=\(indexedCount) new=\(ingest.new.count)"
         )
+        let freshness = try index.freshness()
         return IndexRebuildSnapshot(
             catalog: catalog,
             indexedCount: indexedCount,
             placements: placements,
-            newCount: ingest.new.count
+            newCount: ingest.new.count,
+            lastIngestAt: freshness.lastIngestAt
         )
     }
 
@@ -94,11 +99,13 @@ actor MailIndexWorker {
             store: store
         )
         MailGentLog.trace("open done indexed=\(indexedCount)")
+        let freshness = try index.freshness()
         return IndexRebuildSnapshot(
             catalog: catalog,
             indexedCount: indexedCount,
             placements: placements,
-            newCount: 0
+            newCount: 0,
+            lastIngestAt: freshness.lastIngestAt
         )
     }
 
@@ -122,11 +129,14 @@ actor MailIndexWorker {
             store: index.store
         )
         MailGentLog.trace("incremental ingest done new=\(ingest.new.count) indexed=\(indexedCount)")
+        let freshness = try index.freshness()
         return IndexIncrementalSnapshot(
             catalog: catalog,
             indexedCount: indexedCount,
             placements: placements,
-            newCount: ingest.new.count
+            newCount: ingest.new.count,
+            lastIngestAt: freshness.lastIngestAt,
+            newestMessageDate: freshness.newestMessageDate
         )
     }
 

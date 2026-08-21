@@ -1,41 +1,181 @@
 import AppKit
+import MailStore
 import SwiftUI
 
 struct MenuBarStatus: View {
     @Bindable var session: CompanionSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("MailGent")
                 .font(.headline)
-            LabeledContent("Access") {
-                Text(session.mailAccessGranted ? "Granted" : "Denied")
-                    .foregroundStyle(session.mailAccessGranted ? .green : .orange)
+                .padding(.horizontal, 8)
+
+            // Keep relative-time refresh off the action rows — TimelineView rebuilds
+            // were cancelling clicks / swapping which row received the mouse-up.
+            TimelineView(.periodic(from: .now, by: 15)) { context in
+                VStack(alignment: .leading, spacing: 2) {
+                    statusRow("Access") {
+                        Text(session.mailAccessGranted ? "Granted" : "Denied")
+                            .foregroundStyle(session.mailAccessGranted ? .green : .orange)
+                    }
+                    lastIngestRow(at: context.date)
+                    statusRow("New") {
+                        Text(newLabel)
+                    }
+                    statusRow("Source") {
+                        Text(session.source.title)
+                    }
+                    statusRow("Connected agent") {
+                        Text(session.agents.agent?.name ?? "—")
+                    }
+                    statusRow("Last agent request") {
+                        Text(lastAgentRequestLabel(at: context.date))
+                    }
+                }
+                .padding(.horizontal, 8)
             }
-            LabeledContent("Last ingest") {
-                Text(session.lastIngestAt?.formatted(date: .omitted, time: .shortened) ?? "—")
-            }
-            LabeledContent("New") {
-                Text("\(session.lastNewCount)")
-            }
-            LabeledContent("Source") {
-                Text(session.source.title)
-            }
+
             Divider()
-            Button("Open Companion") {
-                session.openHome()
-                DetachedWindowHost.shared.showCompanion(session: session)
-            }
-            .keyboardShortcut(.defaultAction)
-            Button("Grant access…") {
-                DetachedWindowHost.shared.showAccess(session: session.access)
-            }
-            Button("Quit MailGent") {
-                NSApplication.shared.terminate(nil)
+                .padding(.vertical, 2)
+                .padding(.horizontal, 8)
+
+            VStack(spacing: 1) {
+                MenuBarActionRow(title: "Open Companion", id: "open-companion") {
+                    session.openHome()
+                    DetachedWindowHost.shared.showCompanion(session: session)
+                }
+                MenuBarActionRow(title: "Open Grant Desk", id: "open-grant-desk") {
+                    DetachedWindowHost.shared.showGrantDesk(session: session)
+                }
+                MenuBarActionRow(title: "Grant access…", id: "grant-access") {
+                    DetachedWindowHost.shared.showAccess(session: session.access)
+                }
+
+                Divider()
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, 8)
+
+                MenuBarActionRow(title: "Quit MailGent", id: "quit") {
+                    NSApplication.shared.terminate(nil)
+                }
             }
         }
-        .padding(16)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
         .frame(width: 280)
         .onAppear(perform: session.refreshAccess)
+    }
+
+    private func statusRow<Content: View>(_ title: String, @ViewBuilder value: () -> Content) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            value()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .font(.callout)
+    }
+
+    private func lastIngestRow(at now: Date) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Last ingest")
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(ingestLabel(at: now))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                let work = { session.ingestAgain() }
+                DispatchQueue.main.async(execute: work)
+            } label: {
+                Group {
+                    if session.isBusy {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isBusy)
+            .help("Update ingest")
+            .id("quick-ingest")
+        }
+        .font(.callout)
+    }
+
+    private var newLabel: String {
+        guard let since = session.lastIngestAt else {
+            return "\(session.lastNewCount)"
+        }
+        let clock = since.formatted(date: .omitted, time: .shortened)
+        return "\(session.lastNewCount) (since \(clock))"
+    }
+
+    private func ingestLabel(at now: Date) -> String {
+        guard let date = session.lastIngestAt else { return "—" }
+        let clock = date.formatted(date: .omitted, time: .shortened)
+        return "\(clock) (\(Self.relativeAge(from: date, to: now)))"
+    }
+
+    private func lastAgentRequestLabel(at now: Date) -> String {
+        guard let entry = session.agents.recentAudit.first(where: { Self.isAgentRequest($0.kind) }) else {
+            return "—"
+        }
+        return "\(entry.kind.rawValue) · \(Self.relativeAge(from: entry.at, to: now))"
+    }
+
+    private static func isAgentRequest(_ kind: AuditKind) -> Bool {
+        switch kind {
+        case .search, .get, .createDraft, .updateDraft, .updateIndex:
+            return true
+        case .pair, .revoke:
+            return false
+        }
+    }
+
+    private static func relativeAge(from date: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s ago" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        if hours < 48 { return "\(hours)h ago" }
+        return "\(hours / 24)d ago"
+    }
+}
+
+/// Menu-item row: full-width, blue hover fill, white label — matches system status menus.
+private struct MenuBarActionRow: View {
+    let title: String
+    let id: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            // Capture work immediately; MenuBarExtra may tear this view down before
+            // a synchronous present finishes.
+            let work = action
+            DispatchQueue.main.async(execute: work)
+        } label: {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .id(id)
+        .foregroundStyle(hovering ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+        .background {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(hovering ? Color.accentColor : Color.clear)
+        }
+        .onHover { hovering = $0 }
     }
 }

@@ -6,6 +6,7 @@ public enum AuditKind: String, Equatable, Sendable {
     case get
     case createDraft
     case updateDraft
+    case updateIndex
     case revoke
 }
 

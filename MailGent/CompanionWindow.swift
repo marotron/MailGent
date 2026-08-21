@@ -12,45 +12,62 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var companion: NSWindow?
     private var access: NSWindow?
     private var grantDesk: NSWindow?
+    /// Bumps when a new menu action schedules a present; stale delayed work bails.
+    private var presentationToken = 0
 
     func showCompanion(session: CompanionSession) {
-        // MenuBarExtra dismisses after the click; present on the next turn so it stays key.
-        DispatchQueue.main.async {
+        scheduleAfterMenuDismissal {
             self.presentCompanion(session: session)
         }
     }
 
     func showAccess(session: MailAccessSession) {
-        DispatchQueue.main.async {
+        scheduleAfterMenuDismissal {
             self.presentAccess(session: session)
         }
     }
 
     func showGrantDesk(session: CompanionSession) {
-        DispatchQueue.main.async {
+        scheduleAfterMenuDismissal {
             self.presentGrantDesk(session: session)
         }
     }
 
+    /// MenuBarExtra `.window` tears down on the same turn as the click; wait it out.
+    private func scheduleAfterMenuDismissal(_ body: @escaping () -> Void) {
+        presentationToken += 1
+        let token = presentationToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            guard let self, token == self.presentationToken else { return }
+            body()
+        }
+    }
+
     private func presentCompanion(session: CompanionSession) {
-        if companion == nil {
+        let root = CompanionWindow(session: session)
+        if let companion {
+            companion.contentView = NSHostingView(rootView: root)
+        } else {
             companion = makeWindow(
                 title: "MailGent",
                 size: NSSize(width: 980, height: 640),
                 minSize: NSSize(width: 720, height: 480),
-                root: CompanionWindow(session: session)
+                root: root
             )
         }
         bringForward(companion)
     }
 
     private func presentAccess(session: MailAccessSession) {
-        if access == nil {
+        let root = GrantAccessView(session: session)
+        if let access {
+            access.contentView = NSHostingView(rootView: root)
+        } else {
             access = makeWindow(
                 title: "Grant access",
                 size: NSSize(width: 480, height: 280),
                 minSize: NSSize(width: 420, height: 240),
-                root: GrantAccessView(session: session)
+                root: root
             )
         }
         bringForward(access)
@@ -59,17 +76,18 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private func presentGrantDesk(session: CompanionSession) {
         let size = NSSize(width: 600, height: 640)
         let minSize = NSSize(width: 560, height: 520)
-        if grantDesk == nil {
+        let root = GrantDeskView(session: session)
+        if let grantDesk {
+            grantDesk.minSize = minSize
+            grantDesk.setContentSize(size)
+            grantDesk.contentView = NSHostingView(rootView: root)
+        } else {
             grantDesk = makeWindow(
                 title: "Grant desk",
                 size: size,
                 minSize: minSize,
-                root: GrantDeskView(session: session)
+                root: root
             )
-        } else if let grantDesk {
-            grantDesk.minSize = minSize
-            grantDesk.setContentSize(size)
-            grantDesk.contentView = NSHostingView(rootView: GrantDeskView(session: session))
         }
         bringForward(grantDesk)
     }
@@ -110,6 +128,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     private func bringForward(_ window: NSWindow?) {
         guard let window else { return }
+        let token = presentationToken
         NSApp.setActivationPolicy(.regular)
         NSApp.unhide(nil)
         if window.isMiniaturized {
@@ -118,9 +137,16 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
-        // MenuBarExtra teardown can still race the first present; poke again next turn.
-        DispatchQueue.main.async {
+        // MenuBarExtra teardown can still race the first present; poke again next turns.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, token == self.presentationToken else { return }
             NSApp.setActivationPolicy(.regular)
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self, token == self.presentationToken else { return }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }

@@ -38,10 +38,16 @@ public struct LoopbackMCPResponse: Sendable {
 public struct LoopbackMCPServer {
     public let gateway: AgentReadAPI
     public let ledger: DraftLedger
+    public let indexUpdater: any IndexUpdating
 
-    public init(gateway: AgentReadAPI, ledger: DraftLedger = DraftLedger()) {
+    public init(
+        gateway: AgentReadAPI,
+        ledger: DraftLedger = DraftLedger(),
+        indexUpdater: (any IndexUpdating)? = nil
+    ) {
         self.gateway = gateway
         self.ledger = ledger
+        self.indexUpdater = indexUpdater ?? LocalIndexUpdater(index: gateway.read.index)
     }
 
     public func handle(_ request: LoopbackMCPRequest) -> LoopbackMCPResponse {
@@ -153,11 +159,22 @@ public struct LoopbackMCPServer {
         switch name {
         case "search":
             let query = arguments["query"] as? String ?? ""
-            let page = try gateway.search(query, credential: credential)
-            return try jsonString([
+            let limit = Self.intArgument(arguments["limit"]) ?? 25
+            let cursor = arguments["cursor"] as? String
+            let page = try gateway.search(
+                query,
+                credential: credential,
+                limit: limit,
+                cursor: cursor
+            )
+            var payload: [String: Any] = [
                 "items": page.items.map(Self.messageSummary),
                 "count": page.items.count
-            ])
+            ]
+            if let nextCursor = page.nextCursor {
+                payload["nextCursor"] = nextCursor
+            }
+            return try jsonString(payload)
         case "list":
             let page = try gateway.list(credential: credential)
             return try jsonString([
@@ -182,24 +199,7 @@ public struct LoopbackMCPServer {
                 placement: placement,
                 id: messageID
             )
-            let bodyText: String
-            switch message.body {
-            case .text(let text):
-                bodyText = text
-            case .notAvailable:
-                bodyText = ""
-            }
-            return try jsonString([
-                "id": message.id,
-                "accountID": message.accountID,
-                "placement": message.placement,
-                "subject": message.subject,
-                "from": message.from,
-                "to": message.to,
-                "date": message.date,
-                "isPartial": message.isPartial,
-                "body": bodyText
-            ])
+            return try jsonString(Self.messageDetail(message))
         case "create_draft":
             let body = arguments["body"] as? String ?? ""
             let version = ledger.create(body: body)
@@ -233,6 +233,14 @@ public struct LoopbackMCPServer {
                 )
             }
             return try jsonString(Self.versionSummary(version))
+        case "status":
+            let freshness = try gateway.freshness(credential: credential)
+            return try jsonString(Self.freshnessPayload(freshness))
+        case "update":
+            let outcome = try gateway.updateIndex(credential: credential, updater: indexUpdater)
+            var payload = Self.freshnessPayload(outcome.freshness)
+            payload["newCount"] = outcome.newCount
+            return try jsonString(payload)
         default:
             throw CallError.unknownTool
         }
@@ -250,6 +258,46 @@ public struct LoopbackMCPServer {
         ]
     }
 
+    private static func intArgument(_ value: Any?) -> Int? {
+        switch value {
+        case let n as Int:
+            return n
+        case let n as NSNumber:
+            return n.intValue
+        case let s as String:
+            return Int(s)
+        default:
+            return nil
+        }
+    }
+
+    /// Full `get` payload. Distinguishes grant denial from empty/missing plain text.
+    private static func messageDetail(_ message: ReadMessage) -> [String: Any] {
+        var payload: [String: Any] = [
+            "id": message.id,
+            "accountID": message.accountID,
+            "placement": message.placement,
+            "subject": message.subject,
+            "from": message.from,
+            "to": message.to,
+            "date": message.date,
+            "isPartial": message.isPartial
+        ]
+        switch message.body {
+        case .text(let text):
+            payload["bodyAccess"] = "granted"
+            payload["body"] = text
+        case .notAvailable:
+            payload["bodyAccess"] = "granted"
+            // No plain-text body (empty or HTML-only); omit `body` rather than "".
+        case .notGranted:
+            payload["bodyAccess"] = "not_granted"
+            payload["note"] =
+                "Body omitted: the active grant for this account does not allow body access. Ask the user to enable body on the grant before summarizing or quoting the message."
+        }
+        return payload
+    }
+
     private static func versionSummary(_ version: DraftVersion) -> [String: Any] {
         [
             "draftID": version.draftID,
@@ -257,6 +305,21 @@ public struct LoopbackMCPServer {
             "label": version.label,
             "body": version.body
         ]
+    }
+
+    private static func freshnessPayload(_ freshness: IndexFreshness) -> [String: Any] {
+        var payload: [String: Any] = [
+            "indexedCount": freshness.indexedCount
+        ]
+        if let lastIngestAt = freshness.lastIngestAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            payload["lastIngestAt"] = formatter.string(from: lastIngestAt)
+        }
+        if let newestMessageDate = freshness.newestMessageDate {
+            payload["newestMessageDate"] = newestMessageDate
+        }
+        return payload
     }
 
     private func rpcOK(id: Any, result: [String: Any]) throws -> LoopbackMCPResponse {
@@ -282,11 +345,14 @@ public struct LoopbackMCPServer {
         [
             [
                 "name": "search",
-                "description": "Search granted Apple Mail messages by full-text query.",
+                "description":
+                    "Search granted Apple Mail messages by full-text query. Results are newest-first, with subject/from matches ranked above body-only hits. Pass cursor from nextCursor to page.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
-                        "query": ["type": "string", "description": "Full-text search query"]
+                        "query": ["type": "string", "description": "Full-text search query"],
+                        "limit": ["type": "integer", "description": "Page size (1–100, default 25)"],
+                        "cursor": ["type": "string", "description": "Opaque page cursor from a prior nextCursor"]
                     ],
                     "required": ["query"]
                 ]
@@ -309,7 +375,8 @@ public struct LoopbackMCPServer {
             ],
             [
                 "name": "get",
-                "description": "Fetch one granted message by account, placement, and id.",
+                "description":
+                    "Fetch one granted message by account, placement, and id. Response includes bodyAccess: \"granted\" (body present or omitted when empty/HTML-only) or \"not_granted\" (grant denies body — do not treat as empty mail; ask user to enable body on the grant).",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -341,6 +408,24 @@ public struct LoopbackMCPServer {
                         "body": ["type": "string", "description": "Updated draft body text"]
                     ],
                     "required": ["draftID", "body"]
+                ]
+            ],
+            [
+                "name": "status",
+                "description":
+                    "Index freshness: lastIngestAt (when MailGent last scanned Apple Mail), newestMessageDate (RFC822 date of the newest indexed message), and indexedCount.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [:] as [String: Any]
+                ]
+            ],
+            [
+                "name": "update",
+                "description":
+                    "Run an incremental ingest from Apple Mail and wait until it finishes. Returns newCount plus the same freshness fields as status.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [:] as [String: Any]
                 ]
             ]
         ]

@@ -162,6 +162,10 @@ struct MessageBodyView: View {
                     Text("Body not available")
                         .foregroundStyle(.secondary)
                         .italic()
+                case .notGranted:
+                    Text("Body not granted")
+                        .foregroundStyle(.secondary)
+                        .italic()
                 }
             }
         }

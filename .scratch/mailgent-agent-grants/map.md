@@ -24,7 +24,7 @@ Ship usable **per-agent data access control** on top of the local-read companion
 - [Companion Mailbox Grant UI](issues/02-mailbox-grant-ui.md) — control-center account/mailbox checkboxes
 - [Participant and Date Selectors](issues/03-selector-grants.md) — From/To/date on Grant; Narrow fields in companion
 - [Explicit Deny Carve-Outs](issues/04-deny-carveouts.md) — Grant.mode deny; deny-mode checkbox in companion
-- [Field Exposure Caps](issues/05-field-exposure.md) — GrantFields; body-off get omits without stubs
+- [Field Exposure Caps](issues/05-field-exposure.md) — GrantFields; body-off get → `notGranted` / MCP `bodyAccess`
 - [Grant Desk UI](issues/06-grant-desk.md) — lean Scope/Access desk window (prototype 10 IA subset)
 - [Merge Agent-Grants Train](issues/07-merge-train.md) — `train/agent-grants` → `main`; OAuth later
 
@@ -35,6 +35,10 @@ Ship usable **per-agent data access control** on top of the local-read companion
 - Policy “Test” pre-save counts in the desk.
 - Field-aware FTS search when body is off.
 - Full dual-pane agent list + nested grants from HTML prototype (lean desk ships first).
+
+## Decisions so far (post-merge polish)
+
+- 2026-08-21 — Search orders `date_sort` desc, then `bm25` (subject/from weighted over body); MCP `search` exposes `nextCursor` / `cursor` / `limit`. Fixes account-UUID page flooding + “latest” miss (e.g. Birmingham Revenues).
 
 ## Branches
 

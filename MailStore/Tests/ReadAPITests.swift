@@ -119,11 +119,11 @@ struct ReadAPITests {
             rfc822: """
             From: Alice <alice@example.com>
             To: Bob <bob@example.com>
-            Subject: Hello
+            Subject: Zanzibar one
             Date: Mon, 1 Jan 2024 00:00:00 +0000
             Content-Type: text/plain
 
-            Zanzibar one
+            Body one
             """,
             account: accountID,
             mailbox: "INBOX.mbox"
@@ -133,11 +133,11 @@ struct ReadAPITests {
             rfc822: """
             From: Carol <carol@example.com>
             To: Bob <bob@example.com>
-            Subject: Follow up
+            Subject: Zanzibar two
             Date: Tue, 2 Jan 2024 00:00:00 +0000
             Content-Type: text/plain
 
-            Zanzibar two
+            Body two
             """,
             account: accountID,
             mailbox: "Sent Messages.mbox"
@@ -152,13 +152,13 @@ struct ReadAPITests {
         let api = ReadAPI(index: index)
 
         let first = try api.search("Zanzibar", limit: 1)
-        #expect(first.items.map(\.id) == ["1"])
-        #expect(first.items[0].placement == "INBOX")
+        #expect(first.items.map(\.id) == ["2"])
+        #expect(first.items[0].placement == "Sent Messages")
         #expect(first.nextCursor != nil)
 
         let second = try api.search("Zanzibar", limit: 1, cursor: first.nextCursor)
-        #expect(second.items.map(\.id) == ["2"])
-        #expect(second.items[0].placement == "Sent Messages")
+        #expect(second.items.map(\.id) == ["1"])
+        #expect(second.items[0].placement == "INBOX")
         #expect(second.nextCursor == nil)
     }
 
