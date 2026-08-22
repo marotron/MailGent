@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import SwiftUI
 
+@MainActor
 @Observable
 final class MailAccessSession {
     var snapshot = MailLibraryAccessSnapshot(
