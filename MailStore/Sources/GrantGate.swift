@@ -17,7 +17,7 @@ public struct GrantParticipant: Equatable, Codable, Sendable {
     }
 }
 
-public struct GrantFields: Equatable, Sendable {
+public struct GrantFields: Equatable, Hashable, Sendable {
     public var subject: Bool
     public var from: Bool
     public var to: Bool

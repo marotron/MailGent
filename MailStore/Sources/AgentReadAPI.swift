@@ -55,7 +55,7 @@ public struct AgentReadAPI {
                 detail: "list",
                 requestSummary: request,
                 responseSummary: "\(filtered.items.count) messages",
-                messages: Self.messageRefs(filtered.items)
+                messages: messageRefs(filtered.items, agentID: agent.id)
             )
             return filtered
         } catch {
@@ -105,7 +105,7 @@ public struct AgentReadAPI {
                 detail: query,
                 requestSummary: request,
                 responseSummary: "\(filtered.items.count) messages",
-                messages: Self.messageRefs(filtered.items)
+                messages: messageRefs(filtered.items, agentID: agent.id)
             )
             return filtered
         } catch {
@@ -169,7 +169,7 @@ public struct AgentReadAPI {
                 detail: path,
                 requestSummary: path,
                 responseSummary: "bodyAccess=\(bodyAccess)",
-                messages: [AuditMessageRef(granted)]
+                messages: [AuditMessageRef(granted, fields: fields)]
             )
             return granted
         } catch let error as PairingError where error == .unauthorized {
@@ -317,8 +317,13 @@ public struct AgentReadAPI {
         )
     }
 
-    private static func messageRefs(_ items: [IndexedMessage]) -> [AuditMessageRef] {
-        items.prefix(AuditLog.messageRefCap).map(AuditMessageRef.init)
+    private func messageRefs(_ items: [IndexedMessage], agentID: String) -> [AuditMessageRef] {
+        items.prefix(AuditLog.messageRefCap).map { item in
+            AuditMessageRef(
+                item,
+                fields: grants.effectiveFields(for: item, agentID: agentID) ?? .headersOnly
+            )
+        }
     }
 
     private static func listRequestSummary(

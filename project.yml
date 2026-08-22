@@ -57,6 +57,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: MailGent
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_NSPrincipalClass: MailGentApplication
         INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026
         INFOPLIST_KEY_CFBundleIconFile: AppIcon
         INFOPLIST_KEY_CFBundleIconName: AppIcon

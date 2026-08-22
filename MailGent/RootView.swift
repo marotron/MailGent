@@ -48,19 +48,13 @@ struct GrantAccessView: View {
     var session: MailAccessSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Grant access to Mail")
-                .font(.title2)
-                .bold()
-            Text(
-                "MailGent reads Apple Mail’s local store on this Mac. macOS Full Disk Access is a System Settings grant — no entitlement can skip it. Until that grant succeeds, MailGent will not read mail."
-            )
-            .foregroundStyle(.secondary)
-            Text(
-                "System Settings → Privacy & Security → Full Disk Access → enable MailGent. Then return here and Recheck. You can also choose the Mail folder as a fallback."
-            )
-            .foregroundStyle(.secondary)
-            HStack {
+        Form {
+            Section("Grant access to Mail") {
+                Text(
+                    "MailGent reads Apple Mail’s local store on this Mac. macOS Full Disk Access is a System Settings grant — no entitlement can skip it. Until that grant succeeds, MailGent will not read mail.\n\nSystem Settings → Privacy & Security → Full Disk Access → enable MailGent. Then return here and Recheck. You can also choose the Mail folder as a fallback."
+                )
+                .foregroundStyle(.secondary)
+                .font(.callout)
                 Button("Open Full Disk Access") {
                     session.openFullDiskAccessSettings()
                 }
@@ -73,6 +67,7 @@ struct GrantAccessView: View {
                 }
             }
         }
-        .padding(28)
+        .formStyle(.grouped)
+        .padding(8)
     }
 }

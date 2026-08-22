@@ -5,6 +5,9 @@ import SwiftUI
 /// Menu-bar (`LSUIElement`) apps stay `.accessory`. SwiftUI `Window` / `Settings` /
 /// `openWindow` / `SettingsLink` then fail after the first close. Own the windows in
 /// AppKit: hide on close, flip to `.regular` on the click that shows them.
+///
+/// MenuBarExtra `.window` dismiss also calls `NSApp.hide()` / `orderOut` on the new
+/// key window ~0.3–0.8s later. Delaying present is not enough — block those hides.
 @MainActor
 final class DetachedWindowHost: NSObject, NSWindowDelegate {
     static let shared = DetachedWindowHost()
@@ -13,49 +16,102 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var access: NSWindow?
     private var grantDesk: NSWindow?
     private var accessLog: NSWindow?
+    private var settings: NSWindow?
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
+    /// Only `windowShouldClose` (user close) may order out hosted windows.
+    private var allowingOrderOut = false
+    private var presentedAt: Date?
+    private var hideRecoveries = 0
+    private var hideObserver: NSObjectProtocol?
+    /// Windows the user asked to keep; extra dismiss must not resurrect closed ones.
+    private var intendedVisible: Set<ObjectIdentifier> = []
+
+    /// AppKit may call `orderOut` off the isolated host; HostedWindow reads this on main.
+    var shouldBlockOrderOut: Bool { !allowingOrderOut }
+
+    /// MenuBarExtra dismiss calls `NSApp.hide()` after the click; swallow that while we own windows.
+    var shouldSuppressAppHide: Bool { isRecentPresent || !intendedVisible.isEmpty }
+
+    override init() {
+        super.init()
+        hideObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didHideNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.recoverFromHideIfNeeded()
+            }
+        }
+    }
 
     func showCompanion(session: CompanionSession) {
-        claimActivation()
+        beginPresentation()
         scheduleAfterMenuDismissal {
             self.presentCompanion(session: session)
         }
     }
 
     func showAccess(session: MailAccessSession) {
-        claimActivation()
+        beginPresentation()
         scheduleAfterMenuDismissal {
             self.presentAccess(session: session)
         }
     }
 
     func showGrantDesk(session: CompanionSession) {
-        claimActivation()
+        beginPresentation()
         scheduleAfterMenuDismissal {
             self.presentGrantDesk(session: session)
         }
     }
 
     func showAccessLog(session: CompanionSession, selectedID: String? = nil) {
-        claimActivation()
+        beginPresentation()
         scheduleAfterMenuDismissal {
             self.presentAccessLog(session: session, selectedID: selectedID)
         }
     }
 
+    func showSettings(session: CompanionSession) {
+        beginPresentation()
+        scheduleAfterMenuDismissal {
+            self.presentSettings(session: session)
+        }
+    }
+
     /// Flip off `.accessory` on the click itself so MenuBarExtra dismiss does not hide the app.
     func claimActivation() {
+        presentedAt = Date()
         NSApp.setActivationPolicy(.regular)
         NSApp.unhide(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// MenuBarExtra `.window` tears down on the same turn as the click; wait it out.
+    private func beginPresentation() {
+        hideRecoveries = 0
+        claimActivation()
+    }
+
+    private var isRecentPresent: Bool {
+        guard let presentedAt else { return false }
+        return Date().timeIntervalSince(presentedAt) < 1.2
+    }
+
+    private func wantsVisible(_ window: NSWindow) -> Bool {
+        intendedVisible.contains(ObjectIdentifier(window))
+    }
+
+    private var hostedWindows: [NSWindow] {
+        [companion, access, grantDesk, accessLog, settings].compactMap { $0 }
+    }
+
+    /// MenuBarExtra `.window` tears down on the same turn as the click; wait one turn.
     private func scheduleAfterMenuDismissal(_ body: @escaping () -> Void) {
         presentationToken += 1
         let token = presentationToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             guard let self, token == self.presentationToken else { return }
             body()
         }
@@ -83,8 +139,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         } else {
             access = makeWindow(
                 title: "Grant access",
-                size: NSSize(width: 480, height: 280),
-                minSize: NSSize(width: 420, height: 240),
+                size: NSSize(width: 440, height: 400),
+                minSize: NSSize(width: 420, height: 300),
                 root: root
             )
         }
@@ -111,7 +167,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     private func presentAccessLog(session: CompanionSession, selectedID: String?) {
         let size = NSSize(width: 900, height: 560)
-        let minSize = NSSize(width: 720, height: 420)
+        let minSize = NSSize(width: 780, height: 420)
         let root = AccessLogView(session: session, initialSelection: selectedID)
         if let accessLog {
             install(root, in: accessLog)
@@ -126,16 +182,46 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         bringForward(accessLog)
     }
 
+    private func presentSettings(session: CompanionSession) {
+        let size = NSSize(width: 480, height: 560)
+        let minSize = NSSize(width: 440, height: 400)
+        let root = MailGentSettingsView(session: session)
+        if let settings {
+            settings.minSize = minSize
+            install(root, in: settings)
+        } else {
+            settings = makeWindow(
+                title: "MailGent Settings",
+                size: size,
+                minSize: minSize,
+                root: root
+            )
+        }
+        bringForward(settings)
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Extra dismiss synthesizes close on the new key window. Ignore that flash.
+        if isRecentPresent { return false }
+        intendedVisible.remove(ObjectIdentifier(sender))
+        allowingOrderOut = true
         sender.orderOut(nil)
-        if companion?.isVisible != true,
-           access?.isVisible != true,
-           grantDesk?.isVisible != true,
-           accessLog?.isVisible != true
-        {
+        allowingOrderOut = false
+        if intendedVisible.isEmpty {
             NSApp.setActivationPolicy(.accessory)
         }
         return false
+    }
+
+    private func recoverFromHideIfNeeded() {
+        guard !intendedVisible.isEmpty else { return }
+        guard hideRecoveries < 8 else { return }
+        hideRecoveries += 1
+        claimActivation()
+        for window in hostedWindows where wantsVisible(window) {
+            window.orderFrontRegardless()
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     private func makeWindow<Content: View>(
@@ -144,7 +230,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         minSize: NSSize,
         root: Content
     ) -> NSWindow {
-        let window = NSWindow(
+        let window = HostedWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
@@ -174,6 +260,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     private func bringForward(_ window: NSWindow?) {
         guard let window else { return }
+        intendedVisible.insert(ObjectIdentifier(window))
         let token = presentationToken
         let poke = { [weak self] in
             guard let self, token == self.presentationToken else { return }
@@ -185,9 +272,32 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             window.makeKeyAndOrderFront(nil)
         }
         poke()
-        // MenuBarExtra teardown can still race the first present; poke again next turns.
+        // Extra dismiss / NSApp.hide can still land after the first present.
         DispatchQueue.main.async { poke() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { poke() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { poke() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { poke() }
+    }
+}
+
+@objc(MailGentApplication)
+final class MailGentApplication: NSApplication {
+    override func hide(_ sender: Any?) {
+        let suppress = MainActor.assumeIsolated {
+            DetachedWindowHost.shared.shouldSuppressAppHide
+        }
+        if suppress { return }
+        super.hide(sender)
+    }
+}
+
+/// Status-item teardown calls `orderOut` on whoever became key. Only user close may hide us.
+private final class HostedWindow: NSWindow {
+    override func orderOut(_ sender: Any?) {
+        let blocked = MainActor.assumeIsolated {
+            DetachedWindowHost.shared.shouldBlockOrderOut
+        }
+        if blocked { return }
+        super.orderOut(sender)
     }
 }
 

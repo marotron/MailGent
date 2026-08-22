@@ -15,9 +15,13 @@ struct MailGentApp: App {
             MenuBarIconLabel(agents: session.agents, source: session.source)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            MailGentSettingsView(session: session)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    DetachedWindowHost.shared.showSettings(session: session)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }

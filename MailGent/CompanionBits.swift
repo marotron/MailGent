@@ -481,3 +481,344 @@ struct CompanionStatusMetrics: View {
         }
     }
 }
+
+// MARK: - Access log + grant desk chrome
+
+extension AuditKind {
+    var badgeTitle: String {
+        switch self {
+        case .pair: "pair"
+        case .search: "search"
+        case .list: "list"
+        case .listPlacements: "placements"
+        case .get: "get"
+        case .createDraft: "create"
+        case .updateDraft: "update"
+        case .updateIndex: "ingest"
+        case .status: "status"
+        case .setSource: "source"
+        case .revoke: "revoke"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .pair: "link"
+        case .search: "magnifyingglass"
+        case .list: "list.bullet"
+        case .listPlacements: "folder"
+        case .get: "envelope.open"
+        case .createDraft: "square.and.pencil"
+        case .updateDraft: "pencil"
+        case .updateIndex: "arrow.triangle.2.circlepath"
+        case .status: "chart.bar"
+        case .setSource: "switch.2"
+        case .revoke: "xmark.circle"
+        }
+    }
+}
+
+struct AuditKindBadge: View {
+    let kind: AuditKind
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: kind.systemImage)
+                .font(.caption2.weight(.semibold))
+            Text(kind.badgeTitle)
+                .font(.caption.weight(.semibold).monospaced())
+        }
+        .foregroundStyle(Color.accentColor)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.accentColor.opacity(0.12), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5)
+        }
+        .accessibilityLabel(kind.badgeTitle)
+    }
+}
+
+struct AuditOutcomeIcon: View {
+    let outcome: AuditOutcome
+
+    var body: some View {
+        switch outcome {
+        case .ok:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .help("Succeeded")
+                .accessibilityLabel("Succeeded")
+        case .error(let message):
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.orange)
+                .help(message.isEmpty ? "Failed" : message)
+                .accessibilityLabel("Failed")
+        }
+    }
+}
+
+struct AgentGlyph: View {
+    let name: String
+    var size: CGFloat = 16
+
+    private var isCursor: Bool {
+        name.compare("Cursor", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+
+    var body: some View {
+        Group {
+            if isCursor {
+                CursorMark()
+            } else {
+                Image(systemName: "cpu")
+                    .font(.system(size: size * 0.62, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: size, height: size)
+                    .background(
+                        .quaternary,
+                        in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+        .help(name)
+        .accessibilityLabel(name)
+    }
+}
+
+struct CursorMark: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(.primary)
+            CursorPointerShape()
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .padding(2.5)
+        }
+        .accessibilityLabel("Cursor")
+    }
+}
+
+private struct CursorPointerShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        path.move(to: CGPoint(x: w * 0.16, y: h * 0.08))
+        path.addLine(to: CGPoint(x: w * 0.16, y: h * 0.84))
+        path.addLine(to: CGPoint(x: w * 0.38, y: h * 0.64))
+        path.addLine(to: CGPoint(x: w * 0.54, y: h * 0.96))
+        path.addLine(to: CGPoint(x: w * 0.68, y: h * 0.90))
+        path.addLine(to: CGPoint(x: w * 0.50, y: h * 0.56))
+        path.addLine(to: CGPoint(x: w * 0.82, y: h * 0.56))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct RawPrettyHeader: View {
+    let title: String
+    @Binding var showRaw: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(showRaw ? "Raw" : "Pretty")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .foregroundStyle(.secondary)
+                .background(.quaternary, in: Capsule())
+                .accessibilityLabel(showRaw ? "Raw view" : "Pretty view")
+            Spacer(minLength: 8)
+            BodyFormatPicker(showRaw: $showRaw)
+        }
+    }
+}
+
+struct GrantFieldChip: View {
+    let title: String
+    let isOn: Bool
+    var systemImage: String? = nil
+    var strikethroughWhenOff: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.caption2)
+            }
+            Text(title)
+                .font(.caption)
+        }
+        .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(isOn ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    isOn ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.25),
+                    lineWidth: isOn ? 1.5 : 0.5
+                )
+        )
+        .strikethrough(strikethroughWhenOff && !isOn, color: Color.secondary.opacity(0.45))
+    }
+}
+
+struct GrantFieldBadgeRow: View {
+    let fields: GrantFields
+    var interactive: Bool = false
+    var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
+
+    private static let items: [(String, WritableKeyPath<GrantFields, Bool>)] = [
+        ("subj", \.subject),
+        ("from", \.from),
+        ("to", \.to),
+        ("date", \.date),
+        ("body", \.body),
+        ("att", \.attachmentMetadata),
+        ("bytes", \.attachmentContent),
+    ]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Self.items, id: \.0) { label, keyPath in
+                let on = fields[keyPath: keyPath]
+                if interactive, let onToggle {
+                    Button {
+                        onToggle(keyPath)
+                    } label: {
+                        compactBadge(label, on: on)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Toggle \(label)")
+                } else {
+                    compactBadge(label, on: on)
+                }
+            }
+        }
+    }
+
+    private func compactBadge(_ label: String, on: Bool) -> some View {
+        Text(label)
+            .font(.system(size: 8, weight: on ? .medium : .regular))
+            .foregroundStyle(on ? Color.accentColor : Color.secondary.opacity(0.55))
+            .padding(.horizontal, 4)
+            .frame(height: 12)
+            .background(
+                Capsule()
+                    .fill(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(
+                        on ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.2),
+                        lineWidth: 0.5
+                    )
+            )
+            .strikethrough(!on, color: Color.secondary.opacity(0.45))
+    }
+}
+
+struct GrantFieldCoverage: View {
+    let fields: GrantFields
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Envelope")
+                .font(.caption.weight(.semibold))
+            HStack(spacing: 6) {
+                GrantFieldChip(title: "Subject", isOn: fields.subject, systemImage: "text.alignleft", strikethroughWhenOff: true)
+                GrantFieldChip(title: "From", isOn: fields.from, systemImage: "envelope", strikethroughWhenOff: true)
+                GrantFieldChip(title: "To", isOn: fields.to, systemImage: "envelope", strikethroughWhenOff: true)
+                GrantFieldChip(title: "Date & Time", isOn: fields.date, systemImage: "calendar", strikethroughWhenOff: true)
+            }
+            Text("Content")
+                .font(.caption.weight(.semibold))
+            HStack(spacing: 6) {
+                GrantFieldChip(
+                    title: "Body / snippet",
+                    isOn: fields.body,
+                    systemImage: "text.alignleft",
+                    strikethroughWhenOff: true
+                )
+                GrantFieldChip(
+                    title: "Attachment names",
+                    isOn: fields.attachmentMetadata,
+                    systemImage: "paperclip",
+                    strikethroughWhenOff: true
+                )
+                GrantFieldChip(
+                    title: "Attachment content",
+                    isOn: fields.attachmentContent,
+                    systemImage: "paperclip",
+                    strikethroughWhenOff: true
+                )
+            }
+        }
+    }
+}
+
+struct HatchDeniedLabel: View {
+    var placeholder: String = " "
+    var fixedHeight: CGFloat? = nil
+
+    var body: some View {
+        Group {
+            if let fixedHeight {
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: fixedHeight, maxHeight: fixedHeight)
+            } else {
+                Text(placeholder)
+                    .font(.caption)
+                    .foregroundStyle(.clear)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 2)
+            }
+        }
+        .padding(.horizontal, 4)
+        .background {
+            HatchPattern()
+                .opacity(0.9)
+        }
+        .overlay {
+            Text("not granted")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+}
+
+struct HatchPattern: View {
+    var body: some View {
+        Canvas { context, size in
+            let spacing: CGFloat = 5
+            var path = Path()
+            let extent = size.width + size.height
+            var x: CGFloat = -size.height
+            while x < extent {
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                x += spacing
+            }
+            context.stroke(
+                path,
+                with: .color(Color.secondary.opacity(0.45)),
+                lineWidth: 1
+            )
+            context.fill(
+                Path(CGRect(origin: .zero, size: size)),
+                with: .color(Color.secondary.opacity(0.08))
+            )
+        }
+    }
+}

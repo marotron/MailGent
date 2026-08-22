@@ -6,7 +6,7 @@ import Observation
 @MainActor
 @Observable
 final class AgentBridge {
-    let audit = AuditLog()
+    let audit = AuditLog(fileURL: AgentBridge.auditFileURL)
     let pairing: Pairing
     let grants = GrantGate()
     let ledger = DraftLedger()
@@ -98,12 +98,37 @@ final class AgentBridge {
 
     init() {
         pairing = Pairing(audit: audit)
+        audit.policy = MailGentPreferences.auditRetention
         audit.onChange = { [weak self] in
             Task { @MainActor in
                 self?.noteAuditChanged()
             }
         }
+        audit.applyRetention()
         restorePersistedPairing()
+    }
+
+    var auditStoredCount: Int {
+        _ = auditRevision
+        return audit.entries().count
+    }
+
+    var auditStoredBytes: Int {
+        _ = auditRevision
+        return audit.byteCount()
+    }
+
+    func applyAuditRetention() {
+        audit.policy = MailGentPreferences.auditRetention
+        audit.applyRetention()
+    }
+
+    func removeAllAudit() {
+        audit.removeAll()
+    }
+
+    func removeAuditOlderThan24Hours() {
+        audit.removeOlderThan(Date().addingTimeInterval(-86_400))
     }
 
     func ensureMachineLocalAgent(named name: String = "Cursor") {
@@ -524,6 +549,12 @@ final class AgentBridge {
         } catch {
             MailGentLog.trace("Cursor mcp.json sync failed: \(error)")
         }
+    }
+
+    static var auditFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MailGent", isDirectory: true)
+            .appendingPathComponent("audit.json")
     }
 
     private static var pairingFileURL: URL {

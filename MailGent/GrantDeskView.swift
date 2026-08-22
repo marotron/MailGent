@@ -130,7 +130,7 @@ struct GrantDeskView: View {
                                 Text(pathLabel(grant))
                                     .font(.caption.weight(.semibold))
                                     .multilineTextAlignment(.leading)
-                                FieldBadgeRow(
+                                GrantFieldBadgeRow(
                                     fields: grant.fields,
                                     interactive: false
                                 )
@@ -240,28 +240,7 @@ struct GrantDeskView: View {
                 keyPath: keyPath
             )
         } label: {
-            HStack(spacing: 4) {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .font(.caption2)
-                }
-                Text(title)
-                    .font(.caption)
-            }
-            .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(isOn ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        isOn ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.25),
-                        lineWidth: isOn ? 1.5 : 0.5
-                    )
-            )
+            GrantFieldChip(title: title, isOn: isOn, systemImage: systemImage)
         }
         .buttonStyle(.plain)
         .disabled(session.agents.draftDenyMode)
@@ -283,7 +262,7 @@ struct GrantDeskView: View {
                 .disabled(session.agents.draftDenyMode)
                 if let grant = session.agents.allowGrant(accountID: account.id, placement: nil),
                    !session.agents.draftDenyMode {
-                    FieldBadgeRow(fields: grant.fields, interactive: true) { keyPath in
+                    GrantFieldBadgeRow(fields: grant.fields, interactive: true) { keyPath in
                         session.agents.toggleAllowField(
                             accountID: account.id,
                             placement: nil,
@@ -323,7 +302,7 @@ struct GrantDeskView: View {
                        let edit = accountWide
                         ? session.agents.allowGrant(accountID: account.id, placement: nil)
                         : mbGrant {
-                        FieldBadgeRow(fields: edit.fields, interactive: true) { keyPath in
+                        GrantFieldBadgeRow(fields: edit.fields, interactive: true) { keyPath in
                             session.agents.toggleAllowField(
                                 accountID: account.id,
                                 placement: accountWide ? nil : mailbox.placement,
@@ -345,63 +324,6 @@ struct GrantDeskView: View {
             return "\(name) / \(placement)"
         }
         return "\(name) · all mailboxes"
-    }
-}
-
-// MARK: - Field badges
-
-private struct FieldBadgeRow: View {
-    let fields: GrantFields
-    var interactive: Bool = false
-    var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
-
-    private static let items: [(String, WritableKeyPath<GrantFields, Bool>)] = [
-        ("subj", \.subject),
-        ("from", \.from),
-        ("to", \.to),
-        ("date", \.date),
-        ("body", \.body),
-        ("att", \.attachmentMetadata),
-        ("bytes", \.attachmentContent),
-    ]
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(Self.items, id: \.0) { label, keyPath in
-                let on = fields[keyPath: keyPath]
-                if interactive, let onToggle {
-                    Button {
-                        onToggle(keyPath)
-                    } label: {
-                        badge(label, on: on)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Toggle \(label)")
-                } else {
-                    badge(label, on: on)
-                }
-            }
-        }
-    }
-
-    private func badge(_ label: String, on: Bool) -> some View {
-        Text(label)
-            .font(.system(size: 8, weight: on ? .medium : .regular))
-            .foregroundStyle(on ? Color.accentColor : Color.secondary.opacity(0.55))
-            .padding(.horizontal, 4)
-            .frame(height: 12)
-            .background(
-                Capsule()
-                    .fill(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        on ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.2),
-                        lineWidth: 0.5
-                    )
-            )
-            .strikethrough(!on, color: Color.secondary.opacity(0.45))
     }
 }
 
@@ -523,63 +445,6 @@ private struct AgentAccessPreview: View {
             visible()
         } else {
             HatchDeniedLabel(placeholder: placeholder)
-        }
-    }
-}
-
-private struct HatchDeniedLabel: View {
-    var placeholder: String = " "
-    var fixedHeight: CGFloat? = nil
-
-    var body: some View {
-        Group {
-            if let fixedHeight {
-                Color.clear
-                    .frame(maxWidth: .infinity, minHeight: fixedHeight, maxHeight: fixedHeight)
-            } else {
-                Text(placeholder)
-                    .font(.caption)
-                    .foregroundStyle(.clear)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 2)
-            }
-        }
-        .padding(.horizontal, 4)
-        .background {
-            HatchPattern()
-                .opacity(0.9)
-        }
-        .overlay {
-            Text("not granted")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.4)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-}
-
-private struct HatchPattern: View {
-    var body: some View {
-        Canvas { context, size in
-            let spacing: CGFloat = 5
-            var path = Path()
-            let extent = size.width + size.height
-            var x: CGFloat = -size.height
-            while x < extent {
-                path.move(to: CGPoint(x: x, y: 0))
-                path.addLine(to: CGPoint(x: x + size.height, y: size.height))
-                x += spacing
-            }
-            context.stroke(
-                path,
-                with: .color(Color.secondary.opacity(0.45)),
-                lineWidth: 1
-            )
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(Color.secondary.opacity(0.08))
-            )
         }
     }
 }

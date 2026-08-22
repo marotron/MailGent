@@ -4,7 +4,6 @@ import SwiftUI
 
 struct MenuBarStatus: View {
     @Bindable var session: CompanionSession
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -52,7 +51,7 @@ struct MenuBarStatus: View {
                     .padding(.horizontal, 8)
 
                 MenuBarActionRow(title: "Settings…", id: "settings") {
-                    openSettings()
+                    DetachedWindowHost.shared.showSettings(session: session)
                 }
 
                 Divider()

@@ -17,6 +17,8 @@ struct AuditLogTests {
         #expect(searches[0].responseSummary == "1 messages")
         #expect(searches[0].messages.count == 1)
         #expect(searches[0].messages[0].subject == "Invoice due")
+        #expect(searches[0].messages[0].to.contains("bob@example.com"))
+        #expect(searches[0].messages[0].fields.body == true)
         #expect(searches[0].outcome == .ok)
         #expect(searches[0].finishedAt != nil)
     }
@@ -59,17 +61,98 @@ struct AuditLogTests {
         #expect(placements.placements.count == 1)
     }
 
-    @Test func ringBufferCapsEntries() {
-        let audit = AuditLog()
-        for i in 0..<60 {
-            audit.append(
-                AuditEntry(kind: .status, agentID: "a", agentName: "Cursor", detail: "\(i)")
+    @Test func persistsAcrossReload() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-audit-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let audit = AuditLog(fileURL: url)
+        audit.append(
+            AuditEntry(
+                id: "keep-me",
+                kind: .search,
+                agentID: "a",
+                agentName: "Cursor",
+                detail: "invoice",
+                requestSummary: "q=invoice limit=25",
+                responseSummary: "1 messages"
+            )
+        )
+        #expect(audit.byteCount() > 0)
+
+        let reloaded = AuditLog(fileURL: url)
+        #expect(reloaded.entries().count == 1)
+        #expect(reloaded.entries()[0].id == "keep-me")
+        #expect(reloaded.entries()[0].detail == "invoice")
+    }
+
+    @Test func retentionCapsCountAgeAndBytes() {
+        let now = Date()
+        let audit = AuditLog(
+            policy: AuditRetention(maxAge: 3_600, maxCount: 2, maxBytes: nil)
+        )
+        audit.append(
+            AuditEntry(
+                kind: .status,
+                agentID: "a",
+                agentName: "Cursor",
+                detail: "old",
+                at: now.addingTimeInterval(-7_200)
+            )
+        )
+        audit.append(
+            AuditEntry(kind: .status, agentID: "a", agentName: "Cursor", detail: "a", at: now)
+        )
+        audit.append(
+            AuditEntry(kind: .status, agentID: "a", agentName: "Cursor", detail: "b", at: now)
+        )
+        audit.append(
+            AuditEntry(kind: .status, agentID: "a", agentName: "Cursor", detail: "c", at: now)
+        )
+        #expect(audit.entries().map(\.detail) == ["b", "c"])
+
+        let bulky = AuditLog(policy: AuditRetention(maxBytes: 400))
+        for i in 0..<20 {
+            bulky.append(
+                AuditEntry(
+                    kind: .status,
+                    agentID: "a",
+                    agentName: "Cursor",
+                    detail: String(repeating: "x", count: 80) + "\(i)"
+                )
             )
         }
-        let entries = audit.entries()
-        #expect(entries.count == AuditLog.capacity)
-        #expect(entries.first?.detail == "10")
-        #expect(entries.last?.detail == "59")
+        #expect(bulky.entries().count < 20)
+        #expect(bulky.byteCount() <= 400 || bulky.entries().count == 1)
+    }
+
+    @Test func removeAllAndOlderThan() {
+        let now = Date()
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-audit-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let audit = AuditLog(fileURL: url)
+        audit.append(
+            AuditEntry(
+                kind: .status,
+                agentID: "a",
+                agentName: "Cursor",
+                detail: "old",
+                at: now.addingTimeInterval(-86_400 * 2)
+            )
+        )
+        audit.append(
+            AuditEntry(kind: .status, agentID: "a", agentName: "Cursor", detail: "new", at: now)
+        )
+        audit.removeOlderThan(now.addingTimeInterval(-86_400))
+        #expect(audit.entries().map(\.detail) == ["new"])
+        #expect(FileManager.default.fileExists(atPath: url.path))
+
+        audit.removeAll()
+        #expect(audit.entries().isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(audit.byteCount() == 0)
     }
 
     @Test func pairAndRevokeAreAudited() throws {
