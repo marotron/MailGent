@@ -164,7 +164,7 @@ struct AccessLogView: View {
             ContentUnavailableView(
                 "Select a request",
                 systemImage: "doc.text.magnifyingglass",
-                description: Text("Pick a row to inspect request, response, and messages.")
+                description: Text("Pick a row to inspect request and response.")
             )
         }
     }
@@ -230,24 +230,59 @@ private struct AccessLogRow: View {
     let entry: AuditEntry
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 6) {
             AuditOutcomeIcon(outcome: entry.outcome)
                 .imageScale(.small)
-            AuditKindBadge(kind: entry.kind)
-            AgentGlyph(name: entry.agentName, size: 16)
-            if !entry.detail.isEmpty {
-                Text(entry.detail)
+            AuditKindBadge(kind: entry.kind, compact: true)
+                .fixedSize()
+            AgentGlyph(name: entry.agentName, size: 13)
+            if !requestValue.isEmpty {
+                Text(requestValue)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            Text("→")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .layoutPriority(1)
+            Text(responseShort)
+                .font(.caption)
+                .foregroundStyle(responseStyle)
+                .lineLimit(1)
+                .layoutPriority(1)
             Spacer(minLength: 8)
             Text(timeLabel)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+                .layoutPriority(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
+    }
+
+    private var requestValue: String {
+        if !entry.detail.isEmpty { return entry.detail }
+        return entry.requestSummary
+    }
+
+    private var responseShort: String {
+        switch entry.outcome {
+        case .ok:
+            let summary = entry.responseSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+            return summary.isEmpty ? "ok" : summary
+        case .error(let message):
+            if !message.isEmpty { return message }
+            return entry.responseSummary.isEmpty ? "error" : entry.responseSummary
+        }
+    }
+
+    private var responseStyle: Color {
+        switch entry.outcome {
+        case .ok: .secondary
+        case .error: .orange
+        }
     }
 
     private var timeLabel: String {
@@ -263,7 +298,7 @@ private struct AccessLogRow: View {
         case .ok: status = "succeeded"
         case .error: status = "failed"
         }
-        return "\(entry.kind.badgeTitle) \(entry.agentName) \(status)"
+        return "\(entry.kind.badgeTitle) \(entry.agentName) \(requestValue) \(responseShort) \(status)"
     }
 }
 
@@ -273,8 +308,6 @@ private struct AccessLogDetail: View {
 
     @State private var requestRaw = false
     @State private var responseRaw = false
-    @State private var messagesRaw = false
-    @State private var placementsRaw = false
 
     var body: some View {
         ScrollView {
@@ -283,18 +316,8 @@ private struct AccessLogDetail: View {
                 togglableField("Request", raw: requestLine, showRaw: $requestRaw) {
                     prettyPairs(requestLine)
                 }
-                togglableField("Response", raw: responseLine, showRaw: $responseRaw) {
+                togglableField("Response", raw: responseRawText, showRaw: $responseRaw) {
                     prettyResponse
-                }
-                if !entry.messages.isEmpty {
-                    togglableField("Messages", raw: messagesRawText, showRaw: $messagesRaw) {
-                        prettyMessages
-                    }
-                }
-                if !entry.placements.isEmpty {
-                    togglableField("Placements", raw: placementsRawText, showRaw: $placementsRaw) {
-                        prettyPlacements
-                    }
                 }
             }
             .padding(16)
@@ -303,19 +326,17 @@ private struct AccessLogDetail: View {
         .onChange(of: entry.id) { _, _ in
             requestRaw = false
             responseRaw = false
-            messagesRaw = false
-            placementsRaw = false
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
-                AuditKindBadge(kind: entry.kind)
                 AgentGlyph(name: entry.agentName, size: 18)
                 Text(entry.agentName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                AuditKindBadge(kind: entry.kind)
                 Spacer()
                 outcomeBadge
             }
@@ -374,71 +395,74 @@ private struct AccessLogDetail: View {
 
     @ViewBuilder
     private var prettyResponse: some View {
-        if !entry.messages.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "list.bullet.rectangle")
-                        .foregroundStyle(.secondary)
-                    Text("Message list")
-                        .font(.callout.weight(.semibold))
-                    Text("\(entry.messages.count)")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                    if let total = messageListTotal, total != entry.messages.count {
-                        Text("of \(total)")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Text("Contained")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                GrantFieldCoverage(fields: listedFields)
-            }
+        if isMessageResponse {
+            prettyMessageList
         } else if !entry.placements.isEmpty {
-            HStack(spacing: 8) {
-                Image(systemName: "folder")
-                    .foregroundStyle(.secondary)
-                Text("Placement list")
-                    .font(.callout.weight(.semibold))
-                Text("\(entry.placements.count)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+            prettyPlacements
         } else {
             prettyPairs(responseLine)
         }
     }
 
-    private var prettyMessages: some View {
+    private var prettyMessageList: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "list.bullet.rectangle")
                     .foregroundStyle(.secondary)
                 Text("Message list · \(entry.messages.count)")
                     .font(.callout.weight(.semibold))
+                if let total = messageListTotal, total != entry.messages.count {
+                    Text("of \(total)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if let note = headersOnlyNote {
+                Text(note)
+                    .font(.system(size: 10))
+                    .foregroundStyle(HeadersOnlyStyle.text)
+            }
+            if !entry.messages.isEmpty {
+                LockedFieldsLegend()
             }
             ForEach(entry.messages, id: \.rowID) { ref in
-                Button {
-                    session.openRead(
-                        accountID: ref.accountID,
-                        placement: ref.placement,
-                        id: ref.id
-                    )
-                    DetachedWindowHost.shared.showCompanion(session: session)
-                } label: {
-                    AuditMessageCard(session: session, ref: ref)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Open in Companion Read")
+                CollapsibleAuditMessage(
+                    session: session,
+                    ref: ref,
+                    omitsBody: omitsBody,
+                    startsExpanded: entry.messages.count == 1
+                )
             }
+        }
+        .id(entry.id)
+    }
+
+    private var omitsBody: Bool {
+        switch entry.kind {
+        case .search, .list: true
+        default: false
+        }
+    }
+
+    private var headersOnlyNote: String? {
+        switch entry.kind {
+        case .search:
+            return "Headers only. Search does not include body — use get."
+        case .list:
+            return "Headers only. List does not include body — use get."
+        default:
+            return nil
         }
     }
 
     private var prettyPlacements: some View {
         VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder")
+                    .foregroundStyle(.secondary)
+                Text("Placement list · \(entry.placements.count)")
+                    .font(.callout.weight(.semibold))
+            }
             ForEach(entry.placements, id: \.rowID) { ref in
                 SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
             }
@@ -469,25 +493,14 @@ private struct AccessLogDetail: View {
         }
     }
 
-    private var listedFields: GrantFields {
-        entry.messages.reduce(
-            into: GrantFields(
-                subject: false,
-                from: false,
-                to: false,
-                date: false,
-                body: false,
-                attachmentMetadata: false,
-                attachmentContent: false
-            )
-        ) { acc, ref in
-            acc.subject = acc.subject || ref.fields.subject
-            acc.from = acc.from || ref.fields.from
-            acc.to = acc.to || ref.fields.to
-            acc.date = acc.date || ref.fields.date
-            acc.body = acc.body || ref.fields.body
-            acc.attachmentMetadata = acc.attachmentMetadata || ref.fields.attachmentMetadata
-            acc.attachmentContent = acc.attachmentContent || ref.fields.attachmentContent
+    private var isMessageResponse: Bool {
+        if !entry.messages.isEmpty { return true }
+        switch entry.kind {
+        case .search, .list:
+            if case .ok = entry.outcome { return true }
+            return false
+        default:
+            return false
         }
     }
 
@@ -509,8 +522,21 @@ private struct AccessLogDetail: View {
         return entry.responseSummary.isEmpty ? "—" : entry.responseSummary
     }
 
-    private var messagesRawText: String {
-        AccessLogFormat.json(entry.messages)
+    private var responseRawText: String {
+        if isMessageResponse {
+            return rawWithError(AccessLogFormat.json(entry.messages))
+        }
+        if !entry.placements.isEmpty {
+            return rawWithError(placementsRawText)
+        }
+        return responseLine
+    }
+
+    private func rawWithError(_ payload: String) -> String {
+        if case .error(let message) = entry.outcome, !message.isEmpty {
+            return "\(message)\n\n\(payload)"
+        }
+        return payload
     }
 
     private var placementsRawText: String {
@@ -537,108 +563,76 @@ private struct AccessLogDetail: View {
     }
 }
 
-private struct AuditMessageCard: View {
+private struct CollapsibleAuditMessage: View {
     let session: CompanionSession
     let ref: AuditMessageRef
+    let omitsBody: Bool
+
+    @State private var expanded: Bool
+
+    init(
+        session: CompanionSession,
+        ref: AuditMessageRef,
+        omitsBody: Bool,
+        startsExpanded: Bool = false
+    ) {
+        self.session = session
+        self.ref = ref
+        self.omitsBody = omitsBody
+        _expanded = State(initialValue: startsExpanded)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
-            if ref.fields.from {
-                AddressLine(label: "From", raw: ref.from)
-            } else {
-                previewRow("From", ref.from, false)
-            }
-            if ref.fields.to {
-                AddressLine(label: "To", raw: ref.to)
-            } else {
-                previewRow("To", ref.to, false)
-            }
-            previewRow("Date & Time", ref.date, ref.fields.date)
-            SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
-            Text("Body")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.secondary)
-            bodyPreview
-            HStack(spacing: 6) {
-                attachmentTile(
-                    title: "Attachment names",
-                    granted: ref.fields.attachmentMetadata
-                )
-                attachmentTile(
-                    title: "Attachment content",
-                    granted: ref.fields.attachmentContent
-                )
-            }
-        }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
-    }
-
-    private var bodyPreview: some View {
-        Group {
-            switch ref.bodyAccess {
-            case .granted:
-                Text(ref.bodySnippet)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .notAvailable:
-                Text("not available")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .notGranted:
-                HatchDeniedLabel(placeholder: "Body / snippet")
-            }
-        }
-    }
-
-    private func previewRow(_ label: String, _ value: String, _ granted: Bool, empty: String = " ") -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-            if granted {
-                Text(value.isEmpty ? empty : value)
-                    .font(.caption)
-                    .foregroundStyle(value.isEmpty ? .secondary : .primary)
-                    .textSelection(.enabled)
-            } else {
-                HatchDeniedLabel(placeholder: value.isEmpty ? empty : value)
-            }
-        }
-    }
-
-    private func attachmentTile(title: String, granted: Bool) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            Image(systemName: "paperclip")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Group {
-                if granted {
-                    Text("\(title) · none in this response")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                } else {
-                    HatchDeniedLabel(fixedHeight: 18)
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    expanded.toggle()
                 }
+            } label: {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(collapsedTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        GrantFieldBadgeRow(fields: ref.fields)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
+            .accessibilityLabel(expanded ? "Collapse message" : "Expand message")
+            .accessibilityValue(collapsedTitle)
+
+            if expanded {
+                Button {
+                    session.openRead(
+                        accountID: ref.accountID,
+                        placement: ref.placement,
+                        id: ref.id
+                    )
+                    DetachedWindowHost.shared.showCompanion(session: session)
+                } label: {
+                    MessageAccessCard(session: session, ref: ref, omitsBody: omitsBody)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open in Companion Read")
+            }
         }
-        .padding(6)
-        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-        .background(Color.secondary.opacity(0.05))
-        .cornerRadius(6)
+    }
+
+    private var collapsedTitle: String {
+        if ref.fields.subject {
+            return ref.subject.isEmpty ? "(no subject)" : ref.subject
+        }
+        return ref.id
     }
 }
 

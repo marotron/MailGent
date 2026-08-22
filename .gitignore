@@ -18,3 +18,12 @@ DerivedData/
 # Firecrawl scratch dumps
 .firecrawl/
 
+# JS deps (also covers nested clones under .scratch/)
+node_modules/
+
+# Local icon recon; product assets live in Design/IconPack and MailGent/Resources
+.scratch/_icon-trace/
+
+# Nested clone of https://github.com/frontedu/liquid-composer — not MailGent
+.scratch/liquid-composer/
+

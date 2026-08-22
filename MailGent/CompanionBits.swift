@@ -122,7 +122,8 @@ struct BodyFormatPicker: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .frame(maxWidth: 160)
+        .controlSize(.mini)
+        .fixedSize()
     }
 }
 
@@ -520,17 +521,22 @@ extension AuditKind {
 
 struct AuditKindBadge: View {
     let kind: AuditKind
+    var compact: Bool = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: compact ? 2 : 4) {
             Image(systemName: kind.systemImage)
-                .font(.caption2.weight(.semibold))
+                .font(compact ? .system(size: 8, weight: .semibold) : .caption2.weight(.semibold))
             Text(kind.badgeTitle)
-                .font(.caption.weight(.semibold).monospaced())
+                .font(
+                    compact
+                        ? .system(size: 9, weight: .semibold).monospaced()
+                        : .caption.weight(.semibold).monospaced()
+                )
         }
         .foregroundStyle(Color.accentColor)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
+        .padding(.horizontal, compact ? 5 : 7)
+        .padding(.vertical, compact ? 1 : 3)
         .background(Color.accentColor.opacity(0.12), in: Capsule())
         .overlay {
             Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5)
@@ -569,7 +575,7 @@ struct AgentGlyph: View {
     var body: some View {
         Group {
             if isCursor {
-                CursorMark()
+                CursorMark(size: size)
             } else {
                 Image(systemName: "cpu")
                     .font(.system(size: size * 0.62, weight: .semibold))
@@ -588,32 +594,15 @@ struct AgentGlyph: View {
 }
 
 struct CursorMark: View {
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(.primary)
-            CursorPointerShape()
-                .fill(Color(nsColor: .windowBackgroundColor))
-                .padding(2.5)
-        }
-        .accessibilityLabel("Cursor")
-    }
-}
+    var size: CGFloat = 16
 
-private struct CursorPointerShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.width
-        let h = rect.height
-        path.move(to: CGPoint(x: w * 0.16, y: h * 0.08))
-        path.addLine(to: CGPoint(x: w * 0.16, y: h * 0.84))
-        path.addLine(to: CGPoint(x: w * 0.38, y: h * 0.64))
-        path.addLine(to: CGPoint(x: w * 0.54, y: h * 0.96))
-        path.addLine(to: CGPoint(x: w * 0.68, y: h * 0.90))
-        path.addLine(to: CGPoint(x: w * 0.50, y: h * 0.56))
-        path.addLine(to: CGPoint(x: w * 0.82, y: h * 0.56))
-        path.closeSubpath()
-        return path
+    var body: some View {
+        Image("CursorMark")
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
@@ -727,42 +716,166 @@ struct GrantFieldBadgeRow: View {
     }
 }
 
-struct GrantFieldCoverage: View {
-    let fields: GrantFields
+enum HeadersOnlyStyle {
+    static let text = Color(.systemTeal).opacity(0.85)
+    static let fill = Color(.systemTeal).opacity(0.08)
+}
+
+struct MessageAccessCard: View {
+    let session: CompanionSession
+    let ref: AuditMessageRef
+    var omitsBody: Bool = false
+    var attachmentNamesDetail: String = "none in this response"
+    var attachmentContentDetail: String = "none in this response"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Envelope")
-                .font(.caption.weight(.semibold))
-            HStack(spacing: 6) {
-                GrantFieldChip(title: "Subject", isOn: fields.subject, systemImage: "text.alignleft", strikethroughWhenOff: true)
-                GrantFieldChip(title: "From", isOn: fields.from, systemImage: "envelope", strikethroughWhenOff: true)
-                GrantFieldChip(title: "To", isOn: fields.to, systemImage: "envelope", strikethroughWhenOff: true)
-                GrantFieldChip(title: "Date & Time", isOn: fields.date, systemImage: "calendar", strikethroughWhenOff: true)
+        VStack(alignment: .leading, spacing: 8) {
+            previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
+            if ref.fields.from {
+                AddressLine(label: "From", raw: ref.from)
+            } else {
+                previewRow("From", ref.from, false)
             }
-            Text("Content")
-                .font(.caption.weight(.semibold))
+            if ref.fields.to {
+                AddressLine(label: "To", raw: ref.to)
+            } else {
+                previewRow("To", ref.to, false)
+            }
+            previewRow("Date & Time", ref.date, ref.fields.date)
+            SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
+            Divider()
+            Text("Body")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            bodyPreview
+            Divider()
             HStack(spacing: 6) {
-                GrantFieldChip(
-                    title: "Body / snippet",
-                    isOn: fields.body,
-                    systemImage: "text.alignleft",
-                    strikethroughWhenOff: true
-                )
-                GrantFieldChip(
+                attachmentTile(
                     title: "Attachment names",
-                    isOn: fields.attachmentMetadata,
-                    systemImage: "paperclip",
-                    strikethroughWhenOff: true
+                    granted: ref.fields.attachmentMetadata,
+                    detail: attachmentNamesDetail
                 )
-                GrantFieldChip(
+                attachmentTile(
                     title: "Attachment content",
-                    isOn: fields.attachmentContent,
-                    systemImage: "paperclip",
-                    strikethroughWhenOff: true
+                    granted: ref.fields.attachmentContent,
+                    detail: attachmentContentDetail
                 )
             }
         }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
+    }
+
+    @ViewBuilder
+    private var bodyPreview: some View {
+        if omitsBody, ref.bodyAccess != .notGranted {
+            omittedBodyPreview
+        } else {
+            switch ref.bodyAccess {
+            case .granted:
+                Text(ref.bodySnippet)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            case .notAvailable:
+                Text("not available")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .italic()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            case .notGranted:
+                HatchDeniedLabel(placeholder: "Body / snippet")
+            }
+        }
+    }
+
+    private var omittedBodyPreview: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Not included")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(HeadersOnlyStyle.text)
+            Text("Search and list return headers only. Use get for body.")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(HeadersOnlyStyle.fill)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .help("Search and list do not include message body")
+    }
+
+    private func previewRow(_ label: String, _ value: String, _ granted: Bool, empty: String = " ") -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            if granted {
+                Text(value.isEmpty ? empty : value)
+                    .foregroundStyle(value.isEmpty ? .secondary : .primary)
+                    .textSelection(.enabled)
+            } else {
+                HatchDeniedLabel(placeholder: value.isEmpty ? empty : value)
+            }
+        }
+        .font(.caption)
+    }
+
+    private func attachmentTile(title: String, granted: Bool, detail: String) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Image(systemName: "paperclip")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Group {
+                if granted {
+                    Text("\(title) · \(detail)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                } else {
+                    HatchDeniedLabel(fixedHeight: 18)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+        .background(Color.secondary.opacity(0.05))
+        .cornerRadius(6)
+    }
+}
+
+enum HatchDeniedStyle {
+    static let stripe = Color(.systemRed).opacity(0.28)
+    static let fill = Color(.systemRed).opacity(0.06)
+    static let lock = Color(.systemRed).opacity(0.52)
+    static let legend = Color(.systemRed).opacity(0.72)
+}
+
+struct LockedFieldsLegend: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            HatchLockIcon()
+            Text("Locked. Grant does not allow the agent to read this field.")
+                .font(.system(size: 10))
+        }
+        .foregroundStyle(HatchDeniedStyle.legend)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Locked. Grant does not allow the agent to read this field.")
+    }
+}
+
+struct HatchLockIcon: View {
+    var body: some View {
+        Image(systemName: "lock.fill")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(HatchDeniedStyle.lock)
+            .accessibilityHidden(true)
     }
 }
 
@@ -789,12 +902,11 @@ struct HatchDeniedLabel: View {
                 .opacity(0.9)
         }
         .overlay {
-            Text("not granted")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.4)
+            HatchLockIcon()
         }
         .clipShape(RoundedRectangle(cornerRadius: 4))
+        .accessibilityLabel("Locked")
+        .help("Locked — grant does not allow this field")
     }
 }
 
@@ -812,12 +924,12 @@ struct HatchPattern: View {
             }
             context.stroke(
                 path,
-                with: .color(Color.secondary.opacity(0.45)),
+                with: .color(HatchDeniedStyle.stripe),
                 lineWidth: 1
             )
             context.fill(
                 Path(CGRect(origin: .zero, size: size)),
-                with: .color(Color.secondary.opacity(0.08))
+                with: .color(HatchDeniedStyle.fill)
             )
         }
     }

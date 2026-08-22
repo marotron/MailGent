@@ -100,13 +100,10 @@ struct GrantDeskView: View {
                         Divider()
                         Text("Preview")
                             .font(.subheadline.weight(.semibold))
-                        Text("Sample message under this placement’s caps. Denied fields use hatch treatment.")
+                        Text("Sample message under this placement’s caps.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
-                        AgentAccessPreview(
-                            fields: selected.fields,
-                            pathLabel: pathLabel(selected)
-                        )
+                        AgentAccessPreview(session: session, grant: selected)
                     }
                 }
             }
@@ -330,122 +327,36 @@ struct GrantDeskView: View {
 // MARK: - Access sample preview (hatch)
 
 private struct AgentAccessPreview: View {
-    let fields: GrantFields
-    let pathLabel: String
+    let session: CompanionSession
+    let grant: Grant
 
     private let sample = SampleMessage.invoice
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Sample")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-                Text(pathLabel)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            previewRow("Subject", sample.subject, fields.subject)
-            previewRow("From", sample.from, fields.from)
-            previewRow("To", sample.to, fields.to)
-            previewRow("Date & Time", sample.date, fields.date)
-            Text("Body")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.secondary)
-            bodyPreview(granted: fields.body)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                ForEach(sample.attachments, id: \.name) { att in
-                    attachmentTile(
-                        label: "\(att.name) · \(att.kb) KB",
-                        granted: fields.attachmentMetadata
-                    )
-                    attachmentTile(
-                        label: "\(att.name) content",
-                        granted: fields.attachmentContent
-                    )
-                }
-            }
-            Text("Hatched + “not granted” = agent cannot read")
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
-    }
-
-    private func bodyPreview(granted: Bool) -> some View {
-        Text(sample.body)
-            .font(.caption)
-            .foregroundStyle(granted ? Color.primary : Color.clear)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background {
-                if granted {
-                    Color.secondary.opacity(0.06)
-                } else {
-                    HatchPattern()
-                        .opacity(0.9)
-                }
-            }
-            .overlay {
-                if !granted {
-                    Text("not granted")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .tracking(0.4)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func previewRow(_ label: String, _ value: String, _ granted: Bool) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .leading)
-            deniedOrVisible(
-                granted: granted,
-                visible: { Text(value).font(.caption) },
-                placeholder: value
+        VStack(alignment: .leading, spacing: 6) {
+            MessageAccessCard(
+                session: session,
+                ref: sampleRef,
+                attachmentNamesDetail: sample.attachmentNamesDetail,
+                attachmentContentDetail: sample.attachmentContentDetail
             )
+            LockedFieldsLegend()
         }
     }
 
-    private func attachmentTile(label: String, granted: Bool) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            Image(systemName: "paperclip")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Group {
-                if granted {
-                    Text(label)
-                        .font(.caption)
-                        .lineLimit(1)
-                } else {
-                    HatchDeniedLabel(fixedHeight: 18)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(6)
-        .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .leading)
-        .background(Color.secondary.opacity(0.05))
-        .cornerRadius(6)
-    }
-
-    @ViewBuilder
-    private func deniedOrVisible<V: View>(
-        granted: Bool,
-        @ViewBuilder visible: () -> V,
-        placeholder: String
-    ) -> some View {
-        if granted {
-            visible()
-        } else {
-            HatchDeniedLabel(placeholder: placeholder)
-        }
+    private var sampleRef: AuditMessageRef {
+        AuditMessageRef(
+            accountID: grant.accountID,
+            placement: grant.placement ?? "all mailboxes",
+            id: "sample",
+            subject: sample.subject,
+            from: sample.from,
+            date: sample.date,
+            to: sample.to,
+            bodySnippet: sample.body,
+            bodyAccess: grant.fields.body ? .granted : .notGranted,
+            fields: grant.fields
+        )
     }
 }
 
@@ -468,6 +379,14 @@ private struct SampleMessage {
             ("receipt.png", 21),
         ]
     )
+
+    var attachmentNamesDetail: String {
+        attachments.map { "\($0.name) · \($0.kb) KB" }.joined(separator: ", ")
+    }
+
+    var attachmentContentDetail: String {
+        "\(attachments.count) files"
+    }
 }
 
 /// Button-based checkbox — more reliable than Toggle bindings inside NSHostingView.

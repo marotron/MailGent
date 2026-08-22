@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MailGent — Charge · Liquid Glass</title>
+<style>
+  :root {
+    --bg: #f4f2ee;
+    --ink: #1a1c20;
+    --muted: #6a6760;
+    --line: #ddd8cf;
+    --panel: #fffefb;
+    --stage: #e8e4dc;
+    --accent: #3d4a5c;
+    --gold: #9a7b4f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 500px at 80% -10%, #ebe6dc 0%, transparent 55%),
+      radial-gradient(700px 400px at 0% 100%, #e2dde8 0%, transparent 50%),
+      var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding-bottom: 48px;
+  }
+  header {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 36px 28px 8px;
+  }
+  header .eyebrow {
+    color: var(--gold);
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  header h1 {
+    font-size: clamp(1.9rem, 3.2vw, 2.7rem);
+    font-weight: 560;
+    letter-spacing: -0.035em;
+    margin: 0 0 10px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 1.02rem;
+    max-width: 40rem;
+    line-height: 1.55;
+  }
+  .hero {
+    max-width: 1080px;
+    margin: 28px auto 0;
+    padding: 0 28px;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 28px;
+    align-items: stretch;
+  }
+  @media (max-width: 820px) {
+    .hero { grid-template-columns: 1fr; }
+  }
+  .stage {
+    background: var(--stage);
+    border-radius: 28px;
+    border: 1px solid var(--line);
+    min-height: 380px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .stage.dock {
+    background: #0a0a0c;
+  }
+  .stage.dark {
+    background: radial-gradient(circle at 50% 40%, #2a2e38 0%, #12141a 70%);
+  }
+  .stage img {
+    width: min(280px, 70%);
+    height: auto;
+    filter: drop-shadow(0 22px 40px rgba(0,0,0,0.28));
+  }
+  .detail {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    padding: 28px 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .detail h2 {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 560;
+    letter-spacing: -0.03em;
+  }
+  .detail .blurb { margin: 0; color: var(--muted); line-height: 1.5; }
+  .principle {
+    margin: 0;
+    padding: 14px 16px;
+    background: #f7f4ee;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: #3a3834;
+  }
+  .wordmark {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 0 0;
+  }
+  .wordmark img { width: 48px; height: 48px; }
+  .wordmark .name {
+    font-size: 1.55rem;
+    font-weight: 560;
+    letter-spacing: -0.04em;
+  }
+  .wordmark .tag {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .sizes {
+    display: flex;
+    align-items: flex-end;
+    gap: 18px;
+    padding-top: 4px;
+  }
+  .sizes figure { margin: 0; text-align: center; }
+  .sizes img { display: block; margin: 0 auto 6px; }
+  .sizes figcaption {
+    font-size: 0.68rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .ship {
+    margin-top: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    background: #1a1c20;
+    color: #e8e6e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .section {
+    max-width: 1080px;
+    margin: 36px auto 0;
+    padding: 0 28px;
+  }
+  .section h3 {
+    margin: 0 0 14px;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 560;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 820px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  .card .pick {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 22px 16px 10px;
+    background: #ebe7df;
+    border: 0;
+  }
+  .card.dark .pick { background: #1c2026; }
+  .card.tint .pick { background: #d8d0e8; }
+  .card.clear .pick { background: #c8c8cc; }
+  .card.template .pick { background: #f0ece4; }
+  .card .pick img {
+    display: block;
+    margin: 0 auto;
+    width: min(160px, 72%);
+    height: auto;
+    filter: drop-shadow(0 12px 20px rgba(0,0,0,0.18));
+  }
+  .card.template .pick img {
+    background: #f0ece4;
+    mix-blend-mode: multiply;
+    filter: none;
+  }
+  .meta { padding: 6px 16px 16px; }
+  .meta h2 { margin: 0 0 4px; font-size: 1.05rem; font-weight: 560; }
+  .meta p { margin: 0; color: var(--muted); font-size: 0.86rem; line-height: 1.4; }
+  footer {
+    max-width: 1080px;
+    margin: 28px auto 0;
+    padding: 0 28px;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  footer code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82em;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">MailGent brand · Liquid Glass</p>
+    <h1>Charge shield pack</h1>
+    <p>Same mark as your pick. Traced from the PNG, then glass. Not a redraw.</p>
+  </header>
+
+  <div class="section">
+    <h3>Pick vs pack</h3>
+    <div class="grid">
+      <article class="card">
+        <div class="pick"><img src="source-pick.png" width="220" height="220" alt="Your pick" /></div>
+        <div class="meta"><h2>Your pick</h2><p>shield-02-charge. Source of truth.</p></div>
+      </article>
+      <article class="card">
+        <div class="pick"><img src="source-trace.png" width="220" height="220" alt="Trace" /></div>
+        <div class="meta"><h2>Trace</h2><p>Vector from that silhouette. Holes punched.</p></div>
+      </article>
+      <article class="card">
+        <div class="pick"><img src="glass-marketing.png" width="220" height="220" alt="Flat glass" /></div>
+        <div class="meta"><h2>Flat</h2><p>Same geometry, App Store marketing.</p></div>
+      </article>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="stage" id="stage">
+      <img src="glass-default.png" width="280" height="280" alt="MailGent Charge, default" />
+    </div>
+    <div class="detail">
+      <h2>Charge</h2>
+      <p class="blurb">Protected mail. Agent as guest, punched through the field — not glued on.</p>
+      <p class="principle">Upper glass + lower bowl as separate Liquid Glass layers. Sparkles are holes. Plate is slate gradient; dark and tinted are fill specializations.</p>
+      <div class="wordmark">
+        <img src="glass-128.png" width="48" height="48" alt="" />
+        <div>
+          <span class="name">MailGent</span>
+          <span class="tag">On-device mail companion</span>
+        </div>
+      </div>
+      <div class="sizes">
+        <figure><img src="glass-16.png" width="16" height="16" alt="" /><figcaption>16</figcaption></figure>
+        <figure><img src="glass-32.png" width="32" height="32" alt="" /><figcaption>32</figcaption></figure>
+        <figure><img src="glass-128.png" width="64" height="64" alt="" /><figcaption>128</figcaption></figure>
+        <figure><img src="glass-512.png" width="96" height="96" alt="" /><figcaption>512</figcaption></figure>
+      </div>
+      <div class="ship">Design/IconPack/MailGent.icon</div>
+    </div>
+  </section>
+
+  <div class="section">
+    <h3>Appearances</h3>
+    <div class="grid">
+      <article class="card">
+        <div class="pick"><img src="glass-default.png" width="220" height="220" alt="Default" /></div>
+        <div class="meta"><h2>Default</h2><p>Slate gradient plate. Cream glass. Specular on.</p></div>
+      </article>
+      <article class="card dark">
+        <div class="pick"><img src="glass-dark.png" width="220" height="220" alt="Dark" /></div>
+        <div class="meta"><h2>Dark</h2><p>Deep navy plate. Same glyph, quieter glass.</p></div>
+      </article>
+      <article class="card tint">
+        <div class="pick"><img src="glass-tinted.png" width="220" height="220" alt="Tinted" /></div>
+        <div class="meta"><h2>Tinted</h2><p>System accent wash. Charge still reads as holes.</p></div>
+      </article>
+      <article class="card clear">
+        <div class="pick"><img src="glass-clear-light.png" width="220" height="220" alt="Clear Light" /></div>
+        <div class="meta"><h2>Clear Light</h2><p>macOS clear material, light.</p></div>
+      </article>
+      <article class="card dark">
+        <div class="pick"><img src="glass-clear-dark.png" width="220" height="220" alt="Clear Dark" /></div>
+        <div class="meta"><h2>Clear Dark</h2><p>macOS clear material, dark.</p></div>
+      </article>
+      <article class="card">
+        <div class="pick"><img src="glass-marketing.png" width="220" height="220" alt="Marketing" /></div>
+        <div class="meta"><h2>Marketing</h2><p>Flat 1024, no alpha. App Store Connect.</p></div>
+      </article>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Context &amp; template</h3>
+    <div class="grid">
+      <article class="card dark">
+        <div class="pick"><img src="glass-dock.png" width="220" height="220" alt="Dock" /></div>
+        <div class="meta"><h2>Dock</h2><p>Zoomed on sine-gray. How it sits in a row.</p></div>
+      </article>
+      <article class="card template">
+        <div class="pick"><img src="glass-template-512.png" width="220" height="220" alt="Template" /></div>
+        <div class="meta"><h2>Template</h2><p>Menu-bar / sidebar. Black glyph, transparent.</p></div>
+      </article>
+      <article class="card">
+        <div class="pick"><img src="Assets/mailgent-shield-charge.svg" width="220" height="220" alt="Source SVG" /></div>
+        <div class="meta"><h2>Source</h2><p>Two paths. Split into glass layers.</p></div>
+      </article>
+    </div>
+  </div>
+
+  <footer>
+    Bundle also at <code>MailGent/Resources/AppIcon.icon</code>.
+    Open in Icon Composer to tweak specular. 16px is silhouette-only — sparkles die; use the template there.
+  </footer>
+</body>
+</html>
