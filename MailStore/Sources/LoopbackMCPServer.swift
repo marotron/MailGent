@@ -39,15 +39,18 @@ public struct LoopbackMCPServer {
     public let gateway: AgentReadAPI
     public let ledger: DraftLedger
     public let indexUpdater: any IndexUpdating
+    public let sourceController: (any MailSourceControlling)?
 
     public init(
         gateway: AgentReadAPI,
         ledger: DraftLedger = DraftLedger(),
-        indexUpdater: (any IndexUpdating)? = nil
+        indexUpdater: (any IndexUpdating)? = nil,
+        sourceController: (any MailSourceControlling)? = nil
     ) {
         self.gateway = gateway
         self.ledger = ledger
         self.indexUpdater = indexUpdater ?? LocalIndexUpdater(index: gateway.read.index)
+        self.sourceController = sourceController
     }
 
     public func handle(_ request: LoopbackMCPRequest) -> LoopbackMCPResponse {
@@ -201,6 +204,7 @@ public struct LoopbackMCPServer {
             )
             return try jsonString(Self.messageDetail(message))
         case "create_draft":
+            let started = Date()
             let body = arguments["body"] as? String ?? ""
             let version = ledger.create(body: body)
             if let agent = try? gateway.authenticate(credential) {
@@ -209,7 +213,11 @@ public struct LoopbackMCPServer {
                         kind: .createDraft,
                         agentID: agent.id,
                         agentName: agent.name,
-                        detail: version.draftID
+                        detail: version.draftID,
+                        at: started,
+                        finishedAt: Date(),
+                        requestSummary: "create_draft chars=\(body.count)",
+                        responseSummary: "draftID=\(version.draftID) \(version.label)"
                     )
                 )
             }
@@ -221,6 +229,7 @@ public struct LoopbackMCPServer {
             else {
                 throw CallError.badArguments
             }
+            let started = Date()
             let version = try ledger.update(draftID: draftID, body: body)
             if let agent = try? gateway.authenticate(credential) {
                 gateway.audit?.append(
@@ -228,14 +237,25 @@ public struct LoopbackMCPServer {
                         kind: .updateDraft,
                         agentID: agent.id,
                         agentName: agent.name,
-                        detail: "\(version.draftID)/\(version.label)"
+                        detail: "\(version.draftID)/\(version.label)",
+                        at: started,
+                        finishedAt: Date(),
+                        requestSummary: "draftID=\(draftID) chars=\(body.count)",
+                        responseSummary: "draftID=\(version.draftID) \(version.label)"
                     )
                 )
             }
             return try jsonString(Self.versionSummary(version))
         case "status":
             let freshness = try gateway.freshness(credential: credential)
-            return try jsonString(Self.freshnessPayload(freshness))
+            var payload = Self.freshnessPayload(freshness)
+            if let snap = sourceController?.snapshot() {
+                payload["source"] = snap.source.rawValue
+                payload["agentMayChangeSource"] = snap.agentMayChangeSource
+            }
+            return try jsonString(payload)
+        case "set_source":
+            return try setSource(arguments: arguments, credential: credential)
         case "update":
             let outcome = try gateway.updateIndex(credential: credential, updater: indexUpdater)
             var payload = Self.freshnessPayload(outcome.freshness)
@@ -243,6 +263,54 @@ public struct LoopbackMCPServer {
             return try jsonString(payload)
         default:
             throw CallError.unknownTool
+        }
+    }
+
+    private func setSource(arguments: [String: Any], credential: String?) throws -> String {
+        guard let controller = sourceController else {
+            throw MailSourceError.notAvailable
+        }
+        guard
+            let raw = arguments["source"] as? String,
+            let source = MailSourceID(rawValue: raw)
+        else {
+            throw MailSourceError.unknownSource
+        }
+        let started = Date()
+        let agent = try gateway.authenticate(credential)
+        do {
+            let snap = try controller.setSource(source)
+            gateway.audit?.append(
+                AuditEntry(
+                    kind: .setSource,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: snap.source.rawValue,
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: "source=\(raw)",
+                    responseSummary: "source=\(snap.source.rawValue)"
+                )
+            )
+            return try jsonString([
+                "source": snap.source.rawValue,
+                "agentMayChangeSource": snap.agentMayChangeSource
+            ])
+        } catch {
+            gateway.audit?.append(
+                AuditEntry(
+                    kind: .setSource,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: raw,
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: "source=\(raw)",
+                    responseSummary: String(describing: error),
+                    outcome: .error(String(describing: error))
+                )
+            )
+            throw error
         }
     }
 
@@ -413,7 +481,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "status",
                 "description":
-                    "Index freshness: lastIngestAt (when MailGent last scanned Apple Mail), newestMessageDate (RFC822 date of the newest indexed message), and indexedCount.",
+                    "Index freshness: lastIngestAt, newestMessageDate, indexedCount, plus source (fixture or liveMail) and agentMayChangeSource when the companion is bound.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]
@@ -426,6 +494,22 @@ public struct LoopbackMCPServer {
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]
+                ]
+            ],
+            [
+                "name": "set_source",
+                "description":
+                    "Switch the companion mail source (fixture or liveMail). Denied unless enabled in MailGent Settings → General.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "source": [
+                            "type": "string",
+                            "description": "fixture or liveMail",
+                            "enum": ["fixture", "liveMail"]
+                        ]
+                    ],
+                    "required": ["source"]
                 ]
             ]
         ]

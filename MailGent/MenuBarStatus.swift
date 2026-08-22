@@ -20,18 +20,14 @@ struct MenuBarStatus: View {
                             .foregroundStyle(session.mailAccessGranted ? .green : .orange)
                     }
                     lastIngestRow(at: context.date)
-                    statusRow("New") {
-                        Text(newLabel)
-                    }
+                    newRow
                     statusRow("Source") {
                         Text(session.source.title)
                     }
                     statusRow("Connected agent") {
                         Text(session.agents.agent?.name ?? "—")
                     }
-                    statusRow("Last agent request") {
-                        Text(lastAgentRequestLabel(at: context.date))
-                    }
+                    lastAgentRequestRow(at: context.date)
                 }
                 .padding(.horizontal, 8)
             }
@@ -47,6 +43,9 @@ struct MenuBarStatus: View {
                 }
                 MenuBarActionRow(title: "Open Grant Desk", id: "open-grant-desk") {
                     DetachedWindowHost.shared.showGrantDesk(session: session)
+                }
+                MenuBarActionRow(title: "Open Access Log", id: "open-access-log") {
+                    DetachedWindowHost.shared.showAccessLog(session: session)
                 }
                 MenuBarActionRow(title: "Grant access…", id: "grant-access") {
                     DetachedWindowHost.shared.showAccess(session: session.access)
@@ -108,8 +107,64 @@ struct MenuBarStatus: View {
         .font(.callout)
     }
 
+    private var newRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("New")
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(newLabel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                DetachedWindowHost.shared.claimActivation()
+                let work = {
+                    session.openLastNewMessages()
+                    DetachedWindowHost.shared.showCompanion(session: session)
+                }
+                DispatchQueue.main.async(execute: work)
+            } label: {
+                Image(systemName: "envelope")
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.lastNewMessages.isEmpty)
+            .help("Open new messages")
+            .id("open-new-messages")
+        }
+        .font(.callout)
+    }
+
+    private func lastAgentRequestRow(at now: Date) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Last agent request")
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(lastAgentRequestLabel(at: now))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                DetachedWindowHost.shared.claimActivation()
+                let work = {
+                    DetachedWindowHost.shared.showAccessLog(
+                        session: session,
+                        selectedID: session.agents.lastAgentRequest?.id
+                    )
+                }
+                DispatchQueue.main.async(execute: work)
+            } label: {
+                Image(systemName: "list.bullet.rectangle")
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.agents.lastAgentRequest == nil)
+            .help("Open access log")
+            .id("open-last-agent-request")
+        }
+        .font(.callout)
+    }
+
     private var newLabel: String {
-        guard let since = session.lastIngestAt else {
+        guard let since = session.lastNewSinceAt else {
             return "\(session.lastNewCount)"
         }
         let clock = since.formatted(date: .omitted, time: .shortened)
@@ -123,19 +178,10 @@ struct MenuBarStatus: View {
     }
 
     private func lastAgentRequestLabel(at now: Date) -> String {
-        guard let entry = session.agents.recentAudit.first(where: { Self.isAgentRequest($0.kind) }) else {
+        guard let entry = session.agents.lastAgentRequest else {
             return "—"
         }
         return "\(entry.kind.rawValue) · \(Self.relativeAge(from: entry.at, to: now))"
-    }
-
-    private static func isAgentRequest(_ kind: AuditKind) -> Bool {
-        switch kind {
-        case .search, .get, .createDraft, .updateDraft, .updateIndex:
-            return true
-        case .pair, .revoke:
-            return false
-        }
     }
 
     private static func relativeAge(from date: Date, to now: Date) -> String {
@@ -158,6 +204,8 @@ private struct MenuBarActionRow: View {
 
     var body: some View {
         Button {
+            // Become `.regular` on the click so extra dismiss does not hide the app.
+            DetachedWindowHost.shared.claimActivation()
             // Capture work immediately; MenuBarExtra may tear this view down before
             // a synchronous present finishes.
             let work = action

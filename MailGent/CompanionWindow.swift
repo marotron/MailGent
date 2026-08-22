@@ -12,32 +12,50 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var companion: NSWindow?
     private var access: NSWindow?
     private var grantDesk: NSWindow?
+    private var accessLog: NSWindow?
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
 
     func showCompanion(session: CompanionSession) {
+        claimActivation()
         scheduleAfterMenuDismissal {
             self.presentCompanion(session: session)
         }
     }
 
     func showAccess(session: MailAccessSession) {
+        claimActivation()
         scheduleAfterMenuDismissal {
             self.presentAccess(session: session)
         }
     }
 
     func showGrantDesk(session: CompanionSession) {
+        claimActivation()
         scheduleAfterMenuDismissal {
             self.presentGrantDesk(session: session)
         }
+    }
+
+    func showAccessLog(session: CompanionSession, selectedID: String? = nil) {
+        claimActivation()
+        scheduleAfterMenuDismissal {
+            self.presentAccessLog(session: session, selectedID: selectedID)
+        }
+    }
+
+    /// Flip off `.accessory` on the click itself so MenuBarExtra dismiss does not hide the app.
+    func claimActivation() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.unhide(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     /// MenuBarExtra `.window` tears down on the same turn as the click; wait it out.
     private func scheduleAfterMenuDismissal(_ body: @escaping () -> Void) {
         presentationToken += 1
         let token = presentationToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             guard let self, token == self.presentationToken else { return }
             body()
         }
@@ -46,7 +64,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private func presentCompanion(session: CompanionSession) {
         let root = CompanionWindow(session: session)
         if let companion {
-            companion.contentView = NSHostingView(rootView: root)
+            install(root, in: companion)
         } else {
             companion = makeWindow(
                 title: "MailGent",
@@ -61,7 +79,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private func presentAccess(session: MailAccessSession) {
         let root = GrantAccessView(session: session)
         if let access {
-            access.contentView = NSHostingView(rootView: root)
+            install(root, in: access)
         } else {
             access = makeWindow(
                 title: "Grant access",
@@ -79,8 +97,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let root = GrantDeskView(session: session)
         if let grantDesk {
             grantDesk.minSize = minSize
-            grantDesk.setContentSize(size)
-            grantDesk.contentView = NSHostingView(rootView: root)
+            install(root, in: grantDesk)
         } else {
             grantDesk = makeWindow(
                 title: "Grant desk",
@@ -92,11 +109,29 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         bringForward(grantDesk)
     }
 
+    private func presentAccessLog(session: CompanionSession, selectedID: String?) {
+        let size = NSSize(width: 900, height: 560)
+        let minSize = NSSize(width: 720, height: 420)
+        let root = AccessLogView(session: session, initialSelection: selectedID)
+        if let accessLog {
+            install(root, in: accessLog)
+        } else {
+            accessLog = makeWindow(
+                title: "Access log",
+                size: size,
+                minSize: minSize,
+                root: root
+            )
+        }
+        bringForward(accessLog)
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
         if companion?.isVisible != true,
            access?.isVisible != true,
-           grantDesk?.isVisible != true
+           grantDesk?.isVisible != true,
+           accessLog?.isVisible != true
         {
             NSApp.setActivationPolicy(.accessory)
         }
@@ -116,40 +151,43 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             defer: false
         )
         window.title = title
-        window.contentView = NSHostingView(rootView: root)
         window.minSize = minSize
+        window.setContentSize(size)
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
+        window.canHide = false
+        window.animationBehavior = .none
         window.delegate = self
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        install(root, in: window, contentSize: size)
         window.center()
         return window
+    }
+
+    private func install<Content: View>(_ root: Content, in window: NSWindow, contentSize: NSSize? = nil) {
+        let size = contentSize ?? window.contentRect(forFrameRect: window.frame).size
+        let hosting = NSHostingView(rootView: root)
+        hosting.sizingOptions = []
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
     }
 
     private func bringForward(_ window: NSWindow?) {
         guard let window else { return }
         let token = presentationToken
-        NSApp.setActivationPolicy(.regular)
-        NSApp.unhide(nil)
-        if window.isMiniaturized {
-            window.deminiaturize(nil)
-        }
-        window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
-        // MenuBarExtra teardown can still race the first present; poke again next turns.
-        DispatchQueue.main.async { [weak self] in
+        let poke = { [weak self] in
             guard let self, token == self.presentationToken else { return }
-            NSApp.setActivationPolicy(.regular)
-            window.makeKeyAndOrderFront(nil)
+            self.claimActivation()
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
             window.orderFrontRegardless()
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self, token == self.presentationToken else { return }
             window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
         }
+        poke()
+        // MenuBarExtra teardown can still race the first present; poke again next turns.
+        DispatchQueue.main.async { poke() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { poke() }
     }
 }
 
@@ -172,12 +210,24 @@ struct CompanionWindow: View {
 
     private var controlCenter: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Control center")
-                        .font(.title.bold())
-                    Text("Access and ingest first. Mail search is a separate step.")
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Control center")
+                            .font(.title.bold())
+                        Text("Access and ingest first. Mail search is a separate step.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Button("Grant desk…") {
+                            DetachedWindowHost.shared.showGrantDesk(session: session)
+                        }
+                        Button("Access log…") {
+                            DetachedWindowHost.shared.showAccessLog(session: session)
+                        }
+                    }
                 }
 
                 HStack(alignment: .top, spacing: 16) {
@@ -214,76 +264,53 @@ struct CompanionWindow: View {
     }
 
     private var agentCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Paired agent")
-                .font(.headline)
-            if let agent = session.agents.agent {
-                Text("\(agent.name) · \(agent.trustClass.rawValue)")
-                Text(session.agents.loopbackURL)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Paired agent")
+                    .font(.headline)
+                Spacer()
+                if let agent = session.agents.agent {
+                    Text("\(agent.name) · \(agent.trustClass.rawValue)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("No agent paired")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if session.agents.agent != nil {
                 Text(session.agents.listenNote)
                     .font(.caption)
                     .foregroundStyle(session.agents.isListening ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
                 Text(session.agents.cursorConfigSnippet)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.caption2, design: .monospaced))
                     .textSelection(.enabled)
-                    .padding(8)
+                    .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                Button("Revoke credential") {
-                    session.agents.revoke()
-                    session.agents.ensureMachineLocalAgent()
-                }
-            } else {
-                Text("No agent paired")
-                    .foregroundStyle(.secondary)
-                Button("Pair Cursor") {
-                    session.agents.ensureMachineLocalAgent()
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            }
+            HStack(spacing: 8) {
+                if session.agents.agent != nil {
+                    Button("Revoke credential") {
+                        session.agents.revoke()
+                        session.agents.ensureMachineLocalAgent()
+                    }
+                } else {
+                    Button("Pair Cursor") {
+                        session.agents.ensureMachineLocalAgent()
+                    }
                 }
             }
-
             if session.agents.agent != nil {
-                Button("Open grant desk…") {
-                    DetachedWindowHost.shared.showGrantDesk(session: session)
-                }
                 Text(session.agents.currentGrants.isEmpty
                      ? "Nothing granted — agent search stays empty."
                      : "\(session.agents.currentGrants.count) grant(s) active · edit in grant desk")
                     .font(.caption)
                     .foregroundStyle(session.agents.currentGrants.isEmpty ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
             }
-
-            Text("Access log")
-                .font(.subheadline.weight(.semibold))
-                .padding(.top, 4)
-            if session.agents.recentAudit.isEmpty {
-                Text("No agent calls yet")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(session.agents.recentAudit) { entry in
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(entry.kind.rawValue)
-                            .font(.caption.monospaced())
-                        Text(entry.agentName)
-                            .font(.caption)
-                        if !entry.detail.isEmpty {
-                            Text(entry.detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Text(entry.at.formatted(date: .omitted, time: .shortened))
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
         .overlay {

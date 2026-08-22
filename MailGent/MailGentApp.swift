@@ -9,8 +9,10 @@ struct MailGentApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("MailGent", systemImage: "tray.full") {
+        MenuBarExtra {
             MenuBarStatus(session: session)
+        } label: {
+            MenuBarIconLabel(agents: session.agents)
         }
         .menuBarExtraStyle(.window)
 

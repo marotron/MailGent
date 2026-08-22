@@ -32,14 +32,43 @@ public struct AgentReadAPI {
         accountID: String? = nil,
         placement: String? = nil
     ) throws -> Page<IndexedMessage> {
+        let started = Date()
         let agent = try authenticate(credential)
-        let page = try read.list(
+        let request = Self.listRequestSummary(
             limit: limit,
             cursor: cursor,
             accountID: accountID,
             placement: placement
         )
-        return filterPage(page, agentID: agent.id, limit: limit)
+        do {
+            let page = try read.list(
+                limit: limit,
+                cursor: cursor,
+                accountID: accountID,
+                placement: placement
+            )
+            let filtered = filterPage(page, agentID: agent.id, limit: limit)
+            record(
+                kind: .list,
+                agent: agent,
+                started: started,
+                detail: "list",
+                requestSummary: request,
+                responseSummary: "\(filtered.items.count) messages",
+                messages: Self.messageRefs(filtered.items)
+            )
+            return filtered
+        } catch {
+            record(
+                kind: .list,
+                agent: agent,
+                started: started,
+                detail: "list",
+                requestSummary: request,
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
     }
 
     public func search(
@@ -50,24 +79,46 @@ public struct AgentReadAPI {
         accountID: String? = nil,
         placement: String? = nil
     ) throws -> Page<IndexedMessage> {
+        let started = Date()
         let agent = try authenticate(credential)
-        // Over-fetch then deny-filter so counts/pages never include denied rows.
-        let page = try read.search(
-            query,
-            limit: 100,
+        let request = Self.searchRequestSummary(
+            query: query,
+            limit: limit,
             cursor: cursor,
             accountID: accountID,
             placement: placement
         )
-        audit?.append(
-            AuditEntry(
-                kind: .search,
-                agentID: agent.id,
-                agentName: agent.name,
-                detail: query
+        do {
+            // Over-fetch then deny-filter so counts/pages never include denied rows.
+            let page = try read.search(
+                query,
+                limit: 100,
+                cursor: cursor,
+                accountID: accountID,
+                placement: placement
             )
-        )
-        return filterPage(page, agentID: agent.id, limit: limit)
+            let filtered = filterPage(page, agentID: agent.id, limit: limit)
+            record(
+                kind: .search,
+                agent: agent,
+                started: started,
+                detail: query,
+                requestSummary: request,
+                responseSummary: "\(filtered.items.count) messages",
+                messages: Self.messageRefs(filtered.items)
+            )
+            return filtered
+        } catch {
+            record(
+                kind: .search,
+                agent: agent,
+                started: started,
+                detail: query,
+                requestSummary: request,
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
     }
 
     public func get(
@@ -76,55 +127,152 @@ public struct AgentReadAPI {
         placement: String,
         id: String
     ) throws -> ReadMessage {
+        let started = Date()
         let agent = try authenticate(credential)
-        let message = try read.get(accountID: accountID, placement: placement, id: id)
-        let probe = IndexedMessage(
-            id: message.id,
-            accountID: message.accountID,
-            placement: message.placement,
-            from: message.from,
-            to: message.to,
-            date: message.date,
-            subject: message.subject,
-            body: "",
-            isPartial: message.isPartial
-        )
-        guard let fields = grants.effectiveFields(for: probe, agentID: agent.id) else {
-            throw PairingError.unauthorized
-        }
-        audit?.append(
-            AuditEntry(
-                kind: .get,
-                agentID: agent.id,
-                agentName: agent.name,
-                detail: "\(accountID)/\(placement)/\(id)"
+        let path = "\(accountID)/\(placement)/\(id)"
+        do {
+            let message = try read.get(accountID: accountID, placement: placement, id: id)
+            let probe = IndexedMessage(
+                id: message.id,
+                accountID: message.accountID,
+                placement: message.placement,
+                from: message.from,
+                to: message.to,
+                date: message.date,
+                subject: message.subject,
+                body: "",
+                isPartial: message.isPartial
             )
-        )
-        return message.applying(fields)
+            guard let fields = grants.effectiveFields(for: probe, agentID: agent.id) else {
+                record(
+                    kind: .get,
+                    agent: agent,
+                    started: started,
+                    detail: path,
+                    requestSummary: path,
+                    outcome: .error("unauthorized")
+                )
+                throw PairingError.unauthorized
+            }
+            let granted = message.applying(fields)
+            let bodyAccess: String
+            switch granted.body {
+            case .text, .notAvailable:
+                bodyAccess = "granted"
+            case .notGranted:
+                bodyAccess = "not_granted"
+            }
+            record(
+                kind: .get,
+                agent: agent,
+                started: started,
+                detail: path,
+                requestSummary: path,
+                responseSummary: "bodyAccess=\(bodyAccess)",
+                messages: [AuditMessageRef(granted)]
+            )
+            return granted
+        } catch let error as PairingError where error == .unauthorized {
+            throw error
+        } catch {
+            record(
+                kind: .get,
+                agent: agent,
+                started: started,
+                detail: path,
+                requestSummary: path,
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
     }
 
     public func listPlacements(credential: String?) throws -> [Placement] {
+        let started = Date()
         let agent = try authenticate(credential)
-        return grants.filter(try read.listPlacements(), agentID: agent.id)
+        do {
+            let placements = grants.filter(try read.listPlacements(), agentID: agent.id)
+            record(
+                kind: .listPlacements,
+                agent: agent,
+                started: started,
+                detail: "listPlacements",
+                requestSummary: "listPlacements",
+                responseSummary: "\(placements.count) placements",
+                placements: placements.map {
+                    AuditPlacementRef(accountID: $0.accountID, placement: $0.id)
+                }
+            )
+            return placements
+        } catch {
+            record(
+                kind: .listPlacements,
+                agent: agent,
+                started: started,
+                detail: "listPlacements",
+                requestSummary: "listPlacements",
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
     }
 
     public func freshness(credential: String?) throws -> IndexFreshness {
-        _ = try authenticate(credential)
-        return try read.freshness()
+        let started = Date()
+        let agent = try authenticate(credential)
+        do {
+            let freshness = try read.freshness()
+            var parts = ["indexed=\(freshness.indexedCount)"]
+            if freshness.lastIngestAt != nil {
+                parts.append("lastIngest=set")
+            }
+            record(
+                kind: .status,
+                agent: agent,
+                started: started,
+                detail: "status",
+                requestSummary: "status",
+                responseSummary: parts.joined(separator: " ")
+            )
+            return freshness
+        } catch {
+            record(
+                kind: .status,
+                agent: agent,
+                started: started,
+                detail: "status",
+                requestSummary: "status",
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
     }
 
     public func updateIndex(credential: String?, updater: any IndexUpdating) throws -> IndexUpdateOutcome {
+        let started = Date()
         let agent = try authenticate(credential)
-        let outcome = try updater.update()
-        audit?.append(
-            AuditEntry(
+        do {
+            let outcome = try updater.update()
+            record(
                 kind: .updateIndex,
-                agentID: agent.id,
-                agentName: agent.name,
-                detail: "new=\(outcome.newCount)"
+                agent: agent,
+                started: started,
+                detail: "new=\(outcome.newCount)",
+                requestSummary: "update",
+                responseSummary: "new=\(outcome.newCount) indexed=\(outcome.freshness.indexedCount)"
             )
-        )
-        return outcome
+            return outcome
+        } catch {
+            record(
+                kind: .updateIndex,
+                agent: agent,
+                started: started,
+                detail: "update",
+                requestSummary: "update",
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
     }
 
     private func filterPage(
@@ -139,5 +287,64 @@ public struct AgentReadAPI {
         // never appear and never inflate the returned page.
         let next = allowed.count > clamped ? page.nextCursor : nil
         return Page(items: items, nextCursor: next)
+    }
+
+    private func record(
+        kind: AuditKind,
+        agent: PairedAgent,
+        started: Date,
+        detail: String = "",
+        requestSummary: String = "",
+        responseSummary: String = "",
+        messages: [AuditMessageRef] = [],
+        placements: [AuditPlacementRef] = [],
+        outcome: AuditOutcome = .ok
+    ) {
+        audit?.append(
+            AuditEntry(
+                kind: kind,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: detail,
+                at: started,
+                finishedAt: Date(),
+                requestSummary: requestSummary,
+                responseSummary: responseSummary,
+                messages: messages,
+                placements: placements,
+                outcome: outcome
+            )
+        )
+    }
+
+    private static func messageRefs(_ items: [IndexedMessage]) -> [AuditMessageRef] {
+        items.prefix(AuditLog.messageRefCap).map(AuditMessageRef.init)
+    }
+
+    private static func listRequestSummary(
+        limit: Int,
+        cursor: String?,
+        accountID: String?,
+        placement: String?
+    ) -> String {
+        var parts = ["limit=\(limit)"]
+        if cursor != nil { parts.append("cursor") }
+        if let accountID { parts.append("account=\(accountID)") }
+        if let placement { parts.append("placement=\(placement)") }
+        return parts.joined(separator: " ")
+    }
+
+    private static func searchRequestSummary(
+        query: String,
+        limit: Int,
+        cursor: String?,
+        accountID: String?,
+        placement: String?
+    ) -> String {
+        var parts = ["q=\(query)", "limit=\(limit)"]
+        if cursor != nil { parts.append("cursor") }
+        if let accountID { parts.append("account=\(accountID)") }
+        if let placement { parts.append("placement=\(placement)") }
+        return parts.joined(separator: " ")
     }
 }

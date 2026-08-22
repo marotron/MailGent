@@ -17,14 +17,65 @@ final class AgentBridge {
     private(set) var listenNote = "Loopback MCP not bound yet"
     /// Bumped whenever grants change so SwiftUI refreshes checkbox state.
     private(set) var grantRevision = 0
+    /// Bumped on each audit append so menu / detail refresh without waiting for Timeline.
+    private(set) var auditRevision = 0
+    /// Status-item pulse for the latest agent request (success / error linger + fade).
+    private(set) var iconPulse = MenuBarIconPulse()
     /// Observable mirror of GrantGate rows for the current agent (UI source of truth).
     private(set) var grantRows: [Grant] = []
     let loopbackURL = "http://127.0.0.1:8787/mcp"
     private let loopbackPort: UInt16 = 8787
     private var http: LoopbackHTTPListener?
+    private var lastPulsedRequestID: String?
+    private var pulseClearTask: Task<Void, Never>?
 
-    var recentAudit: [AuditEntry] {
-        Array(audit.entries().suffix(12).reversed())
+    var allAudit: [AuditEntry] {
+        _ = auditRevision
+        return Array(audit.entries().reversed())
+    }
+
+    /// Newest tool call that counts as an agent request (excludes pair / revoke).
+    var lastAgentRequest: AuditEntry? {
+        _ = auditRevision
+        return audit.entries().reversed().first { Self.isAgentRequest($0.kind) }
+    }
+
+    static func isAgentRequest(_ kind: AuditKind) -> Bool {
+        switch kind {
+        case .search, .list, .listPlacements, .get, .createDraft, .updateDraft, .updateIndex, .status,
+            .setSource:
+            return true
+        case .pair, .revoke:
+            return false
+        }
+    }
+
+    func noteAuditChanged() {
+        auditRevision &+= 1
+        guard
+            let entry = lastAgentRequest,
+            entry.id != lastPulsedRequestID
+        else { return }
+        lastPulsedRequestID = entry.id
+        let hold: TimeInterval
+        switch entry.outcome {
+        case .ok:
+            var next = iconPulse
+            next.recordSuccess()
+            iconPulse = next
+            hold = MenuBarIconPulse.successHold
+        case .error:
+            var next = iconPulse
+            next.recordError()
+            iconPulse = next
+            hold = MenuBarIconPulse.errorHold
+        }
+        pulseClearTask?.cancel()
+        pulseClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(hold))
+            guard !Task.isCancelled else { return }
+            self?.iconPulse = MenuBarIconPulse()
+        }
     }
 
     var cursorConfigSnippet: String {
@@ -47,6 +98,11 @@ final class AgentBridge {
 
     init() {
         pairing = Pairing(audit: audit)
+        audit.onChange = { [weak self] in
+            Task { @MainActor in
+                self?.noteAuditChanged()
+            }
+        }
         restorePersistedPairing()
     }
 
@@ -278,7 +334,8 @@ final class AgentBridge {
     func bindLoopback(
         store: MailStore,
         databaseURL: URL,
-        indexUpdater: (any IndexUpdating)? = nil
+        indexUpdater: (any IndexUpdating)? = nil,
+        sourceController: (any MailSourceControlling)? = nil
     ) {
         stopLoopback()
         ensureMachineLocalAgent()
@@ -294,6 +351,7 @@ final class AgentBridge {
                 gateway: gateway,
                 ledger: ledger,
                 indexUpdater: indexUpdater,
+                sourceController: sourceController,
                 host: "127.0.0.1",
                 port: loopbackPort
             )

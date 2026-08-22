@@ -8,12 +8,7 @@ enum CompanionPage: Equatable {
     case read
 }
 
-enum CompanionMailSource: String, CaseIterable, Identifiable {
-    case fixture
-    case liveMail
-
-    var id: String { rawValue }
-
+extension MailSourceID {
     var title: String {
         switch self {
         case .fixture: "Fixture mail"
@@ -21,6 +16,9 @@ enum CompanionMailSource: String, CaseIterable, Identifiable {
         }
     }
 }
+
+typealias CompanionMailSource = MailSourceID
+
 
 struct DetectedMailbox: Equatable, Identifiable, Sendable {
     let accountID: String
@@ -59,7 +57,10 @@ final class CompanionSession {
     var placements: [Placement] = []
     var detail: ReadMessage?
     var lastIngestAt: Date?
+    /// Lower bound for the last incremental pass (previous `lastIngestAt` before that pass).
+    var lastNewSinceAt: Date?
     var lastNewCount = 0
+    var lastNewMessages: [IndexedMessage] = []
     var ingestPassNote = ""
     var indexedCount = 0
     var scanAccounts = 0
@@ -127,6 +128,23 @@ final class CompanionSession {
         mailAccessGranted = access.snapshot.access == .granted
     }
 
+    var availableSources: [MailSourceID] {
+        MailSourceID.available(liveMailAccessible: mailAccessGranted)
+    }
+
+    var nextSource: MailSourceID {
+        source.next(in: availableSources)
+    }
+
+    var canCycleSource: Bool {
+        nextSource != source
+    }
+
+    func cycleSource() {
+        guard !isBusy, canCycleSource else { return }
+        setSource(nextSource)
+    }
+
     func setSource(_ source: CompanionMailSource) {
         guard self.source != source else { return }
         self.source = source
@@ -134,6 +152,24 @@ final class CompanionSession {
         detail = nil
         query = ""
         scheduleReload(reason: "source-\(source.rawValue)")
+    }
+
+    func applyAgentSource(_ source: MailSourceID) throws -> MailSourceSnapshot {
+        guard MailGentPreferences.agentMayChangeSource else {
+            throw MailSourceError.denied
+        }
+        guard availableSources.contains(source) else {
+            throw MailSourceError.unavailable
+        }
+        setSource(source)
+        return sourceSnapshot()
+    }
+
+    func sourceSnapshot() -> MailSourceSnapshot {
+        MailSourceSnapshot(
+            source: source,
+            agentMayChangeSource: MailGentPreferences.agentMayChangeSource
+        )
     }
 
     func reindexNow() {
@@ -190,9 +226,47 @@ final class CompanionSession {
         refresh()
     }
 
+    /// Opens companion search on messages from the last incremental ingest pass.
+    func openLastNewMessages() {
+        selectedPlacement = nil
+        detail = nil
+        page = .search
+        if !query.isEmpty {
+            query = ""
+        }
+        let news = lastNewMessages
+        items = news
+        status = news.isEmpty ? "No new messages" : "\(news.count) new this pass"
+        // Search page clears query → onChange may refresh and overwrite; re-pin after.
+        Task { @MainActor in
+            self.items = self.lastNewMessages
+            self.status = self.lastNewMessages.isEmpty
+                ? "No new messages"
+                : "\(self.lastNewMessages.count) new this pass"
+        }
+    }
+
     func openRead(_ message: IndexedMessage) {
         select(message)
         page = .read
+    }
+
+    /// Opens Companion Read from an audit message ref (re-fetches body; no body in audit).
+    func openRead(accountID: String, placement: String, id: String) {
+        page = .read
+        Task {
+            do {
+                detail = try await worker.readMessage(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id
+                )
+                handoffNote = nil
+            } catch {
+                detail = nil
+                status = "Message not available"
+            }
+        }
     }
 
     private func scheduleReload(reason: String) {
@@ -313,7 +387,9 @@ final class CompanionSession {
             indexedCount = snapshot.indexedCount
             placements = snapshot.placements
             lastIngestAt = snapshot.lastIngestAt
+            lastNewSinceAt = nil
             lastNewCount = 0
+            lastNewMessages = []
             ingestPassNote = "Full reindex"
             items = []
             detail = nil
@@ -341,7 +417,9 @@ final class CompanionSession {
             indexedCount = opened.indexedCount
             placements = opened.placements
             lastIngestAt = opened.lastIngestAt
+            lastNewSinceAt = nil
             lastNewCount = 0
+            lastNewMessages = []
             ingestPassNote = "Loaded from disk"
             items = []
             detail = nil
@@ -404,8 +482,10 @@ final class CompanionSession {
         applyCatalog(snapshot.catalog)
         indexedCount = snapshot.indexedCount
         placements = snapshot.placements
+        lastNewSinceAt = lastIngestAt
         lastIngestAt = snapshot.lastIngestAt
         lastNewCount = snapshot.newCount
+        lastNewMessages = snapshot.newMessages
         ingestPassNote = "Incremental"
         status = snapshot.newCount == 0 ? "No new messages" : "Ingested \(snapshot.newCount) new"
         await refreshFromWorker()
@@ -426,7 +506,29 @@ final class CompanionSession {
             }
             return try await self.updateIndexForMCP()
         }
-        agents.bindLoopback(store: store, databaseURL: databaseURL, indexUpdater: updater)
+        agents.bindLoopback(
+            store: store,
+            databaseURL: databaseURL,
+            indexUpdater: updater,
+            sourceController: makeSourceController()
+        )
+    }
+
+    private func makeSourceController() -> BlockingMailSourceController {
+        BlockingMailSourceController(
+            snapshot: { [weak self] in
+                await MainActor.run {
+                    self?.sourceSnapshot()
+                        ?? MailSourceSnapshot(source: .fixture, agentMayChangeSource: false)
+                }
+            },
+            setSource: { [weak self] id in
+                try await MainActor.run {
+                    guard let self else { throw MailSourceError.notAvailable }
+                    return try self.applyAgentSource(id)
+                }
+            }
+        )
     }
 
     private func updateIndexForMCP() async throws -> IndexUpdateOutcome {
@@ -527,6 +629,9 @@ final class CompanionSession {
         items = []
         detail = nil
         lastNewCount = 0
+        lastNewMessages = []
+        lastIngestAt = nil
+        lastNewSinceAt = nil
         self.status = status
     }
 

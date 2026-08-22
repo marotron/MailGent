@@ -13,6 +13,12 @@ struct AuditLogTests {
         #expect(searches.count == 1)
         #expect(searches[0].agentName == "Cursor")
         #expect(searches[0].detail == "invoice")
+        #expect(searches[0].requestSummary.contains("q=invoice"))
+        #expect(searches[0].responseSummary == "1 messages")
+        #expect(searches[0].messages.count == 1)
+        #expect(searches[0].messages[0].subject == "Invoice due")
+        #expect(searches[0].outcome == .ok)
+        #expect(searches[0].finishedAt != nil)
     }
 
     @Test func getAppendsAuditEntry() throws {
@@ -29,6 +35,41 @@ struct AuditLogTests {
 
         let kinds = env.audit.entries().map(\.kind)
         #expect(kinds == [.pair, .search, .get])
+        let get = env.audit.entries().last!
+        #expect(get.responseSummary == "bodyAccess=granted")
+        #expect(get.messages.count == 1)
+        #expect(get.messages[0].id == hit.id)
+    }
+
+    @Test func listAndStatusAreAudited() throws {
+        let env = try AuditFixture()
+        defer { env.remove() }
+
+        _ = try env.gateway.list(credential: env.credential)
+        _ = try env.gateway.listPlacements(credential: env.credential)
+        _ = try env.gateway.freshness(credential: env.credential)
+
+        let kinds = env.audit.entries().map(\.kind)
+        #expect(kinds.contains(.list))
+        #expect(kinds.contains(.listPlacements))
+        #expect(kinds.contains(.status))
+        let list = env.audit.entries().first { $0.kind == .list }!
+        #expect(list.responseSummary == "1 messages")
+        let placements = env.audit.entries().first { $0.kind == .listPlacements }!
+        #expect(placements.placements.count == 1)
+    }
+
+    @Test func ringBufferCapsEntries() {
+        let audit = AuditLog()
+        for i in 0..<60 {
+            audit.append(
+                AuditEntry(kind: .status, agentID: "a", agentName: "Cursor", detail: "\(i)")
+            )
+        }
+        let entries = audit.entries()
+        #expect(entries.count == AuditLog.capacity)
+        #expect(entries.first?.detail == "10")
+        #expect(entries.last?.detail == "59")
     }
 
     @Test func pairAndRevokeAreAudited() throws {

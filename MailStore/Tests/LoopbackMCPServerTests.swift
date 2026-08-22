@@ -231,6 +231,71 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"listPlacements\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
+        #expect(response.body.contains("\"name\":\"set_source\""))
+    }
+
+    @Test func setSourceDeniedWhenSettingOff() throws {
+        let controller = FakeMailSourceController(agentMayChangeSource: false)
+        let env = try LoopbackFixture(sourceController: controller)
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "set_source", arguments: ["source": "liveMail"])
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("MailGent Settings"))
+        #expect(controller.source == .fixture)
+        #expect(env.audit.entries().contains { $0.kind == .setSource && $0.outcome != .ok })
+    }
+
+    @Test func setSourceSwitchesWhenSettingOn() throws {
+        let controller = FakeMailSourceController(agentMayChangeSource: true)
+        let env = try LoopbackFixture(sourceController: controller)
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "set_source", arguments: ["source": "liveMail"])
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["source"] as? String == "liveMail")
+        #expect((payload["agentMayChangeSource"] as? NSNumber)?.boolValue == true)
+        #expect(controller.source == .liveMail)
+        #expect(env.audit.entries().contains { $0.kind == .setSource && $0.outcome == .ok })
+    }
+
+    @Test func statusIncludesSourceWhenControllerBound() throws {
+        let controller = FakeMailSourceController(agentMayChangeSource: false)
+        let env = try LoopbackFixture(sourceController: controller)
+        defer { env.remove() }
+
+        let response = env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "status", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["source"] as? String == "fixture")
+        #expect((payload["agentMayChangeSource"] as? NSNumber)?.boolValue == false)
     }
 
     @Test func authenticatedCreateAndUpdateDraft() throws {
@@ -340,7 +405,7 @@ private struct LoopbackFixture {
     let audit: AuditLog
     let server: LoopbackMCPServer
 
-    init(bodyGranted: Bool = true) throws {
+    init(bodyGranted: Bool = true, sourceController: (any MailSourceControlling)? = nil) throws {
         root = try FixtureTree()
         let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         try root.writeEmlx(
@@ -382,11 +447,31 @@ private struct LoopbackFixture {
             grants: grants,
             audit: audit
         )
-        server = LoopbackMCPServer(gateway: gateway)
+        server = LoopbackMCPServer(gateway: gateway, sourceController: sourceController)
     }
 
     func remove() {
         root.remove()
         try? FileManager.default.removeItem(at: db)
+    }
+}
+
+private final class FakeMailSourceController: MailSourceControlling, @unchecked Sendable {
+    var source: MailSourceID
+    var agentMayChangeSource: Bool
+
+    init(source: MailSourceID = .fixture, agentMayChangeSource: Bool) {
+        self.source = source
+        self.agentMayChangeSource = agentMayChangeSource
+    }
+
+    func snapshot() -> MailSourceSnapshot {
+        MailSourceSnapshot(source: source, agentMayChangeSource: agentMayChangeSource)
+    }
+
+    func setSource(_ source: MailSourceID) throws -> MailSourceSnapshot {
+        guard agentMayChangeSource else { throw MailSourceError.denied }
+        self.source = source
+        return snapshot()
     }
 }
