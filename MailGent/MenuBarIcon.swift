@@ -1,10 +1,63 @@
 import AppKit
+import MailStore
 import SwiftUI
 
 enum MenuBarIconKind: Equatable, Sendable {
     case idle
     case success
     case error
+}
+
+struct MenuBarIconAppearance: Equatable, Sendable {
+    enum Tint: Equatable, Sendable {
+        case menuBar
+        case success
+        case error
+        case fixture
+    }
+
+    let symbolName: String
+    let tint: Tint
+    let accessibilityLabel: String
+
+    var isTemplate: Bool { tint == .menuBar }
+
+    static func resolve(source: MailSourceID, pulse: MenuBarIconKind) -> MenuBarIconAppearance {
+        if pulse == .error {
+            return MenuBarIconAppearance(
+                symbolName: "exclamationmark.triangle.fill",
+                tint: .error,
+                accessibilityLabel: source == .fixture ? "MailGent fixture mail" : "MailGent"
+            )
+        }
+        if source == .fixture {
+            return MenuBarIconAppearance(
+                symbolName: "theatermasks.fill",
+                tint: pulse == .success ? .success : .fixture,
+                accessibilityLabel: "MailGent fixture mail"
+            )
+        }
+        switch pulse {
+        case .idle:
+            return MenuBarIconAppearance(
+                symbolName: "tray.full",
+                tint: .menuBar,
+                accessibilityLabel: "MailGent"
+            )
+        case .success:
+            return MenuBarIconAppearance(
+                symbolName: "tray.full.fill",
+                tint: .success,
+                accessibilityLabel: "MailGent"
+            )
+        case .error:
+            return MenuBarIconAppearance(
+                symbolName: "exclamationmark.triangle.fill",
+                tint: .error,
+                accessibilityLabel: "MailGent"
+            )
+        }
+    }
 }
 
 /// Status-item pulse: success and error linger so a fast MCP call stays visible.
@@ -40,31 +93,32 @@ struct MenuBarIconPulse: Equatable, Sendable {
 
 struct MenuBarIconLabel: View {
     @Bindable var agents: AgentBridge
+    var source: MailSourceID
 
     var body: some View {
-        let kind = agents.iconPulse.kind
-        Image(nsImage: Self.image(kind))
-            .id(kind)
-            .accessibilityLabel("MailGent")
+        let appearance = MenuBarIconAppearance.resolve(source: source, pulse: agents.iconPulse.kind)
+        Image(nsImage: Self.image(appearance))
+            .id("\(source.rawValue)-\(agents.iconPulse.kind)")
+            .accessibilityLabel(appearance.accessibilityLabel)
     }
 
-    private static func image(_ kind: MenuBarIconKind) -> NSImage {
-        let name: String
-        switch kind {
-        case .idle: name = "tray.full"
-        case .success: name = "tray.full.fill"
-        case .error: name = "exclamationmark.triangle.fill"
-        }
-        let base = NSImage(systemSymbolName: name, accessibilityDescription: "MailGent")
+    private static func image(_ appearance: MenuBarIconAppearance) -> NSImage {
+        let base = NSImage(systemSymbolName: appearance.symbolName, accessibilityDescription: appearance.accessibilityLabel)
             ?? NSImage(size: NSSize(width: 18, height: 18))
         let size = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-        switch kind {
-        case .idle:
+        switch appearance.tint {
+        case .menuBar:
             let image = base.withSymbolConfiguration(size) ?? base
             image.isTemplate = true
             return image
-        case .success, .error:
-            let color: NSColor = kind == .success ? .systemGreen : .systemOrange
+        case .success, .error, .fixture:
+            let color: NSColor
+            switch appearance.tint {
+            case .success: color = .systemGreen
+            case .error: color = .systemOrange
+            case .fixture: color = .systemPurple
+            case .menuBar: color = .labelColor
+            }
             let tinted = size.applying(.init(paletteColors: [color]))
             let image = base.withSymbolConfiguration(tinted) ?? base
             image.isTemplate = false

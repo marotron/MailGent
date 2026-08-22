@@ -75,19 +75,21 @@ public final class BlockingMailSourceController: MailSourceControlling, @uncheck
     public func snapshot() -> MailSourceSnapshot {
         lock.lock()
         defer { lock.unlock() }
+        let work = snapshotWork
         return runSync {
-            await snapshotWork()
+            await work()
         } ?? MailSourceSnapshot(source: .fixture, agentMayChangeSource: false)
     }
 
     public func setSource(_ source: MailSourceID) throws -> MailSourceSnapshot {
         lock.lock()
         defer { lock.unlock() }
+        let work = setWork
         let box = SourceOutcomeBox()
         let sem = DispatchSemaphore(value: 0)
         Task {
             do {
-                box.result = .success(try await setWork(source))
+                box.result = .success(try await work(source))
             } catch {
                 box.result = .failure(error)
             }

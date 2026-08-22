@@ -327,6 +327,8 @@ struct CompanionWindow: View {
             Text("Companion will not write Apple Mail’s store.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Divider()
+            CompanionStatusMetrics(session: session)
             if !session.mailAccessGranted {
                 Button("Open grant settings…") {
                     session.access.openFullDiskAccessSettings()
@@ -354,7 +356,8 @@ struct CompanionWindow: View {
             } else {
                 Text(session.lastIngestAt?.formatted(date: .abbreviated, time: .shortened) ?? "Never")
                 Text("\(session.indexedCount) indexed · \(session.source.title)")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(session.source == .fixture ? Color.purple : Color.secondary)
+                    .fontWeight(session.source == .fixture ? .semibold : .regular)
                 Text("\(session.scanAccounts) accounts · \(session.scanMailboxes) mailboxes · \(session.scanMessagesLabel) indexed")
                     .foregroundStyle(.secondary)
                 Text(ingestSummary)
@@ -368,12 +371,11 @@ struct CompanionWindow: View {
                     .disabled(session.isBusy)
                 Button("Reindex now", action: session.reindexNow)
                     .disabled(session.isBusy)
-                if session.mailAccessGranted {
-                    Button(session.source == .liveMail ? "Use fixture" : "Use live Mail") {
-                        session.setSource(session.source == .liveMail ? .fixture : .liveMail)
-                    }
-                    .disabled(session.isBusy)
+                Button("Next source") {
+                    session.cycleSource()
                 }
+                .disabled(session.isBusy || !session.canCycleSource)
+                .help("Switch to \(session.nextSource.title)")
             }
         }
         .padding(16)

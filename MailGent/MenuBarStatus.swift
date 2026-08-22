@@ -4,6 +4,7 @@ import SwiftUI
 
 struct MenuBarStatus: View {
     @Bindable var session: CompanionSession
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -21,9 +22,7 @@ struct MenuBarStatus: View {
                     }
                     lastIngestRow(at: context.date)
                     newRow
-                    statusRow("Source") {
-                        Text(session.source.title)
-                    }
+                    sourceRow
                     statusRow("Connected agent") {
                         Text(session.agents.agent?.name ?? "—")
                     }
@@ -47,8 +46,13 @@ struct MenuBarStatus: View {
                 MenuBarActionRow(title: "Open Access Log", id: "open-access-log") {
                     DetachedWindowHost.shared.showAccessLog(session: session)
                 }
-                MenuBarActionRow(title: "Grant access…", id: "grant-access") {
-                    DetachedWindowHost.shared.showAccess(session: session.access)
+
+                Divider()
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, 8)
+
+                MenuBarActionRow(title: "Settings…", id: "settings") {
+                    openSettings()
                 }
 
                 Divider()
@@ -82,7 +86,7 @@ struct MenuBarStatus: View {
             Text("Last ingest")
                 .foregroundStyle(.secondary)
                 .frame(width: 118, alignment: .leading)
-            Text(ingestLabel(at: now))
+            Text(CompanionStatusCopy(session: session, now: now).lastIngest)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 let work = { session.ingestAgain() }
@@ -107,12 +111,37 @@ struct MenuBarStatus: View {
         .font(.callout)
     }
 
+    private var sourceRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Source")
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(session.source.title)
+                .foregroundStyle(session.source == .fixture ? Color.purple : Color.primary)
+                .fontWeight(session.source == .fixture ? .semibold : .regular)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                let work = { session.cycleSource() }
+                DispatchQueue.main.async(execute: work)
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(session.isBusy || !session.canCycleSource)
+            .help("Switch to \(session.nextSource.title)")
+            .id("cycle-source")
+        }
+        .font(.callout)
+    }
+
     private var newRow: some View {
         HStack(alignment: .center, spacing: 8) {
             Text("New")
                 .foregroundStyle(.secondary)
                 .frame(width: 118, alignment: .leading)
-            Text(newLabel)
+            Text(CompanionStatusCopy(session: session, now: .now).newMessages)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 DetachedWindowHost.shared.claimActivation()
@@ -139,7 +168,7 @@ struct MenuBarStatus: View {
             Text("Last agent request")
                 .foregroundStyle(.secondary)
                 .frame(width: 118, alignment: .leading)
-            Text(lastAgentRequestLabel(at: now))
+            Text(CompanionStatusCopy(session: session, now: now).lastAgentRequest)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 DetachedWindowHost.shared.claimActivation()
@@ -161,37 +190,6 @@ struct MenuBarStatus: View {
             .id("open-last-agent-request")
         }
         .font(.callout)
-    }
-
-    private var newLabel: String {
-        guard let since = session.lastNewSinceAt else {
-            return "\(session.lastNewCount)"
-        }
-        let clock = since.formatted(date: .omitted, time: .shortened)
-        return "\(session.lastNewCount) (since \(clock))"
-    }
-
-    private func ingestLabel(at now: Date) -> String {
-        guard let date = session.lastIngestAt else { return "—" }
-        let clock = date.formatted(date: .omitted, time: .shortened)
-        return "\(clock) (\(Self.relativeAge(from: date, to: now)))"
-    }
-
-    private func lastAgentRequestLabel(at now: Date) -> String {
-        guard let entry = session.agents.lastAgentRequest else {
-            return "—"
-        }
-        return "\(entry.kind.rawValue) · \(Self.relativeAge(from: entry.at, to: now))"
-    }
-
-    private static func relativeAge(from date: Date, to now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        if seconds < 60 { return "\(seconds)s ago" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m ago" }
-        let hours = minutes / 60
-        if hours < 48 { return "\(hours)h ago" }
-        return "\(hours / 24)d ago"
     }
 }
 

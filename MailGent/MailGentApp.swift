@@ -12,13 +12,12 @@ struct MailGentApp: App {
         MenuBarExtra {
             MenuBarStatus(session: session)
         } label: {
-            MenuBarIconLabel(agents: session.agents)
+            MenuBarIconLabel(agents: session.agents, source: session.source)
         }
         .menuBarExtraStyle(.window)
 
         Settings {
-            GrantAccessView(session: session.access)
-                .frame(minWidth: 420, minHeight: 240)
+            MailGentSettingsView(session: session)
         }
     }
 }

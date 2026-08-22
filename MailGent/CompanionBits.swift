@@ -404,3 +404,80 @@ struct PlacementMenu: View {
         }
     }
 }
+
+/// Shared menu / control-center snapshot strings for ingest, source, and agent.
+@MainActor
+struct CompanionStatusCopy {
+    let session: CompanionSession
+    let now: Date
+
+    var lastIngest: String {
+        guard let date = session.lastIngestAt else { return "—" }
+        let clock = date.formatted(date: .omitted, time: .shortened)
+        return "\(clock) (\(Self.relativeAge(from: date, to: now)))"
+    }
+
+    var newMessages: String {
+        guard let since = session.lastNewSinceAt else {
+            return "\(session.lastNewCount)"
+        }
+        let clock = since.formatted(date: .omitted, time: .shortened)
+        return "\(session.lastNewCount) (since \(clock))"
+    }
+
+    var source: String { session.source.title }
+
+    var connectedAgent: String { session.agents.agent?.name ?? "—" }
+
+    var lastAgentRequest: String {
+        guard let entry = session.agents.lastAgentRequest else { return "—" }
+        return "\(entry.kind.rawValue) · \(Self.relativeAge(from: entry.at, to: now))"
+    }
+
+    static func relativeAge(from date: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s ago" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        if hours < 48 { return "\(hours)h ago" }
+        return "\(hours / 24)d ago"
+    }
+}
+
+/// Label/value snapshot used by Control Center. Menu keeps its own action buttons.
+struct CompanionStatusMetrics: View {
+    let session: CompanionSession
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            let copy = CompanionStatusCopy(session: session, now: context.date)
+            VStack(alignment: .leading, spacing: 2) {
+                row("Last ingest", copy.lastIngest)
+                row("New", copy.newMessages)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Source")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 118, alignment: .leading)
+                    Text(copy.source)
+                        .foregroundStyle(session.source == .fixture ? Color.purple : Color.primary)
+                        .fontWeight(session.source == .fixture ? .semibold : .regular)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                row("Connected agent", copy.connectedAgent)
+                row("Last agent request", copy.lastAgentRequest)
+            }
+            .font(.callout)
+        }
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(value)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}

@@ -3,7 +3,7 @@ import Testing
 
 struct MenuBarIconAppearanceTests {
     @Test func liveIdleIsTemplateTray() {
-        let appearance = MenuBarIconAppearance.resolve(source: .liveMail, pulse: .idle)
+        let appearance = MenuBarIconAppearance.resolve(source: CompanionMailSource.liveMail, pulse: .idle)
         #expect(appearance.symbolName == "tray.full")
         #expect(appearance.isTemplate)
         #expect(appearance.tint == .menuBar)
@@ -11,7 +11,7 @@ struct MenuBarIconAppearanceTests {
     }
 
     @Test func fixtureIdleIsColoredMasks() {
-        let appearance = MenuBarIconAppearance.resolve(source: .fixture, pulse: .idle)
+        let appearance = MenuBarIconAppearance.resolve(source: CompanionMailSource.fixture, pulse: .idle)
         #expect(appearance.symbolName == "theatermasks.fill")
         #expect(!appearance.isTemplate)
         #expect(appearance.tint == .fixture)
@@ -19,7 +19,7 @@ struct MenuBarIconAppearanceTests {
     }
 
     @Test func fixtureKeepsFakeGlyphOnSuccess() {
-        let appearance = MenuBarIconAppearance.resolve(source: .fixture, pulse: .success)
+        let appearance = MenuBarIconAppearance.resolve(source: CompanionMailSource.fixture, pulse: .success)
         #expect(appearance.symbolName == "theatermasks.fill")
         #expect(appearance.tint == .success)
         #expect(!appearance.isTemplate)
@@ -27,8 +27,8 @@ struct MenuBarIconAppearanceTests {
     }
 
     @Test func errorPulseUsesWarningOnAnySource() {
-        let fixture = MenuBarIconAppearance.resolve(source: .fixture, pulse: .error)
-        let live = MenuBarIconAppearance.resolve(source: .liveMail, pulse: .error)
+        let fixture = MenuBarIconAppearance.resolve(source: CompanionMailSource.fixture, pulse: .error)
+        let live = MenuBarIconAppearance.resolve(source: CompanionMailSource.liveMail, pulse: .error)
         #expect(fixture.symbolName == "exclamationmark.triangle.fill")
         #expect(live.symbolName == "exclamationmark.triangle.fill")
         #expect(fixture.tint == .error)
