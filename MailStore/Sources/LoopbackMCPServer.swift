@@ -118,6 +118,13 @@ public struct LoopbackMCPServer {
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
                 do {
                     let text = try callTool(name: name, arguments: arguments, credential: credential)
+                    if let kind = AuditKind(toolName: name) {
+                        gateway.audit?.updateLast(
+                            kind: kind,
+                            requestSummary: AuditJSON.json(arguments),
+                            responseSummary: text
+                        )
+                    }
                     let envelope: [String: Any] = [
                         "jsonrpc": "2.0",
                         "id": id ?? NSNull(),
@@ -170,24 +177,13 @@ public struct LoopbackMCPServer {
                 limit: limit,
                 cursor: cursor
             )
-            var payload: [String: Any] = [
-                "items": page.items.map(Self.messageSummary),
-                "count": page.items.count
-            ]
-            if let nextCursor = page.nextCursor {
-                payload["nextCursor"] = nextCursor
-            }
-            return try jsonString(payload)
+            return try jsonString(AuditJSON.page(page))
         case "list":
             let page = try gateway.list(credential: credential)
-            return try jsonString([
-                "items": page.items.map(Self.messageSummary),
-                "count": page.items.count
-            ])
+            return try jsonString(AuditJSON.page(page))
         case "listPlacements":
             let placements = try gateway.listPlacements(credential: credential)
-            let rows = placements.map { "\($0.accountID)/\($0.id)" }
-            return try jsonString(["placements": rows])
+            return try jsonString(AuditJSON.placements(placements))
         case "get":
             guard
                 let accountID = arguments["accountID"] as? String,
@@ -202,7 +198,7 @@ public struct LoopbackMCPServer {
                 placement: placement,
                 id: messageID
             )
-            return try jsonString(Self.messageDetail(message))
+            return try jsonString(AuditJSON.messageDetail(message))
         case "create_draft":
             let started = Date()
             let body = arguments["body"] as? String ?? ""
@@ -216,12 +212,12 @@ public struct LoopbackMCPServer {
                         detail: version.draftID,
                         at: started,
                         finishedAt: Date(),
-                        requestSummary: "create_draft chars=\(body.count)",
-                        responseSummary: "draftID=\(version.draftID) \(version.label)"
+                        requestSummary: AuditJSON.request(["body": body]),
+                        responseSummary: AuditJSON.json(AuditJSON.version(version))
                     )
                 )
             }
-            return try jsonString(Self.versionSummary(version))
+            return try jsonString(AuditJSON.version(version))
         case "update_draft":
             guard
                 let draftID = arguments["draftID"] as? String,
@@ -240,27 +236,25 @@ public struct LoopbackMCPServer {
                         detail: "\(version.draftID)/\(version.label)",
                         at: started,
                         finishedAt: Date(),
-                        requestSummary: "draftID=\(draftID) chars=\(body.count)",
-                        responseSummary: "draftID=\(version.draftID) \(version.label)"
+                        requestSummary: AuditJSON.request(["draftID": draftID, "body": body]),
+                        responseSummary: AuditJSON.json(AuditJSON.version(version))
                     )
                 )
             }
-            return try jsonString(Self.versionSummary(version))
+            return try jsonString(AuditJSON.version(version))
         case "status":
             let freshness = try gateway.freshness(credential: credential)
-            var payload = Self.freshnessPayload(freshness)
+            var extra: [String: Any] = [:]
             if let snap = sourceController?.snapshot() {
-                payload["source"] = snap.source.rawValue
-                payload["agentMayChangeSource"] = snap.agentMayChangeSource
+                extra["source"] = snap.source.rawValue
+                extra["agentMayChangeSource"] = snap.agentMayChangeSource
             }
-            return try jsonString(payload)
+            return try jsonString(AuditJSON.freshness(freshness, extra: extra))
         case "set_source":
             return try setSource(arguments: arguments, credential: credential)
         case "update":
             let outcome = try gateway.updateIndex(credential: credential, updater: indexUpdater)
-            var payload = Self.freshnessPayload(outcome.freshness)
-            payload["newCount"] = outcome.newCount
-            return try jsonString(payload)
+            return try jsonString(AuditJSON.update(outcome))
         default:
             throw CallError.unknownTool
         }
@@ -288,14 +282,11 @@ public struct LoopbackMCPServer {
                     detail: snap.source.rawValue,
                     at: started,
                     finishedAt: Date(),
-                    requestSummary: "source=\(raw)",
-                    responseSummary: "source=\(snap.source.rawValue)"
+                    requestSummary: AuditJSON.request(["source": raw]),
+                    responseSummary: AuditJSON.json(AuditJSON.source(snap))
                 )
             )
-            return try jsonString([
-                "source": snap.source.rawValue,
-                "agentMayChangeSource": snap.agentMayChangeSource
-            ])
+            return try jsonString(AuditJSON.source(snap))
         } catch {
             gateway.audit?.append(
                 AuditEntry(
@@ -305,25 +296,13 @@ public struct LoopbackMCPServer {
                     detail: raw,
                     at: started,
                     finishedAt: Date(),
-                    requestSummary: "source=\(raw)",
-                    responseSummary: String(describing: error),
+                    requestSummary: AuditJSON.request(["source": raw]),
+                    responseSummary: AuditJSON.json(["error": String(describing: error)]),
                     outcome: .error(String(describing: error))
                 )
             )
             throw error
         }
-    }
-
-    private static func messageSummary(_ message: IndexedMessage) -> [String: Any] {
-        [
-            "accountID": message.accountID,
-            "placement": message.placement,
-            "id": message.id,
-            "subject": message.subject,
-            "from": message.from,
-            "date": message.date,
-            "isPartial": message.isPartial
-        ]
     }
 
     private static func intArgument(_ value: Any?) -> Int? {
@@ -337,57 +316,6 @@ public struct LoopbackMCPServer {
         default:
             return nil
         }
-    }
-
-    /// Full `get` payload. Distinguishes grant denial from empty/missing plain text.
-    private static func messageDetail(_ message: ReadMessage) -> [String: Any] {
-        var payload: [String: Any] = [
-            "id": message.id,
-            "accountID": message.accountID,
-            "placement": message.placement,
-            "subject": message.subject,
-            "from": message.from,
-            "to": message.to,
-            "date": message.date,
-            "isPartial": message.isPartial
-        ]
-        switch message.body {
-        case .text(let text):
-            payload["bodyAccess"] = "granted"
-            payload["body"] = text
-        case .notAvailable:
-            payload["bodyAccess"] = "granted"
-            // No plain-text body (empty or HTML-only); omit `body` rather than "".
-        case .notGranted:
-            payload["bodyAccess"] = "not_granted"
-            payload["note"] =
-                "Body omitted: the active grant for this account does not allow body access. Ask the user to enable body on the grant before summarizing or quoting the message."
-        }
-        return payload
-    }
-
-    private static func versionSummary(_ version: DraftVersion) -> [String: Any] {
-        [
-            "draftID": version.draftID,
-            "versionID": version.id,
-            "label": version.label,
-            "body": version.body
-        ]
-    }
-
-    private static func freshnessPayload(_ freshness: IndexFreshness) -> [String: Any] {
-        var payload: [String: Any] = [
-            "indexedCount": freshness.indexedCount
-        ]
-        if let lastIngestAt = freshness.lastIngestAt {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime]
-            payload["lastIngestAt"] = formatter.string(from: lastIngestAt)
-        }
-        if let newestMessageDate = freshness.newestMessageDate {
-            payload["newestMessageDate"] = newestMessageDate
-        }
-        return payload
     }
 
     private func rpcOK(id: Any, result: [String: Any]) throws -> LoopbackMCPResponse {

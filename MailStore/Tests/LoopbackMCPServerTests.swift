@@ -296,6 +296,12 @@ struct LoopbackMCPServerTests {
         let payload = try Self.toolPayload(response.body)
         #expect(payload["source"] as? String == "fixture")
         #expect((payload["agentMayChangeSource"] as? NSNumber)?.boolValue == false)
+        let status = try #require(env.audit.entries().last { $0.kind == .status })
+        let logged = jsonObject(status.responseSummary)
+        #expect(logged["source"] as? String == "fixture")
+        #expect(logged["lastIngestAt"] is String)
+        #expect(intValue(logged["indexedCount"]) == 1)
+        #expect(status.requestSummary == "{}")
     }
 
     @Test func authenticatedCreateAndUpdateDraft() throws {
@@ -395,6 +401,21 @@ struct LoopbackMCPServerTests {
             throw DraftLedgerError.notFound
         }
         return obj
+    }
+}
+
+private func jsonObject(_ text: String) -> [String: Any] {
+    guard let data = text.data(using: .utf8),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return [:] }
+    return obj
+}
+
+private func intValue(_ any: Any?) -> Int? {
+    switch any {
+    case let n as Int: n
+    case let n as NSNumber: n.intValue
+    default: nil
     }
 }
 

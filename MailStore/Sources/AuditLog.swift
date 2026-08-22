@@ -152,6 +152,23 @@ public struct AuditEntry: Equatable, Sendable, Identifiable {
         guard let finishedAt else { return nil }
         return finishedAt.timeIntervalSince(at)
     }
+
+    func withSummaries(request: String, response: String) -> AuditEntry {
+        AuditEntry(
+            id: id,
+            kind: kind,
+            agentID: agentID,
+            agentName: agentName,
+            detail: detail,
+            at: at,
+            finishedAt: finishedAt,
+            requestSummary: request,
+            responseSummary: response,
+            messages: messages,
+            placements: placements,
+            outcome: outcome
+        )
+    }
 }
 
 public final class AuditLog: @unchecked Sendable {
@@ -181,6 +198,22 @@ public final class AuditLog: @unchecked Sendable {
     public func append(_ entry: AuditEntry) {
         mutate { storage in
             storage.append(entry)
+        }
+    }
+
+    /// Overwrite summaries on the newest entry when it matches `kind`.
+    /// Used by the MCP layer to store the exact tool JSON the agent received.
+    public func updateLast(
+        kind: AuditKind,
+        requestSummary: String? = nil,
+        responseSummary: String? = nil
+    ) {
+        mutate { storage in
+            guard let last = storage.last, last.kind == kind else { return }
+            storage[storage.count - 1] = last.withSummaries(
+                request: requestSummary ?? last.requestSummary,
+                response: responseSummary ?? last.responseSummary
+            )
         }
     }
 

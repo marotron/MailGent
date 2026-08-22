@@ -1,0 +1,143 @@
+import Foundation
+
+/// JSON payloads stored on `AuditEntry` request/response summaries.
+/// Shape matches the MCP tool result the agent receives.
+enum AuditJSON {
+    static func json(_ object: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(
+                withJSONObject: object,
+                options: [.sortedKeys]
+              ),
+              let text = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return text
+    }
+
+    static func request(_ fields: [String: Any?]) -> String {
+        var dict: [String: Any] = [:]
+        for (key, value) in fields {
+            guard let value else { continue }
+            dict[key] = value
+        }
+        return json(dict)
+    }
+
+    static func freshness(
+        _ freshness: IndexFreshness,
+        extra: [String: Any] = [:]
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "indexedCount": freshness.indexedCount
+        ]
+        if let lastIngestAt = freshness.lastIngestAt {
+            payload["lastIngestAt"] = iso8601(lastIngestAt)
+        }
+        if let newestMessageDate = freshness.newestMessageDate {
+            payload["newestMessageDate"] = newestMessageDate
+        }
+        for (key, value) in extra {
+            payload[key] = value
+        }
+        return payload
+    }
+
+    static func update(_ outcome: IndexUpdateOutcome) -> [String: Any] {
+        var payload = freshness(outcome.freshness)
+        payload["newCount"] = outcome.newCount
+        return payload
+    }
+
+    static func page(_ page: Page<IndexedMessage>) -> [String: Any] {
+        var payload: [String: Any] = [
+            "items": page.items.map(messageSummary),
+            "count": page.items.count
+        ]
+        if let nextCursor = page.nextCursor {
+            payload["nextCursor"] = nextCursor
+        }
+        return payload
+    }
+
+    static func placements(_ placements: [Placement]) -> [String: Any] {
+        [
+            "placements": placements.map { "\($0.accountID)/\($0.id)" }
+        ]
+    }
+
+    static func messageSummary(_ message: IndexedMessage) -> [String: Any] {
+        [
+            "accountID": message.accountID,
+            "placement": message.placement,
+            "id": message.id,
+            "subject": message.subject,
+            "from": message.from,
+            "date": message.date,
+            "isPartial": message.isPartial
+        ]
+    }
+
+    static func messageDetail(_ message: ReadMessage) -> [String: Any] {
+        var payload: [String: Any] = [
+            "id": message.id,
+            "accountID": message.accountID,
+            "placement": message.placement,
+            "subject": message.subject,
+            "from": message.from,
+            "to": message.to,
+            "date": message.date,
+            "isPartial": message.isPartial
+        ]
+        switch message.body {
+        case .text(let text):
+            payload["bodyAccess"] = "granted"
+            payload["body"] = text
+        case .notAvailable:
+            payload["bodyAccess"] = "granted"
+        case .notGranted:
+            payload["bodyAccess"] = "not_granted"
+            payload["note"] =
+                "Body omitted: the active grant for this account does not allow body access. Ask the user to enable body on the grant before summarizing or quoting the message."
+        }
+        return payload
+    }
+
+    static func version(_ version: DraftVersion) -> [String: Any] {
+        [
+            "draftID": version.draftID,
+            "versionID": version.id,
+            "label": version.label,
+            "body": version.body
+        ]
+    }
+
+    static func source(_ snapshot: MailSourceSnapshot) -> [String: Any] {
+        [
+            "source": snapshot.source.rawValue,
+            "agentMayChangeSource": snapshot.agentMayChangeSource
+        ]
+    }
+
+    private static func iso8601(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+}
+
+extension AuditKind {
+    init?(toolName: String) {
+        switch toolName {
+        case "search": self = .search
+        case "list": self = .list
+        case "listPlacements": self = .listPlacements
+        case "get": self = .get
+        case "create_draft": self = .createDraft
+        case "update_draft": self = .updateDraft
+        case "status": self = .status
+        case "update": self = .updateIndex
+        case "set_source": self = .setSource
+        default: return nil
+        }
+    }
+}

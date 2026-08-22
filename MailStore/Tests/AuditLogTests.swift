@@ -13,8 +13,10 @@ struct AuditLogTests {
         #expect(searches.count == 1)
         #expect(searches[0].agentName == "Cursor")
         #expect(searches[0].detail == "invoice")
-        #expect(searches[0].requestSummary.contains("q=invoice"))
-        #expect(searches[0].responseSummary == "1 messages")
+        let request = jsonObject(searches[0].requestSummary)
+        #expect(request["query"] as? String == "invoice")
+        let response = jsonObject(searches[0].responseSummary)
+        #expect(intValue(response["count"]) == 1)
         #expect(searches[0].messages.count == 1)
         #expect(searches[0].messages[0].subject == "Invoice due")
         #expect(searches[0].messages[0].to.contains("bob@example.com"))
@@ -38,7 +40,9 @@ struct AuditLogTests {
         let kinds = env.audit.entries().map(\.kind)
         #expect(kinds == [.pair, .search, .get])
         let get = env.audit.entries().last!
-        #expect(get.responseSummary == "bodyAccess=granted")
+        let response = jsonObject(get.responseSummary)
+        #expect(response["bodyAccess"] as? String == "granted")
+        #expect(response["body"] as? String == "Please pay")
         #expect(get.messages.count == 1)
         #expect(get.messages[0].id == hit.id)
     }
@@ -56,9 +60,15 @@ struct AuditLogTests {
         #expect(kinds.contains(.listPlacements))
         #expect(kinds.contains(.status))
         let list = env.audit.entries().first { $0.kind == .list }!
-        #expect(list.responseSummary == "1 messages")
+        #expect(intValue(jsonObject(list.responseSummary)["count"]) == 1)
         let placements = env.audit.entries().first { $0.kind == .listPlacements }!
         #expect(placements.placements.count == 1)
+        let status = env.audit.entries().first { $0.kind == .status }!
+        let freshness = jsonObject(status.responseSummary)
+        #expect(intValue(freshness["indexedCount"]) == 1)
+        #expect(freshness["lastIngestAt"] is String)
+        #expect(freshness["newestMessageDate"] as? String == "Mon, 1 Jan 2024 00:00:00 +0000")
+        #expect(status.requestSummary == "{}")
     }
 
     @Test func persistsAcrossReload() throws {
@@ -168,6 +178,32 @@ struct AuditLogTests {
         #expect(audit.entries().map(\.kind) == [.pair, .revoke])
         #expect(audit.entries().map(\.agentName) == ["Cursor", "Cursor"])
     }
+
+    @Test func updateLastReplacesMatchingSummaries() {
+        let audit = AuditLog()
+        audit.append(
+            AuditEntry(
+                kind: .status,
+                agentID: "a",
+                agentName: "Cursor",
+                detail: "status",
+                requestSummary: "{}",
+                responseSummary: #"{"indexedCount":0}"#
+            )
+        )
+        audit.updateLast(
+            kind: .search,
+            responseSummary: "should-not-apply"
+        )
+        #expect(audit.entries()[0].responseSummary == #"{"indexedCount":0}"#)
+        audit.updateLast(
+            kind: .status,
+            requestSummary: "{}",
+            responseSummary: #"{"indexedCount":2,"lastIngestAt":"2026-08-22T19:30:18Z"}"#
+        )
+        #expect(audit.entries()[0].responseSummary.contains("lastIngestAt"))
+        #expect(intValue(jsonObject(audit.entries()[0].responseSummary)["indexedCount"]) == 2)
+    }
 }
 
 private struct AuditFixture {
@@ -220,5 +256,20 @@ private struct AuditFixture {
     func remove() {
         root.remove()
         try? FileManager.default.removeItem(at: db)
+    }
+}
+
+private func jsonObject(_ text: String) -> [String: Any] {
+    guard let data = text.data(using: .utf8),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return [:] }
+    return obj
+}
+
+private func intValue(_ any: Any?) -> Int? {
+    switch any {
+    case let n as Int: n
+    case let n as NSNumber: n.intValue
+    default: nil
     }
 }

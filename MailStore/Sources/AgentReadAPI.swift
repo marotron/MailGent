@@ -34,12 +34,12 @@ public struct AgentReadAPI {
     ) throws -> Page<IndexedMessage> {
         let started = Date()
         let agent = try authenticate(credential)
-        let request = Self.listRequestSummary(
-            limit: limit,
-            cursor: cursor,
-            accountID: accountID,
-            placement: placement
-        )
+        let request = AuditJSON.request([
+            "limit": limit,
+            "cursor": cursor,
+            "accountID": accountID,
+            "placement": placement
+        ])
         do {
             let page = try read.list(
                 limit: limit,
@@ -54,7 +54,7 @@ public struct AgentReadAPI {
                 started: started,
                 detail: "list",
                 requestSummary: request,
-                responseSummary: "\(filtered.items.count) messages",
+                responseSummary: AuditJSON.json(AuditJSON.page(filtered)),
                 messages: messageRefs(filtered.items, agentID: agent.id)
             )
             return filtered
@@ -81,13 +81,13 @@ public struct AgentReadAPI {
     ) throws -> Page<IndexedMessage> {
         let started = Date()
         let agent = try authenticate(credential)
-        let request = Self.searchRequestSummary(
-            query: query,
-            limit: limit,
-            cursor: cursor,
-            accountID: accountID,
-            placement: placement
-        )
+        let request = AuditJSON.request([
+            "query": query,
+            "limit": limit,
+            "cursor": cursor,
+            "accountID": accountID,
+            "placement": placement
+        ])
         do {
             // Over-fetch then deny-filter so counts/pages never include denied rows.
             let page = try read.search(
@@ -104,7 +104,7 @@ public struct AgentReadAPI {
                 started: started,
                 detail: query,
                 requestSummary: request,
-                responseSummary: "\(filtered.items.count) messages",
+                responseSummary: AuditJSON.json(AuditJSON.page(filtered)),
                 messages: messageRefs(filtered.items, agentID: agent.id)
             )
             return filtered
@@ -130,6 +130,11 @@ public struct AgentReadAPI {
         let started = Date()
         let agent = try authenticate(credential)
         let path = "\(accountID)/\(placement)/\(id)"
+        let request = AuditJSON.request([
+            "accountID": accountID,
+            "placement": placement,
+            "id": id
+        ])
         do {
             let message = try read.get(accountID: accountID, placement: placement, id: id)
             let probe = IndexedMessage(
@@ -149,26 +154,19 @@ public struct AgentReadAPI {
                     agent: agent,
                     started: started,
                     detail: path,
-                    requestSummary: path,
+                    requestSummary: request,
                     outcome: .error("unauthorized")
                 )
                 throw PairingError.unauthorized
             }
             let granted = message.applying(fields)
-            let bodyAccess: String
-            switch granted.body {
-            case .text, .notAvailable:
-                bodyAccess = "granted"
-            case .notGranted:
-                bodyAccess = "not_granted"
-            }
             record(
                 kind: .get,
                 agent: agent,
                 started: started,
                 detail: path,
-                requestSummary: path,
-                responseSummary: "bodyAccess=\(bodyAccess)",
+                requestSummary: request,
+                responseSummary: AuditJSON.json(AuditJSON.messageDetail(granted)),
                 messages: [AuditMessageRef(granted, fields: fields)]
             )
             return granted
@@ -180,7 +178,7 @@ public struct AgentReadAPI {
                 agent: agent,
                 started: started,
                 detail: path,
-                requestSummary: path,
+                requestSummary: request,
                 outcome: .error(String(describing: error))
             )
             throw error
@@ -197,8 +195,8 @@ public struct AgentReadAPI {
                 agent: agent,
                 started: started,
                 detail: "listPlacements",
-                requestSummary: "listPlacements",
-                responseSummary: "\(placements.count) placements",
+                requestSummary: AuditJSON.json([:] as [String: Any]),
+                responseSummary: AuditJSON.json(AuditJSON.placements(placements)),
                 placements: placements.map {
                     AuditPlacementRef(accountID: $0.accountID, placement: $0.id)
                 }
@@ -210,7 +208,7 @@ public struct AgentReadAPI {
                 agent: agent,
                 started: started,
                 detail: "listPlacements",
-                requestSummary: "listPlacements",
+                requestSummary: AuditJSON.json([:] as [String: Any]),
                 outcome: .error(String(describing: error))
             )
             throw error
@@ -222,17 +220,13 @@ public struct AgentReadAPI {
         let agent = try authenticate(credential)
         do {
             let freshness = try read.freshness()
-            var parts = ["indexed=\(freshness.indexedCount)"]
-            if freshness.lastIngestAt != nil {
-                parts.append("lastIngest=set")
-            }
             record(
                 kind: .status,
                 agent: agent,
                 started: started,
                 detail: "status",
-                requestSummary: "status",
-                responseSummary: parts.joined(separator: " ")
+                requestSummary: AuditJSON.json([:] as [String: Any]),
+                responseSummary: AuditJSON.json(AuditJSON.freshness(freshness))
             )
             return freshness
         } catch {
@@ -241,7 +235,7 @@ public struct AgentReadAPI {
                 agent: agent,
                 started: started,
                 detail: "status",
-                requestSummary: "status",
+                requestSummary: AuditJSON.json([:] as [String: Any]),
                 outcome: .error(String(describing: error))
             )
             throw error
@@ -258,8 +252,8 @@ public struct AgentReadAPI {
                 agent: agent,
                 started: started,
                 detail: "new=\(outcome.newCount)",
-                requestSummary: "update",
-                responseSummary: "new=\(outcome.newCount) indexed=\(outcome.freshness.indexedCount)"
+                requestSummary: AuditJSON.json([:] as [String: Any]),
+                responseSummary: AuditJSON.json(AuditJSON.update(outcome))
             )
             return outcome
         } catch {
@@ -268,7 +262,7 @@ public struct AgentReadAPI {
                 agent: agent,
                 started: started,
                 detail: "update",
-                requestSummary: "update",
+                requestSummary: AuditJSON.json([:] as [String: Any]),
                 outcome: .error(String(describing: error))
             )
             throw error
@@ -324,32 +318,5 @@ public struct AgentReadAPI {
                 fields: grants.effectiveFields(for: item, agentID: agentID) ?? .headersOnly
             )
         }
-    }
-
-    private static func listRequestSummary(
-        limit: Int,
-        cursor: String?,
-        accountID: String?,
-        placement: String?
-    ) -> String {
-        var parts = ["limit=\(limit)"]
-        if cursor != nil { parts.append("cursor") }
-        if let accountID { parts.append("account=\(accountID)") }
-        if let placement { parts.append("placement=\(placement)") }
-        return parts.joined(separator: " ")
-    }
-
-    private static func searchRequestSummary(
-        query: String,
-        limit: Int,
-        cursor: String?,
-        accountID: String?,
-        placement: String?
-    ) -> String {
-        var parts = ["q=\(query)", "limit=\(limit)"]
-        if cursor != nil { parts.append("cursor") }
-        if let accountID { parts.append("account=\(accountID)") }
-        if let placement { parts.append("placement=\(placement)") }
-        return parts.joined(separator: " ")
     }
 }

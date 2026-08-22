@@ -271,10 +271,11 @@ private struct AccessLogRow: View {
         switch entry.outcome {
         case .ok:
             let summary = entry.responseSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-            return summary.isEmpty ? "ok" : summary
+            if summary.isEmpty { return "ok" }
+            return AccessLogFormat.compactResponse(summary)
         case .error(let message):
             if !message.isEmpty { return message }
-            return entry.responseSummary.isEmpty ? "error" : entry.responseSummary
+            return entry.responseSummary.isEmpty ? "error" : AccessLogFormat.compactResponse(entry.responseSummary)
         }
     }
 
@@ -314,7 +315,7 @@ private struct AccessLogDetail: View {
             VStack(alignment: .leading, spacing: 12) {
                 header
                 togglableField("Request", raw: requestLine, showRaw: $requestRaw) {
-                    prettyPairs(requestLine)
+                    payloadView(requestLine)
                 }
                 togglableField("Response", raw: responseRawText, showRaw: $responseRaw) {
                     prettyResponse
@@ -395,12 +396,24 @@ private struct AccessLogDetail: View {
 
     @ViewBuilder
     private var prettyResponse: some View {
-        if isMessageResponse {
-            prettyMessageList
-        } else if !entry.placements.isEmpty {
-            prettyPlacements
+        VStack(alignment: .leading, spacing: 12) {
+            payloadView(responseLine)
+            if isMessageResponse {
+                prettyMessageList
+            } else if !entry.placements.isEmpty {
+                prettyPlacements
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func payloadView(_ text: String) -> some View {
+        if AccessLogFormat.isJSON(text) {
+            Text(AccessLogFormat.prettyJSON(text))
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
         } else {
-            prettyPairs(responseLine)
+            prettyPairs(text)
         }
     }
 
@@ -505,6 +518,9 @@ private struct AccessLogDetail: View {
     }
 
     private var messageListTotal: Int? {
+        if let count = AccessLogFormat.jsonInt(entry.responseSummary, key: "count") {
+            return count
+        }
         let prefix = entry.responseSummary.split(separator: " ").first
         guard let prefix, let count = Int(prefix) else { return nil }
         return count
@@ -523,13 +539,7 @@ private struct AccessLogDetail: View {
     }
 
     private var responseRawText: String {
-        if isMessageResponse {
-            return rawWithError(AccessLogFormat.json(entry.messages))
-        }
-        if !entry.placements.isEmpty {
-            return rawWithError(placementsRawText)
-        }
-        return responseLine
+        rawWithError(responseLine)
     }
 
     private func rawWithError(_ payload: String) -> String {
@@ -537,10 +547,6 @@ private struct AccessLogDetail: View {
             return "\(message)\n\n\(payload)"
         }
         return payload
-    }
-
-    private var placementsRawText: String {
-        entry.placements.map { "\($0.accountID)/\($0.placement)" }.joined(separator: "\n")
     }
 
     private var timingLabel: String {
@@ -678,6 +684,81 @@ enum AccessLogFormat {
         case "new": "New"
         case "value": "Value"
         default: key
+        }
+    }
+
+    static func isJSON(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else { return false }
+        guard let data = trimmed.data(using: .utf8) else { return false }
+        return (try? JSONSerialization.jsonObject(with: data)) != nil
+    }
+
+    static func prettyJSON(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(
+                withJSONObject: obj,
+                options: [.prettyPrinted, .sortedKeys]
+              ),
+              let rendered = String(data: pretty, encoding: .utf8)
+        else { return text }
+        return rendered
+    }
+
+    static func jsonObject(_ text: String) -> [String: Any]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    static func jsonInt(_ text: String, key: String) -> Int? {
+        intValue(jsonObject(text)?[key])
+    }
+
+    static func compactResponse(_ text: String) -> String {
+        guard let obj = jsonObject(text) else { return text }
+        if let indexed = intValue(obj["indexedCount"]) {
+            var parts: [String] = []
+            if let newCount = intValue(obj["newCount"]) {
+                parts.append("new=\(newCount)")
+            }
+            parts.append("indexed=\(indexed)")
+            if let last = obj["lastIngestAt"] as? String {
+                parts.append("lastIngestAt=\(last)")
+            }
+            return parts.joined(separator: " ")
+        }
+        if let count = intValue(obj["count"]) {
+            return "\(count) messages"
+        }
+        if let placements = obj["placements"] as? [Any] {
+            return "\(placements.count) placements"
+        }
+        if let bodyAccess = obj["bodyAccess"] as? String {
+            return "bodyAccess=\(bodyAccess)"
+        }
+        if let draftID = obj["draftID"] as? String {
+            if let label = obj["label"] as? String, !label.isEmpty {
+                return "draftID=\(draftID) \(label)"
+            }
+            return "draftID=\(draftID)"
+        }
+        if let source = obj["source"] as? String {
+            return "source=\(source)"
+        }
+        if let error = obj["error"] as? String {
+            return error
+        }
+        return text
+    }
+
+    private static func intValue(_ any: Any?) -> Int? {
+        switch any {
+        case let n as Int: n
+        case let n as NSNumber: n.intValue
+        default: nil
         }
     }
 
