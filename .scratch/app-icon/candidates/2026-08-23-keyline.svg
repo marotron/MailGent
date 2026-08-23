@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs><linearGradient id="i-g-plate" x1="0.32898992833716567" y1="0.9698463103929542" x2="0.6710100716628343" y2="0.030153689607045786"><stop offset="0" stop-color="#5C3A2E"/><stop offset="1" stop-color="#C4894A"/></linearGradient><linearGradient id="i-g-overcast" x1="0.1464466094067262" y1="0.14644660940672627" x2="0.8535533905932737" y2="0.8535533905932737"><stop offset="0" stop-color="#3A241C"/><stop offset="1" stop-color="#3A241C"/></linearGradient><linearGradient id="i-g-sparkleLg" x1="0.5" y1="1" x2="0.5" y2="0"><stop offset="0" stop-color="#4B617F"/><stop offset="1" stop-color="#7A8EAA"/></linearGradient><linearGradient id="i-g-sparkleMid" x1="0.5" y1="1" x2="0.5" y2="0"><stop offset="0" stop-color="#4B617F"/><stop offset="1" stop-color="#7A8EAA"/></linearGradient></defs>
+  <!-- Apple macOS keyline: 824/1024 tile, same as ArchMail / Design Resources grid. -->
+  <g transform="translate(100 100) scale(0.8046875)">
+  <rect width="1024" height="1024" rx="229" fill="url(#i-g-plate)"/>
+  <g transform="translate(512 512) scale(1.157) translate(-512 -518)">
+  <path fill="url(#i-g-overcast)" fill-opacity="0.57" d="M235.9,378.9 L788.1,378.9 A49.2,49.2 0 0 1 837.3,428.2 L837.3,766.3 A49.2,49.2 0 0 1 788.1,815.5 L235.9,815.5 A49.2,49.2 0 0 1 186.7,766.3 L186.7,428.2 A49.2,49.2 0 0 1 235.9,378.9 Z"/>
+  <path fill="#F7EFE0" fill-opacity="0.85" d="M512,179 L534,199 L566,222 L588,235 L632,256 L666,268 L695,276 L738,284 L780,288 L780,398 L512,598 L243,398 L243,288 L285,284 L320,278 L364,266 L394,255 L428,239 L454,224 L480,206 L511,179 Z"/>
+  <path fill="url(#i-g-sparkleLg)" d="M459.8,236.8 C471.4,366.5 471.4,366.5 585.8,380.8 C471.4,389 471.4,389 459.8,516.8 C451.4,388.4 451.4,388.4 335.8,374.8 C451.4,366 451.4,366 459.8,236.8 Z"/>
+  <path fill="url(#i-g-sparkleMid)" d="M565.5,384.5 C573.5,454.7 573.5,454.7 641.5,458.5 C573.5,467.1 573.5,467.1 565.5,538.5 C561.7,466.9 561.7,466.9 493.5,456.5 C561.7,454.5 561.7,454.5 565.5,384.5 Z"/>
+  <path fill="#FF8C82" d="M599,324.2 C606,371.2 606,371.2 655,372.2 C606.2,379.5 606.2,379.5 601,428.2 C597.8,380 597.8,380 549,378.2 C597.6,371.6 597.6,371.6 599,324.2 Z"/>
+  </g>
+  </g>
+</svg>
