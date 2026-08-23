@@ -6,6 +6,8 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
     @AppStorage(MailGentPreferences.auditMaxCountKey) private var auditMaxCount = 0
     @AppStorage(MailGentPreferences.auditMaxBytesKey) private var auditMaxBytes = 0
+    @State private var confirmClearAll = false
+    @State private var confirmClear24h = false
 
     var body: some View {
         TabView {
@@ -14,10 +16,39 @@ struct MailGentSettingsView: View {
             GrantAccessView(session: session.access)
                 .tabItem { Label("Access", systemImage: "lock.shield") }
         }
-        .frame(width: 480, height: 560)
+        .frame(width: 480, height: 600)
         .onChange(of: auditMaxAgeSeconds) { _, _ in session.agents.applyAuditRetention() }
         .onChange(of: auditMaxCount) { _, _ in session.agents.applyAuditRetention() }
         .onChange(of: auditMaxBytes) { _, _ in session.agents.applyAuditRetention() }
+        .confirmationDialog(
+            "Delete all access logs?",
+            isPresented: $confirmClearAll,
+            titleVisibility: .visible
+        ) {
+            Button("Delete all", role: .destructive) {
+                session.agents.removeAllAudit()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the full stored log (\(storedCount) entries, \(storedBytesLabel)). This cannot be undone.")
+        }
+        .confirmationDialog(
+            "Delete logs older than 24 hours?",
+            isPresented: $confirmClear24h,
+            titleVisibility: .visible
+        ) {
+            Button("Delete older than 24 hours", role: .destructive) {
+                session.agents.removeAuditOlderThan24Hours()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Keeps entries from the last 24 hours. Older rows are removed from the stored log.")
+        }
+    }
+
+    private var storedCount: Int { session.agents.auditStoredCount }
+    private var storedBytesLabel: String {
+        AccessLogFormat.bytes(session.agents.auditStoredBytes)
     }
 
     private var generalTab: some View {
@@ -32,7 +63,7 @@ struct MailGentSettingsView: View {
             }
             Section("Access log") {
                 LabeledContent("Full log") {
-                    Text("\(session.agents.auditStoredCount) logs · \(AccessLogFormat.bytes(session.agents.auditStoredBytes))")
+                    Text("\(storedCount) logs · \(storedBytesLabel)")
                         .textSelection(.enabled)
                 }
                 Picker("Delete entries older than", selection: $auditMaxAgeSeconds) {
@@ -49,9 +80,17 @@ struct MailGentSettingsView: View {
                         .foregroundStyle(.secondary)
                         .font(.callout)
                 }
-                Text("0 means no limit. Oldest entries are removed first when a limit is exceeded. The Access log window can also delete all entries or those older than 24 hours.")
+                Text("0 means no limit. Oldest entries are removed first when a limit is exceeded.")
                     .foregroundStyle(.secondary)
                     .font(.callout)
+                Button("Delete older than 24 hours") {
+                    confirmClear24h = true
+                }
+                .disabled(!session.agents.hasAuditOlderThan24Hours)
+                Button("Delete all", role: .destructive) {
+                    confirmClearAll = true
+                }
+                .disabled(storedCount == 0)
             }
         }
         .formStyle(.grouped)

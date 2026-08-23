@@ -123,6 +123,12 @@ final class AgentBridge {
         audit.applyRetention()
     }
 
+    var hasAuditOlderThan24Hours: Bool {
+        _ = auditRevision
+        let cutoff = Date().addingTimeInterval(-86_400)
+        return audit.entries().contains { $0.at < cutoff }
+    }
+
     func removeAllAudit() {
         audit.removeAll()
     }

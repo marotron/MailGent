@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MailGent — icon layer tweaker</title>
+<style>
+  :root {
+    --bg: #f4f2ee;
+    --ink: #1a1c20;
+    --muted: #6a6760;
+    --line: #ddd8cf;
+    --panel: #fffefb;
+    --stage: #e8e4dc;
+    --accent: #3d4a5c;
+    --gold: #9a7b4f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 500px at 80% -10%, #ebe6dc 0%, transparent 55%),
+      radial-gradient(700px 400px at 0% 100%, #e2dde8 0%, transparent 50%),
+      var(--bg);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 24px 12px;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  header .eyebrow {
+    color: var(--gold);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+  }
+  header h1 {
+    font-size: 1.35rem;
+    font-weight: 560;
+    letter-spacing: -0.03em;
+    margin: 0;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+    max-width: 44rem;
+    line-height: 1.4;
+  }
+  #apiStatus {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  #apiStatus.on { color: #2d6a3f; border-color: #b7d4bf; }
+  #apiStatus.off { color: #8a3b32; }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) minmax(380px, 460px);
+    min-height: 0;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .stage-col {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+    overflow: auto;
+  }
+  .stage {
+    width: min(360px, 100%);
+    aspect-ratio: 1;
+    border-radius: 28px;
+    border: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--stage);
+  }
+  .stage.dock { background: #0a0a0c; }
+  .stage.dark { background: radial-gradient(circle at 50% 40%, #2a2e38 0%, #12141a 70%); }
+  .stage.checker {
+    background-color: #ddd;
+    background-image:
+      linear-gradient(45deg, #bbb 25%, transparent 25%),
+      linear-gradient(-45deg, #bbb 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #bbb 75%),
+      linear-gradient(-45deg, transparent 75%, #bbb 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  }
+  .stage svg {
+    width: 78%;
+    height: 78%;
+    filter: drop-shadow(0 18px 32px rgba(0,0,0,0.22));
+  }
+  .stage.mono svg { filter: grayscale(1) drop-shadow(0 18px 32px rgba(0,0,0,0.22)); }
+  .stage.template svg { filter: none; width: 70%; height: 70%; }
+  .sizes {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+  }
+  .sizes figure { margin: 0; text-align: center; }
+  .sizes .mini {
+    width: var(--s);
+    height: var(--s);
+    border-radius: 22%;
+    overflow: hidden;
+    background: var(--stage);
+  }
+  .sizes .mini.template { border-radius: 0; background: transparent; }
+  .sizes .mini svg { width: 100%; height: 100%; display: block; }
+  .sizes.mono .mini svg { filter: grayscale(1); }
+  .sizes figcaption {
+    font-size: 0.68rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    margin-top: 4px;
+  }
+  .menubars {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .menubar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    letter-spacing: -0.01em;
+  }
+  .menubar.light { background: #e6e6e8; color: #1d1d1f; }
+  .menubar.dark { background: #2c2c2e; color: #f5f5f7; }
+  .menubar .apple { font-size: 13px; }
+  .menubar .name { opacity: 0.85; font-weight: 500; }
+  .menubar .clock { margin-left: auto; font-variant-numeric: tabular-nums; opacity: 0.7; }
+  .menubar .glyph {
+    width: var(--mb, 18px);
+    height: var(--mb, 18px);
+    display: flex;
+  }
+  .menubar .glyph svg { width: 100%; height: 100%; display: block; }
+  .menubar.dark .glyph svg { filter: none; }
+  .menubar.dark.mb-flip .mb-template { filter: invert(1); }
+  .menubar.dark.mb-flip .mb-template .mb-fx-keep { filter: invert(1); }
+  .menubar.dark.mb-flip .mb-fx .mb-fx-layer:not(.mb-fx-keep) { filter: invert(1); }
+  #mbStates, #mbTune, .mb-flip-row { display: none; }
+  .mb-flip-row {
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    width: min(440px, 100%);
+    cursor: pointer;
+  }
+  body.template-on .mb-flip-row { display: flex; }
+  body.template-on #mbStates { display: flex; }
+  body.template-on.pulse-on #mbTune {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  #mbTune .globals { justify-content: flex-start; }
+  .pulse-head, .pulse-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .pulse-title {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .pulse-step {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: #fbfaf7;
+  }
+  .pulse-step-head {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+  }
+  .pulse-step-head .n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #f7f4ee;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .pulse-step-head label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    min-width: 0;
+    flex: 1;
+  }
+  .pulse-step-head label.keep-dark {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .pulse-step-head input[type="range"] { flex: 1; min-width: 64px; }
+  .pulse-step-head .swatch { width: 28px; height: 22px; flex-shrink: 0; }
+  .pulse-ops { display: flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
+  .pulse-ops button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+  }
+  .pulse-ops button:disabled { opacity: 0.35; cursor: default; }
+  .pulse-ops button[data-act="del-step"]:hover:not(:disabled) { color: #8a3b32; border-color: #c4a0a0; }
+  .pulse-ops svg { display: block; }
+  .pulse-layers {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px 6px;
+  }
+  .pulse-layers label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    font-size: 0.72rem;
+    color: var(--ink);
+  }
+  .pulse-layers .nm {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar, .globals, .agentbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+  }
+  button, .file-btn {
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover { border-color: #c4bdb0; }
+  button.primary {
+    background: var(--accent);
+    color: #f7f4ee;
+    border-color: var(--accent);
+  }
+  button.active { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .globals label, .agentbar label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .globals input[type="range"] { width: 140px; }
+  #slug {
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    width: 140px;
+  }
+  .hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: center;
+    max-width: 32rem;
+    line-height: 1.4;
+  }
+  .layers {
+    border-left: 1px solid var(--line);
+    background: var(--panel);
+    overflow: auto;
+    padding: 16px 16px 32px;
+  }
+  .layers h2, .gallery-wrap h2 {
+    margin: 0 0 4px;
+    font-size: 0.92rem;
+    font-weight: 560;
+  }
+  .layers .sub, .gallery-wrap .sub {
+    margin: 0 0 12px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px 12px;
+    margin-bottom: 10px;
+    background: #fbfaf7;
+  }
+  .card.off { opacity: 0.55; }
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .card-head .name { font-size: 0.88rem; font-weight: 560; flex: 1; }
+  .card-head .tag {
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 0.78rem;
+  }
+  .row label { color: var(--muted); }
+  .swatch {
+    width: 28px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+  .hex {
+    width: 78px;
+    font: inherit;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    padding: 3px 5px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+  }
+  .opnum {
+    width: 4.5rem;
+    font: inherit;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    padding: 3px 6px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  input[type="range"] { accent-color: var(--accent); }
+  select {
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 3px 6px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #fff;
+  }
+  .card.solid .row-grad { display: none; }
+  .card.gradient .row-solid { display: none; }
+  .card.match .row-fill { opacity: 0.4; pointer-events: none; }
+  .row-mbink { display: none; }
+  body.template-on .row-mbink { display: flex; }
+  body.template-on .row-fill { display: none; }
+  .card.match .row-mbink { opacity: 0.4; pointer-events: none; }
+  .ink-seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .ink-seg label {
+    margin: 0;
+    padding: 2px;
+    cursor: pointer;
+    line-height: 0;
+  }
+  .ink-seg input { position: absolute; width: 0; opacity: 0; }
+  .ink-chip {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.22);
+    box-sizing: border-box;
+  }
+  .ink-seg label:has(input:checked) .ink-chip {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .gallery-wrap {
+    border-top: 1px solid var(--line);
+    padding: 16px 24px 28px;
+    background: var(--panel);
+  }
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .gcard {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    background: #fbfaf7;
+    cursor: pointer;
+    text-align: center;
+  }
+  .gcard.picked { outline: 2px solid var(--accent); }
+  .gcard img, .gcard .thumb {
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 6px;
+    display: block;
+  }
+  .gcard .thumb svg { width: 96px; height: 96px; }
+  .gcard .slug {
+    font-size: 0.72rem;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <p class="eyebrow">Sketch · candidates only</p>
+    <h1>Icon layer tweaker</h1>
+  </div>
+  <p>Dark V is the gap between bowl and field. <strong>Menu bar</strong> is a grayscale glyph (black → gray → white per layer, holes punch through, no plate). Save a slug, then choose one for the app — that writes a pack + agent brief, it does not compile AppIcon by itself.</p>
+  <span id="apiStatus" class="off">API offline</span>
+</header>
+<main>
+  <section class="stage-col">
+    <div class="toolbar" id="appearances">
+      <button type="button" data-app="color" class="active">Color</button>
+      <button type="button" data-app="mono">Mono</button>
+      <button type="button" data-app="template">Menu bar</button>
+    </div>
+    <div class="toolbar" id="stages">
+      <button type="button" data-stage="linen" class="active">Linen</button>
+      <button type="button" data-stage="dark">Dark</button>
+      <button type="button" data-stage="dock">Dock</button>
+      <button type="button" data-stage="checker">Checker</button>
+    </div>
+    <div class="stage linen" id="stage"></div>
+    <div class="sizes" id="sizes"></div>
+    <div class="menubars" id="menubars" hidden></div>
+    <label class="mb-flip-row">
+      <input type="checkbox" id="invertDark" />
+      Flip colors on dark menu bar
+    </label>
+    <div class="toolbar" id="mbStates">
+      <button type="button" data-pulse="idle" class="active">Idle</button>
+      <button type="button" data-pulse="success">Success</button>
+      <button type="button" data-pulse="error">Error</button>
+      <button type="button" id="replayPulse">Replay</button>
+    </div>
+    <div class="globals">
+      <label>Glyph scale
+        <input id="scale" type="range" min="0.85" max="1.35" step="0.001" />
+        <span id="scaleVal"></span>
+      </label>
+    </div>
+    <div class="agentbar">
+      <input id="slug" placeholder="slug (dusk)" spellcheck="false" />
+      <button type="button" class="primary" id="saveCand">Save version</button>
+      <button type="button" id="loadBtn">Load version</button>
+      <input type="file" id="loadFile" accept="application/json,.json" hidden />
+      <button type="button" id="genPalettes">Generate palettes</button>
+      <button type="button" id="pickShip">Choose for the app</button>
+      <button type="button" id="exportPack">Export pack</button>
+      <button type="button" id="copyBrief">Copy agent brief</button>
+    </div>
+    <div class="toolbar">
+      <button type="button" id="dlSvg">Download SVG</button>
+      <button type="button" id="dlPng">Download PNG 1024</button>
+      <button type="button" id="copyJson">Copy JSON</button>
+      <button type="button" id="reset">Reset after-tweaks</button>
+    </div>
+    <p class="hint" id="hint">Menu bar Idle: holes show the bar. Flip colors on dark menu bar inverts the gray ramp on the dark mock (mixed ink stays as painted until you check it). Success / Error: a timeline of steps. Each step has one color; Keep on dark leaves that fill uninverted (green stays green). Check which layers it tints, then it holds. Fade after the last. Add step copies the previous. Live app still uses SF Symbol until you ship this mark.</p>
+  </section>
+  <section class="layers">
+    <div id="layersPane">
+      <h2>Layers · back → front</h2>
+      <p class="sub">↑ sends back, ↓ brings forward. Paint order is this list. Menu bar uses the 5-step gray ramp per layer (Color fill ignored). Sparkle holes still punch through unless you uncheck match plate. Uncheck a layer to drop it.</p>
+      <div id="layerList"></div>
+    </div>
+    <div id="mbTune" hidden></div>
+  </section>
+</main>
+<section class="gallery-wrap">
+  <h2>Candidates</h2>
+  <p class="sub">Save version writes a <code>.json</code> you can Load later (and copies into candidates if the API is up). Click a card to load it.</p>
+  <div class="gallery" id="gallery"></div>
+</section>
+<script type="module">
+import {
+  defaults, slimState, hydrate, buildSvg, findLayer, PALETTES,
+  defaultMenuBar, pulseAt, pulseDuration, pulseStepOverlays,
+  packVersion, unpackVersion, candidateId,
+  invertDarkOf, menuBarInkOf, MENU_BAR_INKS, moveLayer,
+  stepKeep,
+} from "./engine.mjs?v=14";
+
+const STORE = "mailgent-icon-tweaker-v1";
+const API = "";
+
+let state = load();
+let appearance = "color";
+let mbPulse = "idle";
+let pulseOverlays = {};
+let pulseAnim = 0;
+let pickedSlug = null;
+let apiOn = false;
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE);
+    if (!raw) return defaults();
+    return hydrate(JSON.parse(raw));
+  } catch {
+    return defaults();
+  }
+}
+
+function persist() {
+  localStorage.setItem(STORE, JSON.stringify(slimState(state)));
+}
+
+function hexOk(v) { return /^#[0-9a-fA-F]{6}$/.test(v); }
+
+function currentSvg(idPrefix) {
+  const template = appearance === "template";
+  return buildSvg(state, {
+    appearance: template ? "template" : "color",
+    idPrefix,
+    overlays: template ? pulseOverlays : undefined,
+  });
+}
+
+function paint() {
+  document.body.classList.toggle("template-on", appearance === "template");
+  document.body.classList.toggle("pulse-on", appearance === "template" && !!pulseKind());
+  const stageSvg = currentSvg("st");
+  const stage = document.getElementById("stage");
+  stage.classList.toggle("mono", appearance === "mono");
+  stage.classList.toggle("template", appearance === "template");
+  stage.innerHTML = stageSvg;
+  const sizes = document.getElementById("sizes");
+  sizes.classList.toggle("mono", appearance === "mono");
+  const miniClass = appearance === "template" ? "mini template" : "mini";
+  sizes.innerHTML = [128, 64, 32].map((n) =>
+    `<figure><div class="${miniClass}" style="--s:${n}px">${currentSvg("sz" + n)}</div><figcaption>${n}</figcaption></figure>`
+  ).join("");
+  document.getElementById("scale").value = state.scale;
+  document.getElementById("scaleVal").textContent = state.scale.toFixed(3);
+  paintMenuBars();
+}
+
+function paintMenuBars() {
+  const wrap = document.getElementById("menubars");
+  const flipBox = document.getElementById("invertDark");
+  if (appearance !== "template") {
+    wrap.hidden = true;
+    wrap.innerHTML = "";
+    return;
+  }
+  wrap.hidden = false;
+  const flip = invertDarkOf(state);
+  if (flipBox) flipBox.checked = flip;
+  wrap.innerHTML = ["light", "dark"].map((mode) => `
+    <div class="menubar ${mode}${mode === "dark" && flip ? " mb-flip" : ""}">
+      <span class="apple"></span>
+      <div class="glyph" style="--mb:18px">${currentSvg("mb" + mode + "18")}</div>
+      <span class="name">MailGent</span>
+      <div class="glyph" style="--mb:22px">${currentSvg("mb" + mode + "22")}</div>
+      <span class="clock">${mode === "light" ? "light bar · 18 / 22" : (flip ? "dark bar · flipped" : "dark bar · as painted")}</span>
+    </div>
+  `).join("");
+}
+
+function buildPanel() {
+  const root = document.getElementById("layerList");
+  const last = state.layers.length - 1;
+  root.innerHTML = state.layers.map((l, i) => {
+    const ink = menuBarInkOf(l);
+    const mbInk = l.id === "plate" ? "" : `
+      <div class="row row-mbink">
+        <label>Menu bar</label>
+        <span class="ink-seg" role="radiogroup" aria-label="Menu bar ink">
+          ${MENU_BAR_INKS.map((step) => `
+          <label title="${step.label}">
+            <input type="radio" name="mbink-${l.id}" data-k="menuBarInk" value="${step.id}" ${ink === step.id ? "checked" : ""} />
+            <span class="ink-chip" style="background:${step.hex}"></span>
+          </label>`).join("")}
+        </span>
+      </div>`;
+    return `
+    <article class="card ${l.fillMode} ${l.visible ? "" : "off"} ${l.matchPlate ? "match" : ""}" data-id="${l.id}">
+      <div class="card-head">
+        <input type="checkbox" data-k="visible" ${l.visible ? "checked" : ""} />
+        <span class="name">${l.name}</span>
+        <span class="tag">${l.tag}</span>
+        <div class="pulse-ops">
+          <button type="button" data-act="back" aria-label="Send backward" title="Send backward" ${i === 0 ? "disabled" : ""}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 7.6 L6 3.8 L9.8 7.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" data-act="front" aria-label="Bring forward" title="Bring forward" ${i === last ? "disabled" : ""}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 4.4 L6 8.2 L9.8 4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      ${l.tag === "hole" ? `<div class="row"><label><input type="checkbox" data-k="matchPlate" ${l.matchPlate ? "checked" : ""} /> match plate (hole)</label></div>` : ""}
+      <div class="row row-fill">
+        <label>Fill</label>
+        <select data-k="fillMode">
+          <option value="solid" ${l.fillMode === "solid" ? "selected" : ""}>solid</option>
+          <option value="gradient" ${l.fillMode === "gradient" ? "selected" : ""}>gradient</option>
+        </select>
+        <span class="row-solid">
+          <input class="swatch" type="color" data-k="c0" value="${l.c0}" />
+          <input class="hex" data-k="c0" value="${l.c0}" maxlength="7" />
+        </span>
+        <span class="row-grad">
+          <input class="swatch" type="color" data-k="c0" value="${l.c0}" />
+          <input class="hex" data-k="c0" value="${l.c0}" maxlength="7" />
+          →
+          <input class="swatch" type="color" data-k="c1" value="${l.c1}" />
+          <input class="hex" data-k="c1" value="${l.c1}" maxlength="7" />
+          <input type="range" min="0" max="360" step="1" data-k="angle" value="${l.angle}" style="width:90px" />
+          <span data-angle>${l.angle}°</span>
+        </span>
+      </div>
+      ${mbInk}
+      <div class="row">
+        <label>Opacity</label>
+        <input type="range" min="0" max="1" step="0.01" data-k="opacity" value="${l.opacity}" style="flex:1" />
+        <input class="opnum" type="number" min="0" max="1" step="0.01" data-k="opacity" value="${l.opacity}" />
+      </div>
+    </article>`;
+  }).join("");
+}
+
+function layerOf(el) {
+  return state.layers.find((l) => l.id === el.closest(".card").dataset.id);
+}
+
+function syncCard(card, l) {
+  card.classList.toggle("off", !l.visible);
+  card.classList.toggle("match", !!l.matchPlate);
+  card.classList.remove("solid", "gradient");
+  card.classList.add(l.fillMode);
+  card.querySelectorAll("[data-angle]").forEach((n) => { n.textContent = `${l.angle}°`; });
+}
+
+function onLayerEdit(e) {
+  const t = e.target;
+  const k = t.dataset.k;
+  if (!k) return;
+  const l = layerOf(t);
+  if (k === "visible" || k === "matchPlate") l[k] = t.checked;
+  else if (k === "fillMode") l.fillMode = t.value;
+  else if (k === "menuBarInk") l.menuBarInk = menuBarInkOf({ menuBarInk: t.value });
+  else if (k === "opacity") l.opacity = Math.min(1, Math.max(0, Number(t.value)));
+  else if (k === "angle") l.angle = Number(t.value);
+  else if (k === "c0" || k === "c1") {
+    const v = t.value;
+    if (t.type === "color" || hexOk(v)) {
+      l[k] = v.toUpperCase();
+      if (l.matchPlate && (k === "c0" || k === "c1")) l.matchPlate = false;
+    } else return;
+  }
+  const card = t.closest(".card");
+  if (k === "c0" || k === "c1") {
+    card.querySelectorAll(`[data-k="${k}"]`).forEach((n) => { n.value = l[k]; });
+  }
+  if (k === "opacity") {
+    card.querySelectorAll('[data-k="opacity"]').forEach((n) => { n.value = l.opacity; });
+  }
+  if (k === "matchPlate" && l.matchPlate) {
+    const p = findLayer(state, "plate");
+    l.fillMode = p.fillMode;
+    l.c0 = p.c0;
+    l.c1 = p.c1;
+    l.angle = p.angle;
+  }
+  syncCard(card, l);
+  persist();
+  paint();
+}
+
+document.getElementById("layerList").addEventListener("input", onLayerEdit);
+document.getElementById("layerList").addEventListener("change", onLayerEdit);
+document.getElementById("layerList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const card = btn.closest(".card");
+  if (!card) return;
+  const delta = btn.dataset.act === "back" ? -1 : btn.dataset.act === "front" ? 1 : 0;
+  if (!delta) return;
+  moveLayer(state, card.dataset.id, delta);
+  persist();
+  buildPanel();
+  if (pulseKind()) buildPulseEditor();
+  paint();
+});
+
+document.getElementById("scale").addEventListener("input", (e) => {
+  state.scale = Number(e.target.value);
+  persist();
+  paint();
+});
+
+document.getElementById("invertDark").addEventListener("change", (e) => {
+  if (!state.menuBar) state.menuBar = defaultMenuBar();
+  state.menuBar.invertDark = !!e.target.checked;
+  persist();
+  paint();
+});
+
+document.getElementById("stages").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const stage = document.getElementById("stage");
+  stage.classList.remove("linen", "dark", "dock", "checker");
+  stage.classList.add(btn.dataset.stage);
+  document.querySelectorAll("#stages button").forEach((b) => b.classList.toggle("active", b === btn));
+});
+
+document.getElementById("appearances").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  appearance = btn.dataset.app;
+  document.querySelectorAll("#appearances button").forEach((b) => b.classList.toggle("active", b === btn));
+  if (appearance === "template" && mbPulse !== "idle") playPulse(mbPulse);
+  else paint();
+});
+
+function zeroPulse() {
+  pulseOverlays = {};
+}
+
+function pulseKind() {
+  return mbPulse === "success" || mbPulse === "error" ? mbPulse : null;
+}
+
+function stepLayerIds(step) {
+  return (step?.layers || []).map((l) => typeof l === "string" ? l : l && l.id).filter(Boolean);
+}
+
+function stepFill(step, kind) {
+  if (hexOk(step?.fill)) return step.fill.toUpperCase();
+  const hit = (step?.layers || []).find((l) => l && hexOk(l.fill));
+  if (hit) return hit.fill.toUpperCase();
+  return kind === "error" ? "#FF9F0A" : "#30D158";
+}
+
+function pulseSpec(kind) {
+  if (!state.menuBar) state.menuBar = defaultMenuBar();
+  if (!state.menuBar[kind] || !Array.isArray(state.menuBar[kind].steps)) {
+    state.menuBar[kind] = defaultMenuBar()[kind];
+  }
+  const spec = state.menuBar[kind];
+  spec.steps = spec.steps.map((s) => ({
+    holdMs: s.holdMs,
+    fill: stepFill(s, kind),
+    layers: stepLayerIds(s),
+    keep: stepKeep(s),
+  }));
+  return spec;
+}
+
+function previewStep(si) {
+  const kind = pulseKind();
+  if (!kind) return;
+  cancelAnimationFrame(pulseAnim);
+  const step = pulseSpec(kind).steps[si];
+  pulseOverlays = step ? pulseStepOverlays(step, 1) : {};
+  paint();
+}
+
+function playPulse(kind) {
+  const changed = mbPulse !== kind;
+  mbPulse = kind;
+  document.querySelectorAll("#mbStates [data-pulse]").forEach((b) => b.classList.toggle("active", b.dataset.pulse === kind));
+  if (changed) buildPulseEditor();
+  cancelAnimationFrame(pulseAnim);
+  if (kind === "idle") {
+    zeroPulse();
+    paint();
+    return;
+  }
+  const spec = pulseSpec(kind);
+  const t0 = performance.now();
+  const dur = pulseDuration(spec);
+  const tick = (now) => {
+    pulseOverlays = pulseAt(now - t0, spec);
+    paint();
+    if (now - t0 < dur) pulseAnim = requestAnimationFrame(tick);
+    else {
+      zeroPulse();
+      paint();
+    }
+  };
+  pulseAnim = requestAnimationFrame(tick);
+}
+
+document.getElementById("mbStates").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  if (btn.id === "replayPulse") {
+    playPulse(mbPulse === "idle" ? "success" : mbPulse);
+    return;
+  }
+  if (btn.dataset.pulse) playPulse(btn.dataset.pulse);
+});
+
+function updatePulseTotal() {
+  const kind = pulseKind();
+  const el = document.querySelector("#mbTune .pulse-title");
+  if (!el || !kind) return;
+  const label = kind === "error" ? "Error" : "Success";
+  el.textContent = `${label} timeline · ${pulseDuration(pulseSpec(kind))} ms`;
+}
+
+function buildPulseEditor() {
+  const root = document.getElementById("mbTune");
+  const kind = pulseKind();
+  if (!kind) {
+    root.hidden = true;
+    root.innerHTML = "";
+    return;
+  }
+  const spec = pulseSpec(kind);
+  const layers = state.layers.filter((l) => l.id !== "plate");
+  const label = kind === "error" ? "Error" : "Success";
+  root.hidden = false;
+  root.innerHTML = `
+    <div class="pulse-head">
+      <span class="pulse-title">${label} timeline · ${pulseDuration(spec)} ms</span>
+      <button type="button" data-act="add-step">Add step</button>
+    </div>
+    ${spec.steps.map((step, si) => {
+      const on = new Set(stepLayerIds(step));
+      const fill = stepFill(step, kind);
+      return `
+        <article class="pulse-step" data-si="${si}">
+          <div class="pulse-step-head">
+            <span class="n" aria-label="Step ${si + 1}">${si + 1}</span>
+            <input class="swatch" type="color" data-k="fill" value="${fill}" aria-label="Color" title="Color" />
+            <label class="keep-dark" title="Leave this fill uninverted on a dark menu bar">
+              <input type="checkbox" data-k="keep" ${stepKeep(step) ? "checked" : ""} />
+              Keep on dark
+            </label>
+            <label>Hold
+              <input data-k="holdMs" type="range" min="0" max="1200" step="20" value="${step.holdMs}" />
+              <span data-hold-val>${step.holdMs}</span>
+            </label>
+            <div class="pulse-ops">
+              <button type="button" data-act="up" aria-label="Move up" title="Move up" ${si === 0 ? "disabled" : ""}>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 7.6 L6 3.8 L9.8 7.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button type="button" data-act="down" aria-label="Move down" title="Move down" ${si === spec.steps.length - 1 ? "disabled" : ""}>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 4.4 L6 8.2 L9.8 4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button type="button" data-act="del-step" aria-label="Remove step" title="Remove" ${spec.steps.length <= 1 ? "disabled" : ""}>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="pulse-layers">
+            ${layers.map((l) => `<label title="${l.name}">
+                <input type="checkbox" data-layer="${l.id}" ${on.has(l.id) ? "checked" : ""} />
+                <span class="nm">${l.name}</span>
+              </label>`).join("")}
+          </div>
+        </article>`;
+    }).join("")}
+    <div class="pulse-foot globals">
+      <label>Fade ms
+        <input data-k="fadeMs" type="range" min="0" max="1200" step="20" value="${spec.fadeMs}" />
+        <span data-fade-val>${spec.fadeMs}</span>
+      </label>
+    </div>
+  `;
+}
+
+document.getElementById("mbTune").addEventListener("input", (e) => {
+  const kind = pulseKind();
+  if (!kind) return;
+  const spec = pulseSpec(kind);
+  const t = e.target;
+  if (t.dataset.k === "fadeMs") {
+    spec.fadeMs = Number(t.value);
+    const val = t.parentElement.querySelector("[data-fade-val]");
+    if (val) val.textContent = spec.fadeMs;
+    persist();
+    updatePulseTotal();
+    return;
+  }
+  const article = t.closest(".pulse-step");
+  if (!article) return;
+  const si = Number(article.dataset.si);
+  const step = spec.steps[si];
+  if (!step) return;
+  if (t.dataset.k === "holdMs") {
+    step.holdMs = Number(t.value);
+    const val = article.querySelector("[data-hold-val]");
+    if (val) val.textContent = step.holdMs;
+  } else if (t.dataset.k === "fill") {
+    if (!hexOk(t.value)) return;
+    step.fill = t.value.toUpperCase();
+  } else if (t.dataset.k === "keep") {
+    step.keep = t.checked;
+  } else if (t.dataset.layer) {
+    const ids = stepLayerIds(step);
+    if (t.checked) {
+      if (!ids.includes(t.dataset.layer)) step.layers = [...ids, t.dataset.layer];
+    } else {
+      step.layers = ids.filter((id) => id !== t.dataset.layer);
+    }
+  } else return;
+  persist();
+  updatePulseTotal();
+  previewStep(si);
+});
+
+document.getElementById("mbTune").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn || !btn.dataset.act) return;
+  const kind = pulseKind();
+  if (!kind) return;
+  const spec = pulseSpec(kind);
+  const article = btn.closest(".pulse-step");
+  const si = article ? Number(article.dataset.si) : -1;
+  if (btn.dataset.act === "add-step") {
+    const prev = spec.steps[spec.steps.length - 1];
+    spec.steps.push({
+      holdMs: prev?.holdMs ?? 200,
+      fill: stepFill(prev, kind),
+      layers: stepLayerIds(prev),
+      keep: stepKeep(prev),
+    });
+  } else if (btn.dataset.act === "del-step" && spec.steps.length > 1 && si >= 0) {
+    spec.steps.splice(si, 1);
+  } else if (btn.dataset.act === "up" && si > 0) {
+    [spec.steps[si - 1], spec.steps[si]] = [spec.steps[si], spec.steps[si - 1]];
+  } else if (btn.dataset.act === "down" && si >= 0 && si < spec.steps.length - 1) {
+    [spec.steps[si], spec.steps[si + 1]] = [spec.steps[si + 1], spec.steps[si]];
+  } else return;
+  persist();
+  buildPulseEditor();
+  playPulse(kind);
+});
+
+function download(name, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function slugOrPrompt() {
+  const v = document.getElementById("slug").value.trim();
+  return v || "tweaked";
+}
+
+document.getElementById("dlSvg").addEventListener("click", () => {
+  const day = new Date().toISOString().slice(0, 10);
+  const suffix = appearance === "template" ? "-template" : "";
+  download(`${day}-${slugOrPrompt()}${suffix}.svg`, new Blob([currentSvg("dl")], { type: "image/svg+xml" }));
+});
+
+document.getElementById("dlPng").addEventListener("click", () => {
+  const svg = currentSvg("png");
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = 1024;
+    c.height = 1024;
+    c.getContext("2d").drawImage(img, 0, 0);
+    c.toBlob((png) => {
+      const day = new Date().toISOString().slice(0, 10);
+      const suffix = appearance === "template" ? "-template" : "";
+      download(`${day}-${slugOrPrompt()}${suffix}.png`, png);
+      URL.revokeObjectURL(url);
+    });
+  };
+  img.src = url;
+});
+
+document.getElementById("copyJson").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(JSON.stringify(slimState(state), null, 2));
+  flash("copyJson", "Copied");
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  localStorage.removeItem(STORE);
+  state = defaults();
+  mbPulse = "idle";
+  zeroPulse();
+  buildPanel();
+  buildPulseEditor();
+  paint();
+});
+
+function flash(id, msg) {
+  const btn = document.getElementById(id);
+  const old = btn.textContent;
+  btn.textContent = msg;
+  setTimeout(() => { btn.textContent = old; }, 1400);
+}
+
+async function api(path, opts) {
+  const r = await fetch(API + path, opts);
+  if (r.status === 204) return null;
+  const ct = r.headers.get("content-type") || "";
+  if (ct.includes("application/zip")) return r.blob();
+  if (ct.includes("markdown") || ct.includes("text/plain")) return r.text();
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+
+function setApi(on) {
+  apiOn = on;
+  const el = document.getElementById("apiStatus");
+  el.className = on ? "on" : "off";
+  el.textContent = on ? "API connected" : "API offline";
+}
+
+async function refreshGallery() {
+  if (!apiOn) return;
+  const { candidates } = await api("/api/candidates");
+  const root = document.getElementById("gallery");
+  if (!candidates.length) {
+    root.innerHTML = `<p class="sub">No saved candidates yet.</p>`;
+    return;
+  }
+  root.innerHTML = candidates.map((c) => `
+    <article class="gcard ${c.slug === pickedSlug ? "picked" : ""}" data-slug="${c.slug}">
+      ${c.pngUrl ? `<img src="${c.pngUrl}" width="96" height="96" alt="" />` : `<div class="thumb"></div>`}
+      <div class="slug">${c.slug}</div>
+    </article>
+  `).join("");
+}
+
+function applyLoaded(loaded, slugHint) {
+  state = loaded.state;
+  const raw = loaded.slug || slugHint || "";
+  const slug = String(raw).replace(/^\d{4}-\d{2}-\d{2}-/, "");
+  if (slug) document.getElementById("slug").value = slug;
+  persist();
+  buildPanel();
+  buildPulseEditor();
+  paint();
+}
+
+document.getElementById("gallery").addEventListener("click", async (e) => {
+  const card = e.target.closest(".gcard");
+  if (!card) return;
+  const data = await api("/api/candidates/" + card.dataset.slug);
+  applyLoaded({ state: hydrate(data.state), slug: card.dataset.slug });
+  document.querySelectorAll(".gcard").forEach((n) => n.classList.toggle("picked", n === card));
+});
+
+async function needApi() {
+  if (apiOn) return true;
+  alert("Start the API first:\nnode .scratch/app-icon/api.mjs\nthen open http://127.0.0.1:8765/");
+  return false;
+}
+
+document.getElementById("saveCand").addEventListener("click", async () => {
+  const slug = slugOrPrompt();
+  const version = packVersion({ slug, state });
+  const id = candidateId(slug);
+  download(`${id}.json`, new Blob([JSON.stringify(version, null, 2)], { type: "application/json" }));
+  if (apiOn) {
+    try {
+      const saved = await api("/api/save", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug, state: slimState(state) }),
+      });
+      document.getElementById("slug").value = saved.slug.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+      await refreshGallery();
+      flash("saveCand", "Saved " + saved.slug);
+      return;
+    } catch { /* file already downloaded */ }
+  }
+  flash("saveCand", "File " + id + ".json");
+});
+
+document.getElementById("loadBtn").addEventListener("click", () => {
+  document.getElementById("loadFile").click();
+});
+
+document.getElementById("loadFile").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    applyLoaded(unpackVersion(await file.text()));
+    flash("loadBtn", "Loaded");
+  } catch (err) {
+    alert(err.message || "Could not load that file");
+  }
+});
+
+document.getElementById("genPalettes").addEventListener("click", async () => {
+  if (!(await needApi())) return;
+  const out = await api("/api/variants", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ base: slimState(state), palettes: Object.keys(PALETTES) }),
+  });
+  flash("genPalettes", out.count + " variants");
+  await refreshGallery();
+});
+
+document.getElementById("pickShip").addEventListener("click", async () => {
+  if (!(await needApi())) return;
+  const saved = await api("/api/save", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slug: slugOrPrompt(), state: slimState(state) }),
+  });
+  const picked = await api("/api/pick", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slug: saved.slug, intent: "ship" }),
+  });
+  pickedSlug = saved.slug;
+  await navigator.clipboard.writeText(picked.brief);
+  flash("pickShip", "Picked · brief copied");
+  await refreshGallery();
+});
+
+document.getElementById("exportPack").addEventListener("click", async () => {
+  if (!(await needApi())) return;
+  const saved = await api("/api/save", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slug: slugOrPrompt(), state: slimState(state) }),
+  });
+  const blob = await api("/api/pack/" + saved.slug);
+  download(saved.slug + "-pack.zip", blob);
+});
+
+document.getElementById("copyBrief").addEventListener("click", async () => {
+  if (!(await needApi())) return;
+  const slug = document.getElementById("slug").value.trim();
+  const list = await api("/api/candidates");
+  const hit = list.candidates.find((c) => c.slug === slug || c.slug.endsWith("-" + slug))
+    || list.candidates[0];
+  if (!hit) return alert("Save a candidate first.");
+  const brief = await api("/api/ship/" + hit.slug);
+  await navigator.clipboard.writeText(brief);
+  flash("copyBrief", "Copied");
+});
+
+async function boot() {
+  try {
+    await api("/api/health");
+    setApi(true);
+    const pick = await api("/api/pick");
+    if (pick?.slug) pickedSlug = pick.slug;
+    const params = new URLSearchParams(location.search);
+    const loadSlug = params.get("load");
+    if (loadSlug) {
+      const data = await api("/api/candidates/" + loadSlug);
+      state = hydrate(data.state);
+      document.getElementById("slug").value = loadSlug.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+      persist();
+    }
+    await refreshGallery();
+  } catch {
+    setApi(false);
+  }
+  buildPanel();
+  buildPulseEditor();
+  paint();
+}
+
+boot();
+</script>
+</body>
+</html>

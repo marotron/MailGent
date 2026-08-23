@@ -1,0 +1,14 @@
+---
+description: Candidate-first app icon / logo workflow. Never stamp into AppIcon until the user ships a named candidate.
+globs: Design/IconPack/**,Scripts/AppIcon/**,.scratch/app-icon/**,MailGent/Resources/AppIcon.icon/**,MailGent/Assets.xcassets/AppIcon.appiconset/**
+alwaysApply: false
+---
+
+# App icon
+
+Follow `docs/agents/app-icon.md` (skill `app-icon`).
+
+- Sketch in `.scratch/app-icon/candidates/`. Show PNG. Do not compile.
+- Do not run `stamp_from_png.swift` on a full ictool/LC icon PNG (double 824 keyline).
+- Do not use Icon Composer MCP `export_preview`.
+- Sparkles are holes unless the candidate says discs.

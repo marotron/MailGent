@@ -663,6 +663,8 @@ private final class SQLiteDB {
             handle = nil
             throw MailboxIndexError.unreadable
         }
+        sqlite3_busy_timeout(handle, 5_000)
+        try execute("PRAGMA journal_mode=WAL")
     }
 
     deinit {

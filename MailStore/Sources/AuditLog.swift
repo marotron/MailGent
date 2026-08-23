@@ -1,6 +1,6 @@
 import Foundation
 
-public enum AuditKind: String, Codable, Equatable, Sendable {
+public enum AuditKind: String, Codable, Equatable, Hashable, Sendable {
     case pair
     case search
     case list

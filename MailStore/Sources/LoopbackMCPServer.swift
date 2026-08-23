@@ -53,7 +53,7 @@ public struct LoopbackMCPServer {
         self.sourceController = sourceController
     }
 
-    public func handle(_ request: LoopbackMCPRequest) -> LoopbackMCPResponse {
+    public func handle(_ request: LoopbackMCPRequest) async -> LoopbackMCPResponse {
         let path = request.path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? request.path
         guard path == "/mcp" else {
             return LoopbackMCPResponse(status: 404, body: #"{"error":"not_found"}"#)
@@ -117,7 +117,7 @@ public struct LoopbackMCPServer {
                 }
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
                 do {
-                    let text = try callTool(name: name, arguments: arguments, credential: credential)
+                    let text = try await callTool(name: name, arguments: arguments, credential: credential)
                     if let kind = AuditKind(toolName: name) {
                         gateway.audit?.updateLast(
                             kind: kind,
@@ -165,7 +165,7 @@ public struct LoopbackMCPServer {
         name: String,
         arguments: [String: Any],
         credential: String?
-    ) throws -> String {
+    ) async throws -> String {
         switch name {
         case "search":
             let query = arguments["query"] as? String ?? ""
@@ -245,22 +245,22 @@ public struct LoopbackMCPServer {
         case "status":
             let freshness = try gateway.freshness(credential: credential)
             var extra: [String: Any] = [:]
-            if let snap = sourceController?.snapshot() {
+            if let snap = await sourceController?.snapshot() {
                 extra["source"] = snap.source.rawValue
                 extra["agentMayChangeSource"] = snap.agentMayChangeSource
             }
             return try jsonString(AuditJSON.freshness(freshness, extra: extra))
         case "set_source":
-            return try setSource(arguments: arguments, credential: credential)
+            return try await setSource(arguments: arguments, credential: credential)
         case "update":
-            let outcome = try gateway.updateIndex(credential: credential, updater: indexUpdater)
+            let outcome = try await gateway.updateIndex(credential: credential, updater: indexUpdater)
             return try jsonString(AuditJSON.update(outcome))
         default:
             throw CallError.unknownTool
         }
     }
 
-    private func setSource(arguments: [String: Any], credential: String?) throws -> String {
+    private func setSource(arguments: [String: Any], credential: String?) async throws -> String {
         guard let controller = sourceController else {
             throw MailSourceError.notAvailable
         }
@@ -273,7 +273,7 @@ public struct LoopbackMCPServer {
         let started = Date()
         let agent = try gateway.authenticate(credential)
         do {
-            let snap = try controller.setSource(source)
+            let snap = try await controller.setSource(source)
             gateway.audit?.append(
                 AuditEntry(
                     kind: .setSource,

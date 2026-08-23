@@ -3,11 +3,11 @@ import MailStore
 import Testing
 
 struct LoopbackMCPServerTests {
-    @Test func unauthenticatedCallIsRejected() throws {
+    @Test func unauthenticatedCallIsRejected() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -20,11 +20,11 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("unauthorized"))
     }
 
-    @Test func authenticatedSearchReturnsHits() throws {
+    @Test func authenticatedSearchReturnsHits() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -41,11 +41,11 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .search && $0.detail == "invoice" })
     }
 
-    @Test func searchWithFTSOperatorSyntaxReturnsHitsNotInternalError() throws {
+    @Test func searchWithFTSOperatorSyntaxReturnsHitsNotInternalError() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -60,11 +60,11 @@ struct LoopbackMCPServerTests {
         #expect(!response.body.contains("Invoice due"))
     }
 
-    @Test func unknownToolReturnsIsErrorResultNotHTTP500() throws {
+    @Test func unknownToolReturnsIsErrorResultNotHTTP500() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -78,11 +78,11 @@ struct LoopbackMCPServerTests {
         #expect(!response.body.contains(#""error":"internal""#))
     }
 
-    @Test func statusReturnsLastIngestAndNewestMessageDate() throws {
+    @Test func statusReturnsLastIngestAndNewestMessageDate() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -98,7 +98,7 @@ struct LoopbackMCPServerTests {
         #expect(payload["lastIngestAt"] is String)
     }
 
-    @Test func updateIngestsNewMailAndReturnsFreshness() throws {
+    @Test func updateIngestsNewMailAndReturnsFreshness() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
@@ -118,7 +118,7 @@ struct LoopbackMCPServerTests {
             mailbox: "INBOX.mbox"
         )
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -136,11 +136,11 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .updateIndex })
     }
 
-    @Test func authenticatedGetReturnsMessage() throws {
+    @Test func authenticatedGetReturnsMessage() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -164,11 +164,11 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .get })
     }
 
-    @Test func getWithBodyDeniedReportsNotGranted() throws {
+    @Test func getWithBodyDeniedReportsNotGranted() async throws {
         let env = try LoopbackFixture(bodyGranted: false)
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -192,11 +192,11 @@ struct LoopbackMCPServerTests {
         #expect(try Self.toolPayload(response.body)["body"] == nil)
     }
 
-    @Test func initializeReturnsServerCapabilities() throws {
+    @Test func initializeReturnsServerCapabilities() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -211,11 +211,11 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"tools\""))
     }
 
-    @Test func toolsListReturnsReadTools() throws {
+    @Test func toolsListReturnsReadTools() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -234,12 +234,12 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"set_source\""))
     }
 
-    @Test func setSourceDeniedWhenSettingOff() throws {
+    @Test func setSourceDeniedWhenSettingOff() async throws {
         let controller = FakeMailSourceController(agentMayChangeSource: false)
         let env = try LoopbackFixture(sourceController: controller)
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -255,12 +255,12 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .setSource && $0.outcome != .ok })
     }
 
-    @Test func setSourceSwitchesWhenSettingOn() throws {
+    @Test func setSourceSwitchesWhenSettingOn() async throws {
         let controller = FakeMailSourceController(agentMayChangeSource: true)
         let env = try LoopbackFixture(sourceController: controller)
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -278,12 +278,12 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .setSource && $0.outcome == .ok })
     }
 
-    @Test func statusIncludesSourceWhenControllerBound() throws {
+    @Test func statusIncludesSourceWhenControllerBound() async throws {
         let controller = FakeMailSourceController(agentMayChangeSource: false)
         let env = try LoopbackFixture(sourceController: controller)
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -304,11 +304,11 @@ struct LoopbackMCPServerTests {
         #expect(status.requestSummary == "{}")
     }
 
-    @Test func authenticatedCreateAndUpdateDraft() throws {
+    @Test func authenticatedCreateAndUpdateDraft() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let create = env.server.handle(
+        let create = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -326,7 +326,7 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .createDraft })
 
         let draftID = try Self.extractJSONString(create.body, key: "draftID")
-        let update = env.server.handle(
+        let update = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -347,11 +347,11 @@ struct LoopbackMCPServerTests {
         #expect(try env.server.ledger.copy(versionID: versions[0].id) == "Hello Ava — revised")
     }
 
-    @Test func initializedNotificationReturnsAccepted() throws {
+    @Test func initializedNotificationReturnsAccepted() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
 
-        let response = env.server.handle(
+        let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -362,6 +362,47 @@ struct LoopbackMCPServerTests {
 
         #expect(response.status == 202)
         #expect(response.body.isEmpty)
+    }
+
+    @Test func concurrentStatusCallsWithMainActorSourceDoNotHang() async throws {
+        let controller = BlockingMailSourceController(
+            snapshot: {
+                await MainActor.run {
+                    MailSourceSnapshot(source: .fixture, agentMayChangeSource: false)
+                }
+            },
+            setSource: { source in
+                await MainActor.run {
+                    MailSourceSnapshot(source: source, agentMayChangeSource: true)
+                }
+            }
+        )
+        let env = try LoopbackFixture(sourceController: controller)
+        defer { env.remove() }
+        let box = ServerBox(env.server)
+        let credential = env.credential
+
+        await withTaskGroup(of: Int.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    let response = await box.server.handle(
+                        LoopbackMCPRequest(
+                            method: "POST",
+                            path: "/mcp",
+                            headers: ["Authorization": "Bearer \(credential)"],
+                            body: Self.toolCallJSON(name: "status", arguments: [:])
+                        )
+                    )
+                    return response.status
+                }
+            }
+            var statuses: [Int] = []
+            for await status in group {
+                statuses.append(status)
+            }
+            #expect(statuses.allSatisfy { $0 == 200 })
+            #expect(statuses.count == 8)
+        }
     }
 
     private static func toolCallJSON(name: String, arguments: [String: String]) -> Data {
@@ -477,6 +518,11 @@ private struct LoopbackFixture {
     }
 }
 
+private final class ServerBox: @unchecked Sendable {
+    let server: LoopbackMCPServer
+    init(_ server: LoopbackMCPServer) { self.server = server }
+}
+
 private final class FakeMailSourceController: MailSourceControlling, @unchecked Sendable {
     var source: MailSourceID
     var agentMayChangeSource: Bool
@@ -486,13 +532,13 @@ private final class FakeMailSourceController: MailSourceControlling, @unchecked 
         self.agentMayChangeSource = agentMayChangeSource
     }
 
-    func snapshot() -> MailSourceSnapshot {
+    func snapshot() async -> MailSourceSnapshot {
         MailSourceSnapshot(source: source, agentMayChangeSource: agentMayChangeSource)
     }
 
-    func setSource(_ source: MailSourceID) throws -> MailSourceSnapshot {
+    func setSource(_ source: MailSourceID) async throws -> MailSourceSnapshot {
         guard agentMayChangeSource else { throw MailSourceError.denied }
         self.source = source
-        return snapshot()
+        return await snapshot()
     }
 }

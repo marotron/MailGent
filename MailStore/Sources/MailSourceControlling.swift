@@ -37,8 +37,8 @@ public enum MailSourceError: Error, Equatable, CustomStringConvertible {
 }
 
 public protocol MailSourceControlling: Sendable {
-    func snapshot() -> MailSourceSnapshot
-    func setSource(_ source: MailSourceID) throws -> MailSourceSnapshot
+    func snapshot() async -> MailSourceSnapshot
+    func setSource(_ source: MailSourceID) async throws -> MailSourceSnapshot
 }
 
 extension MailSourceID {
@@ -58,70 +58,24 @@ extension MailSourceID {
     }
 }
 
-/// Bridges async companion source changes onto the sync MCP tool surface.
+/// Forwards companion source changes into MCP `status` / `set_source`.
 public final class BlockingMailSourceController: MailSourceControlling, @unchecked Sendable {
     public typealias SnapshotWork = @Sendable () async -> MailSourceSnapshot
     public typealias SetWork = @Sendable (MailSourceID) async throws -> MailSourceSnapshot
 
     private let snapshotWork: SnapshotWork
     private let setWork: SetWork
-    private let lock = NSLock()
 
     public init(snapshot: @escaping SnapshotWork, setSource: @escaping SetWork) {
         self.snapshotWork = snapshot
         self.setWork = setSource
     }
 
-    public func snapshot() -> MailSourceSnapshot {
-        lock.lock()
-        defer { lock.unlock() }
-        let work = snapshotWork
-        return runSync {
-            await work()
-        } ?? MailSourceSnapshot(source: .fixture, agentMayChangeSource: false)
+    public func snapshot() async -> MailSourceSnapshot {
+        await snapshotWork()
     }
 
-    public func setSource(_ source: MailSourceID) throws -> MailSourceSnapshot {
-        lock.lock()
-        defer { lock.unlock() }
-        let work = setWork
-        let box = SourceOutcomeBox()
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            do {
-                box.result = .success(try await work(source))
-            } catch {
-                box.result = .failure(error)
-            }
-            sem.signal()
-        }
-        sem.wait()
-        switch box.result {
-        case let .success(snapshot):
-            return snapshot
-        case let .failure(error):
-            throw error
-        case .none:
-            throw MailSourceError.notAvailable
-        }
+    public func setSource(_ source: MailSourceID) async throws -> MailSourceSnapshot {
+        try await setWork(source)
     }
-
-    private func runSync(_ work: @escaping @Sendable () async -> MailSourceSnapshot) -> MailSourceSnapshot? {
-        let box = SourceSnapshotBox()
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            box.value = await work()
-            sem.signal()
-        }
-        sem.wait()
-        return box.value
-    }
-}
-
-private final class SourceOutcomeBox: @unchecked Sendable {
-    var result: Result<MailSourceSnapshot, Error>?
-}
-
-private final class SourceSnapshotBox: @unchecked Sendable {
-    var value: MailSourceSnapshot?
 }

@@ -122,7 +122,7 @@ struct BodyFormatPicker: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .controlSize(.mini)
+        .controlSize(.small)
         .fixedSize()
     }
 }
@@ -615,13 +615,6 @@ struct RawPrettyHeader: View {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text(showRaw ? "Raw" : "Pretty")
-                .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 1)
-                .foregroundStyle(.secondary)
-                .background(.quaternary, in: Capsule())
-                .accessibilityLabel(showRaw ? "Raw view" : "Pretty view")
             Spacer(minLength: 8)
             BodyFormatPicker(showRaw: $showRaw)
         }

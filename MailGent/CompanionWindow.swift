@@ -183,7 +183,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private func presentSettings(session: CompanionSession) {
-        let size = NSSize(width: 480, height: 560)
+        let size = NSSize(width: 480, height: 600)
         let minSize = NSSize(width: 440, height: 400)
         let root = MailGentSettingsView(session: session)
         if let settings {

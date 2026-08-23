@@ -1,0 +1,117 @@
+{
+  "kind": "mailgent-icon-version",
+  "schema": 1,
+  "slug": "2026-08-23-after-tweaks",
+  "savedAt": "2026-08-23T17:50:15.005Z",
+  "note": "After tweaks (slate) · envelope shadow-only",
+  "state": {
+    "schema": 1,
+    "scale": 1.157,
+    "menuBar": {
+      "success": {
+        "sparkleFill": "#30D158",
+        "staggerMs": 140,
+        "holdMs": 260,
+        "fadeMs": 280
+      },
+      "error": {
+        "sparkleFill": "#FF9F0A",
+        "staggerMs": 0,
+        "holdMs": 420,
+        "fadeMs": 280
+      }
+    },
+    "layers": [
+      {
+        "id": "plate",
+        "visible": true,
+        "fillMode": "gradient",
+        "c0": "#4B617F",
+        "c1": "#7A8EAA",
+        "angle": 0,
+        "opacity": 1,
+        "matchPlate": false
+      },
+      {
+        "id": "overcast",
+        "visible": true,
+        "fillMode": "gradient",
+        "c0": "#3D4C5F",
+        "c1": "#3D4C5F",
+        "angle": 135,
+        "opacity": 0.57,
+        "matchPlate": false
+      },
+      {
+        "id": "body",
+        "visible": false,
+        "fillMode": "solid",
+        "c0": "#3D4C5F",
+        "c1": "#3D4C5F",
+        "angle": 0,
+        "opacity": 0.42,
+        "matchPlate": false
+      },
+      {
+        "id": "flap",
+        "visible": false,
+        "fillMode": "solid",
+        "c0": "#3D4C5F",
+        "c1": "#3D4C5F",
+        "angle": 0,
+        "opacity": 0.5,
+        "matchPlate": false
+      },
+      {
+        "id": "bowl",
+        "visible": false,
+        "fillMode": "solid",
+        "c0": "#F8EED8",
+        "c1": "#E4D4B4",
+        "angle": 0,
+        "opacity": 0.85,
+        "matchPlate": false
+      },
+      {
+        "id": "field",
+        "visible": true,
+        "fillMode": "solid",
+        "c0": "#F8EED8",
+        "c1": "#E4D4B4",
+        "angle": 0,
+        "opacity": 0.85,
+        "matchPlate": false
+      },
+      {
+        "id": "sparkleLg",
+        "visible": true,
+        "fillMode": "gradient",
+        "c0": "#4B617F",
+        "c1": "#7A8EAA",
+        "angle": 0,
+        "opacity": 1,
+        "matchPlate": false
+      },
+      {
+        "id": "sparkleMid",
+        "visible": true,
+        "fillMode": "gradient",
+        "c0": "#4B617F",
+        "c1": "#7A8EAA",
+        "angle": 0,
+        "opacity": 1,
+        "matchPlate": false
+      },
+      {
+        "id": "sparkleSm",
+        "visible": true,
+        "fillMode": "solid",
+        "c0": "#FF8C82",
+        "c1": "#7A8EAA",
+        "angle": 0,
+        "opacity": 1,
+        "matchPlate": false
+      }
+    ]
+  }
+}

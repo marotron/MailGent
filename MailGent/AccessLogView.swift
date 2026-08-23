@@ -7,13 +7,16 @@ struct AccessLogView: View {
 
     @State private var selectedID: String?
     @State private var agentFilter = AgentFilter.all
+    @State private var kindFilter = KindFilter.all
     @State private var timeFilter = TimeFilter.all
-    @State private var confirmClearAll = false
-    @State private var confirmClear24h = false
+    @State private var wordQuery = ""
 
     var body: some View {
         VStack(spacing: 0) {
             filterBar
+            if isLargeStore {
+                largeStoreBanner
+            }
             Divider()
             HSplitView {
                 logList
@@ -22,36 +25,14 @@ struct AccessLogView: View {
                     .frame(minWidth: 360, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 760, minHeight: 420)
+        .frame(minWidth: 860, minHeight: 420)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear(perform: applyInitialSelection)
         .onChange(of: session.agents.auditRevision) { _, _ in reconcileSelection() }
         .onChange(of: agentFilter) { _, _ in reconcileSelection() }
+        .onChange(of: kindFilter) { _, _ in reconcileSelection() }
         .onChange(of: timeFilter) { _, _ in reconcileSelection() }
-        .confirmationDialog(
-            "Delete all access logs?",
-            isPresented: $confirmClearAll,
-            titleVisibility: .visible
-        ) {
-            Button("Delete all", role: .destructive) {
-                session.agents.removeAllAudit()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Removes the full stored log (\(storedCount) entries, \(storedBytesLabel)). This cannot be undone.")
-        }
-        .confirmationDialog(
-            "Delete logs older than 24 hours?",
-            isPresented: $confirmClear24h,
-            titleVisibility: .visible
-        ) {
-            Button("Delete older than 24 hours", role: .destructive) {
-                session.agents.removeAuditOlderThan24Hours()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Keeps entries from the last 24 hours. Older rows are removed from the stored log.")
-        }
+        .onChange(of: wordQuery) { _, _ in reconcileSelection() }
     }
 
     private var entries: [AuditEntry] {
@@ -69,10 +50,20 @@ struct AccessLogView: View {
         Array(Set(entries.map(\.agentName))).sorted()
     }
 
+    private var presentKinds: [AuditKind] {
+        Array(Set(entries.map(\.kind))).sorted { $0.badgeTitle < $1.badgeTitle }
+    }
+
     private var filtered: [AuditEntry] {
         let now = Date()
         return entries.filter { entry in
-            agentFilter.matches(entry.agentName) && timeFilter.contains(entry.at, now: now)
+            agentFilter.matches(entry.agentName)
+                && kindFilter.matches(entry.kind)
+                && timeFilter.contains(entry.at, now: now)
+                && AccessLogFormat.matchesWords(
+                    wordQuery,
+                    in: AccessLogFormat.searchTexts(entry)
+                )
         }
     }
 
@@ -80,9 +71,8 @@ struct AccessLogView: View {
         filtered.first { $0.id == selectedID }
     }
 
-    private var hasLogsOlderThan24h: Bool {
-        let cutoff = Date().addingTimeInterval(-86_400)
-        return session.agents.audit.entries().contains { $0.at < cutoff }
+    private var isLargeStore: Bool {
+        AccessLogFormat.isLargeStore(count: storedCount, bytes: storedBytes)
     }
 
     private var filterBar: some View {
@@ -93,37 +83,63 @@ struct AccessLogView: View {
                     Text(name).tag(AgentFilter.named(name))
                 }
             }
-            .frame(maxWidth: 180)
+            .frame(maxWidth: 160)
+
+            Picker("Type", selection: $kindFilter) {
+                Text("All types").tag(KindFilter.all)
+                ForEach(presentKinds, id: \.self) { kind in
+                    Text(kind.badgeTitle).tag(KindFilter.kind(kind))
+                }
+            }
+            .frame(maxWidth: 140)
 
             Picker("Time", selection: $timeFilter) {
                 ForEach(TimeFilter.allCases) { filter in
                     Text(filter.title).tag(filter)
                 }
             }
-            .frame(maxWidth: 160)
+            .frame(maxWidth: 140)
 
-            Spacer()
+            TextField("Request or response", text: $wordQuery)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 140, maxWidth: 240)
+                .help("Match words in request or response. All words must match.")
+
+            Spacer(minLength: 8)
 
             Text(countLabel)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isLargeStore ? Color.orange : Color.secondary)
                 .help("Full stored log: \(storedCount) entries, \(storedBytesLabel)")
-
-            Button("Older than 24h") {
-                confirmClear24h = true
-            }
-            .disabled(!hasLogsOlderThan24h)
-            .help("Delete stored entries older than 24 hours")
-
-            Button("Delete all", role: .destructive) {
-                confirmClearAll = true
-            }
-            .disabled(storedCount == 0)
         }
         .controlSize(.small)
         .pickerStyle(.menu)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var largeStoreBanner: some View {
+        Button {
+            DetachedWindowHost.shared.showSettings(session: session)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Stored log is large — \(storedCount) entries, \(storedBytesLabel). Delete entries in Settings.")
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.12))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open Settings to delete access logs.")
+        .accessibilityLabel("Large log. Open Settings to delete entries.")
     }
 
     private var countLabel: String {
@@ -143,7 +159,7 @@ struct AccessLogView: View {
                     description: Text(
                         entries.isEmpty
                             ? "Paired agent tool calls show up here."
-                            : "Try another agent or time range."
+                            : "Try another agent, type, time range, or search."
                     )
                 )
             } else {
@@ -182,8 +198,24 @@ struct AccessLogView: View {
             agentFilter = .all
             return
         }
+        if case .kind(let kind) = kindFilter, !presentKinds.contains(kind) {
+            kindFilter = .all
+            return
+        }
         if let selectedID, filtered.contains(where: { $0.id == selectedID }) { return }
         self.selectedID = filtered.first?.id
+    }
+
+    private enum KindFilter: Hashable {
+        case all
+        case kind(AuditKind)
+
+        func matches(_ kind: AuditKind) -> Bool {
+            switch self {
+            case .all: true
+            case .kind(let expected): kind == expected
+            }
+        }
     }
 
     private enum AgentFilter: Hashable {
@@ -372,43 +404,51 @@ private struct AccessLogDetail: View {
         showRaw: Binding<Bool>,
         @ViewBuilder pretty: () -> Pretty
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let hideEmptyPretty = AccessLogFormat.jsonPairs(raw)?.isEmpty == true
+        return VStack(alignment: .leading, spacing: 6) {
             RawPrettyHeader(title: title, showRaw: showRaw)
-            Group {
-                if showRaw.wrappedValue {
+            if showRaw.wrappedValue {
+                payloadBox {
                     Text(raw)
                         .font(.callout.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
+                }
+            } else if !hideEmptyPretty {
+                payloadBox {
                     pretty()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+
+    private func payloadBox<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
             .overlay {
                 RoundedRectangle(cornerRadius: 8).stroke(.separator)
             }
-        }
     }
 
     @ViewBuilder
     private var prettyResponse: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        if isMessageResponse {
+            prettyMessageList
+        } else if !entry.placements.isEmpty {
+            prettyPlacements
+        } else {
             payloadView(responseLine)
-            if isMessageResponse {
-                prettyMessageList
-            } else if !entry.placements.isEmpty {
-                prettyPlacements
-            }
         }
     }
 
     @ViewBuilder
     private func payloadView(_ text: String) -> some View {
-        if AccessLogFormat.isJSON(text) {
+        if let pairs = AccessLogFormat.jsonPairs(text) {
+            prettyPairList(pairs)
+        } else if AccessLogFormat.isJSON(text) {
             Text(AccessLogFormat.prettyJSON(text))
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
@@ -419,21 +459,29 @@ private struct AccessLogDetail: View {
 
     private var prettyMessageList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "list.bullet.rectangle")
-                    .foregroundStyle(.secondary)
-                Text("Message list · \(entry.messages.count)")
-                    .font(.callout.weight(.semibold))
-                if let total = messageListTotal, total != entry.messages.count {
-                    Text("of \(total)")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+            if showsMessageListChrome {
+                HStack(spacing: 8) {
+                    Image(systemName: "list.bullet.rectangle")
+                        .foregroundStyle(.secondary)
+                    Text("Message list · \(entry.messages.count)")
+                        .font(.callout.weight(.semibold))
+                    if let total = messageListTotal, total != entry.messages.count {
+                        Text("of \(total)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    if hasMorePages {
+                        Text("more")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .help("Pass nextCursor as cursor to fetch the next page.")
+                    }
                 }
-            }
-            if let note = headersOnlyNote {
-                Text(note)
-                    .font(.system(size: 10))
-                    .foregroundStyle(HeadersOnlyStyle.text)
+                if let note = headersOnlyNote {
+                    Text(note)
+                        .font(.system(size: 10))
+                        .foregroundStyle(HeadersOnlyStyle.text)
+                }
             }
             if !entry.messages.isEmpty {
                 LockedFieldsLegend()
@@ -448,6 +496,17 @@ private struct AccessLogDetail: View {
             }
         }
         .id(entry.id)
+    }
+
+    private var showsMessageListChrome: Bool {
+        switch entry.kind {
+        case .search, .list: true
+        default: false
+        }
+    }
+
+    private var hasMorePages: Bool {
+        AccessLogFormat.jsonString(entry.responseSummary, key: "nextCursor") != nil
     }
 
     private var omitsBody: Bool {
@@ -490,16 +549,29 @@ private struct AccessLogDetail: View {
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
         } else {
+            prettyPairList(pairs)
+        }
+    }
+
+    @ViewBuilder
+    private func prettyPairList(_ pairs: [(String, String)]) -> some View {
+        if !pairs.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(AccessLogFormat.prettyKey(pair.0).uppercased())
-                            .font(.system(size: 9, weight: .bold))
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(AccessLogFormat.prettyKey(pair.0)):")
+                            .font(.callout.monospaced())
                             .foregroundStyle(.secondary)
-                            .frame(width: 72, alignment: .leading)
-                        Text(pair.1)
-                            .font(.caption)
-                            .textSelection(.enabled)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Text(
+                            AccessLogFormat.displayValue(
+                                pair.0,
+                                pair.1,
+                                accountLabel: session.accountLabel
+                            )
+                        )
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
                     }
                 }
             }
@@ -595,17 +667,21 @@ private struct CollapsibleAuditMessage: View {
                     expanded.toggle()
                 }
             } label: {
-                HStack(alignment: .center, spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
-                    VStack(alignment: .leading, spacing: 4) {
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(collapsedTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        GrantFieldBadgeRow(fields: ref.fields)
+                        Text(collapsedMeta)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
@@ -613,7 +689,7 @@ private struct CollapsibleAuditMessage: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(expanded ? "Collapse message" : "Expand message")
-            .accessibilityValue(collapsedTitle)
+            .accessibilityValue("\(collapsedTitle), \(collapsedMeta)")
 
             if expanded {
                 Button {
@@ -640,9 +716,41 @@ private struct CollapsibleAuditMessage: View {
         }
         return ref.id
     }
+
+    private var collapsedMeta: String {
+        var parts: [String] = []
+        if ref.fields.date, let date = AccessLogFormat.compactMailDate(ref.date) {
+            parts.append(date)
+        }
+        parts.append(session.accountLabel(ref.accountID))
+        return parts.joined(separator: " · ")
+    }
 }
 
 enum AccessLogFormat {
+    static func searchTexts(_ entry: AuditEntry) -> [String] {
+        var texts = [entry.detail, entry.requestSummary, entry.responseSummary]
+        if case .error(let message) = entry.outcome {
+            texts.append(message)
+        }
+        return texts
+    }
+
+    static func matchesWords(_ query: String, in texts: [String]) -> Bool {
+        let words = query.split { $0.isWhitespace || $0.isNewline }.map(String.init)
+        guard !words.isEmpty else { return true }
+        return words.allSatisfy { word in
+            texts.contains { $0.localizedStandardContains(word) }
+        }
+    }
+
+    static let largeStoredCount = 1_000
+    static let largeStoredBytes = 1_048_576
+
+    static func isLargeStore(count: Int, bytes: Int) -> Bool {
+        count >= largeStoredCount || bytes >= largeStoredBytes
+    }
+
     static func bytes(_ count: Int) -> String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
@@ -673,7 +781,7 @@ enum AccessLogFormat {
         case "q": "Query"
         case "limit": "Limit"
         case "cursor": "Cursor"
-        case "account": "Account"
+        case "accountID", "account": "Account"
         case "placement": "Placement"
         case "draftID": "Draft"
         case "chars": "Characters"
@@ -685,6 +793,41 @@ enum AccessLogFormat {
         case "value": "Value"
         default: key
         }
+    }
+
+    static func displayValue(
+        _ key: String,
+        _ value: String,
+        accountLabel: (String) -> String
+    ) -> String {
+        switch key {
+        case "accountID", "account":
+            let name = accountLabel(value)
+            return name.isEmpty ? value : name
+        default:
+            return value
+        }
+    }
+
+    static func compactMailDate(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let date = parseMailDate(trimmed) else { return trimmed }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private static func parseMailDate(_ raw: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: raw) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: raw) { return date }
+        let rfc = DateFormatter()
+        rfc.locale = Locale(identifier: "en_US_POSIX")
+        rfc.dateFormat = "EEE, d MMM yyyy HH:mm:ss Z"
+        if let date = rfc.date(from: raw) { return date }
+        rfc.dateFormat = "d MMM yyyy HH:mm:ss Z"
+        return rfc.date(from: raw)
     }
 
     static func isJSON(_ text: String) -> Bool {
@@ -713,8 +856,40 @@ enum AccessLogFormat {
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
+    static func jsonPairs(_ text: String) -> [(String, String)]? {
+        guard let obj = jsonObject(text) else { return nil }
+        return obj.keys.sorted().map { key in
+            (key, jsonValueString(obj[key]))
+        }
+    }
+
+    private static func jsonValueString(_ any: Any?) -> String {
+        guard let any else { return "null" }
+        switch any {
+        case let s as String:
+            return s
+        case let n as NSNumber:
+            if CFGetTypeID(n) == CFBooleanGetTypeID() {
+                return n.boolValue ? "true" : "false"
+            }
+            return n.stringValue
+        case is NSNull:
+            return "null"
+        default:
+            guard JSONSerialization.isValidJSONObject(any),
+                  let data = try? JSONSerialization.data(withJSONObject: any, options: [.sortedKeys]),
+                  let rendered = String(data: data, encoding: .utf8)
+            else { return String(describing: any) }
+            return rendered
+        }
+    }
+
     static func jsonInt(_ text: String, key: String) -> Int? {
         intValue(jsonObject(text)?[key])
+    }
+
+    static func jsonString(_ text: String, key: String) -> String? {
+        jsonObject(text)?[key] as? String
     }
 
     static func compactResponse(_ text: String) -> String {

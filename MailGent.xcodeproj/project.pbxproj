@@ -40,6 +40,7 @@
 		AD7984854C2D208FE3FD31EB /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FD2BE993542F41B69F61935A /* AppKit.framework */; };
 		AEF71C91C5910871BC3F8F5B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D46E33C5C81175285853B22F /* RootView.swift */; };
 		B72BD93069E35D69291A346F /* AgentReadAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E926E6F6C4F992FC732F05A /* AgentReadAPITests.swift */; };
+		B9E6DCEA0A6B4A01253DE300 /* AccessLogFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54AAD95EB9AF00C859818E0 /* AccessLogFormatTests.swift */; };
 		BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */; };
 		C0188CC8CD8EC3134C07EED7 /* MailGentPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C26C62157AAF64661A97F30 /* MailGentPreferences.swift */; };
 		C0CBA840E379580044926FD5 /* MailGentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */; };
@@ -169,6 +170,7 @@
 		D148D69F39BF09DF9CF97C8B /* AuditLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogTests.swift; sourceTree = "<group>"; };
 		D46E33C5C81175285853B22F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		D49DFE3885C6B890880A2A74 /* MailSourceControlling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailSourceControlling.swift; sourceTree = "<group>"; };
+		D54AAD95EB9AF00C859818E0 /* AccessLogFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessLogFormatTests.swift; sourceTree = "<group>"; };
 		DC735B77CC1CF2089A7F7A3B /* LoopbackHTTPListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackHTTPListenerTests.swift; sourceTree = "<group>"; };
 		E2B51DCEADC842920CCD3614 /* MenuBarIconAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconAppearanceTests.swift; sourceTree = "<group>"; };
 		F17049D8016849D2AC6897A7 /* CompanionWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionWindow.swift; sourceTree = "<group>"; };
@@ -302,6 +304,7 @@
 		B08DCDF67BA344FA6439CE8E /* MailGentTests */ = {
 			isa = PBXGroup;
 			children = (
+				D54AAD95EB9AF00C859818E0 /* AccessLogFormatTests.swift */,
 				4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */,
 				E2B51DCEADC842920CCD3614 /* MenuBarIconAppearanceTests.swift */,
 				95AD375037F9E0F42CCCE20B /* MenuBarIconPulseTests.swift */,
@@ -533,6 +536,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9E6DCEA0A6B4A01253DE300 /* AccessLogFormatTests.swift in Sources */,
 				E23BD62991A7F29E5F665642 /* MailLibraryAccessTests.swift in Sources */,
 				F1036185EA7E3B1DBF78D877 /* MenuBarIconAppearanceTests.swift in Sources */,
 				6F96A306E5E77F0D71F9E22F /* MenuBarIconPulseTests.swift in Sources */,

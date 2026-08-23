@@ -242,11 +242,11 @@ public struct AgentReadAPI {
         }
     }
 
-    public func updateIndex(credential: String?, updater: any IndexUpdating) throws -> IndexUpdateOutcome {
+    public func updateIndex(credential: String?, updater: any IndexUpdating) async throws -> IndexUpdateOutcome {
         let started = Date()
         let agent = try authenticate(credential)
         do {
-            let outcome = try updater.update()
+            let outcome = try await updater.update()
             record(
                 kind: .updateIndex,
                 agent: agent,

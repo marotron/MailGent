@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "intent": "ship",
+  "slug": "2026-08-23-tweaked",
+  "pickedAt": "2026-08-23T15:59:54.330Z",
+  "keyline": "full-1024",
+  "stampFromPng": false,
+  "sparkles": "custom-fill",
+  "envelope": "shadow-only",
+  "note": "",
+  "files": {
+    "svg": ".scratch/app-icon/candidates/2026-08-23-tweaked.svg",
+    "png": ".scratch/app-icon/candidates/2026-08-23-tweaked.png",
+    "templateSvg": ".scratch/app-icon/candidates/2026-08-23-tweaked-template.svg",
+    "templatePng": ".scratch/app-icon/candidates/2026-08-23-tweaked-template.png",
+    "json": ".scratch/app-icon/candidates/2026-08-23-tweaked.json",
+    "brief": ".scratch/app-icon/candidates/2026-08-23-tweaked-SHIP.md"
+  }
+}

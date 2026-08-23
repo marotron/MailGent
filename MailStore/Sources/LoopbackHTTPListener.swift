@@ -157,8 +157,10 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
                 next.append(data)
             }
             if let request = Self.parseHTTP(next) {
-                let response = self.mcp.handle(request)
-                self.send(response, on: connection)
+                Task {
+                    let response = await self.mcp.handle(request)
+                    self.send(response, on: connection)
+                }
                 return
             }
             if isComplete {
