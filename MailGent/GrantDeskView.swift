@@ -337,7 +337,6 @@ private struct AgentAccessPreview: View {
             MessageAccessCard(
                 session: session,
                 ref: sampleRef,
-                attachmentNamesDetail: sample.attachmentNamesDetail,
                 attachmentContentDetail: sample.attachmentContentDetail
             )
             LockedFieldsLegend()
@@ -355,7 +354,8 @@ private struct AgentAccessPreview: View {
             to: sample.to,
             bodySnippet: sample.body,
             bodyAccess: grant.fields.body ? .granted : .notGranted,
-            fields: grant.fields
+            fields: grant.fields,
+            attachments: grant.fields.attachmentMetadata ? sample.mailAttachments : []
         )
     }
 }
@@ -380,8 +380,8 @@ private struct SampleMessage {
         ]
     )
 
-    var attachmentNamesDetail: String {
-        attachments.map { "\($0.name) · \($0.kb) KB" }.joined(separator: ", ")
+    var mailAttachments: [MailAttachment] {
+        attachments.map { MailAttachment(filename: $0.name, byteCount: $0.kb * 1024) }
     }
 
     var attachmentContentDetail: String {

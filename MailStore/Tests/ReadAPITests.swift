@@ -346,6 +346,118 @@ struct ReadAPITests {
         #expect(message.body == .notAvailable)
     }
 
+    @Test func getIncludesInlineMIMEAttachmentMetadata() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "88.emlx",
+            rfc822: """
+            From: Me <me@example.com>
+            To: Team <team@example.com>
+            Subject: Check-in vs check-out
+            Date: Sun, 23 Aug 2026 12:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="alt"
+
+            --alt
+            Content-Type: text/plain; charset=utf-8
+
+            1. Check-in is arrival
+            --alt
+            Content-Type: multipart/mixed; boundary="mix"
+
+            --mix
+            Content-Type: text/html; charset=utf-8
+
+            <p>Hi</p>
+            --mix
+            Content-Type: application/pdf; name="checkin-vs-checkout-compare.pdf"
+            Content-Disposition: inline; filename="checkin-vs-checkout-compare.pdf"
+            Content-Transfer-Encoding: base64
+
+            JVBERi0xLjQK
+            --mix--
+            --alt--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let message = try ReadAPI(index: index).get(accountID: accountID, placement: "INBOX", id: "88")
+        #expect(message.attachments.map(\.filename) == ["checkin-vs-checkout-compare.pdf"])
+        #expect(message.attachments.first?.byteCount == 9)
+        #expect(message.attachmentMetadataGranted == true)
+
+        let hidden = message.applying(GrantFields(envelope: true, body: true, attachmentMetadata: false))
+        #expect(hidden.attachments.isEmpty)
+        #expect(hidden.attachmentMetadataGranted == false)
+        #expect(hidden.body == .text("1. Check-in is arrival"))
+
+        let shown = message.applying(GrantFields(envelope: true, body: true, attachmentMetadata: true))
+        #expect(shown.attachments.map(\.filename) == ["checkin-vs-checkout-compare.pdf"])
+        #expect(shown.attachmentMetadataGranted == true)
+    }
+
+    @Test func getPrettyHTMLFallsBackWhenHTMLIsPrefixOfPlain() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "88.emlx",
+            rfc822: """
+            From: Me <me@example.com>
+            To: Team <team@example.com>
+            Subject: Check-in vs check-out
+            Date: Sun, 23 Aug 2026 12:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="alt"
+
+            --alt
+            Content-Type: text/plain; charset=utf-8
+
+            Hi team,
+
+            Quick compare of check-in vs check-out.
+
+            1. Check-in is arrival
+            2. Check-out is departure
+            --alt
+            Content-Type: text/html; charset=utf-8
+
+            <html><body><p>Hi team,</p><p>Quick compare of check-in vs check-out.</p></html>
+            --alt--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let message = try ReadAPI(index: index).get(accountID: accountID, placement: "INBOX", id: "88")
+        #expect(message.prettyHTMLBody == nil)
+        #expect(message.body == .text("""
+        Hi team,
+
+        Quick compare of check-in vs check-out.
+
+        1. Check-in is arrival
+        2. Check-out is departure
+        """))
+    }
+
     @Test func listScopesToAccountAndPlacementBeforePaging() throws {
         let root = try FixtureTree()
         defer { root.remove() }

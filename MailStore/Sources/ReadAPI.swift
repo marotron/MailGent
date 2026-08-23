@@ -60,7 +60,8 @@ public struct ReadAPI {
             indexed,
             prettyBody: mail.body,
             htmlBody: mail.htmlBody,
-            rawBody: mail.rawBody
+            rawBody: mail.rawBody,
+            attachments: mail.attachments
         )
     }
 
@@ -113,12 +114,16 @@ public struct ReadMessage: Equatable, Sendable {
     /// Original MIME body block; empty when only the index row is available.
     public let rawBody: String
     public let isPartial: Bool
+    public let attachments: [MailAttachment]
+    /// False when the active grant omitted attachment names.
+    public let attachmentMetadataGranted: Bool
 
     init(
         _ message: IndexedMessage,
         prettyBody: String? = nil,
         htmlBody: String? = nil,
-        rawBody: String = ""
+        rawBody: String = "",
+        attachments: [MailAttachment] = []
     ) {
         self.id = message.id
         self.accountID = message.accountID
@@ -132,6 +137,8 @@ public struct ReadMessage: Equatable, Sendable {
         self.htmlBody = htmlBody
         self.rawBody = rawBody
         self.isPartial = message.isPartial
+        self.attachments = attachments
+        self.attachmentMetadataGranted = true
     }
 
     /// Omits body/html/raw under agent field caps (`.notGranted`).
@@ -152,7 +159,9 @@ public struct ReadMessage: Equatable, Sendable {
             body: fields.body ? body : .notGranted,
             htmlBody: fields.body ? htmlBody : nil,
             rawBody: fields.body ? rawBody : "",
-            isPartial: isPartial
+            isPartial: isPartial,
+            attachments: fields.attachmentMetadata ? attachments : [],
+            attachmentMetadataGranted: fields.attachmentMetadata
         )
     }
 
@@ -167,7 +176,9 @@ public struct ReadMessage: Equatable, Sendable {
         body: ReadBody,
         htmlBody: String?,
         rawBody: String,
-        isPartial: Bool
+        isPartial: Bool,
+        attachments: [MailAttachment],
+        attachmentMetadataGranted: Bool
     ) {
         self.id = id
         self.accountID = accountID
@@ -180,6 +191,24 @@ public struct ReadMessage: Equatable, Sendable {
         self.htmlBody = htmlBody
         self.rawBody = rawBody
         self.isPartial = isPartial
+        self.attachments = attachments
+        self.attachmentMetadataGranted = attachmentMetadataGranted
+    }
+
+    /// HTML for Pretty when it is a complete alternative; nil when it is a closed prefix of plain.
+    public var prettyHTMLBody: String? {
+        guard let htmlBody,
+              !htmlBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        switch body {
+        case .text(let plain):
+            if MailMIME.htmlLooksLikePrefix(html: htmlBody, plain: plain) {
+                return nil
+            }
+            return htmlBody
+        case .notAvailable, .notGranted:
+            return htmlBody
+        }
     }
 }
 

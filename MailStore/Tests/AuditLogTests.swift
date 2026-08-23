@@ -47,6 +47,46 @@ struct AuditLogTests {
         #expect(get.messages[0].id == hit.id)
     }
 
+    @Test func getIncludesAttachmentNamesWhenMetadataGranted() throws {
+        let env = try AttachmentAuditFixture()
+        defer { env.remove() }
+
+        let granted = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "88"
+        )
+        #expect(granted.attachments.map(\.filename) == ["checkin-vs-checkout-compare.pdf"])
+        let grantedJSON = jsonObject(env.audit.entries().last!.responseSummary)
+        #expect(grantedJSON["attachmentAccess"] as? String == "granted")
+        let names = grantedJSON["attachments"] as? [[String: Any]]
+        #expect(names?.count == 1)
+        #expect(names?.first?["filename"] as? String == "checkin-vs-checkout-compare.pdf")
+        #expect(intValue(names?.first?["byteCount"]) == 9)
+        #expect(grantedJSON["body"] as? String == "1. Check-in is arrival")
+        #expect(env.audit.entries().last!.messages[0].attachments.map(\.filename) == [
+            "checkin-vs-checkout-compare.pdf"
+        ])
+        #expect(
+            env.audit.entries().last!.messages[0].attachmentNamesDetail
+                .contains("checkin-vs-checkout-compare.pdf")
+        )
+
+        let hidden = try env.hiddenGateway.get(
+            credential: env.hiddenCredential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "88"
+        )
+        #expect(hidden.attachments.isEmpty)
+        let hiddenJSON = jsonObject(env.hiddenAudit.entries().last!.responseSummary)
+        #expect(hiddenJSON["attachmentAccess"] as? String == "not_granted")
+        #expect(hiddenJSON["attachments"] == nil)
+        #expect(hiddenJSON["body"] as? String == "1. Check-in is arrival")
+        #expect(env.hiddenAudit.entries().last!.messages[0].attachments.isEmpty)
+    }
+
     @Test func listAndStatusAreAudited() throws {
         let env = try AuditFixture()
         defer { env.remove() }
@@ -250,6 +290,93 @@ private struct AuditFixture {
             pairing: pairing,
             grants: grants,
             audit: audit
+        )
+    }
+
+    func remove() {
+        root.remove()
+        try? FileManager.default.removeItem(at: db)
+    }
+}
+
+private struct AttachmentAuditFixture {
+    let root: FixtureTree
+    let db: URL
+    let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+    let credential = "secret-token"
+    let hiddenCredential = "hidden-token"
+    let audit: AuditLog
+    let hiddenAudit: AuditLog
+    let gateway: AgentReadAPI
+    let hiddenGateway: AgentReadAPI
+
+    init() throws {
+        root = try FixtureTree()
+        try root.writeEmlx(
+            named: "88.emlx",
+            rfc822: """
+            From: Me <me@example.com>
+            To: Team <team@example.com>
+            Subject: Check-in vs check-out
+            Date: Sun, 23 Aug 2026 12:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="mix"
+
+            --mix
+            Content-Type: text/plain; charset=utf-8
+
+            1. Check-in is arrival
+            --mix
+            Content-Type: application/pdf; name="checkin-vs-checkout-compare.pdf"
+            Content-Disposition: inline; filename="checkin-vs-checkout-compare.pdf"
+            Content-Transfer-Encoding: base64
+
+            JVBERi0xLjQK
+            --mix--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-audit-\(UUID().uuidString).sqlite")
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let read = ReadAPI(index: index)
+
+        audit = AuditLog()
+        let pairing = Pairing(audit: audit)
+        let agent = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: credential
+        )
+        let grants = GrantGate()
+        try grants.allow(
+            agentID: agent.id,
+            accountID: accountID,
+            fields: GrantFields(envelope: true, body: true, attachmentMetadata: true)
+        )
+        gateway = AgentReadAPI(read: read, pairing: pairing, grants: grants, audit: audit)
+
+        hiddenAudit = AuditLog()
+        let hiddenPairing = Pairing(audit: hiddenAudit)
+        let hiddenAgent = try hiddenPairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: hiddenCredential
+        )
+        let hiddenGrants = GrantGate()
+        try hiddenGrants.allow(
+            agentID: hiddenAgent.id,
+            accountID: accountID,
+            fields: GrantFields(envelope: true, body: true, attachmentMetadata: false)
+        )
+        hiddenGateway = AgentReadAPI(
+            read: read,
+            pairing: hiddenPairing,
+            grants: hiddenGrants,
+            audit: hiddenAudit
         )
     }
 

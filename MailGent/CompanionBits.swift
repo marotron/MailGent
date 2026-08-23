@@ -141,6 +141,15 @@ struct MessageBodyView: View {
         guard let htmlBody,
               !htmlBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return nil }
+        let plain: String
+        if case .text(let text) = readBody {
+            plain = text
+        } else {
+            return htmlBody
+        }
+        if MailMIME.htmlLooksLikePrefix(html: htmlBody, plain: plain) {
+            return nil
+        }
         return htmlBody
     }
 
@@ -654,58 +663,108 @@ struct GrantFieldChip: View {
     }
 }
 
+struct MessageAttachmentRow: View {
+    let attachments: [MailAttachment]
+    var onOpen: ((MailAttachment) -> Void)? = nil
+
+    var body: some View {
+        if attachments.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(attachments, id: \.self) { attachment in
+                    Button {
+                        onOpen?(attachment)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "paperclip")
+                                .foregroundStyle(.secondary)
+                            Text(attachment.filename)
+                            Text(attachment.sizeLabel)
+                                .foregroundStyle(.secondary)
+                            if let mimeType = attachment.mimeType {
+                                Text(mimeType)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(onOpen == nil)
+                    .help("Open with default app")
+                }
+            }
+        }
+    }
+}
+
 struct GrantFieldBadgeRow: View {
     let fields: GrantFields
     var interactive: Bool = false
     var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
 
-    private static let items: [(String, WritableKeyPath<GrantFields, Bool>)] = [
-        ("subj", \.subject),
-        ("from", \.from),
-        ("to", \.to),
-        ("date", \.date),
-        ("body", \.body),
-        ("att", \.attachmentMetadata),
-        ("bytes", \.attachmentContent),
+    private struct Item: Identifiable {
+        let id: String
+        let letter: String
+        let title: String
+        let systemImage: String
+        let keyPath: WritableKeyPath<GrantFields, Bool>
+    }
+
+    private static let items: [Item] = [
+        Item(id: "subject", letter: "S", title: "Subject", systemImage: "text.alignleft", keyPath: \.subject),
+        Item(id: "from", letter: "F", title: "From", systemImage: "envelope", keyPath: \.from),
+        Item(id: "to", letter: "T", title: "To", systemImage: "tray.and.arrow.down", keyPath: \.to),
+        Item(id: "date", letter: "D", title: "Date & Time", systemImage: "calendar", keyPath: \.date),
+        Item(id: "body", letter: "B", title: "Body", systemImage: "doc.plaintext", keyPath: \.body),
+        Item(id: "att", letter: "A", title: "Attachment names", systemImage: "paperclip", keyPath: \.attachmentMetadata),
+        Item(id: "bytes", letter: "C", title: "Attachment content", systemImage: "doc", keyPath: \.attachmentContent),
     ]
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(Self.items, id: \.0) { label, keyPath in
-                let on = fields[keyPath: keyPath]
+            ForEach(Self.items) { item in
+                let on = fields[keyPath: item.keyPath]
                 if interactive, let onToggle {
                     Button {
-                        onToggle(keyPath)
+                        onToggle(item.keyPath)
                     } label: {
-                        compactBadge(label, on: on)
+                        compactBadge(item, on: on)
                     }
                     .buttonStyle(.plain)
-                    .help("Toggle \(label)")
+                    .help(item.title)
+                    .accessibilityLabel(item.title)
                 } else {
-                    compactBadge(label, on: on)
+                    compactBadge(item, on: on)
+                        .help(item.title)
+                        .accessibilityLabel(item.title)
                 }
             }
         }
     }
 
-    private func compactBadge(_ label: String, on: Bool) -> some View {
-        Text(label)
-            .font(.system(size: 8, weight: on ? .medium : .regular))
-            .foregroundStyle(on ? Color.accentColor : Color.secondary.opacity(0.55))
-            .padding(.horizontal, 4)
-            .frame(height: 12)
-            .background(
-                Capsule()
-                    .fill(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        on ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.2),
-                        lineWidth: 0.5
-                    )
-            )
-            .strikethrough(!on, color: Color.secondary.opacity(0.45))
+    private func compactBadge(_ item: Item, on: Bool) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: item.systemImage)
+                .font(.system(size: 8, weight: on ? .medium : .regular))
+            Text(item.letter)
+                .font(.system(size: 8, weight: on ? .medium : .regular))
+                .strikethrough(!on, color: Color.secondary.opacity(0.45))
+        }
+        .foregroundStyle(on ? Color.accentColor : Color.secondary.opacity(0.55))
+        .padding(.horizontal, 4)
+        .frame(height: 14)
+        .background(
+            Capsule()
+                .fill(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    on ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.2),
+                    lineWidth: 0.5
+                )
+        )
     }
 }
 
@@ -718,11 +777,12 @@ struct MessageAccessCard: View {
     let session: CompanionSession
     let ref: AuditMessageRef
     var omitsBody: Bool = false
-    var attachmentNamesDetail: String = "none in this response"
+    var attachmentNamesDetail: String? = nil
     var attachmentContentDetail: String = "none in this response"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            GrantFieldBadgeRow(fields: ref.fields)
             previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
             if ref.fields.from {
                 AddressLine(label: "From", raw: ref.from)
@@ -746,7 +806,7 @@ struct MessageAccessCard: View {
                 attachmentTile(
                     title: "Attachment names",
                     granted: ref.fields.attachmentMetadata,
-                    detail: attachmentNamesDetail
+                    detail: attachmentNamesDetail ?? ref.attachmentNamesDetail
                 )
                 attachmentTile(
                     title: "Attachment content",

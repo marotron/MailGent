@@ -99,6 +99,17 @@ enum AuditJSON {
             payload["note"] =
                 "Body omitted: the active grant for this account does not allow body access. Ask the user to enable body on the grant before summarizing or quoting the message."
         }
+        if message.attachmentMetadataGranted {
+            payload["attachmentAccess"] = "granted"
+            payload["attachments"] = message.attachments.map { attachment in
+                [
+                    "filename": attachment.filename,
+                    "byteCount": attachment.byteCount
+                ] as [String: Any]
+            }
+        } else {
+            payload["attachmentAccess"] = "not_granted"
+        }
         return payload
     }
 

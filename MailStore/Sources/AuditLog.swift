@@ -66,6 +66,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let bodySnippet: String
     public let bodyAccess: AuditBodyAccess
     public let fields: GrantFields
+    public let attachments: [MailAttachment]
 
     public init(
         accountID: String,
@@ -77,7 +78,8 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         to: String = "",
         bodySnippet: String = "",
         bodyAccess: AuditBodyAccess = .notAvailable,
-        fields: GrantFields = .headersOnly
+        fields: GrantFields = .headersOnly,
+        attachments: [MailAttachment] = []
     ) {
         self.accountID = accountID
         self.placement = placement
@@ -89,9 +91,15 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.bodySnippet = bodySnippet
         self.bodyAccess = bodyAccess
         self.fields = fields
+        self.attachments = attachments
     }
 
     public var rowID: String { "\(accountID)/\(placement)/\(id)" }
+
+    public var attachmentNamesDetail: String {
+        if attachments.isEmpty { return "none in this response" }
+        return attachments.map { "\($0.filename) · \($0.sizeLabel)" }.joined(separator: ", ")
+    }
 }
 
 public struct AuditPlacementRef: Equatable, Hashable, Codable, Sendable {
@@ -368,7 +376,7 @@ extension AuditOutcome: Codable {
 extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, date
-        case bodySnippet, bodyAccess, fields
+        case bodySnippet, bodyAccess, fields, attachments
     }
 
     public init(from decoder: Decoder) throws {
@@ -384,6 +392,7 @@ extension AuditMessageRef: Codable {
         bodyAccess = try container.decodeIfPresent(AuditBodyAccess.self, forKey: .bodyAccess)
             ?? .notAvailable
         fields = try container.decodeIfPresent(GrantFields.self, forKey: .fields) ?? .headersOnly
+        attachments = try container.decodeIfPresent([MailAttachment].self, forKey: .attachments) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -398,6 +407,7 @@ extension AuditMessageRef: Codable {
         try container.encode(bodySnippet, forKey: .bodySnippet)
         try container.encode(bodyAccess, forKey: .bodyAccess)
         try container.encode(fields, forKey: .fields)
+        try container.encode(attachments, forKey: .attachments)
     }
 }
 
@@ -460,7 +470,8 @@ extension AuditMessageRef {
             to: message.to,
             bodySnippet: snippet,
             bodyAccess: access,
-            fields: fields
+            fields: fields,
+            attachments: message.attachments
         )
     }
 }

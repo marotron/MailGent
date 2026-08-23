@@ -695,7 +695,7 @@ private struct CompanionReadPage: View {
                     if htmlScroll {
                         MessageBodyView(
                             readBody: detail.body,
-                            htmlBody: detail.htmlBody,
+                            htmlBody: detail.prettyHTMLBody,
                             rawBody: detail.rawBody,
                             showRaw: showRaw
                         )
@@ -710,7 +710,7 @@ private struct CompanionReadPage: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 MessageBodyView(
                                     readBody: detail.body,
-                                    htmlBody: detail.htmlBody,
+                                    htmlBody: detail.prettyHTMLBody,
                                     rawBody: detail.rawBody,
                                     showRaw: showRaw
                                 )
@@ -741,7 +741,7 @@ private struct CompanionReadPage: View {
         let showingRaw = showRaw
             && !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         guard !showingRaw else { return false }
-        return !(detail.htmlBody ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return detail.prettyHTMLBody != nil
     }
 
     private var backButton: some View {
@@ -775,6 +775,9 @@ private struct CompanionReadPage: View {
                 if !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     BodyFormatPicker(showRaw: $showRaw)
                 }
+            }
+            MessageAttachmentRow(attachments: detail.attachments) { attachment in
+                session.openAttachment(attachment, of: detail)
             }
         }
     }

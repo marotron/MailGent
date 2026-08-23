@@ -181,6 +181,23 @@ actor MailIndexWorker {
         return try api.get(accountID: accountID, placement: placement, id: id)
     }
 
+    func attachmentData(
+        accountID: String,
+        placement: String,
+        id: String,
+        filename: String
+    ) async throws -> Data {
+        guard let index else {
+            throw MailIndexWorkerError.notReady
+        }
+        return try index.store.attachmentData(
+            accountID: accountID,
+            mailbox: placement,
+            messageID: id,
+            filename: filename
+        )
+    }
+
     func reset() {
         index = nil
         api = nil

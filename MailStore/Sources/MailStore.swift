@@ -56,7 +56,10 @@ public struct MailStore: Sendable {
             rawBody: parsed.rawBody,
             isPartial: url.lastPathComponent.lowercased().hasSuffix(".partial.emlx"),
             isDraft: Self.isDraftFlag(parsedEmlx.flags),
-            attachments: Self.externalAttachmentMetadata(forEmlx: url)
+            attachments: Self.mergeAttachments(
+                parsed.attachments,
+                disk: Self.externalAttachmentMetadata(forEmlx: url)
+            )
         )
     }
 
@@ -67,16 +70,20 @@ public struct MailStore: Sendable {
         filename: String
     ) throws -> Data {
         let url = try emlxURL(accountID: accountID, mailboxID: mailboxID, id: messageID)
-        guard let file = Self.externalAttachmentFiles(forEmlx: url).first(where: {
+        if let file = Self.externalAttachmentFiles(forEmlx: url).first(where: {
             $0.filename.lowercased() == filename.lowercased()
-        }) else {
-            throw MailStoreError.attachmentNotFound
+        }) {
+            do {
+                return try Data(contentsOf: file.url)
+            } catch {
+                throw MailStoreError.unreadable
+            }
         }
-        do {
-            return try Data(contentsOf: file.url)
-        } catch {
-            throw MailStoreError.unreadable
+        let parsedEmlx = try Self.parseEmlx(url)
+        if let bytes = Self.mimeAttachmentBytes(in: parsedEmlx.data, filename: filename) {
+            return bytes
         }
+        throw MailStoreError.attachmentNotFound
     }
 }
 
@@ -125,13 +132,57 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let attachments: [MailAttachment]
 }
 
-public struct MailAttachment: Equatable, Sendable {
+public struct MailAttachment: Equatable, Hashable, Sendable, Codable {
     public let filename: String
     public let byteCount: Int
+    public let mimeType: String?
 
-    public init(filename: String, byteCount: Int) {
+    public init(filename: String, byteCount: Int, mimeType: String? = nil) {
         self.filename = filename
         self.byteCount = byteCount
+        self.mimeType = mimeType
+    }
+
+    public var sizeLabel: String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(byteCount))
+    }
+}
+
+/// HTML vs plain: Apple Mail often closes `</html>` before the rest of the letter.
+public enum MailMIME: Sendable {
+    public static func htmlLooksLikePrefix(html: String?, plain: String) -> Bool {
+        guard let html else { return false }
+        let stripped = collapsed(stripTags(html))
+        let collapsedPlain = collapsed(plain)
+        guard !stripped.isEmpty, collapsedPlain.count > stripped.count + 20 else { return false }
+        return collapsedPlain.hasPrefix(stripped)
+    }
+
+    static func stripTags(_ html: String) -> String {
+        var result = ""
+        result.reserveCapacity(html.count)
+        var inTag = false
+        for ch in html {
+            if ch == "<" {
+                inTag = true
+                continue
+            }
+            if ch == ">" {
+                inTag = false
+                result.append(" ")
+                continue
+            }
+            if !inTag {
+                result.append(ch)
+            }
+        }
+        return result
+    }
+
+    static func collapsed(_ text: String) -> String {
+        text.split { $0.isWhitespace || $0 == "\u{FFFC}" }.joined(separator: " ")
     }
 }
 
@@ -149,6 +200,17 @@ public enum MailStoreError: Error, Equatable {
 private extension MailStore {
     /// Cap indexed body size so one HTML megamail cannot blow the RSS during ingest.
     static let maxIndexedBodyBytes = 32_768
+}
+
+private struct ParsedRFC822 {
+    var from: String
+    var to: String
+    var date: String
+    var subject: String
+    var body: String
+    var htmlBody: String?
+    var rawBody: String
+    var attachments: [MailAttachment]
 }
 
 extension MailStore {
@@ -549,96 +611,179 @@ extension MailStore {
         return nil
     }
 
-    static func parseRFC822(_ data: Data) throws -> (
-        from: String,
-        to: String,
-        date: String,
-        subject: String,
-        body: String,
-        htmlBody: String?,
-        rawBody: String
-    ) {
+    fileprivate static func parseRFC822(_ data: Data) throws -> ParsedRFC822 {
         guard !data.isEmpty else { throw MailStoreError.malformed }
-        let scan = data.prefix(min(data.count, 256_000))
-        let text = String(decoding: scan, as: UTF8.self)
+        let text = String(decoding: data, as: UTF8.self)
         let (headerBlock, bodyBlock) = splitHeadersAndBody(text)
         let headers = parseHeaders(headerBlock)
         let rawBody = bodyBlock
-        let (plain, html) = decodeBodies(bodyBlock: bodyBlock, headers: headers)
-        var body = plain
+        let decoded = decodeBodies(bodyBlock: bodyBlock, headers: headers)
+        var body = decoded.plain
         if body.utf8.count > maxIndexedBodyBytes {
             body = String(body.prefix(maxIndexedBodyBytes))
         }
-        return (
+        return ParsedRFC822(
             from: decodeRFC2047(headers["from"] ?? ""),
             to: decodeRFC2047(headers["to"] ?? ""),
             date: headers["date"] ?? "",
             subject: decodeRFC2047(headers["subject"] ?? ""),
             body: body,
-            htmlBody: html,
-            rawBody: rawBody
+            htmlBody: decoded.html,
+            rawBody: rawBody,
+            attachments: decoded.attachments
         )
     }
 
-    /// Plain for index/search; HTML when a text/html part exists.
+    /// Plain for index/search; every HTML part; MIME attachments (filename or application/*).
     static func decodeBodies(
         bodyBlock: String,
         headers: [String: String]
-    ) -> (plain: String, html: String?) {
+    ) -> (plain: String, html: String?, attachments: [MailAttachment]) {
+        var plains: [String] = []
+        var htmls: [String] = []
+        var attachments: [MailAttachment] = []
+        forEachLeafPart(bodyBlock: bodyBlock, headers: headers) { partHeaders, partBody in
+            let contentType = partHeaders["content-type"] ?? "text/plain"
+            let mime = mediaType(contentType)
+            let transfer = partHeaders["content-transfer-encoding"]
+            let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
+            if mime.hasPrefix("text/plain") {
+                let plain = decodeTransferEncodedBody(partBody, transferEncoding: transfer, charset: charset)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !plain.isEmpty { plains.append(plain) }
+            } else if mime.hasPrefix("text/html") {
+                let html = decodeTransferEncodedBody(partBody, transferEncoding: transfer, charset: charset)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !html.isEmpty { htmls.append(html) }
+            }
+            if let attachment = attachmentMetadata(headers: partHeaders, body: partBody, mime: mime) {
+                attachments.append(attachment)
+            }
+        }
+        let html = htmls.isEmpty ? nil : htmls.joined()
+        return (plains.first ?? "", html, attachments)
+    }
+
+    static func forEachLeafPart(
+        bodyBlock: String,
+        headers: [String: String],
+        visit: (_ headers: [String: String], _ body: String) -> Void
+    ) {
         let contentType = headers["content-type"] ?? "text/plain"
         if contentType.lowercased().hasPrefix("multipart/") {
             guard let boundary = extractParameter(contentType, named: "boundary") else {
-                return (bodyBlock.trimmingCharacters(in: .whitespacesAndNewlines), nil)
+                visit(headers, bodyBlock)
+                return
             }
-            let plain = firstPart(
-                fromMultipart: bodyBlock,
-                boundary: boundary,
-                mimePrefix: "text/plain"
-            )
-            let html = firstPart(
-                fromMultipart: bodyBlock,
-                boundary: boundary,
-                mimePrefix: "text/html"
-            )
-            return (plain ?? "", html)
+            for part in splitMultipart(bodyBlock, boundary: boundary) {
+                let (partHeaders, partBody) = splitHeadersAndBody(part)
+                forEachLeafPart(
+                    bodyBlock: partBody,
+                    headers: parseHeaders(partHeaders),
+                    visit: visit
+                )
+            }
+            return
         }
-
-        let transfer = headers["content-transfer-encoding"]
-        let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
-        let decoded = decodeTransferEncodedBody(bodyBlock, transferEncoding: transfer, charset: charset)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if contentType.lowercased().hasPrefix("text/html") {
-            return ("", decoded.isEmpty ? nil : decoded)
-        }
-        return (decoded, nil)
+        visit(headers, bodyBlock)
     }
 
-    static func firstPart(
-        fromMultipart body: String,
-        boundary: String,
-        mimePrefix: String
-    ) -> String? {
-        for part in splitMultipart(body, boundary: boundary) {
-            let (partHeaders, partBody) = splitHeadersAndBody(part)
-            let headers = parseHeaders(partHeaders)
-            let contentType = headers["content-type"] ?? "text/plain"
-            if contentType.lowercased().hasPrefix("multipart/") {
-                if let nested = extractParameter(contentType, named: "boundary"),
-                   let found = firstPart(fromMultipart: partBody, boundary: nested, mimePrefix: mimePrefix)
-                {
-                    return found
-                }
-                continue
-            }
-            guard contentType.lowercased().hasPrefix(mimePrefix) else { continue }
-            let charset = extractParameter(contentType, named: "charset") ?? "utf-8"
-            return decodeTransferEncodedBody(
-                partBody,
-                transferEncoding: headers["content-transfer-encoding"],
-                charset: charset
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
+    static func mediaType(_ contentType: String) -> String {
+        contentType.split(separator: ";").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? "text/plain"
+    }
+
+    static func attachmentMetadata(
+        headers: [String: String],
+        body: String,
+        mime: String
+    ) -> MailAttachment? {
+        if mime.hasPrefix("text/plain") || mime.hasPrefix("text/html") {
+            return nil
         }
-        return nil
+        let disposition = headers["content-disposition"] ?? ""
+        let filename = extractParameter(disposition, named: "filename")
+            ?? extractParameter(headers["content-type"] ?? "", named: "name")
+        let isApplication = mime.hasPrefix("application/")
+        guard filename != nil || isApplication else { return nil }
+        let trimmed = filename?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolved = trimmed.isEmpty ? fallbackFilename(mime: mime) : trimmed
+        return MailAttachment(
+            filename: resolved,
+            byteCount: partByteCount(headers: headers, body: body),
+            mimeType: mime
+        )
+    }
+
+    static func fallbackFilename(mime: String) -> String {
+        let subtype = mime.split(separator: "/").dropFirst().first.map(String.init) ?? "octet-stream"
+        return "attachment.\(subtype)"
+    }
+
+    static func partByteCount(headers: [String: String], body: String) -> Int {
+        if let apple = Int(headers["x-apple-content-length"] ?? ""), apple > 0 {
+            return apple
+        }
+        let transfer = (headers["content-transfer-encoding"] ?? "7bit")
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces)
+        switch transfer {
+        case "base64":
+            let cleaned = body.filter { !$0.isWhitespace }
+            guard !cleaned.isEmpty else { return 0 }
+            let padding = cleaned.reversed().prefix(while: { $0 == "=" }).count
+            return max(0, cleaned.count * 3 / 4 - padding)
+        case "quoted-printable":
+            return decodeQuotedPrintableBytes(body).count
+        default:
+            return body.utf8.count
+        }
+    }
+
+    static func mimeAttachmentBytes(in data: Data, filename: String) -> Data? {
+        let text = String(decoding: data, as: UTF8.self)
+        let (headerBlock, bodyBlock) = splitHeadersAndBody(text)
+        let want = filename.lowercased()
+        var found: Data?
+        forEachLeafPart(bodyBlock: bodyBlock, headers: parseHeaders(headerBlock)) { partHeaders, partBody in
+            guard found == nil else { return }
+            let mime = mediaType(partHeaders["content-type"] ?? "")
+            guard let meta = attachmentMetadata(headers: partHeaders, body: partBody, mime: mime),
+                  meta.filename.lowercased() == want
+            else { return }
+            found = decodeTransferEncodedData(
+                partBody,
+                transferEncoding: partHeaders["content-transfer-encoding"]
+            )
+        }
+        return found.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    static func mergeAttachments(
+        _ mime: [MailAttachment],
+        disk: [MailAttachment]
+    ) -> [MailAttachment] {
+        var byKey: [String: MailAttachment] = [:]
+        var order: [String] = []
+        func absorb(_ att: MailAttachment) {
+            let key = att.filename.lowercased()
+            if let existing = byKey[key] {
+                let byteCount = att.byteCount > 0 ? att.byteCount : existing.byteCount
+                let mimeType = existing.mimeType ?? att.mimeType
+                byKey[key] = MailAttachment(
+                    filename: existing.filename,
+                    byteCount: byteCount,
+                    mimeType: mimeType
+                )
+            } else {
+                byKey[key] = att
+                order.append(key)
+            }
+        }
+        mime.forEach(absorb)
+        disk.forEach(absorb)
+        return order.map { byKey[$0]! }
     }
 
     static func splitMultipart(_ body: String, boundary: String) -> [String] {
@@ -680,18 +825,26 @@ extension MailStore {
         transferEncoding: String?,
         charset: String
     ) -> String {
+        decodeRFC2047Bytes(
+            decodeTransferEncodedData(body, transferEncoding: transferEncoding),
+            charset: charset
+        )
+    }
+
+    static func decodeTransferEncodedData(
+        _ body: String,
+        transferEncoding: String?
+    ) -> Data {
         let encoding = (transferEncoding ?? "7bit").lowercased().trimmingCharacters(in: .whitespaces)
-        let data: Data
         switch encoding {
         case "base64":
             let cleaned = body.filter { !$0.isWhitespace }
-            data = Data(base64Encoded: cleaned) ?? Data()
+            return Data(base64Encoded: cleaned) ?? Data()
         case "quoted-printable":
-            data = decodeQuotedPrintableBytes(body)
+            return decodeQuotedPrintableBytes(body)
         default:
-            data = Data(body.utf8)
+            return Data(body.utf8)
         }
-        return decodeRFC2047Bytes(data, charset: charset)
     }
 
     static func splitHeadersAndBody(_ text: String) -> (String, String) {
@@ -853,6 +1006,11 @@ private func decodeQuotedPrintableBytes(_ input: String) -> Data {
             {
                 output.append(UInt8(hi * 16 + lo))
                 i += 3
+                continue
+            }
+            // Soft break at end of part: trailing `=` with no CRLF/LF after split.
+            if i + 1 >= bytes.count {
+                i += 1
                 continue
             }
         }

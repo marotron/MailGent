@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MailStore
 import Observation
@@ -209,6 +210,28 @@ final class CompanionSession {
 
     func openInMail() {
         handoffNote = "Apple Mail handoff needs a Message-ID this index does not store yet."
+    }
+
+    func openAttachment(_ attachment: MailAttachment, of message: ReadMessage) {
+        Task {
+            do {
+                let data = try await worker.attachmentData(
+                    accountID: message.accountID,
+                    placement: message.placement,
+                    id: message.id,
+                    filename: attachment.filename
+                )
+                let directory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("MailGent-attachments", isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let safeName = URL(fileURLWithPath: attachment.filename).lastPathComponent
+                let file = directory.appendingPathComponent(safeName)
+                try data.write(to: file, options: .atomic)
+                NSWorkspace.shared.open(file)
+            } catch {
+                status = "Could not open \(attachment.filename)"
+            }
+        }
     }
 
     func openHome() {

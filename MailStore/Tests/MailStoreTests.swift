@@ -307,6 +307,98 @@ struct MailStoreTests {
         #expect(message.body == "unfinished")
     }
 
+    @Test func detectsInlineMIMEPDFAndKeepsCompletePlainWhenHTMLStopsEarly() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let pdfB64 = "JVBERi0xLjQK"
+        try root.writeEmlx(
+            named: "88.emlx",
+            rfc822: """
+            From: Me <me@example.com>
+            To: Team <team@example.com>
+            Subject: Check-in vs check-out
+            Date: Sun, 23 Aug 2026 12:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="Apple-Mail=_alt"
+
+            --Apple-Mail=_alt
+            Content-Type: text/plain; charset=utf-8
+            Content-Transfer-Encoding: quoted-printable
+
+            Hi team,
+
+            Quick compare of check-in vs check-out.
+
+            1. Check-in is arrival
+            2. Check-out is departure
+            3. Overlap is billed twice
+            4. See the attached table
+            =EF=BF=BC=
+            --Apple-Mail=_alt
+            Content-Type: multipart/mixed; boundary="Apple-Mail=_mix"
+
+            --Apple-Mail=_mix
+            Content-Type: text/html; charset=utf-8
+            Content-Transfer-Encoding: quoted-printable
+
+            <html><body><p>Hi team,</p><p>Quick compare of check-in vs check-out.</p></html>=
+            --Apple-Mail=_mix
+            Content-Type: application/pdf; name="checkin-vs-checkout-compare.pdf"
+            Content-Disposition: inline; filename="checkin-vs-checkout-compare.pdf"
+            Content-Transfer-Encoding: base64
+
+            \(pdfB64)
+            --Apple-Mail=_mix--
+            --Apple-Mail=_alt--
+            """,
+            account: accountID,
+            mailbox: "Sent Messages.mbox"
+        )
+
+        let message = try MailStore(root: root.mail).message(
+            accountID: accountID,
+            mailbox: "Sent Messages",
+            id: "88"
+        )
+
+        #expect(message.attachments.map(\.filename) == ["checkin-vs-checkout-compare.pdf"])
+        #expect(message.attachments.first?.byteCount == 9)
+        #expect(message.body.contains("1. Check-in is arrival"))
+        #expect(message.body.contains("2. Check-out is departure"))
+        #expect(message.body.contains("3. Overlap is billed twice"))
+        #expect(message.body.contains("4. See the attached table"))
+        #expect(message.body.contains("\u{FFFC}"))
+        #expect(!message.body.hasSuffix("="))
+        #expect(!(message.htmlBody ?? "").contains("1. Check-in"))
+        #expect((message.htmlBody ?? "").contains("Hi team"))
+        #expect(MailMIME.htmlLooksLikePrefix(html: message.htmlBody, plain: message.body))
+
+        let pdf = try MailStore(root: root.mail).attachmentData(
+            accountID: accountID,
+            mailbox: "Sent Messages",
+            messageID: "88",
+            filename: "checkin-vs-checkout-compare.pdf"
+        )
+        #expect(pdf == Data(base64Encoded: pdfB64))
+    }
+
+    @Test func htmlPrefixHeuristicIgnoresAlternativeBodies() {
+        #expect(
+            MailMIME.htmlLooksLikePrefix(
+                html: "<p>HTML sale</p>",
+                plain: "Labor Day Sale is live.\nSoft break which continues."
+            ) == false
+        )
+        #expect(
+            MailMIME.htmlLooksLikePrefix(
+                html: "<p>Hi team,</p><p>Quick compare of check-in vs check-out.</p>",
+                plain: "Hi team,\n\nQuick compare of check-in vs check-out.\n\n1. Check-in is arrival"
+            )
+        )
+    }
+
     @Test func listsExternalAttachmentMetadataAndFetchesBytesOnDemand() throws {
         let root = try FixtureTree()
         defer { root.remove() }
@@ -349,9 +441,8 @@ struct MailStoreTests {
         let store = MailStore(root: root.mail)
         let message = try store.message(accountID: accountID, mailbox: "INBOX", id: "42")
         #expect(message.isPartial == true)
-        #expect(message.attachments == [
-            MailAttachment(filename: "docs.zip", byteCount: 13),
-        ])
+        #expect(message.attachments.map(\.filename) == ["docs.zip"])
+        #expect(message.attachments.first?.byteCount == 13)
 
         let bytes = try store.attachmentData(
             accountID: accountID,
