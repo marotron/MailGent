@@ -1,6 +1,8 @@
 # MailGent Privacy Policy
 
-**Last updated:** 17 August 2026
+**Last updated:** 24 August 2026
+
+**This 0.1.0 alpha binary does not match every v1 behavior below.** It reads Apple Mail on disk (`~/Library/Mail`) after Full Disk Access. The pairing credential is a local JSON file under Application Support, not Keychain. Gmail/Yahoo OAuth, Keychain tokens, mutation approvals, and remote sessions in this policy are planned v1, not this build.
 
 This policy describes how MailGent (“MailGent,” “we,” “us”) handles information when you use the MailGent macOS application and related local services.
 

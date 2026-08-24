@@ -11,3 +11,7 @@ Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain
 ### App icon / logo
 
 Candidate-first. Sketch in `.scratch/app-icon/candidates/`; do not write `AppIcon` until the user ships a named candidate. See `docs/agents/app-icon.md`.
+
+### License / liability / Homebrew
+
+Apache-2.0 + `NOTICE`; name and icon stay ours; Homebrew is a cask of the notarized GitHub Release. See `docs/agents/licensing.md`.

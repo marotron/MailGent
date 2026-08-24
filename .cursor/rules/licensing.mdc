@@ -1,0 +1,14 @@
+---
+description: Apache-2.0 + NOTICE, liability copy, Homebrew cask — do not pick MIT/GPL.
+globs: LICENSE,NOTICE,Casks/**,PRIVACY.md,README.md,.cursor/skills/licensing/**
+alwaysApply: false
+---
+
+# Licensing
+
+Follow `docs/agents/licensing.md` (skill `licensing`).
+
+- Source license is **Apache-2.0** + root **NOTICE**. Not MIT, not GPL.
+- Closed use of the code is allowed if credits stay. Name and icon are trademarks; forks rename.
+- Warranty copy is AS IS; do not claim the license is a total liability shield.
+- Homebrew = cask of our notarized GitHub Release only; no placeholder sha256.
