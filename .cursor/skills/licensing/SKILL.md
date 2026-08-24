@@ -18,7 +18,8 @@ Follow [docs/agents/licensing.md](../../../docs/agents/licensing.md). Do not re-
 2. **Closed forks may use the code** if they keep copyright, license, and NOTICE credits. That is the point of Apache here.
 3. **Name and icon are not licensed.** Forks rename. Apache does not grant the MailGent trademark.
 4. **Apache AS IS is not “no responsibility ever.”** Put a short user disclaimer on official binaries; do not claim the license beats consumer law or a paid store listing.
-5. **Homebrew is a cask of our notarized GitHub Release.** No fake `sha256`. No formula. No `homebrew/cask` PR until that artifact exists.
+5. **Homebrew is future.** Do not add a cask or tap until a notarized GitHub Release zip exists. Then it is a cask of that file only. No fake `sha256`. No formula. No `homebrew/cask` PR until that artifact exists.
+6. **Never sign or notarize as company.** No `employer@example.com`, no team `COMPANY_TEAM_ID`. Personal Apple ID only (`marotron@gmail.com`). The owner does not work at company.
 
 ## Apply (only when the user wants files)
 
@@ -27,10 +28,11 @@ Follow [docs/agents/licensing.md](../../../docs/agents/licensing.md). Do not re-
 3. Write `NOTICE` from the template in `docs/agents/licensing.md`.
 4. README: SPDX, NOTICE, trademark sentence, official binary = Releases (+ cask when live).
 5. Liability: AS IS, possible mail loss, we do not rewrite Apple Mail’s store, paired agents have their own practices — see `PRIVACY.md`.
-6. Homebrew: add `Casks/mailgent.rb` **after** a real Release URL and sha256; tap instructions in README.
+6. Homebrew: **not now.** Add `Casks/mailgent.rb` only after a real notarized Release URL and sha256; then tap instructions in README.
 
 ## Do not
 
 - Relicense without an explicit user change to this policy.
 - Invent a CLA, EULA novel, or patent filing.
 - Tell the user a license protects the *idea*.
+- Use company / `employer@example.com` for codesign, notary, App Store, CI, or Xcode team.

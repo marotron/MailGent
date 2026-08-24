@@ -59,7 +59,7 @@ SPDX `Apache-2.0`. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 The names “MailGent” and the MailGent logos are trademarks of the copyright holder. Apache-2.0 does not grant trademark rights. Forks must rename.
 
-Official binaries (when they exist) are notarized GitHub Releases. A Homebrew cask comes later from the same file. No placeholder sha256.
+Official binaries (when they exist) are notarized GitHub Releases. A Homebrew cask is **planned later** from that same file — not this alpha. No placeholder sha256.
 
 ## Warranty
 

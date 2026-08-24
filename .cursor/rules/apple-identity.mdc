@@ -1,0 +1,20 @@
+---
+description: MailGent Apple signing is personal only — never company or employer@example.com.
+alwaysApply: true
+---
+
+# Apple identity (hard stop)
+
+MailGent is **personal**. The owner does **not** work at company.
+
+**Never** use for this repo, CI, Xcode, `codesign`, `notarytool`, App Store Connect, GitHub secrets, or Homebrew:
+
+- Apple ID `employer@example.com`
+- Team **Company Developer Team** (`COMPANY_TEAM_ID`)
+- Any company Developer ID, Mac App Distribution cert, notary keychain profile, or provisioning profile
+
+Do not suggest “use the company team if MailGent should ship under company.” It must not.
+
+**Allowed:** personal Apple ID (`marotron@gmail.com` / marotron). Paid Apple Developer Program on that account when a notarized binary is needed. Free Personal Team cannot Developer ID-sign.
+
+If a paid company team appears in `security find-identity` or Xcode, ignore it. Ask the user to enroll/use the personal program instead.

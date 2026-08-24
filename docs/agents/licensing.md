@@ -15,7 +15,8 @@ Canonical MailGent policy for source license, user-facing disclaimers, and binar
 | Closed forks | **Allowed**, if they keep license + NOTICE credits |
 | Name and icon | **Not licensed.** “MailGent,” the mark, and the app icon stay with the copyright holder. Forks rename. |
 | Official binary | **Developer ID + notarized** GitHub Release only |
-| Homebrew | **Optional cask** of that same notarized file, via our tap — not `homebrew/cask` until a real release exists |
+| Signing identity | **Personal Apple ID only** (`marotron@gmail.com` / marotron). Never company. |
+| Homebrew | **Future.** Do not add a cask or tap until a notarized GitHub Release zip exists (paid personal Apple Developer Program). Then cask that same file — not `homebrew/cask` until a public hashed artifact exists. |
 
 **Why Apache, not MIT:** same freedoms (use, fork, sell, close a fork) plus a real `NOTICE` duty, an explicit patent grant, inbound contributions under Apache unless stated otherwise, and an explicit “no trademark license.”
 
@@ -74,9 +75,11 @@ If adding in-app legal copy, keep it short: Apache-2.0, AS IS, may lose or corru
 
 ---
 
-## Homebrew (optional channel)
+## Homebrew (future — do not ship yet)
 
-Homebrew for MailGent is a **cask** (`.app`), never a **formula**.
+**Status: later.** Alpha 0.1.0 is source-only. There is no Developer ID cert, no notarized zip, and no `$99` personal Apple Developer Program on `marotron@gmail.com` yet. Agents must **not** add `Casks/mailgent.rb`, tap docs, or `brew install --cask mailgent` as a working install path. Unsigned/`xcodebuild` zips are not a Homebrew release.
+
+When (and only when) a notarized GitHub Release artifact exists, Homebrew for MailGent is a **cask** (`.app`), never a **formula**.
 
 | Do | Do not |
 |---|---|
@@ -85,7 +88,7 @@ Homebrew for MailGent is a **cask** (`.app`), never a **formula**.
 | `zap` Application Support / preferences for `app.mailgent.MailGent` | Build-from-source in the cask (users install the signed app) |
 | Custom tap until the app is public enough for core cask | Call a debug/`xcodebuild` app “the Homebrew build” |
 
-**Tap (early):** cask in this repo (`Casks/mailgent.rb`) and:
+**Later (not now):** cask in this repo (`Casks/mailgent.rb`) and:
 
 ```text
 brew tap marotron/mailgent https://github.com/marotron/MailGent
@@ -118,6 +121,18 @@ end
 Adjust archive name and `app` path to match the actual Release. `livecheck` against GitHub Releases once versions are tagged.
 
 Signed + notarized + stapled is a **Gatekeeper** requirement for the download, not a liability waiver.
+
+---
+
+## Apple signing identity (never company)
+
+The owner **does not work at company**. MailGent must never be signed, notarized, provisioned, or submitted with:
+
+- Apple ID `employer@example.com`
+- Team **Company Developer Team** (`COMPANY_TEAM_ID`)
+- Any company certificate, notary profile, or Xcode team
+
+Use the **personal** Apple Developer Program (`marotron@gmail.com`). Ignore other teams on the Mac. Agents must not offer company as a shortcut.
 
 ---
 
