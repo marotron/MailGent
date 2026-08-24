@@ -13,7 +13,7 @@ This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local
 - Append-only access log
 - MailGent-owned draft ledger (in-memory; not written into Mail.app)
 
-Default source is **fixture mail**. Live Mail needs Full Disk Access.
+Default source is **fixture mail**. Live Mail needs a readable `~/Library/Mail` (Full Disk Access, or Choose Mail Folder…).
 
 ## Not working yet
 
@@ -32,7 +32,7 @@ Do not advertise these as shipped:
 - Xcode 16 / Swift 6
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 - Apple Mail with mail already downloaded
-- Full Disk Access (sandbox is off; [`MailGent.entitlements`](MailGent/MailGent.entitlements) is empty because FDA is a TCC grant)
+- Access to `~/Library/Mail` (sandbox is off; [`MailGent.entitlements`](MailGent/MailGent.entitlements) is empty). Full Disk Access is one way; Choose Mail Folder… is enough for messages. Enable FDA if account names stay as UUIDs (`~/Library/Accounts`).
 
 ## Install / run
 
@@ -43,7 +43,7 @@ make run
 make xcode
 ```
 
-Menu bar only (`LSUIElement`). Settings → Access → enable Full Disk Access → Recheck, or Choose Mail Folder.
+Menu bar only (`LSUIElement`). Settings → Access → Recheck, Open Full Disk Access, or Choose Mail Folder…
 
 `make prototype-accounts` is a **dev CLI**, not part of the `.app`.
 
