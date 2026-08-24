@@ -1,6 +1,5 @@
 .env
 .env.*
-!.env.example
 
 # macOS
 .DS_Store
@@ -11,9 +10,21 @@ DerivedData/
 *.xcuserstate
 .xcode-version
 .build/
+.swiftpm/
+*.xcresult
+*.hmap
+*.moved-aside
+*.xcactivitylog
+*.dSYM
+*.dSYM.zip
+*.ipa
+*.profdata
+*.profraw
 
 # Editor history
 .history/
+.idea/
+*.swp
 
 # Firecrawl scratch dumps
 .firecrawl/
@@ -23,7 +34,10 @@ node_modules/
 
 # Local icon recon; product assets live in Design/IconPack and MailGent/Resources
 .scratch/_icon-trace/
+.scratch/_icon-preview/
+.scratch/app-icon/_keyline-iconset/
+.scratch/app-icon/_keyline.iconset/
+.scratch/app-icon/_preview-mark/
 
 # Nested clone of https://github.com/frontedu/liquid-composer — not MailGent
 .scratch/liquid-composer/
-
