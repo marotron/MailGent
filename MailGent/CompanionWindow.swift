@@ -432,8 +432,11 @@ struct CompanionWindow: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Access health")
                 .font(.headline)
-            Text(session.mailAccessGranted ? "Full Disk Access granted" : "Grant access to Mail")
+            Text(session.access.snapshot.headline)
                 .foregroundStyle(session.mailAccessGranted ? .green : .orange)
+            Text(session.access.snapshot.explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Text("Companion will not write Apple Mail’s store.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -46,16 +46,17 @@ final class MailAccessSession {
 }
 
 struct GrantAccessView: View {
-    var session: MailAccessSession
+    @Bindable var session: MailAccessSession
 
     var body: some View {
         Form {
-            Section("Grant access to Mail") {
-                Text(
-                    "MailGent reads Apple Mail’s local store on this Mac. macOS Full Disk Access is a System Settings grant — no entitlement can skip it. Until that grant succeeds, MailGent will not read mail.\n\nSystem Settings → Privacy & Security → Full Disk Access → enable MailGent. Then return here and Recheck. You can also choose the Mail folder as a fallback."
-                )
-                .foregroundStyle(.secondary)
-                .font(.callout)
+            Section(session.snapshot.headline) {
+                Text(session.snapshot.explanation)
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                Text("Companion will not write Apple Mail’s store.")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
                 Button("Open Full Disk Access") {
                     session.openFullDiskAccessSettings()
                 }

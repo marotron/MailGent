@@ -16,6 +16,23 @@ struct MailLibraryAccessSnapshot: Equatable, Sendable {
             .denied
         }
     }
+
+    /// Human status: can we list Mail, not whether the FDA toggle is on.
+    var headline: String {
+        access == .granted ? "Mail folder readable" : "Grant access to Mail"
+    }
+
+    var explanation: String {
+        switch access {
+        case .granted:
+            if hasReadableFolderBookmark, !canListMailDirectory {
+                return "Indexing uses the Mail folder you chose. Full Disk Access in System Settings is not required for messages. Enable it if account names stay as UUIDs — those labels come from ~/Library/Accounts, which is outside Mail."
+            }
+            return "This process can list ~/Library/Mail, which is enough to index messages. The Full Disk Access switch in System Settings can stay off. Enable it if account names stay as UUIDs — those labels come from ~/Library/Accounts, which is outside Mail."
+        case .denied:
+            return "MailGent only needs to read ~/Library/Mail. macOS has no Files & Folders toggle for Mail. Use Full Disk Access, or Choose Mail Folder… for that directory only. Then Recheck."
+        }
+    }
 }
 
 enum MailLibraryProbe {

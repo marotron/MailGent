@@ -70,7 +70,7 @@ final class CompanionSession {
     var scanCatalog: [DetectedAccount] = []
     var status = ""
     var handoffNote: String?
-    var mailAccessGranted = false
+    var mailAccessGranted: Bool { access.snapshot.access == .granted }
     var isIndexing = false
     var isUpdating = false
     var ingestProcessed = 0
@@ -126,7 +126,6 @@ final class CompanionSession {
 
     func refreshAccess() {
         access.refresh()
-        mailAccessGranted = access.snapshot.access == .granted
     }
 
     var availableSources: [MailSourceID] {
