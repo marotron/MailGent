@@ -18,7 +18,7 @@ xcode: generate
 
 run: generate
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath '$(DERIVED_DATA)' CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES build
-	@killall MailGent >/dev/null 2>&1 || true
+	@killall -9 MailGent >/dev/null 2>&1 || true
 	@sleep 0.2
 	@echo "Menu bar app — no Dock icon. Click the tray icon, then Open Companion."
 	open '$(DERIVED_DATA)/Build/Products/Debug/MailGent.app'
