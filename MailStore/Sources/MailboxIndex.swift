@@ -18,6 +18,7 @@ public final class MailboxIndex {
                 message_id TEXT NOT NULL,
                 from_addr TEXT NOT NULL,
                 to_addr TEXT NOT NULL,
+                cc_addr TEXT NOT NULL DEFAULT '',
                 date TEXT NOT NULL,
                 date_sort REAL NOT NULL DEFAULT 0,
                 subject TEXT NOT NULL,
@@ -66,16 +67,20 @@ public final class MailboxIndex {
         try migrateSchema()
     }
 
-    /// Adds `date_sort` on older DBs and backfills from RFC822 `date` (user_version ≥ 1).
+    /// Adds `date_sort` / `cc_addr` on older DBs; backfills `date_sort` (user_version ≥ 1).
     private func migrateSchema() throws {
         var hasDateSort = false
+        var hasCc = false
         try db.query("PRAGMA table_info(messages)") { stmt in
-            if sqlite3_column_string(stmt, 1) == "date_sort" {
-                hasDateSort = true
-            }
+            let name = sqlite3_column_string(stmt, 1)
+            if name == "date_sort" { hasDateSort = true }
+            if name == "cc_addr" { hasCc = true }
         }
         if !hasDateSort {
             try db.execute("ALTER TABLE messages ADD COLUMN date_sort REAL NOT NULL DEFAULT 0")
+        }
+        if !hasCc {
+            try db.execute("ALTER TABLE messages ADD COLUMN cc_addr TEXT NOT NULL DEFAULT ''")
         }
 
         var version = 0
@@ -258,7 +263,7 @@ public final class MailboxIndex {
         var hits: [IndexedMessage] = []
         try db.query(
             """
-            SELECT m.account_id, m.placement, m.message_id, m.from_addr, m.to_addr, m.date, m.subject, m.body, m.is_partial
+            SELECT m.account_id, m.placement, m.message_id, m.from_addr, m.to_addr, m.date, m.subject, m.body, m.is_partial, m.cc_addr
             FROM messages_fts
             JOIN messages m ON m.rowid = messages_fts.rowid
             WHERE messages_fts MATCH ?
@@ -278,7 +283,7 @@ public final class MailboxIndex {
         var rows: [IndexedMessage] = []
         try db.query(
             """
-            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, body, is_partial
+            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, body, is_partial, cc_addr
             FROM messages
             ORDER BY account_id, placement, message_id
             """,
@@ -344,7 +349,7 @@ public final class MailboxIndex {
         let whereSQL = clauses.isEmpty ? "" : "WHERE " + clauses.joined(separator: " AND ")
         try db.query(
             """
-            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, is_partial
+            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, is_partial, cc_addr
             FROM messages
             \(whereSQL)
             ORDER BY account_id, placement, message_id
@@ -384,7 +389,7 @@ public final class MailboxIndex {
         if placement != nil { clauses.append("m.placement = ?") }
         try db.query(
             """
-            SELECT m.account_id, m.placement, m.message_id, m.from_addr, m.to_addr, m.date, m.subject, m.is_partial
+            SELECT m.account_id, m.placement, m.message_id, m.from_addr, m.to_addr, m.date, m.subject, m.is_partial, m.cc_addr
             FROM messages_fts
             JOIN messages m ON m.rowid = messages_fts.rowid
             WHERE \(clauses.joined(separator: " AND "))
@@ -417,7 +422,7 @@ public final class MailboxIndex {
         var found: IndexedMessage?
         try db.query(
             """
-            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, body, is_partial
+            SELECT account_id, placement, message_id, from_addr, to_addr, date, subject, body, is_partial, cc_addr
             FROM messages
             WHERE account_id = ? AND placement = ? AND message_id = ?
             """,
@@ -441,6 +446,7 @@ public final class MailboxIndex {
             placement: sqlite3_column_string(stmt, 1),
             from: sqlite3_column_string(stmt, 3),
             to: sqlite3_column_string(stmt, 4),
+            cc: sqlite3_column_string(stmt, 9),
             date: sqlite3_column_string(stmt, 5),
             subject: sqlite3_column_string(stmt, 6),
             body: sqlite3_column_string(stmt, 7),
@@ -455,6 +461,7 @@ public final class MailboxIndex {
             placement: sqlite3_column_string(stmt, 1),
             from: sqlite3_column_string(stmt, 3),
             to: sqlite3_column_string(stmt, 4),
+            cc: sqlite3_column_string(stmt, 8),
             date: sqlite3_column_string(stmt, 5),
             subject: sqlite3_column_string(stmt, 6),
             body: "",
@@ -496,12 +503,13 @@ public final class MailboxIndex {
         try db.execute(
             """
             INSERT INTO messages (
-                account_id, placement, message_id, from_addr, to_addr, date, date_sort, subject, body, is_partial,
+                account_id, placement, message_id, from_addr, to_addr, cc_addr, date, date_sort, subject, body, is_partial,
                 path, inode, mtime, size
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(account_id, placement, message_id) DO UPDATE SET
                 from_addr = excluded.from_addr,
                 to_addr = excluded.to_addr,
+                cc_addr = excluded.cc_addr,
                 date = excluded.date,
                 date_sort = excluded.date_sort,
                 subject = excluded.subject,
@@ -519,15 +527,16 @@ public final class MailboxIndex {
                 sqlite3_bind_text(stmt, 3, id, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 4, message.from, -1, SQLITE_TRANSIENT)
                 sqlite3_bind_text(stmt, 5, message.to, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_text(stmt, 6, message.date, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_double(stmt, 7, dateSort)
-                sqlite3_bind_text(stmt, 8, message.subject, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_text(stmt, 9, message.body, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_int(stmt, 10, message.isPartial ? 1 : 0)
-                sqlite3_bind_text(stmt, 11, identity.path, -1, SQLITE_TRANSIENT)
-                sqlite3_bind_int64(stmt, 12, Int64(bitPattern: identity.inode))
-                sqlite3_bind_double(stmt, 13, identity.mtime)
-                sqlite3_bind_int64(stmt, 14, Int64(identity.size))
+                sqlite3_bind_text(stmt, 6, message.cc, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 7, message.date, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_double(stmt, 8, dateSort)
+                sqlite3_bind_text(stmt, 9, message.subject, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_text(stmt, 10, message.body, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_int(stmt, 11, message.isPartial ? 1 : 0)
+                sqlite3_bind_text(stmt, 12, identity.path, -1, SQLITE_TRANSIENT)
+                sqlite3_bind_int64(stmt, 13, Int64(bitPattern: identity.inode))
+                sqlite3_bind_double(stmt, 14, identity.mtime)
+                sqlite3_bind_int64(stmt, 15, Int64(identity.size))
             }
         )
     }
@@ -622,6 +631,7 @@ public struct IndexedMessage: Equatable, Sendable {
     public let placement: String
     public let from: String
     public let to: String
+    public let cc: String
     public let date: String
     public let subject: String
     public let body: String

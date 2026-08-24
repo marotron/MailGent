@@ -12,16 +12,24 @@ struct GrantDeskView: View {
         var id: String { rawValue }
     }
 
+    private var isEditing: Bool { session.agents.isEditingGrants }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("", selection: $tab) {
-                ForEach(Tab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+            HStack(alignment: .center, spacing: 10) {
+                Picker("", selection: $tab) {
+                    ForEach(Tab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 220)
+                .accessibilityLabel("Grant desk section")
+
+                Spacer(minLength: 8)
+                editModeControls
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityLabel("Grant desk section")
 
             switch tab {
             case .scope:
@@ -33,8 +41,30 @@ struct GrantDeskView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(minWidth: 600, minHeight: 560)
-        .id(session.agents.grantRevision)
+        .frame(minWidth: 700, minHeight: 560)
+    }
+
+    @ViewBuilder
+    private var editModeControls: some View {
+        if isEditing {
+            HStack(spacing: 6) {
+                Button("Cancel") {
+                    session.agents.cancelGrantDeskEdits()
+                }
+                Button("Save") {
+                    session.agents.commitGrantDeskEdits()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .controlSize(.small)
+        } else {
+            Button("Edit") {
+                session.agents.beginGrantDeskEdits()
+            }
+            .controlSize(.small)
+            .help("Unlock to change grants")
+            .accessibilityLabel("Edit grants")
+        }
     }
 
     private var scopePane: some View {
@@ -47,17 +77,20 @@ struct GrantDeskView: View {
                 set: { session.agents.draftFromFilter = $0 }
             ))
                 .textFieldStyle(.roundedBorder)
+                .disabled(!isEditing)
             TextField("On/after date ISO8601 (optional)", text: Binding(
                 get: { session.agents.draftDateStart },
                 set: { session.agents.draftDateStart = $0 }
             ))
                 .textFieldStyle(.roundedBorder)
+                .disabled(!isEditing)
             GrantCheckRow(
                 title: "Deny carve-out mode",
                 isOn: session.agents.draftDenyMode
             ) {
                 session.agents.draftDenyMode.toggle()
             }
+            .disabled(!isEditing)
 
             if session.scanCatalog.isEmpty {
                 Text("Index accounts first.")
@@ -70,10 +103,11 @@ struct GrantDeskView: View {
                         }
                     }
                     .padding(.vertical, 2)
+                    .id(session.agents.grantRevision)
                 }
             }
 
-            if !session.agents.grantRows.isEmpty {
+            if isEditing, !session.agents.grantRows.isEmpty {
                 Button("Clear all grants", role: .destructive) {
                     session.agents.clearGrants()
                 }
@@ -94,7 +128,7 @@ struct GrantDeskView: View {
                 let selected = session.agents.selectedAccessGrant() ?? allows[0]
                 HStack(alignment: .top, spacing: 12) {
                     assetList(allows: allows, selected: selected)
-                        .frame(width: 180, alignment: .top)
+                        .frame(width: 280, alignment: .top)
                     VStack(alignment: .leading, spacing: 10) {
                         fieldEditor(for: selected)
                         Divider()
@@ -170,6 +204,7 @@ struct GrantDeskView: View {
                 }
             }
             .padding(.top, 4)
+            .disabled(!isEditing)
 
             Text("Envelope")
                 .font(.caption.weight(.semibold))
@@ -178,8 +213,10 @@ struct GrantDeskView: View {
                 fieldBadge("Subject", fields.subject, grant, \.subject, systemImage: "text.alignleft")
                 fieldBadge("From", fields.from, grant, \.from, systemImage: "envelope")
                 fieldBadge("To", fields.to, grant, \.to, systemImage: "envelope")
+                fieldBadge("Cc", fields.cc, grant, \.cc, systemImage: "person.2")
                 fieldBadge("Date & Time", fields.date, grant, \.date, systemImage: "calendar")
             }
+            .disabled(!isEditing)
             Text("Content")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
@@ -206,6 +243,7 @@ struct GrantDeskView: View {
                     systemImage: "paperclip"
                 )
             }
+            .disabled(!isEditing)
         }
     }
 
@@ -240,7 +278,7 @@ struct GrantDeskView: View {
             GrantFieldChip(title: title, isOn: isOn, systemImage: systemImage)
         }
         .buttonStyle(.plain)
-        .disabled(session.agents.draftDenyMode)
+        .disabled(!isEditing || session.agents.draftDenyMode)
     }
 
     private func accountBlock(_ account: DetectedAccount) -> some View {
@@ -256,10 +294,10 @@ struct GrantDeskView: View {
                         enabled: !session.agents.hasAccountWideGrant(accountID: account.id)
                     )
                 }
-                .disabled(session.agents.draftDenyMode)
+                .disabled(!isEditing || session.agents.draftDenyMode)
                 if let grant = session.agents.allowGrant(accountID: account.id, placement: nil),
                    !session.agents.draftDenyMode {
-                    GrantFieldBadgeRow(fields: grant.fields, interactive: true) { keyPath in
+                    GrantFieldBadgeRow(fields: grant.fields, interactive: isEditing) { keyPath in
                         session.agents.toggleAllowField(
                             accountID: account.id,
                             placement: nil,
@@ -293,13 +331,13 @@ struct GrantDeskView: View {
                         )
                     }
                     .disabled(
-                        !session.agents.draftDenyMode && accountWide
+                        !isEditing || (!session.agents.draftDenyMode && accountWide)
                     )
                     if !session.agents.draftDenyMode,
                        let edit = accountWide
                         ? session.agents.allowGrant(accountID: account.id, placement: nil)
                         : mbGrant {
-                        GrantFieldBadgeRow(fields: edit.fields, interactive: true) { keyPath in
+                        GrantFieldBadgeRow(fields: edit.fields, interactive: isEditing) { keyPath in
                             session.agents.toggleAllowField(
                                 accountID: account.id,
                                 placement: accountWide ? nil : mailbox.placement,
@@ -337,6 +375,7 @@ private struct AgentAccessPreview: View {
             MessageAccessCard(
                 session: session,
                 ref: sampleRef,
+                showsFieldBadges: false,
                 attachmentContentDetail: sample.attachmentContentDetail
             )
             LockedFieldsLegend()
@@ -352,6 +391,7 @@ private struct AgentAccessPreview: View {
             from: sample.from,
             date: sample.date,
             to: sample.to,
+            cc: sample.cc,
             bodySnippet: sample.body,
             bodyAccess: grant.fields.body ? .granted : .notGranted,
             fields: grant.fields,
@@ -364,6 +404,7 @@ private struct SampleMessage {
     let subject: String
     let from: String
     let to: String
+    let cc: String
     let date: String
     let body: String
     let attachments: [(name: String, kb: Int)]
@@ -372,6 +413,7 @@ private struct SampleMessage {
         subject: "Invoice #4412 — March hosting",
         from: "billing@hostco.example",
         to: "you@yahoo.com",
+        cc: "finance@hostco.example",
         date: "2026-03-12T09:14:00Z",
         body: "Hi,\n\nAttached is your March invoice ($48.00).\nCard ending 4412 was charged.\n\nThanks,\nHostCo billing",
         attachments: [

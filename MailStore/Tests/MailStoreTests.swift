@@ -63,6 +63,7 @@ struct MailStoreTests {
             rfc822: """
             From: Alice <alice@example.com>
             To: Bob <bob@example.com>
+            Cc: Carol <carol@example.com>
             Subject: Hello
             Date: Mon, 1 Jan 2024 00:00:00 +0000
             Content-Type: text/plain
@@ -79,6 +80,7 @@ struct MailStoreTests {
         #expect(message.id == "1")
         #expect(message.from == "Alice <alice@example.com>")
         #expect(message.to == "Bob <bob@example.com>")
+        #expect(message.cc == "Carol <carol@example.com>")
         #expect(message.subject == "Hello")
         #expect(message.body == "Hi there")
         #expect(message.isPartial == false)

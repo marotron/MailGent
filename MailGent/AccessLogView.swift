@@ -661,27 +661,31 @@ private struct CollapsibleAuditMessage: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    expanded.toggle()
-                }
-            } label: {
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: toggleExpanded) {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .padding(.top, 2)
+                        .frame(width: 10)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(collapsedTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        Text(collapsedMeta)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        HStack(alignment: .center, spacing: 6) {
+                            Text(collapsedMeta)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            GrantFieldBadgeRow(
+                                fields: ref.fields,
+                                labelMode: expanded ? .short : .icon
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -700,13 +704,25 @@ private struct CollapsibleAuditMessage: View {
                     )
                     DetachedWindowHost.shared.showCompanion(session: session)
                 } label: {
-                    MessageAccessCard(session: session, ref: ref, omitsBody: omitsBody)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                    MessageAccessCard(
+                        session: session,
+                        ref: ref,
+                        omitsBody: omitsBody,
+                        showsFieldBadges: false
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Open in Companion Read")
+                .padding(.leading, 18)
             }
+        }
+    }
+
+    private func toggleExpanded() {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            expanded.toggle()
         }
     }
 
@@ -786,6 +802,7 @@ enum AccessLogFormat {
         case "draftID": "Draft"
         case "chars": "Characters"
         case "bodyAccess": "Body"
+        case "cc": "Cc"
         case "indexed": "Indexed"
         case "lastIngest": "Last ingest"
         case "source": "Source"

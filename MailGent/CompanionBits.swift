@@ -48,6 +48,14 @@ struct MailAddressParts: Equatable {
     let name: String?
     let email: String?
 
+    static func parseList(_ raw: String) -> [MailAddressParts] {
+        splitAddressList(raw).compactMap { token in
+            let parts = parse(token)
+            if parts.name == nil, parts.email == nil { return nil }
+            return parts
+        }
+    }
+
     static func parse(_ raw: String) -> MailAddressParts {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return MailAddressParts(name: nil, email: nil) }
@@ -72,6 +80,63 @@ struct MailAddressParts: Equatable {
         }
         return MailAddressParts(name: trimmed, email: nil)
     }
+
+    /// RFC 5322 address-list: split on commas outside quotes, comments, and angle-addr.
+    static func splitAddressList(_ raw: String) -> [String] {
+        var result: [String] = []
+        var current = ""
+        var inQuotes = false
+        var inAngle = false
+        var commentDepth = 0
+        var escape = false
+
+        for ch in raw {
+            if escape {
+                current.append(ch)
+                escape = false
+                continue
+            }
+            if ch == "\\", inQuotes || commentDepth > 0 {
+                current.append(ch)
+                escape = true
+                continue
+            }
+            if commentDepth > 0 {
+                if ch == "(" { commentDepth += 1 }
+                else if ch == ")" { commentDepth -= 1 }
+                current.append(ch)
+                continue
+            }
+            if inQuotes {
+                if ch == "\"" { inQuotes = false }
+                current.append(ch)
+                continue
+            }
+            switch ch {
+            case "\"":
+                inQuotes = true
+                current.append(ch)
+            case "<":
+                inAngle = true
+                current.append(ch)
+            case ">":
+                inAngle = false
+                current.append(ch)
+            case "(":
+                commentDepth = 1
+                current.append(ch)
+            case "," where !inAngle:
+                let token = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !token.isEmpty { result.append(token) }
+                current = ""
+            default:
+                current.append(ch)
+            }
+        }
+        let token = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !token.isEmpty { result.append(token) }
+        return result
+    }
 }
 
 struct AddressLine<Trailing: View>: View {
@@ -86,18 +151,26 @@ struct AddressLine<Trailing: View>: View {
     }
 
     var body: some View {
-        let parts = MailAddressParts.parse(raw)
+        let addresses = MailAddressParts.parseList(raw)
         HStack(spacing: 6) {
-            Text(label)
+            Text("\(label):")
+                .fontWeight(.light)
                 .foregroundStyle(.secondary)
-            if let name = parts.name {
-                Text(name)
-            }
-            if let email = parts.email {
-                AddressBadge(email: email)
-            }
-            if parts.name == nil, parts.email == nil, !raw.isEmpty {
-                Text(raw)
+            if addresses.isEmpty {
+                if !raw.isEmpty {
+                    Text(raw)
+                }
+            } else {
+                ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
+                    HStack(spacing: 6) {
+                        if let name = parts.name {
+                            Text(name)
+                        }
+                        if let email = parts.email {
+                            AddressBadge(email: email)
+                        }
+                    }
+                }
             }
             trailing()
             Spacer(minLength: 0)
@@ -156,10 +229,9 @@ struct MessageBodyView: View {
     var body: some View {
         Group {
             if canShowRaw {
-                Text(rawBody)
-                    .font(.body.monospaced())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // SwiftUI `Text` blanks out past ~32k characters and on embedded NULs.
+                RawBodyView(text: rawBody)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let html = prettyHTML {
                 HTMLMailView(html: Self.documentHTML(html))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -264,6 +336,57 @@ struct MessageBodyView: View {
             run.underlineStyle = .single
         }
         return run
+    }
+}
+
+/// MIME / raw body. NSTextView owns scrolling so large (or NUL-containing) payloads still draw.
+private struct RawBodyView: NSViewRepresentable {
+    let text: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasHorizontalScroller = false
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        textView.drawsBackground = false
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.font = NSFont.monospacedSystemFont(
+            ofSize: NSFont.preferredFont(forTextStyle: .body).pointSize,
+            weight: .regular
+        )
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        let display = Self.displayString(from: text)
+        textView.string = display
+        context.coordinator.loaded = text
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard context.coordinator.loaded != text else { return }
+        context.coordinator.loaded = text
+        textView.string = Self.displayString(from: text)
+    }
+
+    /// NSString / SwiftUI Text treat U+0000 as terminator; binary MIME parts often contain them.
+    static func displayString(from text: String) -> String {
+        text.replacingOccurrences(of: "\0", with: "\u{FFFD}")
+    }
+
+    final class Coordinator {
+        var loaded: String?
     }
 }
 
@@ -699,26 +822,35 @@ struct MessageAttachmentRow: View {
 }
 
 struct GrantFieldBadgeRow: View {
+    enum LabelMode {
+        case icon
+        case short
+        case letter
+    }
+
     let fields: GrantFields
     var interactive: Bool = false
+    var labelMode: LabelMode = .letter
     var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
 
     private struct Item: Identifiable {
         let id: String
         let letter: String
+        let short: String
         let title: String
         let systemImage: String
         let keyPath: WritableKeyPath<GrantFields, Bool>
     }
 
     private static let items: [Item] = [
-        Item(id: "subject", letter: "S", title: "Subject", systemImage: "text.alignleft", keyPath: \.subject),
-        Item(id: "from", letter: "F", title: "From", systemImage: "envelope", keyPath: \.from),
-        Item(id: "to", letter: "T", title: "To", systemImage: "tray.and.arrow.down", keyPath: \.to),
-        Item(id: "date", letter: "D", title: "Date & Time", systemImage: "calendar", keyPath: \.date),
-        Item(id: "body", letter: "B", title: "Body", systemImage: "doc.plaintext", keyPath: \.body),
-        Item(id: "att", letter: "A", title: "Attachment names", systemImage: "paperclip", keyPath: \.attachmentMetadata),
-        Item(id: "bytes", letter: "C", title: "Attachment content", systemImage: "doc", keyPath: \.attachmentContent),
+        Item(id: "subject", letter: "S", short: "Subj", title: "Subject", systemImage: "text.alignleft", keyPath: \.subject),
+        Item(id: "from", letter: "F", short: "From", title: "From", systemImage: "envelope", keyPath: \.from),
+        Item(id: "to", letter: "T", short: "To", title: "To", systemImage: "tray.and.arrow.down", keyPath: \.to),
+        Item(id: "cc", letter: "Cc", short: "Cc", title: "Cc", systemImage: "person.2", keyPath: \.cc),
+        Item(id: "date", letter: "D", short: "Date", title: "Date & Time", systemImage: "calendar", keyPath: \.date),
+        Item(id: "body", letter: "B", short: "Body", title: "Body", systemImage: "doc.plaintext", keyPath: \.body),
+        Item(id: "att", letter: "A", short: "Att", title: "Attachment names", systemImage: "paperclip", keyPath: \.attachmentMetadata),
+        Item(id: "bytes", letter: "C", short: "File", title: "Attachment content", systemImage: "doc", keyPath: \.attachmentContent),
     ]
 
     var body: some View {
@@ -747,12 +879,14 @@ struct GrantFieldBadgeRow: View {
         HStack(spacing: 2) {
             Image(systemName: item.systemImage)
                 .font(.system(size: 8, weight: on ? .medium : .regular))
-            Text(item.letter)
-                .font(.system(size: 8, weight: on ? .medium : .regular))
-                .strikethrough(!on, color: Color.secondary.opacity(0.45))
+            if let text = labelText(item) {
+                Text(text)
+                    .font(.system(size: 8, weight: on ? .medium : .regular))
+                    .strikethrough(!on, color: Color.secondary.opacity(0.45))
+            }
         }
         .foregroundStyle(on ? Color.accentColor : Color.secondary.opacity(0.55))
-        .padding(.horizontal, 4)
+        .padding(.horizontal, labelMode == .icon ? 5 : 4)
         .frame(height: 14)
         .background(
             Capsule()
@@ -766,6 +900,14 @@ struct GrantFieldBadgeRow: View {
                 )
         )
     }
+
+    private func labelText(_ item: Item) -> String? {
+        switch labelMode {
+        case .icon: nil
+        case .short: item.short
+        case .letter: item.letter
+        }
+    }
 }
 
 enum HeadersOnlyStyle {
@@ -777,46 +919,57 @@ struct MessageAccessCard: View {
     let session: CompanionSession
     let ref: AuditMessageRef
     var omitsBody: Bool = false
-    var attachmentNamesDetail: String? = nil
+    var showsFieldBadges: Bool = true
     var attachmentContentDetail: String = "none in this response"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            GrantFieldBadgeRow(fields: ref.fields)
-            previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
-            if ref.fields.from {
-                AddressLine(label: "From", raw: ref.from)
-            } else {
-                previewRow("From", ref.from, false)
-            }
-            if ref.fields.to {
-                AddressLine(label: "To", raw: ref.to)
-            } else {
-                previewRow("To", ref.to, false)
-            }
-            previewRow("Date & Time", ref.date, ref.fields.date)
+        VStack(alignment: .leading, spacing: 6) {
             SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
-            Divider()
-            Text("Body")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            bodyPreview
-            Divider()
-            HStack(spacing: 6) {
-                attachmentTile(
-                    title: "Attachment names",
-                    granted: ref.fields.attachmentMetadata,
-                    detail: attachmentNamesDetail ?? ref.attachmentNamesDetail
-                )
-                attachmentTile(
-                    title: "Attachment content",
-                    granted: ref.fields.attachmentContent,
-                    detail: attachmentContentDetail
-                )
+            VStack(alignment: .leading, spacing: 8) {
+                if showsFieldBadges {
+                    GrantFieldBadgeRow(fields: ref.fields)
+                }
+                previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
+                if ref.fields.from {
+                    AddressLine(label: "From", raw: ref.from)
+                } else {
+                    previewRow("From", ref.from, false)
+                }
+                if ref.fields.to {
+                    AddressLine(label: "To", raw: ref.to)
+                } else {
+                    previewRow("To", ref.to, false)
+                }
+                if ref.fields.cc {
+                    AddressLine(label: "Cc", raw: ref.cc)
+                } else {
+                    previewRow("Cc", ref.cc, false)
+                }
+                previewRow("Date & Time", ref.date, ref.fields.date)
+                Divider()
+                Text("Body")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                bodyPreview
+                Divider()
+                HStack(alignment: .top, spacing: 6) {
+                    attachmentColumn("Attachment Info", granted: ref.fields.attachmentMetadata) {
+                        if ref.attachments.isEmpty {
+                            attachmentTile(detail: "none in this response")
+                        } else {
+                            ForEach(Array(ref.attachments.enumerated()), id: \.offset) { _, attachment in
+                                attachmentTile(detail: "\(attachment.filename) · \(attachment.sizeLabel)")
+                            }
+                        }
+                    }
+                    attachmentColumn("Attachment Content", granted: ref.fields.attachmentContent) {
+                        attachmentTile(detail: attachmentContentDetail)
+                    }
+                }
             }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
     }
 
     @ViewBuilder
@@ -866,7 +1019,8 @@ struct MessageAccessCard: View {
 
     private func previewRow(_ label: String, _ value: String, _ granted: Bool, empty: String = " ") -> some View {
         HStack(alignment: .top, spacing: 6) {
-            Text(label)
+            Text("\(label):")
+                .fontWeight(.light)
                 .foregroundStyle(.secondary)
             if granted {
                 Text(value.isEmpty ? empty : value)
@@ -879,14 +1033,32 @@ struct MessageAccessCard: View {
         .font(.caption)
     }
 
-    private func attachmentTile(title: String, granted: Bool, detail: String) -> some View {
+    private func attachmentColumn<Content: View>(
+        _ title: String,
+        granted: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if granted {
+                content()
+            } else {
+                attachmentTile(detail: nil)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func attachmentTile(detail: String?) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Image(systemName: "paperclip")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Group {
-                if granted {
-                    Text("\(title) · \(detail)")
+                if let detail {
+                    Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

@@ -21,6 +21,7 @@ public struct GrantFields: Equatable, Hashable, Sendable {
     public var subject: Bool
     public var from: Bool
     public var to: Bool
+    public var cc: Bool
     public var date: Bool
     public var body: Bool
     public var attachmentMetadata: Bool
@@ -28,11 +29,12 @@ public struct GrantFields: Equatable, Hashable, Sendable {
 
     /// All header fields on/off (legacy “envelope” cap).
     public var envelope: Bool {
-        get { subject && from && to && date }
+        get { subject && from && to && cc && date }
         set {
             subject = newValue
             from = newValue
             to = newValue
+            cc = newValue
             date = newValue
         }
     }
@@ -41,6 +43,7 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         subject: Bool = true,
         from: Bool = true,
         to: Bool = true,
+        cc: Bool = true,
         date: Bool = true,
         body: Bool = true,
         attachmentMetadata: Bool = false,
@@ -49,6 +52,7 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         self.subject = subject
         self.from = from
         self.to = to
+        self.cc = cc
         self.date = date
         self.body = body
         self.attachmentMetadata = attachmentMetadata
@@ -65,6 +69,7 @@ public struct GrantFields: Equatable, Hashable, Sendable {
             subject: envelope,
             from: envelope,
             to: envelope,
+            cc: envelope,
             date: envelope,
             body: body,
             attachmentMetadata: attachmentMetadata,
@@ -80,6 +85,7 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         subject: true,
         from: true,
         to: true,
+        cc: true,
         date: true,
         body: false,
         attachmentMetadata: false,
@@ -89,7 +95,7 @@ public struct GrantFields: Equatable, Hashable, Sendable {
 
 extension GrantFields: Codable {
     enum CodingKeys: String, CodingKey {
-        case subject, from, to, date, body, attachmentMetadata, attachmentContent, envelope
+        case subject, from, to, cc, date, body, attachmentMetadata, attachmentContent, envelope
     }
 
     public init(from decoder: Decoder) throws {
@@ -97,16 +103,18 @@ extension GrantFields: Codable {
         body = try c.decodeIfPresent(Bool.self, forKey: .body) ?? true
         attachmentMetadata = try c.decodeIfPresent(Bool.self, forKey: .attachmentMetadata) ?? false
         attachmentContent = try c.decodeIfPresent(Bool.self, forKey: .attachmentContent) ?? false
-        if c.contains(.subject) || c.contains(.from) || c.contains(.to) || c.contains(.date) {
+        if c.contains(.subject) || c.contains(.from) || c.contains(.to) || c.contains(.cc) || c.contains(.date) {
             subject = try c.decodeIfPresent(Bool.self, forKey: .subject) ?? true
             from = try c.decodeIfPresent(Bool.self, forKey: .from) ?? true
             to = try c.decodeIfPresent(Bool.self, forKey: .to) ?? true
+            cc = try c.decodeIfPresent(Bool.self, forKey: .cc) ?? true
             date = try c.decodeIfPresent(Bool.self, forKey: .date) ?? true
         } else {
             let envelope = try c.decodeIfPresent(Bool.self, forKey: .envelope) ?? true
             subject = envelope
             from = envelope
             to = envelope
+            cc = envelope
             date = envelope
         }
         if attachmentContent && !attachmentMetadata {
@@ -119,6 +127,7 @@ extension GrantFields: Codable {
         try c.encode(subject, forKey: .subject)
         try c.encode(from, forKey: .from)
         try c.encode(to, forKey: .to)
+        try c.encode(cc, forKey: .cc)
         try c.encode(date, forKey: .date)
         try c.encode(body, forKey: .body)
         try c.encode(attachmentMetadata, forKey: .attachmentMetadata)

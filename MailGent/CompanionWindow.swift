@@ -148,8 +148,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private func presentGrantDesk(session: CompanionSession) {
-        let size = NSSize(width: 600, height: 640)
-        let minSize = NSSize(width: 560, height: 520)
+        let size = NSSize(width: 700, height: 640)
+        let minSize = NSSize(width: 640, height: 520)
         let root = GrantDeskView(session: session)
         if let grantDesk {
             grantDesk.minSize = minSize
@@ -683,7 +683,7 @@ private struct CompanionReadPage: View {
     var body: some View {
         Group {
             if let detail = session.detail {
-                let htmlScroll = usesHTMLScroll(for: detail)
+                let ownedScroll = usesOwnedScroll(for: detail)
                 VStack(alignment: .leading, spacing: 0) {
                     readHeader(detail: detail)
                         .padding(.horizontal, 24)
@@ -692,7 +692,7 @@ private struct CompanionReadPage: View {
 
                     Divider()
 
-                    if htmlScroll {
+                    if ownedScroll {
                         MessageBodyView(
                             readBody: detail.body,
                             htmlBody: detail.prettyHTMLBody,
@@ -702,6 +702,10 @@ private struct CompanionReadPage: View {
                         .id(detail.rowID)
                         .padding(.horizontal, 24)
                         .padding(.top, 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        readAttachments(detail)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 8)
                         OpenInMailButton(session: session)
                             .padding(.horizontal, 24)
                             .padding(.vertical, 12)
@@ -715,6 +719,7 @@ private struct CompanionReadPage: View {
                                     showRaw: showRaw
                                 )
                                 .id(detail.rowID)
+                                readAttachments(detail)
                                 OpenInMailButton(session: session)
                             }
                             .padding(24)
@@ -737,11 +742,17 @@ private struct CompanionReadPage: View {
         }
     }
 
-    private func usesHTMLScroll(for detail: ReadMessage) -> Bool {
+    private func usesOwnedScroll(for detail: ReadMessage) -> Bool {
         let showingRaw = showRaw
             && !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        guard !showingRaw else { return false }
-        return detail.prettyHTMLBody != nil
+        return showingRaw || detail.prettyHTMLBody != nil
+    }
+
+    @ViewBuilder
+    private func readAttachments(_ detail: ReadMessage) -> some View {
+        MessageAttachmentRow(attachments: detail.attachments) { attachment in
+            session.openAttachment(attachment, of: detail)
+        }
     }
 
     private var backButton: some View {
@@ -767,6 +778,9 @@ private struct CompanionReadPage: View {
                     .foregroundStyle(.secondary)
                 if detail.isPartial { PartialBadge() }
             }
+            if !detail.cc.isEmpty {
+                AddressLine(label: "Cc", raw: detail.cc)
+            }
             HStack(alignment: .center) {
                 Text(detail.date)
                     .font(.caption)
@@ -775,9 +789,6 @@ private struct CompanionReadPage: View {
                 if !detail.rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     BodyFormatPicker(showRaw: $showRaw)
                 }
-            }
-            MessageAttachmentRow(attachments: detail.attachments) { attachment in
-                session.openAttachment(attachment, of: detail)
             }
         }
     }

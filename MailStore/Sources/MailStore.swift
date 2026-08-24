@@ -49,6 +49,7 @@ public struct MailStore: Sendable {
             id: id,
             from: parsed.from,
             to: parsed.to,
+            cc: parsed.cc,
             date: parsed.date,
             subject: parsed.subject,
             body: parsed.body,
@@ -119,6 +120,7 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let id: String
     public let from: String
     public let to: String
+    public let cc: String
     public let date: String
     public let subject: String
     /// Decoded plain text (text/plain preferred; QP/base64 applied). Empty when HTML-only.
@@ -205,6 +207,7 @@ private extension MailStore {
 private struct ParsedRFC822 {
     var from: String
     var to: String
+    var cc: String
     var date: String
     var subject: String
     var body: String
@@ -625,6 +628,7 @@ extension MailStore {
         return ParsedRFC822(
             from: decodeRFC2047(headers["from"] ?? ""),
             to: decodeRFC2047(headers["to"] ?? ""),
+            cc: decodeRFC2047(headers["cc"] ?? ""),
             date: headers["date"] ?? "",
             subject: decodeRFC2047(headers["subject"] ?? ""),
             body: body,

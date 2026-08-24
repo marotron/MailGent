@@ -160,6 +160,7 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("Invoice due"))
         #expect(response.body.contains("Please pay"))
         #expect(response.body.contains("alice@example.com"))
+        #expect(response.body.contains("finance@example.com"))
         #expect(try Self.extractJSONString(response.body, key: "bodyAccess") == "granted")
         #expect(env.audit.entries().contains { $0.kind == .get })
     }
@@ -475,6 +476,7 @@ private struct LoopbackFixture {
             rfc822: """
             From: Alice <alice@example.com>
             To: Bob <bob@example.com>
+            Cc: Finance <finance@example.com>
             Subject: Invoice due
             Date: Mon, 1 Jan 2024 00:00:00 +0000
             Content-Type: text/plain

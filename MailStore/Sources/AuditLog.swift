@@ -62,6 +62,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let subject: String
     public let from: String
     public let to: String
+    public let cc: String
     public let date: String
     public let bodySnippet: String
     public let bodyAccess: AuditBodyAccess
@@ -76,6 +77,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         from: String,
         date: String,
         to: String = "",
+        cc: String = "",
         bodySnippet: String = "",
         bodyAccess: AuditBodyAccess = .notAvailable,
         fields: GrantFields = .headersOnly,
@@ -87,6 +89,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.subject = subject
         self.from = from
         self.to = to
+        self.cc = cc
         self.date = date
         self.bodySnippet = bodySnippet
         self.bodyAccess = bodyAccess
@@ -375,7 +378,7 @@ extension AuditOutcome: Codable {
 
 extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
-        case accountID, placement, id, subject, from, to, date
+        case accountID, placement, id, subject, from, to, cc, date
         case bodySnippet, bodyAccess, fields, attachments
     }
 
@@ -388,6 +391,7 @@ extension AuditMessageRef: Codable {
         from = try container.decode(String.self, forKey: .from)
         date = try container.decode(String.self, forKey: .date)
         to = try container.decodeIfPresent(String.self, forKey: .to) ?? ""
+        cc = try container.decodeIfPresent(String.self, forKey: .cc) ?? ""
         bodySnippet = try container.decodeIfPresent(String.self, forKey: .bodySnippet) ?? ""
         bodyAccess = try container.decodeIfPresent(AuditBodyAccess.self, forKey: .bodyAccess)
             ?? .notAvailable
@@ -403,6 +407,7 @@ extension AuditMessageRef: Codable {
         try container.encode(subject, forKey: .subject)
         try container.encode(from, forKey: .from)
         try container.encode(to, forKey: .to)
+        try container.encode(cc, forKey: .cc)
         try container.encode(date, forKey: .date)
         try container.encode(bodySnippet, forKey: .bodySnippet)
         try container.encode(bodyAccess, forKey: .bodyAccess)
@@ -435,6 +440,7 @@ extension AuditMessageRef {
             from: fields.from ? message.from : "",
             date: fields.date ? message.date : "",
             to: fields.to ? message.to : "",
+            cc: fields.cc ? message.cc : "",
             bodySnippet: snippet,
             bodyAccess: access,
             fields: fields
@@ -468,6 +474,7 @@ extension AuditMessageRef {
             from: message.from,
             date: message.date,
             to: message.to,
+            cc: message.cc,
             bodySnippet: snippet,
             bodyAccess: access,
             fields: fields,

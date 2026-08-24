@@ -277,6 +277,38 @@ struct ReadAPITests {
         #expect(message.isPartial == false)
     }
 
+    @Test func getReturnsCcHeader() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "cc.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Cc: Carol <carol@example.com>
+            Subject: Copy
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            see cc
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let message = try ReadAPI(index: index).get(accountID: accountID, placement: "INBOX", id: "cc")
+        #expect(message.cc == "Carol <carol@example.com>")
+        #expect(message.to == "Bob <bob@example.com>")
+    }
+
     @Test func getReturnsDecodedBodyAndRawMIMEBody() throws {
         let root = try FixtureTree()
         defer { root.remove() }

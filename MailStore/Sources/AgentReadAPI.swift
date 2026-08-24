@@ -143,6 +143,7 @@ public struct AgentReadAPI {
                 placement: message.placement,
                 from: message.from,
                 to: message.to,
+                cc: message.cc,
                 date: message.date,
                 subject: message.subject,
                 body: "",

@@ -85,6 +85,7 @@ enum AuditJSON {
             "subject": message.subject,
             "from": message.from,
             "to": message.to,
+            "cc": message.cc,
             "date": message.date,
             "isPartial": message.isPartial
         ]

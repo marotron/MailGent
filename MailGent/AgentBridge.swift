@@ -165,6 +165,53 @@ final class AgentBridge {
     var draftDenyMode = false
     /// Access tab selection: grant identity key `mode|accountID|placementOr*`.
     var selectedAccessKey: String?
+    /// Grant desk Scope/Access stay view-only until the human clicks Edit.
+    private(set) var isEditingGrants = false
+    /// Rows + draft filters captured at Edit; Cancel restores this snapshot.
+    private var grantDeskEditBaseline: GrantDeskEditBaseline?
+    /// While editing, GrantGate updates stay in memory until Save.
+    private var grantDeskPersistDeferred = false
+
+    func beginGrantDeskEdits() {
+        guard !isEditingGrants else { return }
+        grantDeskEditBaseline = GrantDeskEditBaseline(
+            rows: grantRows,
+            fromFilter: draftFromFilter,
+            dateStart: draftDateStart,
+            denyMode: draftDenyMode,
+            selectedAccessKey: selectedAccessKey
+        )
+        grantDeskPersistDeferred = true
+        isEditingGrants = true
+        grantRevision += 1
+    }
+
+    func commitGrantDeskEdits() {
+        guard isEditingGrants else { return }
+        grantDeskPersistDeferred = false
+        grantDeskEditBaseline = nil
+        isEditingGrants = false
+        persistGrants()
+    }
+
+    func cancelGrantDeskEdits() {
+        guard isEditingGrants else { return }
+        grantDeskPersistDeferred = false
+        if let baseline = grantDeskEditBaseline {
+            if let agent {
+                grants.replaceAll(agentID: agent.id, with: baseline.rows)
+            } else {
+                grantRows = baseline.rows
+            }
+            draftFromFilter = baseline.fromFilter
+            draftDateStart = baseline.dateStart
+            draftDenyMode = baseline.denyMode
+            selectedAccessKey = baseline.selectedAccessKey
+        }
+        grantDeskEditBaseline = nil
+        isEditingGrants = false
+        persistGrants()
+    }
 
     /// Adds or updates one allow and persists. Does not invent grants for new accounts.
     func allow(accountID: String, placement: String? = nil) {
@@ -426,6 +473,9 @@ final class AgentBridge {
         credential = nil
         grantRows = []
         grantRevision += 1
+        isEditingGrants = false
+        grantDeskEditBaseline = nil
+        grantDeskPersistDeferred = false
         clearPersistedPairing()
         clearPersistedGrants()
     }
@@ -498,6 +548,10 @@ final class AgentBridge {
 
     private func persistGrants() {
         guard let agent else { return }
+        if grantDeskPersistDeferred {
+            refreshGrantRows()
+            return
+        }
         let snapshot = GrantSnapshot(grants: grants.list(agentID: agent.id))
         do {
             try FileManager.default.createDirectory(
@@ -589,4 +643,12 @@ private struct PersistedPairing: Codable {
     let name: String
     let trustClass: String
     let credential: String
+}
+
+private struct GrantDeskEditBaseline {
+    let rows: [Grant]
+    let fromFilter: String
+    let dateStart: String
+    let denyMode: Bool
+    let selectedAccessKey: String?
 }

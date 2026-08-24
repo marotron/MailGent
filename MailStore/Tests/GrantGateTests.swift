@@ -202,8 +202,37 @@ struct GrantGateTests {
         #expect(fields.subject == false)
         #expect(fields.from == false)
         #expect(fields.to == false)
+        #expect(fields.cc == false)
         #expect(fields.date == false)
         #expect(fields.body == true)
+    }
+
+    @Test func ccOffOmitsCcOnGet() throws {
+        let env = try GrantFixture()
+        defer { env.remove() }
+
+        try env.grants.allow(
+            agentID: env.agent.id,
+            accountID: env.accountA,
+            placement: "INBOX",
+            fields: GrantFields(
+                subject: true,
+                from: true,
+                to: true,
+                cc: false,
+                date: true,
+                body: false
+            )
+        )
+
+        let message = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountA,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(message.cc == "")
+        #expect(!message.to.isEmpty)
     }
 }
 
@@ -224,6 +253,7 @@ private struct GrantFixture {
             rfc822: """
             From: A <a@example.com>
             To: Bob <bob@example.com>
+            Cc: Carol <carol@example.com>
             Subject: Alpha A
             Date: Mon, 1 Jan 2024 00:00:00 +0000
             Content-Type: text/plain

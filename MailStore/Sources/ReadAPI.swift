@@ -61,7 +61,8 @@ public struct ReadAPI {
             prettyBody: mail.body,
             htmlBody: mail.htmlBody,
             rawBody: mail.rawBody,
-            attachments: mail.attachments
+            attachments: mail.attachments,
+            cc: mail.cc
         )
     }
 
@@ -106,6 +107,7 @@ public struct ReadMessage: Equatable, Sendable {
     public let placement: String
     public let from: String
     public let to: String
+    public let cc: String
     public let date: String
     public let subject: String
     public let body: ReadBody
@@ -123,13 +125,15 @@ public struct ReadMessage: Equatable, Sendable {
         prettyBody: String? = nil,
         htmlBody: String? = nil,
         rawBody: String = "",
-        attachments: [MailAttachment] = []
+        attachments: [MailAttachment] = [],
+        cc: String? = nil
     ) {
         self.id = message.id
         self.accountID = message.accountID
         self.placement = message.placement
         self.from = message.from
         self.to = message.to
+        self.cc = cc ?? message.cc
         self.date = message.date
         self.subject = message.subject
         let text = prettyBody ?? message.body
@@ -154,6 +158,7 @@ public struct ReadMessage: Equatable, Sendable {
             placement: placement,
             from: fields.from ? from : "",
             to: fields.to ? to : "",
+            cc: fields.cc ? cc : "",
             date: fields.date ? date : "",
             subject: fields.subject ? subject : "",
             body: fields.body ? body : .notGranted,
@@ -171,6 +176,7 @@ public struct ReadMessage: Equatable, Sendable {
         placement: String,
         from: String,
         to: String,
+        cc: String,
         date: String,
         subject: String,
         body: ReadBody,
@@ -185,6 +191,7 @@ public struct ReadMessage: Equatable, Sendable {
         self.placement = placement
         self.from = from
         self.to = to
+        self.cc = cc
         self.date = date
         self.subject = subject
         self.body = body
