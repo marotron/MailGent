@@ -144,9 +144,12 @@ struct MailboxIndexTests {
             mailbox: "INBOX.mbox"
         )
 
-        #expect(try index.ingest().new == [
+        let pass = try index.ingest()
+        #expect(pass.new == [])
+        #expect(pass.updated == [
             IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
         ])
+        #expect(pass.removed == [])
         let message = try index.get(accountID: accountID, placement: "INBOX", id: "1")
         #expect(message.subject == "Hello again")
         #expect(message.body == "edited body")
@@ -590,5 +593,224 @@ struct MailboxIndexTests {
         #expect(again.lastIngestAt == stamped)
         #expect(again.newestMessageDate == "Wed, 3 Jan 2024 12:00:00 +0000")
         #expect(again.indexedCount == 2)
+    }
+
+    @Test func ingestRemovesDeletedMessageFromIndex() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        try FileManager.default.removeItem(
+            at: root.mailboxURL(account: accountID, mailbox: "INBOX.mbox")
+                .appendingPathComponent("Messages/1.emlx")
+        )
+
+        let pass = try index.ingest()
+        #expect(pass.new == [])
+        #expect(pass.updated == [])
+        #expect(pass.removed == [
+            IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
+        ])
+        #expect(throws: MailboxIndexError.messageNotFound) {
+            try index.get(accountID: accountID, placement: "INBOX", id: "1")
+        }
+        #expect(try index.search("Hello").isEmpty)
+        #expect(try index.freshness().indexedCount == 0)
+    }
+
+    @Test func ingestTreatsTrashCopyAsRemovedNotNew() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Keep me
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            still here
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        try FileManager.default.removeItem(
+            at: root.mailboxURL(account: accountID, mailbox: "INBOX.mbox")
+                .appendingPathComponent("Messages/1.emlx")
+        )
+        try root.writeEmlx(
+            named: "99.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "Deleted Messages.mbox"
+        )
+
+        let pass = try index.ingest()
+        #expect(pass.new == [])
+        #expect(pass.removed == [
+            IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
+        ])
+        #expect(try index.get(accountID: accountID, placement: "Deleted Messages", id: "99").subject == "Hello")
+        #expect(try index.get(accountID: accountID, placement: "INBOX", id: "2").subject == "Keep me")
+        #expect(try ReadAPI(index: index).listNew().items.isEmpty)
+        #expect(try index.freshness().indexedCount == 2)
+    }
+
+    @Test func ingestDoesNotCountTrashMailboxInsertAsNew() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        try root.writeEmlx(
+            named: "7.emlx",
+            rfc822: """
+            From: Dan <dan@example.com>
+            To: Bob <bob@example.com>
+            Subject: Trashed
+            Date: Wed, 3 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            gone
+            """,
+            account: accountID,
+            mailbox: "Trash.mbox"
+        )
+
+        let pass = try index.ingest()
+        #expect(pass.new == [])
+        #expect(pass.removed == [])
+        #expect(try index.get(accountID: accountID, placement: "Trash", id: "7").subject == "Trashed")
+    }
+
+    @Test func ingestCountsInboxArrivalAlongsideRemoval() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        try FileManager.default.removeItem(
+            at: root.mailboxURL(account: accountID, mailbox: "INBOX.mbox")
+                .appendingPathComponent("Messages/1.emlx")
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Arrival
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            New mail
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let pass = try index.ingest()
+        #expect(pass.new == [
+            IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "2"),
+        ])
+        #expect(pass.removed == [
+            IndexedMessageRef(accountID: accountID, placement: "INBOX", id: "1"),
+        ])
     }
 }

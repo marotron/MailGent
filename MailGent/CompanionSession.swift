@@ -61,6 +61,7 @@ final class CompanionSession {
     /// Lower bound for the last incremental pass (previous `lastIngestAt` before that pass).
     var lastNewSinceAt: Date?
     var lastNewCount = 0
+    var lastRemovedCount = 0
     var lastNewMessages: [IndexedMessage] = []
     var ingestPassNote = ""
     var indexedCount = 0
@@ -411,6 +412,7 @@ final class CompanionSession {
             lastIngestAt = snapshot.lastIngestAt
             lastNewSinceAt = nil
             lastNewCount = 0
+            lastRemovedCount = 0
             lastNewMessages = []
             ingestPassNote = "Full reindex"
             items = []
@@ -441,6 +443,7 @@ final class CompanionSession {
             lastIngestAt = opened.lastIngestAt
             lastNewSinceAt = nil
             lastNewCount = 0
+            lastRemovedCount = 0
             lastNewMessages = []
             ingestPassNote = "Loaded from disk"
             items = []
@@ -507,12 +510,14 @@ final class CompanionSession {
         lastNewSinceAt = lastIngestAt
         lastIngestAt = snapshot.lastIngestAt
         lastNewCount = snapshot.newCount
+        lastRemovedCount = snapshot.removedCount
         lastNewMessages = snapshot.newMessages
         ingestPassNote = "Incremental"
-        status = snapshot.newCount == 0 ? "No new messages" : "Ingested \(snapshot.newCount) new"
+        status = IngestPassCopy.status(newCount: snapshot.newCount, removedCount: snapshot.removedCount)
         await refreshFromWorker()
         return IndexUpdateOutcome(
             newCount: snapshot.newCount,
+            removedCount: snapshot.removedCount,
             freshness: IndexFreshness(
                 lastIngestAt: snapshot.lastIngestAt,
                 newestMessageDate: snapshot.newestMessageDate,
@@ -651,6 +656,7 @@ final class CompanionSession {
         items = []
         detail = nil
         lastNewCount = 0
+        lastRemovedCount = 0
         lastNewMessages = []
         lastIngestAt = nil
         lastNewSinceAt = nil

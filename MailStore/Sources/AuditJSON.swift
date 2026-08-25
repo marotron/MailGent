@@ -45,6 +45,7 @@ enum AuditJSON {
     static func update(_ outcome: IndexUpdateOutcome) -> [String: Any] {
         var payload = freshness(outcome.freshness)
         payload["newCount"] = outcome.newCount
+        payload["removedCount"] = outcome.removedCount
         return payload
     }
 

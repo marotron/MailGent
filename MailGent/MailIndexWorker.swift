@@ -22,6 +22,7 @@ struct IndexIncrementalSnapshot: Sendable {
     let placements: [Placement]
     let newCount: Int
     let newMessages: [IndexedMessage]
+    let removedCount: Int
     let lastIngestAt: Date?
     let newestMessageDate: String?
 }
@@ -129,7 +130,7 @@ actor MailIndexWorker {
             indexedCounts: try api.placementIndexedCounts(),
             store: index.store
         )
-        MailGentLog.trace("incremental ingest done new=\(ingest.new.count) indexed=\(indexedCount)")
+        MailGentLog.trace("incremental ingest done new=\(ingest.new.count) removed=\(ingest.removed.count) indexed=\(indexedCount)")
         let freshness = try index.freshness()
         let newMessages: [IndexedMessage] = ingest.new.compactMap { ref in
             try? index.get(accountID: ref.accountID, placement: ref.placement, id: ref.id)
@@ -140,6 +141,7 @@ actor MailIndexWorker {
             placements: placements,
             newCount: ingest.new.count,
             newMessages: newMessages,
+            removedCount: ingest.removed.count,
             lastIngestAt: freshness.lastIngestAt,
             newestMessageDate: freshness.newestMessageDate
         )

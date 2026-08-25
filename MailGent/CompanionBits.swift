@@ -539,23 +539,94 @@ struct PlacementMenu: View {
 }
 
 /// Shared menu / control-center snapshot strings for ingest, source, and agent.
+enum IngestPassCopy {
+    static func signed(_ value: Int) -> String {
+        if value > 0 { return "+\(value)" }
+        if value < 0 { return "−\(-value)" }
+        return "0"
+    }
+
+    static func summary(newCount: Int, removedCount: Int) -> String {
+        switch (newCount, removedCount) {
+        case (0, 0): "0"
+        case (_, 0): "+\(newCount)"
+        case (0, _): "−\(removedCount)"
+        default: "+\(newCount) −\(removedCount) → \(signed(newCount - removedCount))"
+        }
+    }
+
+    static func attributedSummary(newCount: Int, removedCount: Int) -> AttributedString {
+        func colored(_ text: String, _ color: Color) -> AttributedString {
+            var fragment = AttributedString(text)
+            fragment.foregroundColor = color
+            return fragment
+        }
+
+        switch (newCount, removedCount) {
+        case (0, 0):
+            return AttributedString("0")
+        case (_, 0):
+            return colored("+\(newCount)", .green)
+        case (0, _):
+            return colored("−\(removedCount)", .red)
+        default:
+            let net = newCount - removedCount
+            let netColor: Color = net > 0 ? .green : net < 0 ? .red : .primary
+            var result = colored("+\(newCount)", .green)
+            result += AttributedString(" ")
+            result += colored("−\(removedCount)", .red)
+            var arrow = AttributedString(" → ")
+            arrow.foregroundColor = .secondary
+            result += arrow
+            result += colored(signed(net), netColor)
+            return result
+        }
+    }
+
+    static func status(newCount: Int, removedCount: Int) -> String {
+        switch (newCount, removedCount) {
+        case (0, 0): "No new messages"
+        case (_, 0): "Ingested \(newCount) new"
+        case (0, _): "Removed \(removedCount)"
+        default: "Ingested \(newCount) new, removed \(removedCount)"
+        }
+    }
+
+    static func companionSummary(newCount: Int, removedCount: Int) -> String {
+        switch (newCount, removedCount) {
+        case (0, 0): "No new this pass"
+        case (_, 0): "\(newCount) new this pass"
+        case (0, _): "\(removedCount) removed this pass"
+        default: "\(newCount) new, \(removedCount) removed this pass"
+        }
+    }
+}
+
 @MainActor
 struct CompanionStatusCopy {
     let session: CompanionSession
     let now: Date
 
-    var lastIngest: String {
+    var lastIngestClock: String {
         guard let date = session.lastIngestAt else { return "—" }
-        let clock = date.formatted(date: .omitted, time: .shortened)
-        return "\(clock) (\(Self.relativeAge(from: date, to: now)))"
+        return date.formatted(date: .omitted, time: .shortened)
     }
 
-    var newMessages: String {
-        guard let since = session.lastNewSinceAt else {
-            return "\(session.lastNewCount)"
-        }
+    /// Parenthetical relative age, e.g. `(27m ago)`. Nil when there is no ingest yet.
+    var lastIngestRelative: String? {
+        guard let date = session.lastIngestAt else { return nil }
+        return "(\(Self.relativeAge(from: date, to: now)))"
+    }
+
+    var lastIngest: String {
+        guard let relative = lastIngestRelative else { return lastIngestClock }
+        return "\(lastIngestClock) \(relative)"
+    }
+
+    var changesSince: String? {
+        guard let since = session.lastNewSinceAt else { return nil }
         let clock = since.formatted(date: .omitted, time: .shortened)
-        return "\(session.lastNewCount) (since \(clock))"
+        return "(since \(clock))"
     }
 
     var source: String { session.source.title }
@@ -578,6 +649,64 @@ struct CompanionStatusCopy {
     }
 }
 
+/// Parenthetical note beside a status value. Smaller than `.callout`, still larger than `.caption`.
+private struct StatusMetaText: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline.italic().weight(.light))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+}
+
+/// Clock plus optional relative age on one line.
+struct LastIngestValue: View {
+    let copy: CompanionStatusCopy
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(copy.lastIngestClock)
+            if let relative = copy.lastIngestRelative {
+                StatusMetaText(text: relative)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(copy.lastIngest)
+    }
+}
+
+/// Counts plus optional since-clock. Numbers stay on one line; since sits underneath.
+struct IngestChangesValue: View {
+    let newCount: Int
+    let removedCount: Int
+    let sinceLine: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(IngestPassCopy.attributedSummary(newCount: newCount, removedCount: removedCount))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .allowsTightening(true)
+            if let sinceLine {
+                StatusMetaText(text: sinceLine)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        let summary = IngestPassCopy.summary(newCount: newCount, removedCount: removedCount)
+        guard let sinceLine else { return summary }
+        return "\(summary) \(sinceLine)"
+    }
+}
+
 /// Label/value snapshot used by Control Center. Menu keeps its own action buttons.
 struct CompanionStatusMetrics: View {
     let session: CompanionSession
@@ -586,8 +715,22 @@ struct CompanionStatusMetrics: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let copy = CompanionStatusCopy(session: session, now: context.date)
             VStack(alignment: .leading, spacing: 2) {
-                row("Last ingest", copy.lastIngest)
-                row("New", copy.newMessages)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Last ingest")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 118, alignment: .leading)
+                    LastIngestValue(copy: copy)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Changes")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 118, alignment: .leading)
+                    IngestChangesValue(
+                        newCount: session.lastNewCount,
+                        removedCount: session.lastRemovedCount,
+                        sinceLine: copy.changesSince
+                    )
+                }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Source")
                         .foregroundStyle(.secondary)

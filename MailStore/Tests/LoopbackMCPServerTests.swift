@@ -136,6 +136,34 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .updateIndex })
     }
 
+    @Test func updateReportsRemovedCountWhenMessageLeavesDisk() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        try FileManager.default.removeItem(
+            at: env.root.mailboxURL(
+                account: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                mailbox: "INBOX.mbox"
+            )
+            .appendingPathComponent("Messages/1.emlx")
+        )
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "update", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect((payload["newCount"] as? NSNumber)?.intValue == 0)
+        #expect((payload["removedCount"] as? NSNumber)?.intValue == 1)
+        #expect((payload["indexedCount"] as? NSNumber)?.intValue == 0)
+    }
+
     @Test func listNewReturnsMessagesFromLastUpdate() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }

@@ -121,6 +121,8 @@ public final class MailboxIndex {
         onProgress: (@Sendable (IngestProgress) -> Void)? = nil
     ) throws -> IngestResult {
         var new: [IndexedMessageRef] = []
+        var updated: [IndexedMessageRef] = []
+        var seen: Set<IndexedMessageRef> = []
         var processed = 0
         var lastReportedAccount = ""
         var lastReportedMailbox = ""
@@ -146,6 +148,8 @@ public final class MailboxIndex {
                         processed += 1
                         let id = entry.id
                         let url = entry.url
+                        let ref = IndexedMessageRef(accountID: account.id, placement: mailbox.id, id: id)
+                        seen.insert(ref)
                         let identity: FileIdentity
                         do {
                             identity = try FileIdentity(url: url)
@@ -153,7 +157,8 @@ public final class MailboxIndex {
                             report()
                             return
                         }
-                        if try storedIdentity(accountID: account.id, placement: mailbox.id, id: id) == identity {
+                        let previous = try storedIdentity(accountID: account.id, placement: mailbox.id, id: id)
+                        if previous == identity {
                             report()
                             return
                         }
@@ -165,18 +170,31 @@ public final class MailboxIndex {
                             return
                         }
                         try upsert(accountID: account.id, placement: mailbox.id, id: id, message: message, identity: identity)
-                        new.append(IndexedMessageRef(accountID: account.id, placement: mailbox.id, id: id))
+                        if previous == nil {
+                            if !Self.isDisposalPlacement(mailbox.id) {
+                                new.append(ref)
+                            }
+                        } else {
+                            updated.append(ref)
+                        }
                         report()
                     }
                 }
             }
         }
+        let removed = try listedMessageRefs().filter { !seen.contains($0) }.sorted {
+            ($0.accountID, $0.placement, $0.id) < ($1.accountID, $1.placement, $1.id)
+        }
+        try deleteMessages(removed)
         new.sort {
+            ($0.accountID, $0.placement, $0.id) < ($1.accountID, $1.placement, $1.id)
+        }
+        updated.sort {
             ($0.accountID, $0.placement, $0.id) < ($1.accountID, $1.placement, $1.id)
         }
         try markLastIngest(at: Date())
         try replaceIngestNew(new)
-        return IngestResult(new: new)
+        return IngestResult(new: new, updated: updated, removed: removed)
     }
 
     private func replaceIngestNew(_ refs: [IndexedMessageRef]) throws {
@@ -186,6 +204,55 @@ public final class MailboxIndex {
             for ref in refs {
                 try db.execute(
                     "INSERT INTO ingest_new(account_id, placement, message_id) VALUES (?, ?, ?)",
+                    bind: { stmt in
+                        sqlite3_bind_text(stmt, 1, ref.accountID, -1, SQLITE_TRANSIENT)
+                        sqlite3_bind_text(stmt, 2, ref.placement, -1, SQLITE_TRANSIENT)
+                        sqlite3_bind_text(stmt, 3, ref.id, -1, SQLITE_TRANSIENT)
+                    }
+                )
+            }
+            try db.execute("COMMIT")
+        } catch {
+            try? db.execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    /// Trash / junk copies still get indexed, but they are not "new mail".
+    private static func isDisposalPlacement(_ placement: String) -> Bool {
+        let name = placement.split(separator: "/").last.map(String.init) ?? placement
+        switch name.lowercased() {
+        case "trash", "bin", "deleted messages", "deleted items", "junk", "junk mail", "spam":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func listedMessageRefs() throws -> [IndexedMessageRef] {
+        var refs: [IndexedMessageRef] = []
+        try db.query(
+            "SELECT account_id, placement, message_id FROM messages",
+            row: { stmt in
+                refs.append(
+                    IndexedMessageRef(
+                        accountID: sqlite3_column_string(stmt, 0),
+                        placement: sqlite3_column_string(stmt, 1),
+                        id: sqlite3_column_string(stmt, 2)
+                    )
+                )
+            }
+        )
+        return refs
+    }
+
+    private func deleteMessages(_ refs: [IndexedMessageRef]) throws {
+        guard !refs.isEmpty else { return }
+        try db.execute("BEGIN IMMEDIATE")
+        do {
+            for ref in refs {
+                try db.execute(
+                    "DELETE FROM messages WHERE account_id = ? AND placement = ? AND message_id = ?",
                     bind: { stmt in
                         sqlite3_bind_text(stmt, 1, ref.accountID, -1, SQLITE_TRANSIENT)
                         sqlite3_bind_text(stmt, 2, ref.placement, -1, SQLITE_TRANSIENT)
@@ -653,6 +720,18 @@ public struct IngestProgress: Sendable, Equatable {
 
 public struct IngestResult: Equatable, Sendable {
     public let new: [IndexedMessageRef]
+    public let updated: [IndexedMessageRef]
+    public let removed: [IndexedMessageRef]
+
+    public init(
+        new: [IndexedMessageRef],
+        updated: [IndexedMessageRef] = [],
+        removed: [IndexedMessageRef] = []
+    ) {
+        self.new = new
+        self.updated = updated
+        self.removed = removed
+    }
 }
 
 public struct IndexFreshness: Equatable, Sendable {
@@ -667,7 +746,7 @@ public struct IndexFreshness: Equatable, Sendable {
     }
 }
 
-public struct IndexedMessageRef: Equatable, Sendable {
+public struct IndexedMessageRef: Hashable, Equatable, Sendable {
     public let accountID: String
     public let placement: String
     public let id: String

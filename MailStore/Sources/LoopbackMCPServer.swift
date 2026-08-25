@@ -97,7 +97,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.1.0"
+                        "version": "0.1.1"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -373,7 +373,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "list_new",
                 "description":
-                    "List messages indexed in the last ingest pass (the newCount from update). Same item shape as list/search. Newest-first. Default page size 100 (max 100). Pass cursor from nextCursor to page.",
+                    "List messages that arrived in non-trash mailboxes in the last ingest pass (update's newCount). Same item shape as list/search. Newest-first. Default page size 100 (max 100). Pass cursor from nextCursor to page.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -439,7 +439,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "update",
                 "description":
-                    "Run an incremental ingest from Apple Mail and wait until it finishes. Returns newCount plus the same freshness fields as status. Call list_new to fetch those new messages.",
+                    "Run an incremental ingest from Apple Mail and wait until it finishes. Returns newCount (arrivals outside Trash/Junk) and removedCount, plus the same freshness fields as status. Call list_new to fetch those new messages.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]

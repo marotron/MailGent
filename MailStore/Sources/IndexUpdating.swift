@@ -2,10 +2,12 @@ import Foundation
 
 public struct IndexUpdateOutcome: Equatable, Sendable {
     public let newCount: Int
+    public let removedCount: Int
     public let freshness: IndexFreshness
 
-    public init(newCount: Int, freshness: IndexFreshness) {
+    public init(newCount: Int, removedCount: Int = 0, freshness: IndexFreshness) {
         self.newCount = newCount
+        self.removedCount = removedCount
         self.freshness = freshness
     }
 }
@@ -32,7 +34,11 @@ public final class LocalIndexUpdater: IndexUpdating, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         let result = try index.ingest()
-        return IndexUpdateOutcome(newCount: result.new.count, freshness: try index.freshness())
+        return IndexUpdateOutcome(
+            newCount: result.new.count,
+            removedCount: result.removed.count,
+            freshness: try index.freshness()
+        )
     }
 }
 

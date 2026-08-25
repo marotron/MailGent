@@ -506,7 +506,10 @@ struct CompanionWindow: View {
         case "Loaded from disk":
             return "Opened existing index"
         default:
-            return session.lastNewCount == 0 ? "No new this pass" : "\(session.lastNewCount) new this pass"
+            return IngestPassCopy.companionSummary(
+                newCount: session.lastNewCount,
+                removedCount: session.lastRemovedCount
+            )
         }
     }
 

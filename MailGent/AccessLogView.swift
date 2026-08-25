@@ -918,6 +918,9 @@ enum AccessLogFormat {
             if let newCount = intValue(obj["newCount"]) {
                 parts.append("new=\(newCount)")
             }
+            if let removedCount = intValue(obj["removedCount"]) {
+                parts.append("removed=\(removedCount)")
+            }
             parts.append("indexed=\(indexed)")
             if let last = obj["lastIngestAt"] as? String {
                 parts.append("lastIngestAt=\(last)")

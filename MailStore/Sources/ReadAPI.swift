@@ -66,7 +66,8 @@ public struct ReadAPI {
         )
     }
 
-    /// Messages indexed in the last ingest pass (`update`'s `newCount`), newest-first.
+    /// Arrivals from the last ingest pass (`update`'s `newCount`), newest-first.
+    /// Trash/Junk copies and identity-only reindexes are omitted.
     public func listNew(
         limit: Int = 100,
         cursor: String? = nil

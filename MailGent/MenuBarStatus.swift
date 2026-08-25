@@ -28,7 +28,7 @@ struct MenuBarStatus: View {
                             .foregroundStyle(session.mailAccessGranted ? .green : .orange)
                     }
                     lastIngestRow(at: context.date)
-                    newRow
+                    changesRow
                     sourceRow
                     statusRow("Connected agent") {
                         Text(session.agents.agent?.name ?? "—")
@@ -73,7 +73,7 @@ struct MenuBarStatus: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
-        .frame(width: 280)
+        .frame(width: 320)
         .onAppear(perform: session.refreshAccess)
     }
 
@@ -99,8 +99,7 @@ struct MenuBarStatus: View {
             Text("Last ingest")
                 .foregroundStyle(.secondary)
                 .frame(width: 118, alignment: .leading)
-            Text(CompanionStatusCopy(session: session, now: now).lastIngest)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            LastIngestValue(copy: CompanionStatusCopy(session: session, now: now))
             Button {
                 let work = { session.ingestAgain() }
                 DispatchQueue.main.async(execute: work)
@@ -149,13 +148,16 @@ struct MenuBarStatus: View {
         .font(.callout)
     }
 
-    private var newRow: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text("New")
+    private var changesRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Changes")
                 .foregroundStyle(.secondary)
                 .frame(width: 118, alignment: .leading)
-            Text(CompanionStatusCopy(session: session, now: .now).newMessages)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            IngestChangesValue(
+                newCount: session.lastNewCount,
+                removedCount: session.lastRemovedCount,
+                sinceLine: CompanionStatusCopy(session: session, now: .now).changesSince
+            )
             Button {
                 DetachedWindowHost.shared.claimActivation()
                 let work = {

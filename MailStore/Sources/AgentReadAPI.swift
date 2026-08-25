@@ -289,7 +289,7 @@ public struct AgentReadAPI {
                 kind: .updateIndex,
                 agent: agent,
                 started: started,
-                detail: "new=\(outcome.newCount)",
+                detail: "new=\(outcome.newCount) removed=\(outcome.removedCount)",
                 requestSummary: AuditJSON.json([:] as [String: Any]),
                 responseSummary: AuditJSON.json(AuditJSON.update(outcome))
             )
