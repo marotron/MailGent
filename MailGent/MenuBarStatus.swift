@@ -7,9 +7,17 @@ struct MenuBarStatus: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("MailGent")
-                .font(.headline)
-                .padding(.horizontal, 8)
+            HStack(alignment: .center) {
+                Text("MailGent")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Text(marketingVersionLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 8)
+            .accessibilityElement(children: .combine)
 
             // Keep relative-time refresh off the action rows — TimelineView rebuilds
             // were cancelling clicks / swapping which row received the mouse-up.
@@ -67,6 +75,12 @@ struct MenuBarStatus: View {
         .padding(.horizontal, 4)
         .frame(width: 280)
         .onAppear(perform: session.refreshAccess)
+    }
+
+    private var marketingVersionLabel: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        guard let version, !version.isEmpty else { return "—" }
+        return "v\(version)"
     }
 
     private func statusRow<Content: View>(_ title: String, @ViewBuilder value: () -> Content) -> some View {

@@ -500,7 +500,7 @@ private struct AccessLogDetail: View {
 
     private var showsMessageListChrome: Bool {
         switch entry.kind {
-        case .search, .list: true
+        case .search, .list, .listNew: true
         default: false
         }
     }
@@ -511,7 +511,7 @@ private struct AccessLogDetail: View {
 
     private var omitsBody: Bool {
         switch entry.kind {
-        case .search, .list: true
+        case .search, .list, .listNew: true
         default: false
         }
     }
@@ -522,6 +522,8 @@ private struct AccessLogDetail: View {
             return "Headers only. Search does not include body — use get."
         case .list:
             return "Headers only. List does not include body — use get."
+        case .listNew:
+            return "Headers only. New messages do not include body — use get."
         default:
             return nil
         }
@@ -581,7 +583,7 @@ private struct AccessLogDetail: View {
     private var isMessageResponse: Bool {
         if !entry.messages.isEmpty { return true }
         switch entry.kind {
-        case .search, .list:
+        case .search, .list, .listNew:
             if case .ok = entry.outcome { return true }
             return false
         default:

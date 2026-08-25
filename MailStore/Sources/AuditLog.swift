@@ -4,6 +4,7 @@ public enum AuditKind: String, Codable, Equatable, Hashable, Sendable {
     case pair
     case search
     case list
+    case listNew
     case listPlacements
     case get
     case createDraft

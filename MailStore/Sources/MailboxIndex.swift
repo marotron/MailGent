@@ -64,6 +64,14 @@ public final class MailboxIndex {
                 value TEXT NOT NULL
             )
             """)
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS ingest_new (
+                account_id TEXT NOT NULL,
+                placement TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                PRIMARY KEY (account_id, placement, message_id)
+            )
+            """)
         try migrateSchema()
     }
 
@@ -167,7 +175,29 @@ public final class MailboxIndex {
             ($0.accountID, $0.placement, $0.id) < ($1.accountID, $1.placement, $1.id)
         }
         try markLastIngest(at: Date())
+        try replaceIngestNew(new)
         return IngestResult(new: new)
+    }
+
+    private func replaceIngestNew(_ refs: [IndexedMessageRef]) throws {
+        try db.execute("BEGIN IMMEDIATE")
+        do {
+            try db.execute("DELETE FROM ingest_new")
+            for ref in refs {
+                try db.execute(
+                    "INSERT INTO ingest_new(account_id, placement, message_id) VALUES (?, ?, ?)",
+                    bind: { stmt in
+                        sqlite3_bind_text(stmt, 1, ref.accountID, -1, SQLITE_TRANSIENT)
+                        sqlite3_bind_text(stmt, 2, ref.placement, -1, SQLITE_TRANSIENT)
+                        sqlite3_bind_text(stmt, 3, ref.id, -1, SQLITE_TRANSIENT)
+                    }
+                )
+            }
+            try db.execute("COMMIT")
+        } catch {
+            try? db.execute("ROLLBACK")
+            throw error
+        }
     }
 
     /// Last ingest stamp (persisted), newest indexed message date string, and row count.
@@ -367,6 +397,30 @@ public final class MailboxIndex {
                 }
                 sqlite3_bind_int(stmt, index, Int32(limit))
                 sqlite3_bind_int(stmt, index + 1, Int32(offset))
+            },
+            row: { stmt in
+                rows.append(indexedMessageSummary(from: stmt))
+            }
+        )
+        return rows
+    }
+
+    func listNewMessages(limit: Int, offset: Int) throws -> [IndexedMessage] {
+        var rows: [IndexedMessage] = []
+        try db.query(
+            """
+            SELECT m.account_id, m.placement, m.message_id, m.from_addr, m.to_addr, m.date, m.subject, m.is_partial, m.cc_addr
+            FROM ingest_new n
+            JOIN messages m
+              ON m.account_id = n.account_id
+             AND m.placement = n.placement
+             AND m.message_id = n.message_id
+            ORDER BY m.date_sort DESC, m.message_id DESC
+            LIMIT ? OFFSET ?
+            """,
+            bind: { stmt in
+                sqlite3_bind_int(stmt, 1, Int32(limit))
+                sqlite3_bind_int(stmt, 2, Int32(offset))
             },
             row: { stmt in
                 rows.append(indexedMessageSummary(from: stmt))

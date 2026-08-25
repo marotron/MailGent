@@ -66,6 +66,24 @@ public struct ReadAPI {
         )
     }
 
+    /// Messages indexed in the last ingest pass (`update`'s `newCount`), newest-first.
+    public func listNew(
+        limit: Int = 100,
+        cursor: String? = nil
+    ) throws -> Page<IndexedMessage> {
+        let offset = cursor.flatMap(Int.init) ?? 0
+        let clamped = min(max(limit, 1), 100)
+        let fetched = try index.listNewMessages(
+            limit: clamped + 1,
+            offset: max(offset, 0)
+        )
+        let hasMore = fetched.count > clamped
+        return Page(
+            items: Array(fetched.prefix(clamped)),
+            nextCursor: hasMore ? String(max(offset, 0) + clamped) : nil
+        )
+    }
+
     public func listPlacements() throws -> [Placement] {
         try index.distinctPlacements().map { Placement(accountID: $0.accountID, id: $0.placement) }
     }

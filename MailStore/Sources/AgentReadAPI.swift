@@ -71,6 +71,43 @@ public struct AgentReadAPI {
         }
     }
 
+    public func listNew(
+        credential: String?,
+        limit: Int = 100,
+        cursor: String? = nil
+    ) throws -> Page<IndexedMessage> {
+        let started = Date()
+        let agent = try authenticate(credential)
+        let request = AuditJSON.request([
+            "limit": limit,
+            "cursor": cursor
+        ])
+        do {
+            let page = try read.listNew(limit: limit, cursor: cursor)
+            let filtered = filterPage(page, agentID: agent.id, limit: limit)
+            record(
+                kind: .listNew,
+                agent: agent,
+                started: started,
+                detail: "list_new",
+                requestSummary: request,
+                responseSummary: AuditJSON.json(AuditJSON.page(filtered)),
+                messages: messageRefs(filtered.items, agentID: agent.id)
+            )
+            return filtered
+        } catch {
+            record(
+                kind: .listNew,
+                agent: agent,
+                started: started,
+                detail: "list_new",
+                requestSummary: request,
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
+    }
+
     public func search(
         _ query: String,
         credential: String?,
@@ -195,7 +232,7 @@ public struct AgentReadAPI {
                 kind: .listPlacements,
                 agent: agent,
                 started: started,
-                detail: "listPlacements",
+                detail: "list_placements",
                 requestSummary: AuditJSON.json([:] as [String: Any]),
                 responseSummary: AuditJSON.json(AuditJSON.placements(placements)),
                 placements: placements.map {
@@ -208,7 +245,7 @@ public struct AgentReadAPI {
                 kind: .listPlacements,
                 agent: agent,
                 started: started,
-                detail: "listPlacements",
+                detail: "list_placements",
                 requestSummary: AuditJSON.json([:] as [String: Any]),
                 outcome: .error(String(describing: error))
             )

@@ -181,7 +181,16 @@ public struct LoopbackMCPServer {
         case "list":
             let page = try gateway.list(credential: credential)
             return try jsonString(AuditJSON.page(page))
-        case "listPlacements":
+        case "list_new", "listNew":
+            let limit = Self.intArgument(arguments["limit"]) ?? 100
+            let cursor = arguments["cursor"] as? String
+            let page = try gateway.listNew(
+                credential: credential,
+                limit: limit,
+                cursor: cursor
+            )
+            return try jsonString(AuditJSON.page(page))
+        case "list_placements", "listPlacements":
             let placements = try gateway.listPlacements(credential: credential)
             return try jsonString(AuditJSON.placements(placements))
         case "get":
@@ -362,7 +371,19 @@ public struct LoopbackMCPServer {
                 ]
             ],
             [
-                "name": "listPlacements",
+                "name": "list_new",
+                "description":
+                    "List messages indexed in the last ingest pass (the newCount from update). Same item shape as list/search. Newest-first. Default page size 100 (max 100). Pass cursor from nextCursor to page.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "limit": ["type": "integer", "description": "Page size (1–100, default 100)"],
+                        "cursor": ["type": "string", "description": "Opaque page cursor from a prior nextCursor"]
+                    ]
+                ]
+            ],
+            [
+                "name": "list_placements",
                 "description": "List granted account/mailbox placements.",
                 "inputSchema": [
                     "type": "object",
@@ -418,7 +439,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "update",
                 "description":
-                    "Run an incremental ingest from Apple Mail and wait until it finishes. Returns newCount plus the same freshness fields as status.",
+                    "Run an incremental ingest from Apple Mail and wait until it finishes. Returns newCount plus the same freshness fields as status. Call list_new to fetch those new messages.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]

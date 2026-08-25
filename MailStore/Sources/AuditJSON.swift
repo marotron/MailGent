@@ -142,7 +142,8 @@ extension AuditKind {
         switch toolName {
         case "search": self = .search
         case "list": self = .list
-        case "listPlacements": self = .listPlacements
+        case "list_new", "listNew": self = .listNew
+        case "list_placements", "listPlacements": self = .listPlacements
         case "get": self = .get
         case "create_draft": self = .createDraft
         case "update_draft": self = .updateDraft

@@ -51,7 +51,7 @@ Menu bar only (`LSUIElement`). Settings → Access → Recheck, Open Full Disk A
 
 In the companion, **Pair Cursor** → paste the snippet into `~/.cursor/mcp.json`. The app can write that file with the Bearer.
 
-Tools: `search`, `list`, `listPlacements`, `get`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (source switch is off unless Settings allows it).
+Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (source switch is off unless Settings allows it).
 
 ## License
 

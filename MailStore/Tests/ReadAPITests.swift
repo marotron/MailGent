@@ -76,6 +76,84 @@ struct ReadAPITests {
         #expect(all.nextCursor == nil)
     }
 
+    @Test func listNewReturnsOnlyLastIngestPassNewestFirst() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: One
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            first
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-index-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let api = ReadAPI(index: index)
+
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Two
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            second
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "3.emlx",
+            rfc822: """
+            From: Dan <dan@example.com>
+            To: Bob <bob@example.com>
+            Subject: Three
+            Date: Wed, 3 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            third
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        _ = try index.ingest()
+
+        let first = try api.listNew(limit: 1)
+        #expect(first.items.map(\.id) == ["3"])
+        #expect(first.items.map(\.subject) == ["Three"])
+        #expect(first.nextCursor != nil)
+
+        let second = try api.listNew(limit: 1, cursor: first.nextCursor)
+        #expect(second.items.map(\.id) == ["2"])
+        #expect(second.items[0].subject == "Two")
+        #expect(second.nextCursor == nil)
+
+        let allNew = try api.listNew()
+        #expect(allNew.items.map(\.id) == ["3", "2"])
+        #expect(allNew.nextCursor == nil)
+
+        _ = try index.ingest()
+        let empty = try api.listNew()
+        #expect(empty.items.isEmpty)
+        #expect(empty.nextCursor == nil)
+    }
+
     @Test func listClampsPageSizeToOneHundred() throws {
         let root = try FixtureTree()
         defer { root.remove() }

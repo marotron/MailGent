@@ -136,6 +136,55 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains { $0.kind == .updateIndex })
     }
 
+    @Test func listNewReturnsMessagesFromLastUpdate() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try env.root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Carol <carol@example.com>
+            To: Bob <bob@example.com>
+            Subject: Arrival
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            New mail
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        _ = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "update", arguments: [:])
+            )
+        )
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "list_new", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect((payload["count"] as? NSNumber)?.intValue == 1)
+        let items = payload["items"] as? [[String: Any]]
+        #expect(items?.count == 1)
+        #expect(items?.first?["subject"] as? String == "Arrival")
+        #expect(items?.first?["id"] as? String == "2")
+        #expect(payload["nextCursor"] == nil)
+        #expect(env.audit.entries().contains { $0.kind == .listNew })
+    }
+
     @Test func authenticatedGetReturnsMessage() async throws {
         let env = try LoopbackFixture()
         defer { env.remove() }
@@ -228,8 +277,11 @@ struct LoopbackMCPServerTests {
         #expect(response.status == 200)
         #expect(response.body.contains("\"name\":\"search\""))
         #expect(response.body.contains("\"name\":\"list\""))
+        #expect(response.body.contains("\"name\":\"list_new\""))
         #expect(response.body.contains("\"name\":\"get\""))
-        #expect(response.body.contains("\"name\":\"listPlacements\""))
+        #expect(response.body.contains("\"name\":\"list_placements\""))
+        #expect(!response.body.contains("\"name\":\"listNew\""))
+        #expect(!response.body.contains("\"name\":\"listPlacements\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
