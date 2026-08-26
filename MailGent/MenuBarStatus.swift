@@ -28,12 +28,12 @@ struct MenuBarStatus: View {
                             .foregroundStyle(session.mailAccessGranted ? .green : .orange)
                     }
                     lastIngestRow(at: context.date)
-                    changesRow
+                    changesRow(at: context.date)
                     sourceRow
                     statusRow("Connected agent") {
                         Text(session.agents.agent?.name ?? "—")
                     }
-                    lastAgentRequestRow(at: context.date)
+                    lastAgentCallRow(at: context.date)
                 }
                 .padding(.horizontal, 8)
             }
@@ -148,7 +148,7 @@ struct MenuBarStatus: View {
         .font(.callout)
     }
 
-    private var changesRow: some View {
+    private func changesRow(at now: Date) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Changes")
                 .foregroundStyle(.secondary)
@@ -156,7 +156,7 @@ struct MenuBarStatus: View {
             IngestChangesValue(
                 newCount: session.lastNewCount,
                 removedCount: session.lastRemovedCount,
-                sinceLine: CompanionStatusCopy(session: session, now: .now).changesSince
+                sinceLine: CompanionStatusCopy(session: session, now: now).changesSince
             )
             Button {
                 DetachedWindowHost.shared.claimActivation()
@@ -178,13 +178,12 @@ struct MenuBarStatus: View {
         .font(.callout)
     }
 
-    private func lastAgentRequestRow(at now: Date) -> some View {
+    private func lastAgentCallRow(at now: Date) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            Text("Last agent request")
+            Text("Last agent call")
                 .foregroundStyle(.secondary)
                 .frame(width: 118, alignment: .leading)
-            Text(CompanionStatusCopy(session: session, now: now).lastAgentRequest)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            LastAgentCallValue(copy: CompanionStatusCopy(session: session, now: now))
             Button {
                 DetachedWindowHost.shared.claimActivation()
                 let work = {

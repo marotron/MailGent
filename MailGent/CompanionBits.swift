@@ -612,10 +612,10 @@ struct CompanionStatusCopy {
         return date.formatted(date: .omitted, time: .shortened)
     }
 
-    /// Parenthetical relative age, e.g. `(27m ago)`. Nil when there is no ingest yet.
+    /// Relative age, e.g. `27m ago`. Nil when there is no ingest yet.
     var lastIngestRelative: String? {
         guard let date = session.lastIngestAt else { return nil }
-        return "(\(Self.relativeAge(from: date, to: now)))"
+        return Self.relativeAge(from: date, to: now)
     }
 
     var lastIngest: String {
@@ -625,20 +625,33 @@ struct CompanionStatusCopy {
 
     var changesSince: String? {
         guard let since = session.lastNewSinceAt else { return nil }
-        let clock = since.formatted(date: .omitted, time: .shortened)
-        return "(since \(clock))"
+        return Self.sinceCaption(from: since, now: now)
     }
 
     var source: String { session.source.title }
 
     var connectedAgent: String { session.agents.agent?.name ?? "—" }
 
-    var lastAgentRequest: String {
-        guard let entry = session.agents.lastAgentRequest else { return "—" }
-        return "\(entry.kind.rawValue) · \(Self.relativeAge(from: entry.at, to: now))"
+    var lastAgentKind: String {
+        session.agents.lastAgentRequest?.kind.rawValue ?? "—"
     }
 
-    static func relativeAge(from date: Date, to now: Date) -> String {
+    var lastAgentClock: String? {
+        guard let entry = session.agents.lastAgentRequest else { return nil }
+        return entry.at.formatted(date: .omitted, time: .shortened)
+    }
+
+    var lastAgentRelative: String? {
+        guard let entry = session.agents.lastAgentRequest else { return nil }
+        return Self.relativeAge(from: entry.at, to: now)
+    }
+
+    var lastAgentCall: String {
+        guard let clock = lastAgentClock, let relative = lastAgentRelative else { return lastAgentKind }
+        return "\(lastAgentKind) \(clock) \(relative)"
+    }
+
+    nonisolated static func relativeAge(from date: Date, to now: Date) -> String {
         let seconds = max(0, Int(now.timeIntervalSince(date)))
         if seconds < 60 { return "\(seconds)s ago" }
         let minutes = seconds / 60
@@ -647,52 +660,108 @@ struct CompanionStatusCopy {
         if hours < 48 { return "\(hours)h ago" }
         return "\(hours / 24)d ago"
     }
+
+    /// Clock only on the same calendar day as `now`; `yesterday` the day before; date otherwise.
+    nonisolated static func dayAwareClock(
+        from date: Date,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let clock = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDate(date, inSameDayAs: now) {
+            return clock
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday)
+        {
+            return "yesterday \(clock)"
+        }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    nonisolated static func sinceCaption(
+        from date: Date,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        "since \(dayAwareClock(from: date, now: now, calendar: calendar))"
+    }
 }
 
-/// Parenthetical note beside a status value. Smaller than `.callout`, still larger than `.caption`.
-private struct StatusMetaText: View {
+/// Quiet time chip next to a status value.
+private struct StatusTimeBadge: View {
     let text: String
 
     var body: some View {
         Text(text)
-            .font(.subheadline.italic().weight(.light))
+            .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.quaternary, in: Capsule())
             .lineLimit(1)
     }
 }
 
-/// Clock plus optional relative age on one line.
+/// Clock plus optional relative-age chip on one line.
 struct LastIngestValue: View {
     let copy: CompanionStatusCopy
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(copy.lastIngestClock)
-            if let relative = copy.lastIngestRelative {
-                StatusMetaText(text: relative)
+        ClockAndAgeValue(clock: copy.lastIngestClock, relative: copy.lastIngestRelative)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel(copy.lastIngest)
+    }
+}
+
+/// Kind plus clock and relative-age chip — same time layout as last ingest.
+struct LastAgentCallValue: View {
+    let copy: CompanionStatusCopy
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(copy.lastAgentKind)
+            if let clock = copy.lastAgentClock {
+                ClockAndAgeValue(clock: clock, relative: copy.lastAgentRelative)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(copy.lastIngest)
+        .accessibilityLabel(copy.lastAgentCall)
     }
 }
 
-/// Counts plus optional since-clock. Numbers stay on one line; since sits underneath.
+private struct ClockAndAgeValue: View {
+    let clock: String
+    let relative: String?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(clock)
+            if let relative {
+                StatusTimeBadge(text: relative)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+    }
+}
+
+/// Counts plus optional since chip. Numbers stay on one line; since sits underneath.
 struct IngestChangesValue: View {
     let newCount: Int
     let removedCount: Int
     let sinceLine: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(IngestPassCopy.attributedSummary(newCount: newCount, removedCount: removedCount))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .allowsTightening(true)
             if let sinceLine {
-                StatusMetaText(text: sinceLine)
+                StatusTimeBadge(text: sinceLine)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -715,7 +784,7 @@ struct CompanionStatusMetrics: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let copy = CompanionStatusCopy(session: session, now: context.date)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     Text("Last ingest")
                         .foregroundStyle(.secondary)
                         .frame(width: 118, alignment: .leading)
@@ -741,7 +810,12 @@ struct CompanionStatusMetrics: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 row("Connected agent", copy.connectedAgent)
-                row("Last agent request", copy.lastAgentRequest)
+                HStack(alignment: .center, spacing: 8) {
+                    Text("Last agent call")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 118, alignment: .leading)
+                    LastAgentCallValue(copy: copy)
+                }
             }
             .font(.callout)
         }
