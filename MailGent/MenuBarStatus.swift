@@ -156,7 +156,7 @@ struct MenuBarStatus: View {
             IngestChangesValue(
                 newCount: session.lastNewCount,
                 removedCount: session.lastRemovedCount,
-                sinceLine: CompanionStatusCopy(session: session, now: now).changesSince
+                sinceLine: CompanionStatusCopy(session: session, now: now).changesWindow
             )
             Button {
                 DetachedWindowHost.shared.claimActivation()

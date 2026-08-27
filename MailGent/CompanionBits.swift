@@ -623,9 +623,9 @@ struct CompanionStatusCopy {
         return "\(lastIngestClock) \(relative)"
     }
 
-    var changesSince: String? {
-        guard let since = session.lastNewSinceAt else { return nil }
-        return Self.sinceCaption(from: since, now: now)
+    var changesWindow: String? {
+        guard let start = session.lastNewSinceAt, let end = session.lastIngestAt else { return nil }
+        return Self.windowCaption(from: start, to: end, now: now)
     }
 
     var source: String { session.source.title }
@@ -679,12 +679,42 @@ struct CompanionStatusCopy {
         return date.formatted(date: .abbreviated, time: .shortened)
     }
 
-    nonisolated static func sinceCaption(
-        from date: Date,
+    /// Compact ingest window, e.g. `12:15–12:31 (16m)`.
+    nonisolated static func windowCaption(
+        from start: Date,
+        to end: Date,
         now: Date,
         calendar: Calendar = .current
     ) -> String {
-        "since \(dayAwareClock(from: date, now: now, calendar: calendar))"
+        let duration = compactDuration(from: start, to: end)
+        if calendar.isDate(start, inSameDayAs: end) {
+            let range = "\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
+            if calendar.isDate(start, inSameDayAs: now) {
+                return "\(range) (\(duration))"
+            }
+            if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+               calendar.isDate(start, inSameDayAs: yesterday)
+            {
+                return "yesterday \(range) (\(duration))"
+            }
+            return "\(start.formatted(date: .abbreviated, time: .omitted)) \(range) (\(duration))"
+        }
+        return "\(dayAwareClock(from: start, now: now, calendar: calendar))–\(dayAwareClock(from: end, now: now, calendar: calendar)) (\(duration))"
+    }
+
+    nonisolated private static func compactDuration(from start: Date, to end: Date) -> String {
+        let seconds = max(0, Int(end.timeIntervalSince(start).rounded()))
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        let remainMinutes = minutes % 60
+        if hours < 24 {
+            return remainMinutes == 0 ? "\(hours)h" : "\(hours)h \(remainMinutes)m"
+        }
+        let days = hours / 24
+        let remainHours = hours % 24
+        return remainHours == 0 ? "\(days)d" : "\(days)d \(remainHours)h"
     }
 }
 
@@ -747,7 +777,7 @@ private struct ClockAndAgeValue: View {
     }
 }
 
-/// Counts plus optional since chip. Numbers stay on one line; since sits underneath.
+/// Counts plus optional window chip. Numbers stay on one line; window sits underneath.
 struct IngestChangesValue: View {
     let newCount: Int
     let removedCount: Int
@@ -797,7 +827,7 @@ struct CompanionStatusMetrics: View {
                     IngestChangesValue(
                         newCount: session.lastNewCount,
                         removedCount: session.lastRemovedCount,
-                        sinceLine: copy.changesSince
+                        sinceLine: copy.changesWindow
                     )
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
