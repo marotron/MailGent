@@ -15,7 +15,7 @@ Canonical MailGent policy for source license, user-facing disclaimers, and binar
 | Closed forks | **Allowed**, if they keep license + NOTICE credits |
 | Name and icon | **Not licensed.** “MailGent,” the mark, and the app icon stay with the copyright holder. Forks rename. |
 | Official binary | **Developer ID + notarized** GitHub Release only |
-| Signing identity | **Personal Apple ID only** (`marotron@gmail.com` / marotron). Never company. |
+| Signing identity | **Personal Apple ID only** (`marotron@gmail.com` / marotron). Never an employer/company team. |
 | Homebrew | **Future.** Do not add a cask or tap until a notarized GitHub Release zip exists (paid personal Apple Developer Program). Then cask that same file — not `homebrew/cask` until a public hashed artifact exists. |
 
 **Why Apache, not MIT:** same freedoms (use, fork, sell, close a fork) plus a real `NOTICE` duty, an explicit patent grant, inbound contributions under Apache unless stated otherwise, and an explicit “no trademark license.”
@@ -124,15 +124,11 @@ Signed + notarized + stapled is a **Gatekeeper** requirement for the download, n
 
 ---
 
-## Apple signing identity (never company)
+## Apple signing identity (personal only)
 
-The owner **does not work at company**. MailGent must never be signed, notarized, provisioned, or submitted with:
+MailGent must never be signed, notarized, provisioned, or submitted with an **employer or company** Apple Developer account — including any paid team that appears in Xcode or `security find-identity` on the build Mac.
 
-- Apple ID `employer@example.com`
-- Team **Company Developer Team** (`COMPANY_TEAM_ID`)
-- Any company certificate, notary profile, or Xcode team
-
-Use the **personal** Apple Developer Program (`marotron@gmail.com`). Ignore other teams on the Mac. Agents must not offer company as a shortcut.
+Use the **personal** Apple Developer Program (`marotron@gmail.com`). Ignore other teams on the Mac. Agents must not offer a company team as a shortcut.
 
 ---
 

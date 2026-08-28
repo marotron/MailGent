@@ -253,7 +253,7 @@ private enum PrototypeFixture {
             mailbox: "Sent Messages",
             name: "1.emlx",
             rfc822: """
-            From: Marek <alice@example.com>
+            From: Alice <alice@example.com>
             To: team@example.com
             Subject: shipping notes
             Date: Thu, 20 Aug 2026 09:00:00 +0100

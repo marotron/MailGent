@@ -257,7 +257,7 @@ public enum MailAccountIdentityResolver {
         }
     }
 
-    /// `alice@example.com` → `Acme`; known providers keep friendly labels.
+    /// `billing@acme.co.uk` → `Acme`; known providers keep friendly labels.
     public static func displayName(fromEmail email: String) -> String? {
         let parts = email.split(separator: "@")
         guard parts.count == 2 else { return nil }

@@ -12,4 +12,4 @@ Follow `docs/agents/licensing.md` (skill `licensing`).
 - Closed use of the code is allowed if credits stay. Name and icon are trademarks; forks rename.
 - Warranty copy is AS IS; do not claim the license is a total liability shield.
 - Homebrew cask is **future** — do not add until a notarized GitHub Release exists; then cask that file only; no placeholder sha256.
-- Sign/notarize with the **personal** Apple ID only. Never company / `employer@example.com` / team `COMPANY_TEAM_ID`.
+- Sign/notarize with the **personal** Apple ID only. Never an employer or company Developer Program team.

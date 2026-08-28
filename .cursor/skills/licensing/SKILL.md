@@ -19,7 +19,7 @@ Follow [docs/agents/licensing.md](../../../docs/agents/licensing.md). Do not re-
 3. **Name and icon are not licensed.** Forks rename. Apache does not grant the MailGent trademark.
 4. **Apache AS IS is not “no responsibility ever.”** Put a short user disclaimer on official binaries; do not claim the license beats consumer law or a paid store listing.
 5. **Homebrew is future.** Do not add a cask or tap until a notarized GitHub Release zip exists. Then it is a cask of that file only. No fake `sha256`. No formula. No `homebrew/cask` PR until that artifact exists.
-6. **Never sign or notarize as company.** No `employer@example.com`, no team `COMPANY_TEAM_ID`. Personal Apple ID only (`marotron@gmail.com`). The owner does not work at company.
+6. **Never sign or notarize under an employer/company team.** Personal Apple ID only (`marotron@gmail.com`). Ignore paid company teams on the Mac.
 
 ## Apply (only when the user wants files)
 
@@ -35,4 +35,4 @@ Follow [docs/agents/licensing.md](../../../docs/agents/licensing.md). Do not re-
 - Relicense without an explicit user change to this policy.
 - Invent a CLA, EULA novel, or patent filing.
 - Tell the user a license protects the *idea*.
-- Use company / `employer@example.com` for codesign, notary, App Store, CI, or Xcode team.
+- Use an employer/company Apple ID or Developer Program team for codesign, notary, App Store, CI, or Xcode team selection.

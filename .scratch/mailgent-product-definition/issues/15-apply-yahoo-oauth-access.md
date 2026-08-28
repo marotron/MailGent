@@ -15,7 +15,7 @@ Complete Yahoo’s commercial developer / Sender Hub access application for IMAP
 | --- | --- |
 | Status | Submitted — awaiting Yahoo review (no published SLA / status portal) |
 | YDN app | MailGent (public client; Client ID in local `.env`; no Client Secret) |
-| YDN account | `you@yahoo.com` |
+| YDN account | `you@yahoo.com` (placeholder) |
 | Product URL | `https://github.com/marotron/MailGent` |
 | Privacy URL | `https://github.com/marotron/MailGent/blob/main/PRIVACY.md` |
 | API requested | IMAP only (not CardDAV/CalDAV) |

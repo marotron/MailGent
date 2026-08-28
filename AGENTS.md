@@ -14,7 +14,7 @@ Candidate-first. Sketch in `.scratch/app-icon/candidates/`; do not write `AppIco
 
 ### License / liability / Homebrew
 
-Apache-2.0 + `NOTICE`; name and icon stay ours. Homebrew cask is **future** (after a notarized GitHub Release). Sign only with the **personal** Apple ID — never company / `employer@example.com`. See `docs/agents/licensing.md`.
+Apache-2.0 + `NOTICE`; name and icon stay ours. Homebrew cask is **future** (after a notarized GitHub Release). Sign only with the **personal** Apple ID — never an employer/company team. See `docs/agents/licensing.md`.
 
 ### Versioning
 
