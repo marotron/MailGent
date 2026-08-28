@@ -4,6 +4,8 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
+Release sections use semver only (`## [0.1.8]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+
 ## [0.1.8] - 2026-08-28
 
 ### Added

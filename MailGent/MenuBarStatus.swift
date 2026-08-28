@@ -16,7 +16,7 @@ struct MenuBarStatus: View {
                     let work = { DetachedWindowHost.shared.showChangelog() }
                     DispatchQueue.main.async(execute: work)
                 } label: {
-                    Text(marketingVersionLabel)
+                    Text(MailGentAboutInfo.menuBarVersionLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -91,12 +91,6 @@ struct MenuBarStatus: View {
         .padding(.horizontal, 4)
         .frame(width: 320)
         .onAppear(perform: session.refreshAccess)
-    }
-
-    private var marketingVersionLabel: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        guard let version, !version.isEmpty else { return "—" }
-        return "v\(version)"
     }
 
     private func statusRow<Content: View>(_ title: String, @ViewBuilder value: () -> Content) -> some View {

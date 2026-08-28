@@ -24,9 +24,14 @@ jobs:
           MAILGENT_NOTARY_PROFILE: ${{ secrets.MAILGENT_NOTARY_PROFILE }}
         run: make dmg
 
+      - name: Release title
+        id: release
+        run: echo "title=${GITHUB_REF_NAME#v} alpha" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.release.outputs.title }}
           body_path: .github/RELEASE_BODY.md
           files: dist/MailGent-*.dmg
           generate_release_notes: true

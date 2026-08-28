@@ -4,7 +4,7 @@
 # Optional (set when Developer ID + notary profile exist):
 #   MAILGENT_SIGN_IDENTITY   e.g. "Developer ID Application: Your Name (TEAMID)"
 #   MAILGENT_NOTARY_PROFILE  keychain profile for `xcrun notarytool`
-#   RELEASE_TAG              e.g. v0.1.6 — must match MARKETING_VERSION in project.yml
+#   RELEASE_TAG              e.g. v0.1.8 — must match MARKETING_VERSION in project.yml (tag is v-prefixed semver; no -alpha suffix)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

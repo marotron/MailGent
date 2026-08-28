@@ -2,6 +2,9 @@ import AppKit
 import SwiftUI
 
 enum MailGentAboutInfo {
+    /// User-facing stage until v1 (`README.md`, GitHub Release title, About).
+    static let releaseStage = "alpha"
+
     static var marketingVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
@@ -11,7 +14,13 @@ enum MailGentAboutInfo {
     }
 
     static var versionLine: String {
-        "Version \(marketingVersion) (\(buildNumber))"
+        "Version \(marketingVersion) \(releaseStage) (\(buildNumber))"
+    }
+
+    /// Compact menu-bar label; full stage string is in About and release metadata.
+    static var menuBarVersionLabel: String {
+        guard !marketingVersion.isEmpty, marketingVersion != "—" else { return "—" }
+        return "v\(marketingVersion)"
     }
 
     static let tagline = "macOS menu-bar companion beside Apple Mail."

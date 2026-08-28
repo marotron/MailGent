@@ -1,5 +1,7 @@
 ## Install
 
+**Pre-release alpha** — not a stable or beta build. Version in the app bundle is semver (`0.1.8`); GitHub release title and About show **`0.1.8 alpha`**.
+
 1. Download `MailGent-*.dmg` below.
 2. Open the disk image and drag **MailGent** to **Applications**.
 3. Launch from Applications (menu bar only — no Dock icon).

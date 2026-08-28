@@ -26,7 +26,11 @@ Backfill missing history when you discover a gap (as with 0.1.0–0.1.3 before `
 | `MailGent.xcodeproj/project.pbxproj` | regenerate via `xcodegen generate` after `project.yml` |
 | `README.md` | `**X.Y.Z alpha**` headline |
 | `PRIVACY.md` | `This X.Y.Z alpha binary…` |
-| `MailStore/Sources/LoopbackMCPServer.swift` | MCP `initialize` → `serverInfo.version` |
+| GitHub Release **title** | `X.Y.Z alpha` (pre-release until v1) |
+| Git tag | `vX.Y.Z` (semver only — no `-alpha` suffix) |
+| About window | `Version X.Y.Z alpha (build)` |
+| Menu-bar version label | `vX.Y.Z` (compact; stage in About / release title) |
+| `MailStore/Sources/LoopbackMCPServer.swift` | MCP `initialize` → `serverInfo.version` (semver only) |
 | `CHANGELOG.md` | new top section for the bump |
 
 Increment `CURRENT_PROJECT_VERSION` on every release build.
@@ -36,3 +40,19 @@ Increment `CURRENT_PROJECT_VERSION` on every release build.
 - Do not land versioned work on `main` — branch `feat/…` or `fix/…` first.
 - Tag the release commit `vX.Y.Z` when shipping.
 - Docs/chore/internal-only: no version bump, no CHANGELOG entry.
+
+## Tags vs GitHub Releases (alpha until v1)
+
+All **0.1.x** ships as **pre-release alpha**. Same semver everywhere in code; **alpha** appears in user-facing titles only.
+
+| Surface | Format | Example |
+|---------|--------|---------|
+| Git tag | `vX.Y.Z` | `v0.1.8` |
+| GitHub Release **title** | `X.Y.Z alpha` | `0.1.8 alpha` |
+| GitHub **pre-release** | always checked | — |
+| DMG filename | `MailGent-X.Y.Z.dmg` | `MailGent-0.1.8.dmg` |
+| `MARKETING_VERSION` / MCP / bundle | `X.Y.Z` | `0.1.8` |
+
+**Do not** put `-alpha` on new git tags (legacy exception: `v0.1.0-alpha.1` — first alpha; keep the tag, title is `0.1.0 alpha`).
+
+Workflow sets release title from the tag: strip leading `v`, append ` alpha`.
