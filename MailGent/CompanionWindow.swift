@@ -837,7 +837,7 @@ private struct CompanionReadPage: View {
                 AddressLine(label: "Cc", raw: detail.cc)
             }
             HStack(alignment: .center) {
-                Text(detail.date)
+                Text(AccessLogFormat.compactMailDate(detail.date) ?? detail.date)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)

@@ -43,6 +43,17 @@ struct AccessLogFormatTests {
         )
     }
 
+    @Test func displayValueFormatsMailDatesLocally() {
+        let raw = "Fri, 28 Aug 2026 15:46:13 +0000"
+        let formatted = AccessLogFormat.displayValue("newestMessageDate", raw) { _ in "" }
+        #expect(formatted != raw)
+        #expect(formatted.contains("28"))
+        #expect(
+            AccessLogFormat.displayValue("lastIngestAt", "2026-08-22T22:37:13Z") { _ in "" }
+                != "2026-08-22T22:37:13Z"
+        )
+    }
+
     @Test func compactMailDateParsesRFC822() {
         let raw = "Sat, 22 Aug 2026 10:46:17 +0000"
         let formatted = AccessLogFormat.compactMailDate(raw)

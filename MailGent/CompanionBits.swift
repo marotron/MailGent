@@ -1194,7 +1194,11 @@ struct MessageAccessCard: View {
                 } else {
                     previewRow("Cc", ref.cc, false)
                 }
-                previewRow("Date & Time", ref.date, ref.fields.date)
+                previewRow(
+                    "Date & Time",
+                    AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
+                    ref.fields.date
+                )
                 Divider()
                 Text("Body")
                     .font(.caption)

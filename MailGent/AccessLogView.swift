@@ -823,6 +823,8 @@ enum AccessLogFormat {
         case "accountID", "account":
             let name = accountLabel(value)
             return name.isEmpty ? value : name
+        case "newestMessageDate", "lastIngestAt":
+            return compactMailDate(value) ?? value
         default:
             return value
         }
