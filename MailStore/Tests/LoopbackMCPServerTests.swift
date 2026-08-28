@@ -96,6 +96,110 @@ struct LoopbackMCPServerTests {
         #expect(payload["newestMessageDate"] as? String == "Mon, 1 Jan 2024 00:00:00 +0000")
         #expect((payload["indexedCount"] as? NSNumber)?.intValue == 1)
         #expect(payload["lastIngestAt"] is String)
+        #expect(payload["state"] as? String == "ready")
+    }
+
+    @Test func indexingSearchReturns503WithProgress() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let host = LoopbackHost(
+            pairing: env.pairing,
+            audit: env.audit,
+            grants: env.grants
+        )
+        host.setIndexState(
+            LoopbackIndexSnapshot(
+                phase: .indexing,
+                indexedSoFar: 12,
+                totalHint: 40,
+                currentTask: "Indexing INBOX",
+                statusMessage: "Indexing INBOX"
+            )
+        )
+        let server = LoopbackMCPServer(host: host)
+
+        let response = await server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "search", arguments: ["query": "invoice"])
+            )
+        )
+
+        #expect(response.status == 503)
+        #expect(response.body.contains("Index not ready"))
+        #expect(response.body.contains("indexing"))
+        #expect(response.body.contains("12"))
+        #expect(response.body.contains("40"))
+    }
+
+    @Test func indexingStatusReturnsProgressWithoutGateway() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let host = LoopbackHost(
+            pairing: env.pairing,
+            audit: env.audit,
+            grants: env.grants
+        )
+        host.setIndexState(
+            LoopbackIndexSnapshot(
+                phase: .indexing,
+                indexedSoFar: 12,
+                totalHint: 40,
+                currentTask: "Indexing INBOX",
+                statusMessage: "Indexing INBOX"
+            )
+        )
+        let server = LoopbackMCPServer(host: host)
+
+        let response = await server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "status", arguments: [:])
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["state"] as? String == "indexing")
+        #expect((payload["indexedSoFar"] as? NSNumber)?.intValue == 12)
+        #expect((payload["totalHint"] as? NSNumber)?.intValue == 40)
+        #expect(payload["currentTask"] as? String == "Indexing INBOX")
+    }
+
+    @Test func initializeWorksWhileIndexing() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let host = LoopbackHost(
+            pairing: env.pairing,
+            audit: env.audit,
+            grants: env.grants
+        )
+        host.setIndexState(
+            LoopbackIndexSnapshot(phase: .indexing, indexedSoFar: 1, totalHint: 10)
+        )
+        let server = LoopbackMCPServer(host: host)
+
+        let response = await server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(
+                    #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cursor","version":"1"}}}"#
+                        .utf8
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("mailgent"))
     }
 
     @Test func updateIngestsNewMailAndReturnsFreshness() async throws {
@@ -423,9 +527,9 @@ struct LoopbackMCPServerTests {
         #expect(update.body.contains("v2"))
         #expect(env.audit.entries().contains { $0.kind == .updateDraft })
 
-        let versions = try env.server.ledger.list(draftID: draftID)
+        let versions = try env.server.host.ledger.list(draftID: draftID)
         #expect(versions.map(\.label) == ["v2", "v1"])
-        #expect(try env.server.ledger.copy(versionID: versions[0].id) == "Hello Ava — revised")
+        #expect(try env.server.host.ledger.copy(versionID: versions[0].id) == "Hello Ava — revised")
     }
 
     @Test func initializedNotificationReturnsAccepted() async throws {
@@ -546,6 +650,8 @@ private struct LoopbackFixture {
     let db: URL
     let credential = "secret-token"
     let audit: AuditLog
+    let pairing: Pairing
+    let grants: GrantGate
     let server: LoopbackMCPServer
 
     init(bodyGranted: Bool = true, sourceController: (any MailSourceControlling)? = nil) throws {
@@ -573,13 +679,13 @@ private struct LoopbackFixture {
         _ = try index.ingest()
 
         audit = AuditLog()
-        let pairing = Pairing(audit: audit)
+        pairing = Pairing(audit: audit)
         let agent = try pairing.register(
             name: "Cursor",
             trustClass: .machineLocal,
             credential: credential
         )
-        let grants = GrantGate()
+        grants = GrantGate()
         try grants.allow(
             agentID: agent.id,
             accountID: accountID,

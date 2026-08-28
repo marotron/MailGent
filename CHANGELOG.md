@@ -4,6 +4,12 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
+## [0.1.6] - 2026-08-28
+
+### Added
+
+- Loopback MCP binds on launch; during full reindex, data tools return HTTP 503 with indexing progress (`state`, `indexedSoFar`, `totalHint`, `currentTask`). `status` stays reachable for polling.
+
 ## [0.1.5] - 2026-08-28
 
 ### Added

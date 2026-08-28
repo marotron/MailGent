@@ -36,21 +36,34 @@ public struct LoopbackMCPResponse: Sendable {
 
 /// Thin JSON-RPC MCP surface over AgentReadAPI + DraftLedger (Streamable HTTP POST /mcp).
 public struct LoopbackMCPServer {
-    public let gateway: AgentReadAPI
-    public let ledger: DraftLedger
-    public let indexUpdater: any IndexUpdating
-    public let sourceController: (any MailSourceControlling)?
+    public let host: LoopbackHost
 
+    public init(host: LoopbackHost) {
+        self.host = host
+    }
+
+    /// Tests and single-shot hosts with a fixed gateway.
     public init(
         gateway: AgentReadAPI,
         ledger: DraftLedger = DraftLedger(),
         indexUpdater: (any IndexUpdating)? = nil,
         sourceController: (any MailSourceControlling)? = nil
     ) {
-        self.gateway = gateway
-        self.ledger = ledger
-        self.indexUpdater = indexUpdater ?? LocalIndexUpdater(index: gateway.read.index)
-        self.sourceController = sourceController
+        let box = LoopbackHost(
+            pairing: gateway.pairing,
+            audit: gateway.audit,
+            grants: gateway.grants,
+            ledger: ledger
+        )
+        box.setGateway(gateway, indexUpdater: indexUpdater ?? LocalIndexUpdater(index: gateway.read.index))
+        box.setSourceController(sourceController)
+        box.setIndexState(
+            LoopbackIndexSnapshot(
+                phase: .ready,
+                indexedSoFar: (try? gateway.read.freshness().indexedCount) ?? 0
+            )
+        )
+        self.host = box
     }
 
     public func handle(_ request: LoopbackMCPRequest) async -> LoopbackMCPResponse {
@@ -71,7 +84,7 @@ public struct LoopbackMCPServer {
 
         let credential = request.bearerToken
         do {
-            _ = try gateway.authenticate(credential)
+            _ = try host.authenticate(credential)
         } catch {
             return LoopbackMCPResponse(status: 401, body: #"{"error":"unauthorized"}"#)
         }
@@ -97,7 +110,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.1.5"
+                        "version": "0.1.6"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -116,10 +129,14 @@ public struct LoopbackMCPServer {
                     return LoopbackMCPResponse(status: 400, body: #"{"error":"bad_request"}"#)
                 }
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
+                let indexSnapshot = host.snapshot()
+                if !indexSnapshot.isReady, name != "status" {
+                    return try indexingUnavailable(id: id, snapshot: indexSnapshot)
+                }
                 do {
                     let text = try await callTool(name: name, arguments: arguments, credential: credential)
                     if let kind = AuditKind(toolName: name) {
-                        gateway.audit?.updateLast(
+                        host.audit?.updateLast(
                             kind: kind,
                             requestSummary: AuditJSON.json(arguments),
                             responseSummary: text
@@ -166,6 +183,9 @@ public struct LoopbackMCPServer {
         arguments: [String: Any],
         credential: String?
     ) async throws -> String {
+        guard let gateway = host.readGateway() else {
+            throw CallError.indexNotReady
+        }
         switch name {
         case "search":
             let query = arguments["query"] as? String ?? ""
@@ -211,9 +231,9 @@ public struct LoopbackMCPServer {
         case "create_draft":
             let started = Date()
             let body = arguments["body"] as? String ?? ""
-            let version = ledger.create(body: body)
-            if let agent = try? gateway.authenticate(credential) {
-                gateway.audit?.append(
+            let version = host.ledger.create(body: body)
+            if let agent = try? host.authenticate(credential) {
+                host.audit?.append(
                     AuditEntry(
                         kind: .createDraft,
                         agentID: agent.id,
@@ -235,9 +255,9 @@ public struct LoopbackMCPServer {
                 throw CallError.badArguments
             }
             let started = Date()
-            let version = try ledger.update(draftID: draftID, body: body)
-            if let agent = try? gateway.authenticate(credential) {
-                gateway.audit?.append(
+            let version = try host.ledger.update(draftID: draftID, body: body)
+            if let agent = try? host.authenticate(credential) {
+                host.audit?.append(
                     AuditEntry(
                         kind: .updateDraft,
                         agentID: agent.id,
@@ -252,16 +272,13 @@ public struct LoopbackMCPServer {
             }
             return try jsonString(AuditJSON.version(version))
         case "status":
-            let freshness = try gateway.freshness(credential: credential)
-            var extra: [String: Any] = [:]
-            if let snap = await sourceController?.snapshot() {
-                extra["source"] = snap.source.rawValue
-                extra["agentMayChangeSource"] = snap.agentMayChangeSource
-            }
-            return try jsonString(AuditJSON.freshness(freshness, extra: extra))
+            return try await statusTool(credential: credential)
         case "set_source":
             return try await setSource(arguments: arguments, credential: credential)
         case "update":
+            guard let indexUpdater = host.readIndexUpdater() else {
+                throw CallError.indexNotReady
+            }
             let outcome = try await gateway.updateIndex(credential: credential, updater: indexUpdater)
             return try jsonString(AuditJSON.update(outcome))
         default:
@@ -269,8 +286,57 @@ public struct LoopbackMCPServer {
         }
     }
 
+    private func statusTool(credential: String?) async throws -> String {
+        let snapshot = host.snapshot()
+        var extra = await sourceExtras()
+        if snapshot.isReady, let gateway = host.readGateway() {
+            let freshness = try gateway.freshness(credential: credential)
+            return try jsonString(AuditJSON.indexStatus(snapshot, freshness: freshness, extra: extra))
+        }
+        let started = Date()
+        let agent = try host.authenticate(credential)
+        let payload = AuditJSON.indexStatus(snapshot, extra: extra)
+        host.audit?.append(
+            AuditEntry(
+                kind: .status,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: snapshot.phase.rawValue,
+                at: started,
+                finishedAt: Date(),
+                requestSummary: AuditJSON.json([:] as [String: Any]),
+                responseSummary: AuditJSON.json(payload)
+            )
+        )
+        return try jsonString(payload)
+    }
+
+    private func sourceExtras() async -> [String: Any] {
+        guard let snap = await host.readSourceController()?.snapshot() else { return [:] }
+        return [
+            "source": snap.source.rawValue,
+            "agentMayChangeSource": snap.agentMayChangeSource
+        ]
+    }
+
+    private func indexingUnavailable(id: Any?, snapshot: LoopbackIndexSnapshot) throws -> LoopbackMCPResponse {
+        let envelope: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": id ?? NSNull(),
+            "error": [
+                "code": -32_000,
+                "message": "Index not ready",
+                "data": AuditJSON.indexStatus(snapshot)
+            ]
+        ]
+        return LoopbackMCPResponse(status: 503, body: try jsonString(envelope))
+    }
+
     private func setSource(arguments: [String: Any], credential: String?) async throws -> String {
-        guard let controller = sourceController else {
+        guard let gateway = host.readGateway() else {
+            throw CallError.indexNotReady
+        }
+        guard let controller = host.readSourceController() else {
             throw MailSourceError.notAvailable
         }
         guard
@@ -283,7 +349,7 @@ public struct LoopbackMCPServer {
         let agent = try gateway.authenticate(credential)
         do {
             let snap = try await controller.setSource(source)
-            gateway.audit?.append(
+            host.audit?.append(
                 AuditEntry(
                     kind: .setSource,
                     agentID: agent.id,
@@ -297,7 +363,7 @@ public struct LoopbackMCPServer {
             )
             return try jsonString(AuditJSON.source(snap))
         } catch {
-            gateway.audit?.append(
+            host.audit?.append(
                 AuditEntry(
                     kind: .setSource,
                     agentID: agent.id,
@@ -343,6 +409,7 @@ public struct LoopbackMCPServer {
 
     private enum CallError: Error {
         case badArguments
+        case indexNotReady
         case unknownTool
     }
 
@@ -431,7 +498,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "status",
                 "description":
-                    "Index freshness: lastIngestAt, newestMessageDate, indexedCount, plus source (fixture or liveMail) and agentMayChangeSource when the companion is bound.",
+                    "Index lifecycle and freshness. While the companion is indexing, state is indexing with indexedSoFar/totalHint/currentTask; when ready, state is ready plus lastIngestAt, newestMessageDate, indexedCount. Also returns source and agentMayChangeSource when bound.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]

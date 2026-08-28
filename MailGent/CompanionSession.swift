@@ -123,6 +123,9 @@ final class CompanionSession {
         liveDatabaseURL = Self.liveMailDatabaseURL()
         refreshAccess()
         agents.ensureMachineLocalAgent()
+        agents.ensureLoopbackListening()
+        agents.setLoopbackSourceController(makeSourceController())
+        agents.updateIndexState(.notStarted)
         scheduleReload(reason: "startup")
     }
 
@@ -179,6 +182,7 @@ final class CompanionSession {
     }
 
     func applyLoopbackPort() {
+        agents.rebindLoopbackPort()
         guard indexedCount > 0, let store = loopbackStore else { return }
         bindLoopbackWithUpdater(store: store, databaseURL: databaseURL)
     }
@@ -320,6 +324,13 @@ final class CompanionSession {
         items = []
         indexedCount = 0
         status = "Scanning Mail store…"
+        agents.detachIndex(
+            state: LoopbackIndexSnapshot(
+                phase: .indexing,
+                statusMessage: "Scanning Mail store…"
+            )
+        )
+        agents.setLoopbackSourceController(makeSourceController())
         MailGentLog.trace("reload scheduled reason=\(reason) source=\(source.rawValue)")
 
         let source = self.source
@@ -540,11 +551,24 @@ final class CompanionSession {
             }
             return try await self.updateIndexForMCP()
         }
-        agents.bindLoopback(
+        agents.attachIndex(
             store: store,
             databaseURL: databaseURL,
             indexUpdater: updater,
             sourceController: makeSourceController()
+        )
+    }
+
+    private func publishIndexProgress() {
+        guard isIndexing else { return }
+        agents.updateIndexState(
+            LoopbackIndexSnapshot(
+                phase: .indexing,
+                indexedSoFar: ingestInserted,
+                totalHint: ingestTotal,
+                currentTask: ingestCurrentTask.isEmpty ? status : ingestCurrentTask,
+                statusMessage: status
+            )
         )
     }
 
@@ -639,6 +663,7 @@ final class CompanionSession {
         }
         ingestCurrentTask = "\(verb) \(accountLabel(progress.accountID)) / \(progress.mailboxID)"
         status = ingestCurrentTask
+        publishIndexProgress()
     }
 
     private func resetIngestProgress() {
@@ -656,7 +681,12 @@ final class CompanionSession {
     }
 
     private func clearIndexState(status: String) {
-        agents.stopLoopback()
+        agents.detachIndex(
+            state: LoopbackIndexSnapshot(
+                phase: .failed,
+                statusMessage: status
+            )
+        )
         loopbackStore = nil
         clearDetectedCatalog()
         indexedCount = 0

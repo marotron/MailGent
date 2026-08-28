@@ -26,6 +26,7 @@ final class AgentBridge {
     var loopbackURL: String { MailGentPreferences.loopbackURL }
     private var loopbackPort: UInt16 { MailGentPreferences.loopbackPort }
     private var http: LoopbackHTTPListener?
+    private var loopbackHost: LoopbackHost?
     private var lastPulsedRequestID: String?
     private var pulseClearTask: Task<Void, Never>?
 
@@ -415,8 +416,69 @@ final class AgentBridge {
         indexUpdater: (any IndexUpdating)? = nil,
         sourceController: (any MailSourceControlling)? = nil
     ) {
-        stopLoopback()
+        attachIndex(
+            store: store,
+            databaseURL: databaseURL,
+            indexUpdater: indexUpdater,
+            sourceController: sourceController
+        )
+    }
+
+    /// Keeps the loopback port open from launch; MCP handshake works before the index is ready.
+    func ensureLoopbackListening() {
         ensureMachineLocalAgent()
+        let host = makeLoopbackHost()
+        refreshListenNote()
+        guard http == nil else { return }
+
+        let listener = LoopbackHTTPListener(host: host, hostAddress: "127.0.0.1", port: loopbackPort)
+        http = listener
+        Task { @MainActor in
+            do {
+                try await listener.start()
+                guard self.http === listener else {
+                    listener.stop()
+                    return
+                }
+                self.isListening = true
+                self.refreshListenNote()
+                self.syncCursorMCPConfig()
+                MailGentLog.trace("mcp loopback ready \(self.loopbackURL)")
+            } catch {
+                self.isListening = false
+                self.listenNote = "Bind failed: \(error)"
+                self.http = nil
+                MailGentLog.trace("mcp loopback bind failed: \(error)")
+            }
+        }
+    }
+
+    func updateIndexState(_ snapshot: LoopbackIndexSnapshot) {
+        makeLoopbackHost().setIndexState(snapshot)
+        refreshListenNote()
+    }
+
+    func setLoopbackSourceController(_ sourceController: (any MailSourceControlling)?) {
+        makeLoopbackHost().setSourceController(sourceController)
+    }
+
+    func detachIndex(state: LoopbackIndexSnapshot) {
+        let host = makeLoopbackHost()
+        host.setGateway(nil, indexUpdater: nil)
+        host.setIndexState(state)
+        refreshListenNote()
+    }
+
+    func attachIndex(
+        store: MailStore,
+        databaseURL: URL,
+        indexUpdater: (any IndexUpdating)? = nil,
+        sourceController: (any MailSourceControlling)? = nil
+    ) {
+        ensureLoopbackListening()
+        ensureMachineLocalAgent()
+        let host = makeLoopbackHost()
+        host.setSourceController(sourceController)
         do {
             let index = try MailboxIndex(store: store, databaseURL: databaseURL)
             let gateway = AgentReadAPI(
@@ -425,44 +487,80 @@ final class AgentBridge {
                 grants: grants,
                 audit: audit
             )
-            let listener = LoopbackHTTPListener(
-                gateway: gateway,
-                ledger: ledger,
-                indexUpdater: indexUpdater,
-                sourceController: sourceController,
-                host: "127.0.0.1",
-                port: loopbackPort
+            host.setGateway(gateway, indexUpdater: indexUpdater)
+            let count = (try? gateway.read.freshness().indexedCount) ?? 0
+            host.setIndexState(
+                LoopbackIndexSnapshot(
+                    phase: .ready,
+                    indexedSoFar: count,
+                    statusMessage: "Index ready"
+                )
             )
-            http = listener
-            Task { @MainActor in
-                do {
-                    try await listener.start()
-                    guard self.http === listener else {
-                        listener.stop()
-                        return
-                    }
-                    self.isListening = true
-                    self.listenNote = "Listening on \(self.loopbackURL)"
-                    self.syncCursorMCPConfig()
-                    MailGentLog.trace("mcp loopback ready \(self.loopbackURL)")
-                } catch {
-                    self.isListening = false
-                    self.listenNote = "Bind failed: \(error)"
-                    self.http = nil
-                    MailGentLog.trace("mcp loopback bind failed: \(error)")
-                }
-            }
+            refreshListenNote()
+            MailGentLog.trace("mcp index attached indexed=\(count)")
         } catch {
-            isListening = false
-            listenNote = "Bind failed: \(error)"
+            host.setGateway(nil, indexUpdater: nil)
+            host.setIndexState(
+                LoopbackIndexSnapshot(
+                    phase: .failed,
+                    statusMessage: "Index attach failed: \(error)"
+                )
+            )
+            refreshListenNote()
             MailGentLog.trace("mcp gateway open failed: \(error)")
         }
     }
 
-    func stopLoopback() {
+    func rebindLoopbackPort() {
+        stopLoopbackListener()
+        ensureLoopbackListening()
+    }
+
+    private func makeLoopbackHost() -> LoopbackHost {
+        if let loopbackHost { return loopbackHost }
+        let host = LoopbackHost(
+            pairing: pairing,
+            audit: audit,
+            grants: grants,
+            ledger: ledger
+        )
+        loopbackHost = host
+        return host
+    }
+
+    private func refreshListenNote() {
+        guard isListening else {
+            if http != nil {
+                listenNote = "Starting loopback MCP…"
+            } else {
+                listenNote = loopbackHost?.snapshot().isReady == true
+                    ? "Loopback MCP not bound yet"
+                    : "Loopback MCP not bound yet"
+            }
+            return
+        }
+        let snapshot = loopbackHost?.snapshot()
+        if snapshot?.phase == .indexing {
+            listenNote = "Listening on \(loopbackURL) (indexing)"
+        } else if snapshot?.phase == .failed {
+            listenNote = "Listening on \(loopbackURL) (index failed)"
+        } else if snapshot?.isReady == true {
+            listenNote = "Listening on \(loopbackURL)"
+        } else {
+            listenNote = "Listening on \(loopbackURL) (waiting for index)"
+        }
+    }
+
+    private func stopLoopbackListener() {
         http?.stop()
         http = nil
         isListening = false
+    }
+
+    func stopLoopback() {
+        stopLoopbackListener()
+        loopbackHost?.setGateway(nil, indexUpdater: nil)
+        loopbackHost?.setIndexState(.notStarted)
         listenNote = "Loopback MCP not bound yet"
     }
 

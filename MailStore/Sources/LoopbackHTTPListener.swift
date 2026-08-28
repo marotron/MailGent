@@ -30,6 +30,17 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
     }
 
     public init(
+        host: LoopbackHost,
+        hostAddress: String = "127.0.0.1",
+        port: UInt16 = 8788
+    ) {
+        self.mcp = LoopbackMCPServer(host: host)
+        self.host = hostAddress
+        self.port = port
+    }
+
+    /// Backward-compatible initializer for tests.
+    public convenience init(
         gateway: AgentReadAPI,
         ledger: DraftLedger = DraftLedger(),
         indexUpdater: (any IndexUpdating)? = nil,
@@ -37,14 +48,25 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
         host: String = "127.0.0.1",
         port: UInt16 = 8788
     ) {
-        self.mcp = LoopbackMCPServer(
-            gateway: gateway,
-            ledger: ledger,
-            indexUpdater: indexUpdater,
-            sourceController: sourceController
+        self.init(
+            host: LoopbackHost(
+                pairing: gateway.pairing,
+                audit: gateway.audit,
+                grants: gateway.grants,
+                ledger: ledger
+            ),
+            hostAddress: host,
+            port: port
         )
-        self.host = host
-        self.port = port
+        let box = self.mcp.host
+        box.setGateway(gateway, indexUpdater: indexUpdater ?? LocalIndexUpdater(index: gateway.read.index))
+        box.setSourceController(sourceController)
+        box.setIndexState(
+            LoopbackIndexSnapshot(
+                phase: .ready,
+                indexedSoFar: (try? gateway.read.freshness().indexedCount) ?? 0
+            )
+        )
     }
 
     public func start() async throws {
@@ -231,6 +253,7 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
         case 401: reason = "Unauthorized"
         case 404: reason = "Not Found"
         case 405: reason = "Method Not Allowed"
+        case 503: reason = "Service Unavailable"
         default: reason = "Error"
         }
         var text = "HTTP/1.1 \(response.status) \(reason)\r\n"
