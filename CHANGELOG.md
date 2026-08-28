@@ -4,6 +4,13 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
+## [0.1.7] - 2026-08-28
+
+### Added
+
+- `make dmg` / `make release` build `dist/MailGent-<version>.dmg` for GitHub Releases.
+- Release workflow on `v*` tags attaches the DMG; release notes warn about Gatekeeper when unsigned.
+
 ## [0.1.6] - 2026-08-28
 
 ### Added

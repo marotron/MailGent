@@ -5,7 +5,7 @@ DERIVED_DATA := .build/DerivedData
 
 .DEFAULT_GOAL := test
 
-.PHONY: generate test run xcode prototype-accounts
+.PHONY: generate test run xcode prototype-accounts dmg release
 
 generate:
 	xcodegen generate
@@ -27,4 +27,9 @@ prototype-accounts: generate
 	xcodebuild -project $(PROJECT) -scheme AccountIdentityPrototype -destination '$(DESTINATION)' -derivedDataPath '$(DERIVED_DATA)' CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES build
 	@echo "PROTOTYPE — account names from Accounts4.sqlite or header inference"
 	DYLD_FRAMEWORK_PATH='$(DERIVED_DATA)/Build/Products/Debug' '$(DERIVED_DATA)/Build/Products/Debug/AccountIdentityPrototype'
+
+dmg: generate
+	@./Scripts/release/dmg.sh
+
+release: test dmg
 

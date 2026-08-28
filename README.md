@@ -1,6 +1,6 @@
 # MailGent
 
-**0.1.6 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
+**0.1.7 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
@@ -46,6 +46,31 @@ make xcode
 ```
 
 Menu bar only (`LSUIElement`). Settings → Access → Recheck, Open Full Disk Access, or Choose Mail Folder…
+
+## Release (DMG)
+
+Build a Release `.dmg` locally (output: `dist/MailGent-<version>.dmg`, version from `project.yml`):
+
+```bash
+make dmg        # package only
+make release    # run tests, then package
+```
+
+For Gatekeeper-safe distribution, set before `make dmg`:
+
+```bash
+export MAILGENT_SIGN_IDENTITY='Developer ID Application: …'
+export MAILGENT_NOTARY_PROFILE='mailgent-notary'   # `xcrun notarytool store-credentials`
+```
+
+**GitHub Release:** push a tag matching `MARKETING_VERSION` (e.g. `v0.1.7`). The [Release workflow](.github/workflows/release.yml) builds the DMG and attaches it. Optional repo secrets: `MAILGENT_SIGN_IDENTITY`, `MAILGENT_NOTARY_PROFILE`.
+
+```bash
+git tag v0.1.7
+git push origin v0.1.7
+```
+
+**Gatekeeper:** without Developer ID signing and notarization, macOS may warn or block the app on first open on other machines. Use **Open Anyway** in Privacy & Security, or right-click → **Open**. GitHub Release pages include this warning in the release notes (see [`.github/RELEASE_BODY.md`](.github/RELEASE_BODY.md)).
 
 `make prototype-accounts` is a **dev CLI**, not part of the `.app`.
 

@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build DMG
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          MAILGENT_SIGN_IDENTITY: ${{ secrets.MAILGENT_SIGN_IDENTITY }}
+          MAILGENT_NOTARY_PROFILE: ${{ secrets.MAILGENT_NOTARY_PROFILE }}
+        run: make dmg
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: .github/RELEASE_BODY.md
+          files: dist/MailGent-*.dmg
+          generate_release_notes: true
