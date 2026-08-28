@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   dmg:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -30,3 +30,4 @@ jobs:
           body_path: .github/RELEASE_BODY.md
           files: dist/MailGent-*.dmg
           generate_release_notes: true
+          prerelease: true
