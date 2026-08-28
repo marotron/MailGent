@@ -3,12 +3,28 @@ import MailStore
 
 enum MailGentPreferences {
     static let agentMayChangeSourceKey = "agentMayChangeSource"
+    static let loopbackPortKey = "loopbackPort"
     static let auditMaxAgeSecondsKey = "auditMaxAgeSeconds"
     static let auditMaxCountKey = "auditMaxCount"
     static let auditMaxBytesKey = "auditMaxBytes"
 
+    static let defaultLoopbackPort: UInt16 = 8788
+
     static var agentMayChangeSource: Bool {
         UserDefaults.standard.bool(forKey: agentMayChangeSourceKey)
+    }
+
+    static var loopbackPort: UInt16 {
+        normalizedLoopbackPort(UserDefaults.standard.integer(forKey: loopbackPortKey))
+    }
+
+    static var loopbackURL: String {
+        "http://127.0.0.1:\(loopbackPort)/mcp"
+    }
+
+    static func normalizedLoopbackPort(_ value: Int) -> UInt16 {
+        guard value >= 1, value <= 65_535 else { return defaultLoopbackPort }
+        return UInt16(value)
     }
 
     static var auditRetention: AuditRetention {

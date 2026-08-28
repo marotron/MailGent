@@ -23,8 +23,8 @@ final class AgentBridge {
     private(set) var iconPulse = MenuBarIconPulse()
     /// Observable mirror of GrantGate rows for the current agent (UI source of truth).
     private(set) var grantRows: [Grant] = []
-    let loopbackURL = "http://127.0.0.1:8788/mcp"
-    private let loopbackPort: UInt16 = 8788
+    var loopbackURL: String { MailGentPreferences.loopbackURL }
+    private var loopbackPort: UInt16 { MailGentPreferences.loopbackPort }
     private var http: LoopbackHTTPListener?
     private var lastPulsedRequestID: String?
     private var pulseClearTask: Task<Void, Never>?
@@ -443,6 +443,7 @@ final class AgentBridge {
                     }
                     self.isListening = true
                     self.listenNote = "Listening on \(self.loopbackURL)"
+                    self.syncCursorMCPConfig()
                     MailGentLog.trace("mcp loopback ready \(self.loopbackURL)")
                 } catch {
                     self.isListening = false

@@ -3,6 +3,8 @@ import SwiftUI
 struct MailGentSettingsView: View {
     @Bindable var session: CompanionSession
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
+    @AppStorage(MailGentPreferences.loopbackPortKey) private var loopbackPort =
+        Int(MailGentPreferences.defaultLoopbackPort)
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
     @AppStorage(MailGentPreferences.auditMaxCountKey) private var auditMaxCount = 0
     @AppStorage(MailGentPreferences.auditMaxBytesKey) private var auditMaxBytes = 0
@@ -17,6 +19,14 @@ struct MailGentSettingsView: View {
                 .tabItem { Label("Access", systemImage: "lock.shield") }
         }
         .frame(width: 480, height: 600)
+        .onChange(of: loopbackPort) { _, newValue in
+            let normalized = Int(MailGentPreferences.normalizedLoopbackPort(newValue))
+            if normalized != newValue {
+                loopbackPort = normalized
+                return
+            }
+            session.applyLoopbackPort()
+        }
         .onChange(of: auditMaxAgeSeconds) { _, _ in session.agents.applyAuditRetention() }
         .onChange(of: auditMaxCount) { _, _ in session.agents.applyAuditRetention() }
         .onChange(of: auditMaxBytes) { _, _ in session.agents.applyAuditRetention() }
@@ -60,6 +70,14 @@ struct MailGentSettingsView: View {
                 )
                 .foregroundStyle(.secondary)
                 .font(.callout)
+                TextField("Loopback MCP port", value: $loopbackPort, format: .number)
+                Text(session.agents.loopbackURL)
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                Text("Default 8788. Avoid 8787 — reserved for Cursor OAuth callbacks.")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
             }
             Section("Access log") {
                 LabeledContent("Full log") {

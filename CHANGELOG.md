@@ -2,6 +2,14 @@
 
 All notable changes to MailGent are documented here.
 
+Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
+
+## [0.1.5] - 2026-08-28
+
+### Added
+
+- Settings → General → **Loopback MCP port** (default 8788); listener rebinds and Cursor `mcp.json` URL updates when changed.
+
 ## [0.1.4] - 2026-08-28
 
 ### Fixed

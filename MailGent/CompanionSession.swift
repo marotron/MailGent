@@ -103,6 +103,7 @@ final class CompanionSession {
     private var fixtureDatabaseURL: URL
     private let liveDatabaseURL: URL
     private var arrivalWave = 0
+    private var loopbackStore: MailStore?
     private let worker = MailIndexWorker()
     private var indexTask: Task<Void, Never>?
 
@@ -175,6 +176,11 @@ final class CompanionSession {
 
     func reindexNow() {
         scheduleReload(reason: "reindex")
+    }
+
+    func applyLoopbackPort() {
+        guard indexedCount > 0, let store = loopbackStore else { return }
+        bindLoopbackWithUpdater(store: store, databaseURL: databaseURL)
     }
 
     func ingestAgain() {
@@ -527,6 +533,7 @@ final class CompanionSession {
     }
 
     private func bindLoopbackWithUpdater(store: MailStore, databaseURL: URL) {
+        loopbackStore = store
         let updater = BlockingIndexUpdater { [weak self] in
             guard let self else {
                 throw MailIndexWorkerError.notReady
@@ -650,6 +657,7 @@ final class CompanionSession {
 
     private func clearIndexState(status: String) {
         agents.stopLoopback()
+        loopbackStore = nil
         clearDetectedCatalog()
         indexedCount = 0
         placements = []
