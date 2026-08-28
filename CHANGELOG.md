@@ -4,7 +4,14 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
-Release sections use semver only (`## [0.1.8]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+Release sections use semver only (`## [0.1.9]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+
+## [0.1.9] - 2026-08-28
+
+### Fixed
+
+- Mail timestamps display in local time consistently (access log message cards, Companion Read, status JSON).
+- Release DMG launches on install — ad-hoc builds re-sign MailStore and disable hardened runtime so dyld no longer aborts at startup.
 
 ## [0.1.8] - 2026-08-28
 
