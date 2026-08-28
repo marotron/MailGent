@@ -186,6 +186,11 @@ public enum MailMIME: Sendable {
     static func collapsed(_ text: String) -> String {
         text.split { $0.isWhitespace || $0 == "\u{FFFC}" }.joined(separator: " ")
     }
+
+    /// Plain text for agents when a message is HTML-only (tags stripped, whitespace collapsed).
+    public static func plainText(fromHTML html: String) -> String {
+        collapsed(stripTags(html))
+    }
 }
 
 public enum MailStoreError: Error, Equatable {

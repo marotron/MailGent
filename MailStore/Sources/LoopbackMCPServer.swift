@@ -97,7 +97,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.1.3"
+                        "version": "0.1.4"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -351,7 +351,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "search",
                 "description":
-                    "Search granted Apple Mail messages by full-text query. Results are newest-first, with subject/from matches ranked above body-only hits. Pass cursor from nextCursor to page.",
+                    "Search granted Apple Mail messages by full-text query. Results are newest-first, with subject/from matches ranked above body-only hits. Pass cursor from nextCursor to page. Returns headers only (accountID, placement, id, subject, from, date, isPartial) — never body. Always follow with get for each hit you need to read.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -364,7 +364,8 @@ public struct LoopbackMCPServer {
             ],
             [
                 "name": "list",
-                "description": "List recent granted Apple Mail messages.",
+                "description":
+                    "List recent granted Apple Mail messages. Headers only — never body. Follow with get to read a message.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]
@@ -373,7 +374,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "list_new",
                 "description":
-                    "List messages that arrived in non-trash mailboxes in the last ingest pass (update's newCount). Same item shape as list/search. Newest-first. Default page size 100 (max 100). Pass cursor from nextCursor to page.",
+                    "List messages that arrived in non-trash mailboxes in the last ingest pass (update's newCount). Same header-only item shape as list/search (never body). Newest-first. Default page size 100 (max 100). Pass cursor from nextCursor to page. Follow with get to read.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -393,7 +394,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "get",
                 "description":
-                    "Fetch one granted message by account, placement, and id. Response includes bodyAccess: \"granted\" (body present or omitted when empty/HTML-only) or \"not_granted\" (grant denies body — do not treat as empty mail; ask user to enable body on the grant).",
+                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. bodyAccess \"not_granted\" means the grant denies body — ask the user to enable body on the grant. bodyAccess \"granted\" with no body field means truly empty.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [

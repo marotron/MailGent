@@ -1,6 +1,6 @@
 # MailGent
 
-**0.1.3 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
+**0.1.4 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
@@ -10,7 +10,7 @@ This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local
 - On-device SQLite FTS
 - Incremental ingest reports arrivals vs removals (`+44 −2277 → −2233`); Trash/Junk copies are not counted as new
 - Menu status times sit in chips; Changes shows the ingest window as `12:15–12:31 (16m)` (yesterday or the date when that window is not today); Last agent call uses clock + elapsed like Last ingest
-- One paired `machine-local` agent on loopback `http://127.0.0.1:8787/mcp`
+- One paired `machine-local` agent on loopback `http://127.0.0.1:8788/mcp` (8787 reserved for Cursor OAuth callbacks)
 - Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments
 - Append-only access log
 - MailGent-owned draft ledger (in-memory; not written into Mail.app)

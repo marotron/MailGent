@@ -35,7 +35,7 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
         indexUpdater: (any IndexUpdating)? = nil,
         sourceController: (any MailSourceControlling)? = nil,
         host: String = "127.0.0.1",
-        port: UInt16 = 8787
+        port: UInt16 = 8788
     ) {
         self.mcp = LoopbackMCPServer(
             gateway: gateway,

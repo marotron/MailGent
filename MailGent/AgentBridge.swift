@@ -23,8 +23,8 @@ final class AgentBridge {
     private(set) var iconPulse = MenuBarIconPulse()
     /// Observable mirror of GrantGate rows for the current agent (UI source of truth).
     private(set) var grantRows: [Grant] = []
-    let loopbackURL = "http://127.0.0.1:8787/mcp"
-    private let loopbackPort: UInt16 = 8787
+    let loopbackURL = "http://127.0.0.1:8788/mcp"
+    private let loopbackPort: UInt16 = 8788
     private var http: LoopbackHTTPListener?
     private var lastPulsedRequestID: String?
     private var pulseClearTask: Task<Void, Never>?

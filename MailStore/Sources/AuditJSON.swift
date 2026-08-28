@@ -96,6 +96,14 @@ enum AuditJSON {
             payload["body"] = text
         case .notAvailable:
             payload["bodyAccess"] = "granted"
+            if let html = message.prettyHTMLBody,
+               !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                let plain = MailMIME.plainText(fromHTML: html)
+                if !plain.isEmpty {
+                    payload["body"] = plain
+                }
+            }
         case .notGranted:
             payload["bodyAccess"] = "not_granted"
             payload["note"] =
