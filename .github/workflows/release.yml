@@ -12,10 +12,12 @@ jobs:
   dmg:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew untap aws/tap || true
+          brew install xcodegen
 
       - name: Build DMG
         env:
@@ -29,7 +31,7 @@ jobs:
         run: echo "title=${GITHUB_REF_NAME#v} alpha" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: ${{ steps.release.outputs.title }}
           body_path: .github/RELEASE_BODY.md
