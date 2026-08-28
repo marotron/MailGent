@@ -43,3 +43,6 @@ node_modules/
 
 # Nested clone of https://github.com/frontedu/liquid-composer — not MailGent
 .scratch/liquid-composer/
+
+# git filter-repo replacement map (local only)
+.scratch/history-redact.txt
