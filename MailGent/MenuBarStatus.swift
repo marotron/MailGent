@@ -11,10 +11,18 @@ struct MenuBarStatus: View {
                 Text("MailGent")
                     .font(.headline)
                 Spacer(minLength: 8)
-                Text(marketingVersionLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                Button {
+                    DetachedWindowHost.shared.claimActivation()
+                    let work = { DetachedWindowHost.shared.showChangelog() }
+                    DispatchQueue.main.async(execute: work)
+                } label: {
+                    Text(marketingVersionLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .buttonStyle(.plain)
+                .help("View changelog")
             }
             .padding(.horizontal, 8)
             .accessibilityElement(children: .combine)
@@ -60,6 +68,14 @@ struct MenuBarStatus: View {
 
                 MenuBarActionRow(title: "Settings…", id: "settings") {
                     DetachedWindowHost.shared.showSettings(session: session)
+                }
+
+                Divider()
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, 8)
+
+                MenuBarActionRow(title: "About MailGent", id: "about") {
+                    DetachedWindowHost.shared.showAbout()
                 }
 
                 Divider()

@@ -16,6 +16,11 @@ struct MailGentApp: App {
         }
         .menuBarExtraStyle(.window)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About MailGent") {
+                    DetachedWindowHost.shared.showAbout()
+                }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
                     DetachedWindowHost.shared.showSettings(session: session)

@@ -70,7 +70,7 @@ struct MailGentSettingsView: View {
                 )
                 .foregroundStyle(.secondary)
                 .font(.callout)
-                TextField("Loopback MCP port", value: $loopbackPort, format: .number)
+                TextField("Loopback MCP port", value: $loopbackPort, format: .number.grouping(.never))
                 Text(session.agents.loopbackURL)
                     .foregroundStyle(.secondary)
                     .font(.callout)

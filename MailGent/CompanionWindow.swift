@@ -17,6 +17,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var grantDesk: NSWindow?
     private var accessLog: NSWindow?
     private var settings: NSWindow?
+    private var about: NSWindow?
+    private var changelog: NSWindow?
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
     /// Only `windowShouldClose` (user close) may order out hosted windows.
@@ -81,6 +83,20 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
+    func showAbout() {
+        beginPresentation()
+        scheduleAfterMenuDismissal {
+            self.presentAbout()
+        }
+    }
+
+    func showChangelog() {
+        beginPresentation()
+        scheduleAfterMenuDismissal {
+            self.presentChangelog()
+        }
+    }
+
     /// Flip off `.accessory` on the click itself so MenuBarExtra dismiss does not hide the app.
     func claimActivation() {
         presentedAt = Date()
@@ -104,7 +120,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private var hostedWindows: [NSWindow] {
-        [companion, access, grantDesk, accessLog, settings].compactMap { $0 }
+        [companion, access, grantDesk, accessLog, settings, about, changelog].compactMap { $0 }
     }
 
     /// MenuBarExtra `.window` tears down on the same turn as the click; wait one turn.
@@ -198,6 +214,39 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
         }
         bringForward(settings)
+    }
+
+    private func presentAbout() {
+        let root = MailGentAboutView()
+        if let about {
+            install(root, in: about)
+        } else {
+            about = makeWindow(
+                title: "About MailGent",
+                size: NSSize(width: 400, height: 460),
+                minSize: NSSize(width: 400, height: 460),
+                root: root
+            )
+            about?.styleMask.remove(.resizable)
+        }
+        bringForward(about)
+    }
+
+    private func presentChangelog() {
+        let size = NSSize(width: 520, height: 560)
+        let minSize = NSSize(width: 440, height: 360)
+        let root = MailGentChangelogView()
+        if let changelog {
+            install(root, in: changelog)
+        } else {
+            changelog = makeWindow(
+                title: "MailGent Changelog",
+                size: size,
+                minSize: minSize,
+                root: root
+            )
+        }
+        bringForward(changelog)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

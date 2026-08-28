@@ -4,6 +4,17 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
+## [0.1.8] - 2026-08-28
+
+### Added
+
+- About MailGent window (app menu and menu item between Settings and Quit) with bundled changelog viewer; menu-bar version label opens the changelog directly.
+
+### Fixed
+
+- Settings loopback MCP port field no longer inserts thousands separators (e.g. 8788).
+- Changelog viewer renders version sections and bullet lists instead of a single collapsed paragraph.
+
 ## [0.1.7] - 2026-08-28
 
 ### Added
