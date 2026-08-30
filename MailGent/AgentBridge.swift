@@ -311,11 +311,26 @@ final class AgentBridge {
         persistGrants()
     }
 
+    /// Field caps for a mailbox row in Scope (per-mailbox grant, else inherited account-wide).
+    func effectiveAllowFields(accountID: String, placement: String) -> GrantFields? {
+        if let grant = allowGrant(accountID: accountID, placement: placement) {
+            return grant.fields
+        }
+        return allowGrant(accountID: accountID, placement: nil)?.fields
+    }
+
     func toggleAllowField(
         accountID: String,
         placement: String?,
-        keyPath: WritableKeyPath<GrantFields, Bool>
+        keyPath: WritableKeyPath<GrantFields, Bool>,
+        mailboxPlacements: [String]? = nil
     ) {
+        if let placement, hasAccountWideGrant(accountID: accountID) {
+            materializeAccountWideToMailboxes(
+                accountID: accountID,
+                placements: mailboxPlacements ?? [placement]
+            )
+        }
         guard let existing = grantRows.first(where: {
             $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
         }) else { return }
@@ -346,6 +361,39 @@ final class AgentBridge {
         grantRows.first {
             $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
         }
+    }
+
+    /// Replaces account-wide allow with one allow per mailbox, preserving caps and filters.
+    private func materializeAccountWideToMailboxes(accountID: String, placements: [String]) {
+        guard let agent else { return }
+        guard let wide = allowGrant(accountID: accountID, placement: nil) else { return }
+        let mailboxPlacements = placements
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !mailboxPlacements.isEmpty else { return }
+
+        var next = grantRows.filter {
+            !($0.accountID == accountID && $0.mode == .allow)
+        }
+        for placement in mailboxPlacements {
+            next.append(
+                Grant(
+                    agentID: agent.id,
+                    accountID: accountID,
+                    placement: placement,
+                    participants: wide.participants,
+                    dateStart: wide.dateStart,
+                    dateEnd: wide.dateEnd,
+                    mode: .allow,
+                    fields: wide.fields
+                )
+            )
+        }
+        grants.replaceAll(agentID: agent.id, with: next)
+        if selectedAccessKey == Self.accessKey(mode: .allow, accountID: accountID, placement: nil) {
+            selectedAccessKey = nil
+        }
+        persistGrants()
     }
 
     /// Account-wide allow: clears per-mailbox allow rows for that account first.

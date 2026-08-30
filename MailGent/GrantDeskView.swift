@@ -333,15 +333,17 @@ struct GrantDeskView: View {
                     .disabled(
                         !isEditing || (!session.agents.draftDenyMode && accountWide)
                     )
-                    if !session.agents.draftDenyMode,
-                       let edit = accountWide
-                        ? session.agents.allowGrant(accountID: account.id, placement: nil)
-                        : mbGrant {
-                        GrantFieldBadgeRow(fields: edit.fields, interactive: isEditing) { keyPath in
+                    if !session.agents.draftDenyMode, allowed,
+                       let fields = session.agents.effectiveAllowFields(
+                           accountID: account.id,
+                           placement: mailbox.placement
+                       ) {
+                        GrantFieldBadgeRow(fields: fields, interactive: isEditing) { keyPath in
                             session.agents.toggleAllowField(
                                 accountID: account.id,
-                                placement: accountWide ? nil : mailbox.placement,
-                                keyPath: keyPath
+                                placement: mailbox.placement,
+                                keyPath: keyPath,
+                                mailboxPlacements: account.mailboxes.map(\.placement)
                             )
                         }
                     }
