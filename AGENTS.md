@@ -19,3 +19,5 @@ Apache-2.0 + `NOTICE`; name and icon stay ours. Homebrew cask is **future** (aft
 ### Versioning
 
 Bump `MARKETING_VERSION` only when a user-facing change is ready to land. **Always update root `CHANGELOG.md` in the same commit** — see `.cursor/rules/versioning.mdc`.
+
+After bumping version, run `python3 ../scripts/update-dev-index.py` (from repo root: `python3 ~/dev/scripts/update-dev-index.py`) to refresh `~/dev/INDEX.md`.
