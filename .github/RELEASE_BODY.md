@@ -1,6 +1,6 @@
 ## Install
 
-**Pre-release alpha** — not a stable or beta build. Version in the app bundle is semver (`0.1.9`); GitHub release title and About show **`0.1.9 alpha`**.
+**Pre-release alpha** — not a stable or beta build. Version in the app bundle is semver (`0.2.0`); GitHub release title and About show **`0.2.0 alpha`**.
 
 1. Download `MailGent-*.dmg` below.
 2. Open the disk image and drag **MailGent** to **Applications**.

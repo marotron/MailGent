@@ -4,7 +4,17 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
-Release sections use semver only (`## [0.1.9]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+
+## [0.2.0] - 2026-08-31
+
+### Added
+
+- **Outbound leak guard** — on-device scan of subject and body before paired agents receive mail; opt in per placement in Grant Desk → Scope.
+- Grant Desk **Privacy** tab: built-in detectors (API keys, JWT, password patterns, and more), custom literal/wildcard/regex filters, subject/body hit modes (redact spans or block whole field), with expandable info panels matching Scope/Access.
+- MCP `get` and list/search summaries expose `subjectAccess` / `bodyAccess` (`granted`, `not_granted`, `sanitized`, `withheld_confidential`), `subjectAccessReason` / `bodyAccessReason` (`grant`, `leak_guard`), and `sanitizedRules` when disclosed.
+- Access log shows sanitized spans and withheld fields; hover reveals originals; audit refs record per-hit leak detections for badges and detail.
+- Leak guard policy persisted in `~/Library/Application Support/MailGent/sensitive-filter.json`.
 
 ## [0.1.9] - 2026-08-28
 

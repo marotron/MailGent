@@ -1,8 +1,8 @@
 # MailGent Privacy Policy
 
-**Last updated:** 24 August 2026
+**Last updated:** 31 August 2026
 
-**This 0.1.9 alpha binary does not match every v1 behavior below.** It reads Apple Mail on disk (`~/Library/Mail`) when that folder is readable (Full Disk Access, or a folder you choose). The pairing credential is a local JSON file under Application Support, not Keychain. Gmail/Yahoo OAuth, Keychain tokens, mutation approvals, and remote sessions in this policy are planned v1, not this build.
+**This 0.2.0 alpha binary does not match every v1 behavior below.** It reads Apple Mail on disk (`~/Library/Mail`) when that folder is readable (Full Disk Access, or a folder you choose). The pairing credential is a local JSON file under Application Support, not Keychain. When you enable **outbound leak guard** and opt in placements, MailGent scans message subject and body on your Mac before disclosing them to a paired agent — redacting or withholding matches per your Grant Desk rules; originals stay in the local access log, not in MCP responses. Gmail/Yahoo OAuth, Keychain tokens, mutation approvals, and remote sessions in this policy are planned v1, not this build.
 
 This policy describes how MailGent (“MailGent,” “we,” “us”) handles information when you use the MailGent macOS application and related local services.
 

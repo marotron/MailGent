@@ -1172,56 +1172,57 @@ struct MessageAccessCard: View {
     var attachmentContentDetail: String = "none in this response"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
-            VStack(alignment: .leading, spacing: 8) {
-                if showsFieldBadges {
-                    GrantFieldBadgeRow(fields: ref.fields)
-                }
-                subjectPreview
-                if ref.fields.from {
-                    AddressLine(label: "From", raw: ref.from)
-                } else {
-                    previewRow("From", ref.from, false)
-                }
-                if ref.fields.to {
-                    AddressLine(label: "To", raw: ref.to)
-                } else {
-                    previewRow("To", ref.to, false)
-                }
-                if ref.fields.cc {
-                    AddressLine(label: "Cc", raw: ref.cc)
-                } else {
-                    previewRow("Cc", ref.cc, false)
-                }
-                previewRow(
-                    "Date & Time",
-                    AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
-                    ref.fields.date
-                )
-                Divider()
-                Text("Body")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                bodyPreview
-                Divider()
-                HStack(alignment: .top, spacing: 6) {
-                    attachmentColumn("Attachment Info", granted: ref.fields.attachmentMetadata) {
-                        if ref.attachments.isEmpty {
-                            attachmentTile(detail: "none in this response")
-                        } else {
-                            ForEach(Array(ref.attachments.enumerated()), id: \.offset) { _, attachment in
-                                attachmentTile(detail: "\(attachment.filename) · \(attachment.sizeLabel)")
-                            }
+            if showsFieldBadges {
+                GrantFieldBadgeRow(fields: ref.fields)
+            }
+            subjectPreview
+            if ref.fields.from {
+                AddressLine(label: "From", raw: ref.from)
+            } else {
+                previewRow("From", ref.from, false)
+            }
+            if ref.fields.to {
+                AddressLine(label: "To", raw: ref.to)
+            } else {
+                previewRow("To", ref.to, false)
+            }
+            if ref.fields.cc {
+                AddressLine(label: "Cc", raw: ref.cc)
+            } else {
+                previewRow("Cc", ref.cc, false)
+            }
+            previewRow(
+                "Date & Time",
+                AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
+                ref.fields.date
+            )
+            Divider()
+            Text("Body")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            bodyPreview
+            Divider()
+            HStack(alignment: .top, spacing: 6) {
+                attachmentColumn("Attachment Info", granted: ref.fields.attachmentMetadata) {
+                    if ref.attachments.isEmpty {
+                        attachmentTile(detail: "none in this response")
+                    } else {
+                        ForEach(Array(ref.attachments.enumerated()), id: \.offset) { _, attachment in
+                            attachmentTile(detail: "\(attachment.filename) · \(attachment.sizeLabel)")
                         }
                     }
-                    attachmentColumn("Attachment Content", granted: ref.fields.attachmentContent) {
-                        attachmentTile(detail: attachmentContentDetail)
-                    }
+                }
+                attachmentColumn("Attachment Content", granted: ref.fields.attachmentContent) {
+                    attachmentTile(detail: attachmentContentDetail)
                 }
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
+        }
+        .padding(10)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
         }
     }
 
@@ -1241,10 +1242,17 @@ struct MessageAccessCard: View {
     private var bodyPreview: some View {
         if omitsBody, ref.bodyAccess != .notGranted {
             omittedBodyPreview
+        } else if ref.bodyAccess == .notGranted {
+            HatchDeniedLabel(placeholder: "Body / snippet", fixedHeight: 112)
+                .frame(maxWidth: .infinity)
+                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+                .background(Color.secondary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
             bodyFieldContent
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
+                .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+                .padding(10)
                 .background(Color.secondary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }

@@ -5,6 +5,7 @@ import SwiftUI
 struct GrantDeskView: View {
     @Bindable var session: CompanionSession
     @State private var tab: Tab = .scope
+    @State private var expandedInfo: String?
 
     enum Tab: String, CaseIterable, Identifiable {
         case scope = "Scope"
@@ -38,7 +39,7 @@ struct GrantDeskView: View {
             case .access:
                 accessPane
             case .privacy:
-                LeakGuardPrivacyPane(session: session)
+                LeakGuardPrivacyPane(session: session, expandedInfo: $expandedInfo)
             }
 
             Spacer(minLength: 0)
@@ -72,53 +73,64 @@ struct GrantDeskView: View {
 
     private var scopePane: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Check placements to allow. Click field badges to toggle Access caps (default: headers only).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Toggle("Leak guard", isOn: Binding(
-                get: { session.agents.leakGuardEnabled },
-                set: { session.agents.setLeakGuardEnabled($0) }
-            ))
-            .disabled(!isEditing)
-            .help("Master switch for on-device subject/body scanning")
+            LeakGuardMasterRow(
+                isOn: Binding(
+                    get: { session.agents.leakGuardEnabled },
+                    set: { session.agents.setLeakGuardEnabled($0) }
+                ),
+                isEditing: isEditing,
+                peerTab: "Privacy",
+                expandedInfo: $expandedInfo
+            )
+            GrantDeskInfoPanel(topic: .leakGuardMaster, expandedInfo: $expandedInfo)
             if session.agents.leakGuardEnabled, session.agents.leakGuardPolicy.scopes.isEmpty {
                 Text("Leak guard is on but no placements are opted in for scanning.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            TextField("Narrow From (optional)", text: Binding(
-                get: { session.agents.draftFromFilter },
-                set: { session.agents.draftFromFilter = $0 }
-            ))
-                .textFieldStyle(.roundedBorder)
-                .disabled(!isEditing)
-            TextField("On/after date ISO8601 (optional)", text: Binding(
-                get: { session.agents.draftDateStart },
-                set: { session.agents.draftDateStart = $0 }
-            ))
-                .textFieldStyle(.roundedBorder)
-                .disabled(!isEditing)
-            GrantCheckRow(
-                title: "Deny carve-out mode",
-                isOn: session.agents.draftDenyMode
-            ) {
-                session.agents.draftDenyMode.toggle()
-            }
-            .disabled(!isEditing)
 
-            if session.scanCatalog.isEmpty {
-                Text("Index accounts first.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(session.scanCatalog) { account in
-                            accountBlock(account)
+            GrantDeskCard(title: "Allowed placements", topic: .scopeOverview, expandedInfo: $expandedInfo) {
+                GrantDeskInfoPanel(topic: .scopeOverview, expandedInfo: $expandedInfo)
+                scopeHintRow
+                if session.scanCatalog.isEmpty {
+                    Text("Index accounts first.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(session.scanCatalog) { account in
+                                accountBlock(account)
+                            }
                         }
+                        .padding(.vertical, 2)
+                        .id(session.agents.grantRevision)
+                        .id(session.agents.leakGuardRevision)
                     }
-                    .padding(.vertical, 2)
-                    .id(session.agents.grantRevision)
-                    .id(session.agents.leakGuardRevision)
+                    .frame(maxHeight: 340)
+                }
+            }
+
+            GrantDeskCard(title: "Narrow scope", expandedInfo: $expandedInfo) {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Narrow From (optional)", text: Binding(
+                        get: { session.agents.draftFromFilter },
+                        set: { session.agents.draftFromFilter = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                    TextField("On/after date ISO8601 (optional)", text: Binding(
+                        get: { session.agents.draftDateStart },
+                        set: { session.agents.draftDateStart = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!isEditing)
+                    GrantCheckRow(
+                        title: "Deny carve-out mode",
+                        isOn: session.agents.draftDenyMode
+                    ) {
+                        session.agents.draftDenyMode.toggle()
+                    }
+                    .disabled(!isEditing)
                 }
             }
 
@@ -126,6 +138,12 @@ struct GrantDeskView: View {
                 Button("Clear all grants", role: .destructive) {
                     session.agents.clearGrants()
                 }
+            }
+
+            if !session.agents.allowGrants.isEmpty {
+                Text("Detectors & custom rules → Privacy tab.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -149,9 +167,7 @@ struct GrantDeskView: View {
                         Divider()
                         Text("Preview")
                             .font(.subheadline.weight(.semibold))
-                        Text("Sample message under this placement’s caps.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        previewCaption(for: selected)
                         AgentAccessPreview(session: session, grant: selected)
                     }
                 }
@@ -172,25 +188,49 @@ struct GrantDeskView: View {
                         Button {
                             session.agents.selectAccessGrant(grant)
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(pathLabel(grant))
-                                    .font(.caption.weight(.semibold))
-                                    .multilineTextAlignment(.leading)
-                                GrantFieldBadgeRow(
-                                    fields: grant.fields,
-                                    interactive: false
-                                )
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                            .background(on ? Color.accentColor.opacity(0.12) : Color.clear)
-                            .cornerRadius(8)
+                            accessAssetLabel(grant)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(on ? Color.accentColor.opacity(0.12) : Color.clear)
+                                .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
         }
+    }
+
+    private var scopeHintRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("Check placements to allow. Field badges = Access caps")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                GrantDeskInfoButton(topic: .grantFieldBadges, expandedInfo: $expandedInfo, size: .small)
+                Text("· Leak guard")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                GrantDeskInfoButton(topic: .shieldScan, expandedInfo: $expandedInfo, size: .small)
+                Text("= opt-in scanning.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            GrantDeskInfoPanel(topic: .grantFieldBadges, expandedInfo: $expandedInfo)
+            GrantDeskInfoPanel(topic: .shieldScan, expandedInfo: $expandedInfo)
+        }
+    }
+
+    private func previewCaption(for grant: Grant) -> some View {
+        let scanning = session.agents.leakGuardEnabled
+            && session.agents.isScopeInLeakGuardAllowlist(
+                accountID: grant.accountID,
+                placement: grant.placement
+            )
+        let suffix = scanning ? " · leak guard active" : ""
+        return Text("Sample message under this placement’s caps\(suffix).")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
     }
 
     private func fieldEditor(for grant: Grant) -> some View {
@@ -201,6 +241,13 @@ struct GrantDeskView: View {
             Text("Fields apply only to this allow.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            LeakGuardAccessRow(
+                session: session,
+                grant: grant,
+                isEditing: isEditing,
+                expandedInfo: $expandedInfo
+            )
 
             HStack(alignment: .center, spacing: 8) {
                 Text("Presets")
@@ -220,23 +267,6 @@ struct GrantDeskView: View {
             }
             .padding(.top, 4)
             .disabled(!isEditing)
-
-            Toggle("Leak guard scan", isOn: Binding(
-                get: {
-                    session.agents.isScopeInLeakGuardAllowlist(
-                        accountID: grant.accountID,
-                        placement: grant.placement
-                    )
-                },
-                set: { _ in
-                    session.agents.toggleLeakGuardScope(
-                        accountID: grant.accountID,
-                        placement: grant.placement
-                    )
-                }
-            ))
-            .disabled(!isEditing || !session.agents.leakGuardEnabled)
-            .help("Opt this placement into subject/body scanning when leak guard is on")
 
             Text("Envelope")
                 .font(.caption.weight(.semibold))
@@ -328,25 +358,21 @@ struct GrantDeskView: View {
                 }
                 .disabled(!isEditing || session.agents.draftDenyMode)
                 if let grant = session.agents.allowGrant(accountID: account.id, placement: nil),
+                   session.agents.hasAccountWideGrant(accountID: account.id),
                    !session.agents.draftDenyMode {
-                    GrantFieldBadgeRow(fields: grant.fields, interactive: isEditing) { keyPath in
+                    scopeBadgeRow(
+                        fields: grant.fields,
+                        accountID: account.id,
+                        placement: nil,
+                        showsLeakGuard: true,
+                        interactive: isEditing
+                    ) { keyPath in
                         session.agents.toggleAllowField(
                             accountID: account.id,
                             placement: nil,
                             keyPath: keyPath
                         )
                     }
-                }
-                if session.agents.leakGuardEnabled,
-                   session.agents.hasAccountWideGrant(accountID: account.id),
-                   !session.agents.draftDenyMode {
-                    LeakGuardScanToggle(
-                        session: session,
-                        accountID: account.id,
-                        placement: nil,
-                        isEditing: isEditing
-                    )
-                    .accessibilityLabel("Scan all mailboxes")
                 }
             }
 
@@ -380,7 +406,13 @@ struct GrantDeskView: View {
                        let edit = accountWide
                         ? session.agents.allowGrant(accountID: account.id, placement: nil)
                         : mbGrant {
-                        GrantFieldBadgeRow(fields: edit.fields, interactive: isEditing) { keyPath in
+                        scopeBadgeRow(
+                            fields: edit.fields,
+                            accountID: account.id,
+                            placement: accountWide ? nil : mailbox.placement,
+                            showsLeakGuard: allowed && !accountWide,
+                            interactive: isEditing
+                        ) { keyPath in
                             session.agents.toggleAllowField(
                                 accountID: account.id,
                                 placement: accountWide ? nil : mailbox.placement,
@@ -388,19 +420,29 @@ struct GrantDeskView: View {
                             )
                         }
                     }
-                    if session.agents.leakGuardEnabled,
-                       allowed,
-                       !session.agents.draftDenyMode,
-                       !accountWide {
-                        LeakGuardScanToggle(
-                            session: session,
-                            accountID: account.id,
-                            placement: mailbox.placement,
-                            isEditing: isEditing
-                        )
-                    }
                 }
                 .padding(.leading, 16)
+            }
+        }
+    }
+
+    private func accessAssetLabel(_ grant: Grant) -> some View {
+        let shieldState = session.agents.leakGuardShieldState(
+            accountID: grant.accountID,
+            placement: grant.placement
+        )
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(pathLabel(grant))
+                .font(.caption.weight(.semibold))
+                .multilineTextAlignment(.leading)
+            HStack(spacing: 4) {
+                GrantFieldBadgeRow(
+                    fields: grant.fields,
+                    interactive: false
+                )
+                if shieldState != .off {
+                    LeakGuardShieldChip(state: shieldState)
+                }
             }
         }
     }
@@ -413,6 +455,29 @@ struct GrantDeskView: View {
             return "\(name) / \(placement)"
         }
         return "\(name) · all mailboxes"
+    }
+
+    @ViewBuilder
+    private func scopeBadgeRow(
+        fields: GrantFields,
+        accountID: String,
+        placement: String?,
+        showsLeakGuard: Bool,
+        interactive: Bool,
+        onToggle: @escaping (WritableKeyPath<GrantFields, Bool>) -> Void
+    ) -> some View {
+        HStack(spacing: 4) {
+            GrantFieldBadgeRow(fields: fields, interactive: interactive, onToggle: onToggle)
+            if showsLeakGuard {
+                LeakGuardScopeControls(
+                    session: session,
+                    accountID: accountID,
+                    placement: placement,
+                    isEditing: interactive,
+                    expandedInfo: $expandedInfo
+                )
+            }
+        }
     }
 }
 

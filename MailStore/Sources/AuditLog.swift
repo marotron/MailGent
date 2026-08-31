@@ -28,6 +28,71 @@ public enum AuditBodyAccess: String, Codable, Equatable, Hashable, Sendable {
     case withheldConfidential = "withheld_confidential"
 }
 
+/// One leak-guard hit recorded for the Access Log (human-facing).
+public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
+    public enum Field: String, Codable, Sendable {
+        case subject
+        case body
+    }
+
+    public enum Disposition: String, Codable, Sendable {
+        case redacted
+        case replaced
+        case withheld
+    }
+
+    public let field: Field
+    public let label: String
+    public let disposition: Disposition
+    public let discloseToAgent: Bool
+
+    public init(
+        field: Field,
+        label: String,
+        disposition: Disposition,
+        discloseToAgent: Bool
+    ) {
+        self.field = field
+        self.label = label
+        self.disposition = disposition
+        self.discloseToAgent = discloseToAgent
+    }
+
+    public static func from(
+        subject: SanitizedField?,
+        body: SanitizedField?
+    ) -> [AuditLeakDetection]? {
+        var out: [AuditLeakDetection] = []
+        if let subject {
+            out.append(contentsOf: from(field: .subject, sanitized: subject))
+        }
+        if let body {
+            out.append(contentsOf: from(field: .body, sanitized: body))
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    private static func from(field: Field, sanitized: SanitizedField) -> [AuditLeakDetection] {
+        let withheld = sanitized.access == .withheldConfidential
+        return sanitized.hitSpans.map { hit in
+            let disposition: Disposition
+            if withheld {
+                disposition = .withheld
+            } else if hit.action == .replace {
+                disposition = .replaced
+            } else {
+                disposition = .redacted
+            }
+            return AuditLeakDetection(
+                field: field,
+                label: hit.label,
+                disposition: disposition,
+                discloseToAgent: hit.discloseToAgent
+            )
+        }
+    }
+}
+
 public struct AuditRetention: Equatable, Sendable {
     public var maxAge: TimeInterval?
     public var maxCount: Int?
@@ -74,6 +139,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let bodyOriginal: String?
     public let sanitizedRules: [String]?
     public let stealth: Bool?
+    public let leakDetections: [AuditLeakDetection]?
     public let fields: GrantFields
     public let attachments: [MailAttachment]
 
@@ -93,6 +159,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         bodyOriginal: String? = nil,
         sanitizedRules: [String]? = nil,
         stealth: Bool? = nil,
+        leakDetections: [AuditLeakDetection]? = nil,
         fields: GrantFields = .headersOnly,
         attachments: [MailAttachment] = []
     ) {
@@ -111,11 +178,71 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.bodyOriginal = bodyOriginal
         self.sanitizedRules = sanitizedRules
         self.stealth = stealth
+        self.leakDetections = leakDetections
         self.fields = fields
         self.attachments = attachments
     }
 
     public var rowID: String { "\(accountID)/\(placement)/\(id)" }
+
+    /// Count of leak-guard parts for list badges. Prefers recorded hits; falls back for older logs.
+    public var leakDetectionCount: Int {
+        if let leakDetections, !leakDetections.isEmpty {
+            return leakDetections.count
+        }
+        if let sanitizedRules, !sanitizedRules.isEmpty {
+            return sanitizedRules.count
+        }
+        if stealth == true
+            || subjectAccess == .sanitized
+            || subjectAccess == .withheldConfidential
+            || bodyAccess == .sanitized
+            || bodyAccess == .withheldConfidential
+        {
+            return 1
+        }
+        return 0
+    }
+
+    /// Rows shown in Access Log detail (recorded hits, or a legacy proxy from rule labels).
+    public var displayLeakDetections: [AuditLeakDetection] {
+        if let leakDetections, !leakDetections.isEmpty {
+            return leakDetections
+        }
+        guard leakDetectionCount > 0 else { return [] }
+        let withheldSubject = subjectAccess == .withheldConfidential
+        let withheldBody = bodyAccess == .withheldConfidential
+        let disposition: AuditLeakDetection.Disposition
+        if withheldSubject || withheldBody {
+            disposition = .withheld
+        } else if stealth == true {
+            disposition = .replaced
+        } else {
+            disposition = .redacted
+        }
+        let field: AuditLeakDetection.Field =
+            (bodyAccess == .sanitized || bodyAccess == .withheldConfidential || stealth == true)
+                ? .body
+                : .subject
+        if let sanitizedRules, !sanitizedRules.isEmpty {
+            return sanitizedRules.map {
+                AuditLeakDetection(
+                    field: field,
+                    label: $0,
+                    disposition: disposition,
+                    discloseToAgent: stealth != true
+                )
+            }
+        }
+        return [
+            AuditLeakDetection(
+                field: field,
+                label: stealth == true ? "Stealth replace" : "Sensitive content",
+                disposition: disposition,
+                discloseToAgent: stealth != true
+            )
+        ]
+    }
 
     public var attachmentNamesDetail: String {
         if attachments.isEmpty { return "none in this response" }
@@ -398,7 +525,7 @@ extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, cc, date
         case bodySnippet, subjectAccess, bodyAccess, subjectOriginal, bodyOriginal
-        case sanitizedRules, stealth, fields, attachments
+        case sanitizedRules, stealth, leakDetections, fields, attachments
     }
 
     public init(from decoder: Decoder) throws {
@@ -419,6 +546,10 @@ extension AuditMessageRef: Codable {
         bodyOriginal = try container.decodeIfPresent(String.self, forKey: .bodyOriginal)
         sanitizedRules = try container.decodeIfPresent([String].self, forKey: .sanitizedRules)
         stealth = try container.decodeIfPresent(Bool.self, forKey: .stealth)
+        leakDetections = try container.decodeIfPresent(
+            [AuditLeakDetection].self,
+            forKey: .leakDetections
+        )
         fields = try container.decodeIfPresent(GrantFields.self, forKey: .fields) ?? .headersOnly
         attachments = try container.decodeIfPresent([MailAttachment].self, forKey: .attachments) ?? []
     }
@@ -440,6 +571,7 @@ extension AuditMessageRef: Codable {
         try container.encodeIfPresent(bodyOriginal, forKey: .bodyOriginal)
         try container.encodeIfPresent(sanitizedRules, forKey: .sanitizedRules)
         try container.encodeIfPresent(stealth, forKey: .stealth)
+        try container.encodeIfPresent(leakDetections, forKey: .leakDetections)
         try container.encode(fields, forKey: .fields)
         try container.encode(attachments, forKey: .attachments)
     }
@@ -482,6 +614,7 @@ extension AuditMessageRef {
             subjectAccess: subjectAccess,
             bodyAccess: access,
             subjectOriginal: subjectOriginal,
+            leakDetections: AuditLeakDetection.from(subject: subjectSanitized, body: nil),
             fields: fields
         )
     }
@@ -542,6 +675,10 @@ extension AuditMessageRef {
             bodyOriginal: bodyOriginal,
             sanitizedRules: disclosed.isEmpty ? nil : disclosed,
             stealth: stealth ? true : nil,
+            leakDetections: AuditLeakDetection.from(
+                subject: subjectSanitized,
+                body: bodySanitized
+            ),
             fields: fields,
             attachments: message.attachments
         )
