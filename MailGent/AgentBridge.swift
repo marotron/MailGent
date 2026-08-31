@@ -23,6 +23,10 @@ final class AgentBridge {
     private(set) var iconPulse = MenuBarIconPulse()
     /// Observable mirror of GrantGate rows for the current agent (UI source of truth).
     private(set) var grantRows: [Grant] = []
+    /// On-device outbound leak guard policy (loaded from sensitive-filter.json).
+    private(set) var leakGuardPolicy: OutboundLeakGuardPolicy = .default
+    /// Bumped when leak guard policy changes so SwiftUI refreshes toggles.
+    private(set) var leakGuardRevision = 0
     var loopbackURL: String { MailGentPreferences.loopbackURL }
     private var loopbackPort: UInt16 { MailGentPreferences.loopbackPort }
     private var http: LoopbackHTTPListener?
@@ -107,6 +111,82 @@ final class AgentBridge {
         }
         audit.applyRetention()
         restorePersistedPairing()
+        restorePersistedLeakGuardPolicy()
+    }
+
+    var leakGuardEnabled: Bool {
+        get { leakGuardPolicy.enabled }
+        set { setLeakGuardEnabled(newValue) }
+    }
+
+    var customLeakRules: [CustomLeakRule] {
+        leakGuardPolicy.customRules
+    }
+
+    func setLeakGuardEnabled(_ enabled: Bool) {
+        guard leakGuardPolicy.enabled != enabled else { return }
+        leakGuardPolicy.enabled = enabled
+        persistLeakGuardPolicy()
+    }
+
+    func isScopeProtected(accountID: String, placement: String) -> Bool {
+        leakGuardPolicy.isScopeProtected(accountID: accountID, placement: placement)
+    }
+
+    func isScopeInLeakGuardAllowlist(accountID: String, placement: String?) -> Bool {
+        let key = OutboundLeakGuardPolicy.scopeKey(accountID: accountID, placement: placement)
+        return leakGuardPolicy.scopes.contains(key)
+    }
+
+    func toggleLeakGuardScope(accountID: String, placement: String?) {
+        let key = OutboundLeakGuardPolicy.scopeKey(accountID: accountID, placement: placement)
+        if leakGuardPolicy.scopes.contains(key) {
+            leakGuardPolicy.scopes.remove(key)
+        } else {
+            leakGuardPolicy.scopes.insert(key)
+        }
+        persistLeakGuardPolicy()
+    }
+
+    func setBuiltInLeakClass(_ leakClass: BuiltInLeakClass, enabled: Bool) {
+        guard leakGuardPolicy.builtInClasses[leakClass] != enabled else { return }
+        leakGuardPolicy.builtInClasses[leakClass] = enabled
+        persistLeakGuardPolicy()
+    }
+
+    func setSubjectHitMode(_ mode: LeakGuardHitMode) {
+        guard leakGuardPolicy.subjectHitMode != mode else { return }
+        leakGuardPolicy.subjectHitMode = mode
+        persistLeakGuardPolicy()
+    }
+
+    func setBodyHitMode(_ mode: LeakGuardHitMode) {
+        guard leakGuardPolicy.bodyHitMode != mode else { return }
+        leakGuardPolicy.bodyHitMode = mode
+        persistLeakGuardPolicy()
+    }
+
+    func addCustomLeakRule(_ rule: CustomLeakRule) {
+        leakGuardPolicy.customRules.append(rule)
+        persistLeakGuardPolicy()
+    }
+
+    func updateCustomLeakRule(_ rule: CustomLeakRule) {
+        guard let index = leakGuardPolicy.customRules.firstIndex(where: { $0.id == rule.id }) else { return }
+        leakGuardPolicy.customRules[index] = rule
+        persistLeakGuardPolicy()
+    }
+
+    func removeCustomLeakRule(id: String) {
+        let before = leakGuardPolicy.customRules.count
+        leakGuardPolicy.customRules.removeAll { $0.id == id }
+        guard leakGuardPolicy.customRules.count != before else { return }
+        persistLeakGuardPolicy()
+    }
+
+    func moveCustomLeakRules(from source: IndexSet, to destination: Int) {
+        leakGuardPolicy.customRules.move(fromOffsets: source, toOffset: destination)
+        persistLeakGuardPolicy()
     }
 
     var auditStoredCount: Int {
@@ -180,7 +260,8 @@ final class AgentBridge {
             fromFilter: draftFromFilter,
             dateStart: draftDateStart,
             denyMode: draftDenyMode,
-            selectedAccessKey: selectedAccessKey
+            selectedAccessKey: selectedAccessKey,
+            leakGuardPolicy: leakGuardPolicy
         )
         grantDeskPersistDeferred = true
         isEditingGrants = true
@@ -193,6 +274,7 @@ final class AgentBridge {
         grantDeskEditBaseline = nil
         isEditingGrants = false
         persistGrants()
+        persistLeakGuardPolicy()
     }
 
     func cancelGrantDeskEdits() {
@@ -208,10 +290,13 @@ final class AgentBridge {
             draftDateStart = baseline.dateStart
             draftDenyMode = baseline.denyMode
             selectedAccessKey = baseline.selectedAccessKey
+            leakGuardPolicy = baseline.leakGuardPolicy
+            refreshGatewayLeakGuard()
         }
         grantDeskEditBaseline = nil
         isEditingGrants = false
         persistGrants()
+        persistLeakGuardPolicy()
     }
 
     /// Adds or updates one allow and persists. Does not invent grants for new accounts.
@@ -248,6 +333,7 @@ final class AgentBridge {
         if selectedAccessKey == Self.accessKey(mode: .allow, accountID: accountID, placement: placement) {
             selectedAccessKey = nil
         }
+        removeLeakGuardScope(accountID: accountID, placement: placement)
         persistGrants()
     }
 
@@ -485,6 +571,7 @@ final class AgentBridge {
                 read: ReadAPI(index: index),
                 pairing: pairing,
                 grants: grants,
+                leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
                 audit: audit
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
@@ -678,6 +765,63 @@ final class AgentBridge {
         try? FileManager.default.removeItem(at: Self.grantsFileURL)
     }
 
+    private func restorePersistedLeakGuardPolicy() {
+        guard
+            let data = try? Data(contentsOf: Self.leakGuardPolicyFileURL),
+            let saved = try? JSONDecoder().decode(OutboundLeakGuardPolicy.self, from: data)
+        else {
+            return
+        }
+        leakGuardPolicy = saved
+        leakGuardRevision &+= 1
+    }
+
+    private func persistLeakGuardPolicy() {
+        if grantDeskPersistDeferred {
+            refreshGatewayLeakGuard()
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: Self.leakGuardPolicyFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try JSONEncoder().encode(leakGuardPolicy).write(to: Self.leakGuardPolicyFileURL, options: .atomic)
+        } catch {
+            MailGentLog.trace("leak guard policy persist failed: \(error)")
+        }
+        refreshGatewayLeakGuard()
+    }
+
+    private func removeLeakGuardScope(accountID: String, placement: String?) {
+        let key = OutboundLeakGuardPolicy.scopeKey(accountID: accountID, placement: placement)
+        guard leakGuardPolicy.scopes.contains(key) else { return }
+        leakGuardPolicy.scopes.remove(key)
+        persistLeakGuardPolicy()
+    }
+
+    private func refreshGatewayLeakGuard() {
+        guard
+            let host = loopbackHost,
+            let existing = host.readGateway()
+        else {
+            leakGuardRevision &+= 1
+            return
+        }
+        let updated = AgentReadAPI(
+            read: existing.read,
+            pairing: existing.pairing,
+            grants: existing.grants,
+            leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
+            audit: existing.audit
+        )
+        host.setGateway(updated, indexUpdater: host.readIndexUpdater())
+        leakGuardRevision &+= 1
+        MailGentLog.trace(
+            "leak guard policy enabled=\(leakGuardPolicy.enabled) scopes=\(leakGuardPolicy.scopes.count)"
+        )
+    }
+
     /// Keep Cursor's local MCP entry aligned with the current Bearer (machine-local only).
     func syncCursorMCPConfig() {
         guard let credential else { return }
@@ -728,6 +872,12 @@ final class AgentBridge {
             .appendingPathComponent("grants.json")
     }
 
+    private static var leakGuardPolicyFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MailGent", isDirectory: true)
+            .appendingPathComponent("sensitive-filter.json")
+    }
+
     private static func makeCredential() -> String {
         Data((0..<24).map { _ in UInt8.random(in: 0...255) })
             .base64EncodedString()
@@ -750,4 +900,5 @@ private struct GrantDeskEditBaseline {
     let dateStart: String
     let denyMode: Bool
     let selectedAccessKey: String?
+    let leakGuardPolicy: OutboundLeakGuardPolicy
 }
