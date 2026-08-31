@@ -486,12 +486,15 @@ private struct AccessLogDetail: View {
             if !entry.messages.isEmpty {
                 LockedFieldsLegend()
             }
-            ForEach(entry.messages, id: \.rowID) { ref in
+            if AccessLogFormat.showsSanitizedLegend(for: displayMessages) {
+                SanitizedFieldsLegend()
+            }
+            ForEach(displayMessages, id: \.rowID) { ref in
                 CollapsibleAuditMessage(
                     session: session,
                     ref: ref,
                     omitsBody: omitsBody,
-                    startsExpanded: entry.messages.count == 1
+                    startsExpanded: displayMessages.count == 1
                 )
             }
         }
@@ -558,6 +561,7 @@ private struct AccessLogDetail: View {
     @ViewBuilder
     private func prettyPairList(_ pairs: [(String, String)]) -> some View {
         if !pairs.isEmpty {
+            let leakGuard = AccessLogFormat.leakGuardDetail(from: entry.responseSummary)
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -565,23 +569,24 @@ private struct AccessLogDetail: View {
                             .font(.callout.monospaced())
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: true, vertical: false)
-                        Text(
-                            AccessLogFormat.displayValue(
-                                pair.0,
-                                pair.1,
-                                accountLabel: session.accountLabel
-                            )
+                        AccessLogJSONValueView(
+                            key: pair.0,
+                            value: pair.1,
+                            accountLabel: session.accountLabel,
+                            leakGuard: leakGuard
                         )
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
                     }
                 }
             }
         }
     }
 
+    private var displayMessages: [AuditMessageRef] {
+        AccessLogFormat.displayMessages(for: entry)
+    }
+
     private var isMessageResponse: Bool {
-        if !entry.messages.isEmpty { return true }
+        if !displayMessages.isEmpty { return true }
         switch entry.kind {
         case .search, .list, .listNew:
             if case .ok = entry.outcome { return true }
@@ -804,6 +809,10 @@ enum AccessLogFormat {
         case "draftID": "Draft"
         case "chars": "Characters"
         case "bodyAccess": "Body"
+        case "subjectAccess": "Subject access"
+        case "subjectAccessReason": "Subject reason"
+        case "bodyAccessReason": "Body reason"
+        case "sanitizedRules": "Sanitized rules"
         case "cc": "Cc"
         case "indexed": "Indexed"
         case "lastIngest": "Last ingest"
@@ -970,5 +979,258 @@ enum AccessLogFormat {
             let text = String(data: data, encoding: .utf8)
         else { return "—" }
         return text
+    }
+
+    static func displayMessages(for entry: AuditEntry) -> [AuditMessageRef] {
+        switch entry.kind {
+        case .get:
+            if entry.messages.isEmpty {
+                if let ref = messageRef(from: entry.responseSummary) {
+                    return [ref]
+                }
+                return []
+            }
+            return entry.messages.map { enrichGetRef($0, from: entry.responseSummary) }
+        default:
+            return entry.messages
+        }
+    }
+
+    static func showsSanitizedLegend(for refs: [AuditMessageRef]) -> Bool {
+        refs.contains { ref in
+            ref.subjectAccess == .sanitized
+                || ref.subjectAccess == .withheldConfidential
+                || ref.bodyAccess == .sanitized
+                || ref.bodyAccess == .withheldConfidential
+                || ref.stealth == true
+        }
+    }
+
+    static func messageRef(from responseSummary: String) -> AuditMessageRef? {
+        guard let obj = jsonObject(responseSummary),
+              let id = obj["id"] as? String,
+              let accountID = obj["accountID"] as? String,
+              let placement = obj["placement"] as? String
+        else { return nil }
+
+        let subject = obj["subject"] as? String ?? ""
+        let from = obj["from"] as? String ?? ""
+        let to = obj["to"] as? String ?? ""
+        let cc = obj["cc"] as? String ?? ""
+        let date = obj["date"] as? String ?? ""
+        let body = obj["body"] as? String ?? ""
+        let subjectAccess = auditAccess(obj["subjectAccess"])
+        let bodyAccess = auditAccess(obj["bodyAccess"]) ?? (body.isEmpty ? .notAvailable : .granted)
+        let rules = sanitizedRules(from: obj["sanitizedRules"])
+        let stealth = (obj["note"] as? String)?.contains("substituted") == true
+        let fields = inferredGrantFields(from: obj)
+        let attachments = parseAttachments(from: obj)
+
+        return AuditMessageRef(
+            accountID: accountID,
+            placement: placement,
+            id: id,
+            subject: subject,
+            from: from,
+            date: date,
+            to: to,
+            cc: cc,
+            bodySnippet: String(body.prefix(AuditMessageRef.bodySnippetCap)),
+            subjectAccess: subjectAccess,
+            bodyAccess: bodyAccess,
+            sanitizedRules: rules,
+            stealth: stealth ? true : nil,
+            fields: fields,
+            attachments: attachments
+        )
+    }
+
+    static func enrichGetRef(_ ref: AuditMessageRef, from responseSummary: String) -> AuditMessageRef {
+        guard let obj = jsonObject(responseSummary) else { return ref }
+        let parsedSubjectAccess = auditAccess(obj["subjectAccess"])
+        let parsedBodyAccess = auditAccess(obj["bodyAccess"])
+        let parsedRules = sanitizedRules(from: obj["sanitizedRules"])
+        let parsedStealth = (obj["note"] as? String)?.contains("substituted") == true
+
+        let mergedRules: [String]?
+        if let existing = ref.sanitizedRules, !existing.isEmpty {
+            mergedRules = existing
+        } else {
+            mergedRules = parsedRules
+        }
+
+        let mergedStealth: Bool?
+        if ref.stealth == true || parsedStealth {
+            mergedStealth = true
+        } else {
+            mergedStealth = ref.stealth
+        }
+
+        guard parsedSubjectAccess != nil
+            || parsedBodyAccess != nil
+            || mergedRules != nil
+            || mergedStealth == true
+        else { return ref }
+
+        return AuditMessageRef(
+            accountID: ref.accountID,
+            placement: ref.placement,
+            id: ref.id,
+            subject: ref.subject,
+            from: ref.from,
+            date: ref.date,
+            to: ref.to,
+            cc: ref.cc,
+            bodySnippet: ref.bodySnippet,
+            subjectAccess: ref.subjectAccess ?? parsedSubjectAccess,
+            bodyAccess: parsedBodyAccess ?? ref.bodyAccess,
+            subjectOriginal: ref.subjectOriginal,
+            bodyOriginal: ref.bodyOriginal,
+            sanitizedRules: mergedRules,
+            stealth: mergedStealth,
+            fields: ref.fields,
+            attachments: ref.attachments
+        )
+    }
+
+    static func leakGuardDetail(from responseSummary: String) -> LeakGuardResponseDetail? {
+        guard let obj = jsonObject(responseSummary) else { return nil }
+        let subjectAccess = auditAccess(obj["subjectAccess"])
+        let bodyAccess = auditAccess(obj["bodyAccess"])
+        let rules = sanitizedRules(from: obj["sanitizedRules"])
+        let stealth = (obj["note"] as? String)?.contains("substituted") == true
+        guard subjectAccess != nil || bodyAccess != nil || rules != nil || stealth else { return nil }
+        return LeakGuardResponseDetail(
+            subjectAccess: subjectAccess,
+            bodyAccess: bodyAccess,
+            sanitizedRules: rules,
+            stealth: stealth,
+            subject: obj["subject"] as? String,
+            body: obj["body"] as? String
+        )
+    }
+
+    private static func auditAccess(_ any: Any?) -> AuditBodyAccess? {
+        guard let raw = any as? String else { return nil }
+        return AuditBodyAccess(rawValue: raw)
+    }
+
+    private static func sanitizedRules(from any: Any?) -> [String]? {
+        guard let rules = any as? [Any] else { return nil }
+        let labels = rules.compactMap { $0 as? String }.filter { !$0.isEmpty }
+        return labels.isEmpty ? nil : labels
+    }
+
+    private static func inferredGrantFields(from obj: [String: Any]) -> GrantFields {
+        GrantFields(
+            subject: obj["subjectAccess"] as? String != AuditBodyAccess.notGranted.rawValue,
+            from: (obj["from"] as? String)?.isEmpty == false,
+            to: (obj["to"] as? String)?.isEmpty == false,
+            cc: (obj["cc"] as? String)?.isEmpty == false,
+            date: (obj["date"] as? String)?.isEmpty == false,
+            body: obj["bodyAccess"] as? String != AuditBodyAccess.notGranted.rawValue,
+            attachmentMetadata: obj["attachmentAccess"] as? String == "granted",
+            attachmentContent: false
+        )
+    }
+
+    private static func parseAttachments(from obj: [String: Any]) -> [MailAttachment] {
+        guard let items = obj["attachments"] as? [[String: Any]] else { return [] }
+        return items.compactMap { item in
+            guard let filename = item["filename"] as? String else { return nil }
+            let byteCount = intValue(item["byteCount"]) ?? 0
+            return MailAttachment(filename: filename, byteCount: byteCount)
+        }
+    }
+}
+
+struct LeakGuardResponseDetail: Equatable {
+    let subjectAccess: AuditBodyAccess?
+    let bodyAccess: AuditBodyAccess?
+    let sanitizedRules: [String]?
+    let stealth: Bool
+    let subject: String?
+    let body: String?
+}
+
+private struct AccessLogJSONValueView: View {
+    let key: String
+    let value: String
+    let accountLabel: (String) -> String
+    var leakGuard: LeakGuardResponseDetail?
+
+    var body: some View {
+        Group {
+            switch key {
+            case "subject":
+                fieldValue(
+                    text: value,
+                    access: leakGuard?.subjectAccess,
+                    original: nil
+                )
+            case "body":
+                fieldValue(
+                    text: value,
+                    access: leakGuard?.bodyAccess,
+                    original: nil
+                )
+            case "subjectAccess", "bodyAccess":
+                accessBadge(value)
+            default:
+                Text(AccessLogFormat.displayValue(key, value, accountLabel: accountLabel))
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func fieldValue(
+        text: String,
+        access: AuditBodyAccess?,
+        original: String?
+    ) -> some View {
+        if let access {
+            switch access {
+            case .sanitized:
+                SanitizedFieldText(
+                    text: text,
+                    original: original,
+                    rules: leakGuard?.sanitizedRules,
+                    stealth: leakGuard?.stealth == true,
+                    font: .callout.monospaced()
+                )
+            case .withheldConfidential:
+                WithheldLabel(original: original, rules: leakGuard?.sanitizedRules)
+            default:
+                Text(AccessLogFormat.displayValue(key, text, accountLabel: accountLabel))
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+            }
+        } else {
+            Text(AccessLogFormat.displayValue(key, text, accountLabel: accountLabel))
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private func accessBadge(_ raw: String) -> some View {
+        if let access = AuditBodyAccess(rawValue: raw) {
+            switch access {
+            case .sanitized, .withheldConfidential:
+                Text(raw)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(SanitizedFieldStyle.legend)
+            default:
+                Text(raw)
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+            }
+        } else {
+            Text(raw)
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+        }
     }
 }

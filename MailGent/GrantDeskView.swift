@@ -437,6 +437,9 @@ private struct AgentAccessPreview: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            if AccessLogFormat.showsSanitizedLegend(for: [sampleRef]) {
+                SanitizedFieldsLegend()
+            }
             LockedFieldsLegend()
         }
         .id(session.agents.leakGuardRevision)

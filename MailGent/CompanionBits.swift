@@ -1227,32 +1227,14 @@ struct MessageAccessCard: View {
 
     @ViewBuilder
     private var subjectPreview: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text("Subject:")
-                .fontWeight(.light)
-                .foregroundStyle(.secondary)
-            if !ref.fields.subject {
-                HatchDeniedLabel(placeholder: ref.subject.isEmpty ? "(no subject)" : ref.subject)
-            } else {
-                switch ref.subjectAccess ?? .granted {
-                case .granted, .notAvailable:
-                    Text(ref.subject.isEmpty ? "(no subject)" : ref.subject)
-                        .foregroundStyle(ref.subject.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                case .notGranted:
-                    HatchDeniedLabel(placeholder: ref.subject.isEmpty ? "(no subject)" : ref.subject)
-                case .sanitized:
-                    Text(ref.subject.isEmpty ? "(no subject)" : ref.subject)
-                        .foregroundStyle(ref.subject.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                case .withheldConfidential:
-                    Text("(withheld)")
-                        .foregroundStyle(.secondary)
-                        .italic()
-                }
-            }
-        }
-        .font(.caption)
+        leakGuardRow(
+            label: "Subject",
+            text: ref.subject.isEmpty ? "(no subject)" : ref.subject,
+            fieldGranted: ref.fields.subject,
+            access: ref.subjectAccess ?? .granted,
+            original: ref.subjectOriginal,
+            deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject
+        )
     }
 
     @ViewBuilder
@@ -1260,47 +1242,76 @@ struct MessageAccessCard: View {
         if omitsBody, ref.bodyAccess != .notGranted {
             omittedBodyPreview
         } else {
-            switch ref.bodyAccess {
-            case .granted:
-                Text(ref.bodySnippet)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .notAvailable:
-                Text("not available")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .notGranted:
-                HatchDeniedLabel(placeholder: "Body / snippet")
-            case .sanitized, .withheldConfidential:
-                if ref.bodyAccess == .withheldConfidential {
-                    Text("(withheld)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .italic()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Text(ref.bodySnippet)
-                        .font(.caption)
+            bodyFieldContent
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(Color.secondary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private var bodyFieldContent: some View {
+        switch ref.bodyAccess {
+        case .granted:
+            Text(ref.bodySnippet)
+                .font(.caption)
+                .textSelection(.enabled)
+        case .notAvailable:
+            Text("not available")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .italic()
+        case .notGranted:
+            HatchDeniedLabel(placeholder: "Body / snippet")
+        case .sanitized:
+            SanitizedFieldText(
+                text: ref.bodySnippet,
+                original: ref.bodyOriginal,
+                rules: ref.sanitizedRules,
+                stealth: ref.stealth == true
+            )
+        case .withheldConfidential:
+            WithheldLabel(original: ref.bodyOriginal, rules: ref.sanitizedRules)
+        }
+    }
+
+    @ViewBuilder
+    private func leakGuardRow(
+        label: String,
+        text: String,
+        fieldGranted: Bool,
+        access: AuditBodyAccess,
+        original: String?,
+        deniedPlaceholder: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("\(label):")
+                .fontWeight(.light)
+                .foregroundStyle(.secondary)
+            if !fieldGranted {
+                HatchDeniedLabel(placeholder: deniedPlaceholder)
+            } else {
+                switch access {
+                case .granted, .notAvailable:
+                    Text(text)
+                        .foregroundStyle(text.hasPrefix("(") ? .secondary : .primary)
                         .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                case .notGranted:
+                    HatchDeniedLabel(placeholder: deniedPlaceholder)
+                case .sanitized:
+                    SanitizedFieldText(
+                        text: text,
+                        original: original,
+                        rules: ref.sanitizedRules,
+                        stealth: ref.stealth == true
+                    )
+                case .withheldConfidential:
+                    WithheldLabel(original: original, rules: ref.sanitizedRules)
                 }
             }
         }
+        .font(.caption)
     }
 
     private var omittedBodyPreview: some View {
@@ -1459,5 +1470,127 @@ struct HatchPattern: View {
                 with: .color(HatchDeniedStyle.fill)
             )
         }
+    }
+}
+
+// MARK: - Leak guard access log visuals
+
+enum WithheldStyle {
+    static let text = Color.orange.opacity(0.88)
+    static let fill = Color.orange.opacity(0.12)
+    static let border = Color.orange.opacity(0.38)
+    static let legend = Color.orange.opacity(0.78)
+}
+
+struct WithheldLabel: View {
+    var original: String? = nil
+    var rules: [String]? = nil
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "eye.slash.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text("Withheld")
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(WithheldStyle.text)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(WithheldStyle.fill, in: RoundedRectangle(cornerRadius: 4))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+        }
+        .accessibilityLabel("Withheld by leak guard")
+        .help(tooltip)
+    }
+
+    private var tooltip: String {
+        var parts = ["Whole field withheld — leak guard blocked outbound content."]
+        if let rules, !rules.isEmpty {
+            parts.append("Rules: \(rules.joined(separator: ", "))")
+        }
+        if let original, !original.isEmpty {
+            parts.append("Original: \(original)")
+        }
+        return parts.joined(separator: "\n")
+    }
+}
+
+enum SanitizedFieldStyle {
+    static let underline = Color.orange.opacity(0.72)
+    static let legend = Color.orange.opacity(0.78)
+}
+
+struct SanitizedFieldText: View {
+    let text: String
+    var original: String? = nil
+    var rules: [String]? = nil
+    var stealth: Bool = false
+    var font: Font = .caption
+
+    var body: some View {
+        Text(displayText)
+            .font(font)
+            .foregroundStyle(displayText.isEmpty ? .secondary : .primary)
+            .underline(hasSanitizationMarker, pattern: .dash, color: SanitizedFieldStyle.underline)
+            .textSelection(.enabled)
+            .help(tooltip)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var displayText: String {
+        text.isEmpty ? "(empty)" : text
+    }
+
+    private var hasSanitizationMarker: Bool {
+        if let original, original != text { return true }
+        if stealth { return true }
+        if let rules, !rules.isEmpty { return true }
+        return false
+    }
+
+    private var tooltip: String {
+        var parts: [String] = []
+        if stealth {
+            parts.append("Stealth replace — agent saw substituted text.")
+        }
+        if let original, original != text {
+            parts.append("Original: \(original)")
+        }
+        if let rules, !rules.isEmpty {
+            parts.append("Rules: \(rules.joined(separator: ", "))")
+        }
+        if parts.isEmpty {
+            parts.append("Sanitized on device before the agent received this field.")
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    private var accessibilityLabel: String {
+        var label = displayText
+        if hasSanitizationMarker {
+            label += ". Sanitized"
+        }
+        if let original, original != text {
+            label += ". Original: \(original)"
+        }
+        return label
+    }
+}
+
+struct SanitizedFieldsLegend: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                .font(.system(size: 9, weight: .semibold))
+            Text("Sanitized. Dashed underline — hover for original text and matching rules.")
+                .font(.system(size: 10))
+        }
+        .foregroundStyle(SanitizedFieldStyle.legend)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Sanitized. Dashed underline. Hover for original text and matching rules."
+        )
     }
 }
