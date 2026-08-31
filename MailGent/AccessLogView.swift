@@ -285,6 +285,9 @@ private struct AccessLogRow: View {
                 .lineLimit(1)
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if leakHitCount > 0 {
+                AccessLogLeakHitBadge(count: leakHitCount)
+            }
             Text(timeLabel)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -292,6 +295,10 @@ private struct AccessLogRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
+    }
+
+    private var leakHitCount: Int {
+        AccessLogFormat.leakDetectionCount(for: entry)
     }
 
     private var requestValue: String {
@@ -331,7 +338,11 @@ private struct AccessLogRow: View {
         case .ok: status = "succeeded"
         case .error: status = "failed"
         }
-        return "\(entry.kind.badgeTitle) \(entry.agentName) \(requestValue) \(responseShort) \(status)"
+        var text = "\(entry.kind.badgeTitle) \(entry.agentName) \(requestValue) \(responseShort) \(status)"
+        if leakHitCount > 0 {
+            text += ". Leak guard \(leakHitCount) detection\(leakHitCount == 1 ? "" : "s")"
+        }
+        return text
     }
 }
 
@@ -692,6 +703,9 @@ private struct CollapsibleAuditMessage: View {
                                 labelMode: expanded ? .short : .icon
                             )
                             .fixedSize(horizontal: true, vertical: false)
+                            if ref.leakDetectionCount > 0 {
+                                AccessLogLeakHitBadge(count: ref.leakDetectionCount)
+                            }
                         }
                     }
                     Spacer(minLength: 0)
@@ -703,25 +717,30 @@ private struct CollapsibleAuditMessage: View {
             .accessibilityValue("\(collapsedTitle), \(collapsedMeta)")
 
             if expanded {
-                Button {
-                    session.openRead(
-                        accountID: ref.accountID,
-                        placement: ref.placement,
-                        id: ref.id
-                    )
-                    DetachedWindowHost.shared.showCompanion(session: session)
-                } label: {
-                    MessageAccessCard(
-                        session: session,
-                        ref: ref,
-                        omitsBody: omitsBody,
-                        showsFieldBadges: false
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 8) {
+                    if !ref.displayLeakDetections.isEmpty {
+                        LeakGuardDetectionsList(detections: ref.displayLeakDetections)
+                    }
+                    Button {
+                        session.openRead(
+                            accountID: ref.accountID,
+                            placement: ref.placement,
+                            id: ref.id
+                        )
+                        DetachedWindowHost.shared.showCompanion(session: session)
+                    } label: {
+                        MessageAccessCard(
+                            session: session,
+                            ref: ref,
+                            omitsBody: omitsBody,
+                            showsFieldBadges: false
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in Companion Read")
                 }
-                .buttonStyle(.plain)
-                .help("Open in Companion Read")
                 .padding(.leading, 18)
             }
         }
@@ -1003,7 +1022,27 @@ enum AccessLogFormat {
                 || ref.bodyAccess == .sanitized
                 || ref.bodyAccess == .withheldConfidential
                 || ref.stealth == true
+                || !(ref.leakDetections ?? []).isEmpty
         }
+    }
+
+    static func leakDetectionCount(for entry: AuditEntry) -> Int {
+        let fromMessages = displayMessages(for: entry).reduce(0) { $0 + $1.leakDetectionCount }
+        if fromMessages > 0 { return fromMessages }
+        if let detail = leakGuardDetail(from: entry.responseSummary) {
+            if let rules = detail.sanitizedRules, !rules.isEmpty {
+                return rules.count
+            }
+            if detail.stealth
+                || detail.subjectAccess == .sanitized
+                || detail.subjectAccess == .withheldConfidential
+                || detail.bodyAccess == .sanitized
+                || detail.bodyAccess == .withheldConfidential
+            {
+                return 1
+            }
+        }
+        return 0
     }
 
     static func messageRef(from responseSummary: String) -> AuditMessageRef? {
@@ -1088,6 +1127,7 @@ enum AccessLogFormat {
             bodyOriginal: ref.bodyOriginal,
             sanitizedRules: mergedRules,
             stealth: mergedStealth,
+            leakDetections: ref.leakDetections,
             fields: ref.fields,
             attachments: ref.attachments
         )
