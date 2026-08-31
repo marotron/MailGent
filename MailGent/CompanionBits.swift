@@ -1178,7 +1178,7 @@ struct MessageAccessCard: View {
                 if showsFieldBadges {
                     GrantFieldBadgeRow(fields: ref.fields)
                 }
-                previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
+                subjectPreview
                 if ref.fields.from {
                     AddressLine(label: "From", raw: ref.from)
                 } else {
@@ -1226,6 +1226,36 @@ struct MessageAccessCard: View {
     }
 
     @ViewBuilder
+    private var subjectPreview: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("Subject:")
+                .fontWeight(.light)
+                .foregroundStyle(.secondary)
+            if !ref.fields.subject {
+                HatchDeniedLabel(placeholder: ref.subject.isEmpty ? "(no subject)" : ref.subject)
+            } else {
+                switch ref.subjectAccess ?? .granted {
+                case .granted, .notAvailable:
+                    Text(ref.subject.isEmpty ? "(no subject)" : ref.subject)
+                        .foregroundStyle(ref.subject.isEmpty ? .secondary : .primary)
+                        .textSelection(.enabled)
+                case .notGranted:
+                    HatchDeniedLabel(placeholder: ref.subject.isEmpty ? "(no subject)" : ref.subject)
+                case .sanitized:
+                    Text(ref.subject.isEmpty ? "(no subject)" : ref.subject)
+                        .foregroundStyle(ref.subject.isEmpty ? .secondary : .primary)
+                        .textSelection(.enabled)
+                case .withheldConfidential:
+                    Text("(withheld)")
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+            }
+        }
+        .font(.caption)
+    }
+
+    @ViewBuilder
     private var bodyPreview: some View {
         if omitsBody, ref.bodyAccess != .notGranted {
             omittedBodyPreview
@@ -1251,13 +1281,24 @@ struct MessageAccessCard: View {
             case .notGranted:
                 HatchDeniedLabel(placeholder: "Body / snippet")
             case .sanitized, .withheldConfidential:
-                Text(ref.bodySnippet)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                if ref.bodyAccess == .withheldConfidential {
+                    Text("(withheld)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color.secondary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Text(ref.bodySnippet)
+                        .font(.caption)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color.secondary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
             }
         }
     }

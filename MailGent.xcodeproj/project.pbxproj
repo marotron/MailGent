@@ -72,6 +72,7 @@
 		F286C9F1EEF1CCBE2F12CBD9 /* AgentReadAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC12DE84FE059C771B0C5CB /* AgentReadAPI.swift */; };
 		F6139A27BC077F85DA7A127D /* LoopbackMCPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF627201D28B0D28492127F /* LoopbackMCPServer.swift */; };
 		F6D6220F9DBF28497533287D /* AccountIdentityPrototype.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C67DBE07135F0EF7C2CD87B /* AccountIdentityPrototype.swift */; };
+		F8EE1F289CBE1BAA4880AC45 /* LeakGuardPrivacyPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ADEFDF7A1EBC6C040BA4CD7 /* LeakGuardPrivacyPane.swift */; };
 		FA7235AA34AF51978124BDCB /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 /* End PBXBuildFile section */
 
@@ -135,6 +136,7 @@
 		025830C9CA5995BC5E28B733 /* MailAddressPartsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailAddressPartsTests.swift; sourceTree = "<group>"; };
 		0494EF0811DFF9341CED4AE3 /* MailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStore.swift; sourceTree = "<group>"; };
 		071729EDED56C3E0C38CCCA6 /* GrantGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantGate.swift; sourceTree = "<group>"; };
+		0ADEFDF7A1EBC6C040BA4CD7 /* LeakGuardPrivacyPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeakGuardPrivacyPane.swift; sourceTree = "<group>"; };
 		1178A79BA573EF9F021FCAA2 /* MailIndexWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailIndexWorker.swift; sourceTree = "<group>"; };
 		181E9FFF39C7415ADF2366C5 /* LoopbackMCPServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackMCPServerTests.swift; sourceTree = "<group>"; };
 		20B0BC892630583E6155EB36 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pairing.swift; sourceTree = "<group>"; };
@@ -310,6 +312,7 @@
 				C26E596BC3082684F009221C /* CompanionSession.swift */,
 				F17049D8016849D2AC6897A7 /* CompanionWindow.swift */,
 				BBAE3783C673903DFB7BDEAF /* GrantDeskView.swift */,
+				0ADEFDF7A1EBC6C040BA4CD7 /* LeakGuardPrivacyPane.swift */,
 				4D4FE71A2E9E5ADD630382FC /* MailGent.entitlements */,
 				6D9CBF81158A2BD86ACB9279 /* MailGentAboutView.swift */,
 				23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */,
@@ -556,6 +559,7 @@
 				DE79955A8BF5D44603961455 /* CompanionSession.swift in Sources */,
 				A68BB082B9C58CE8CF977A72 /* CompanionWindow.swift in Sources */,
 				769F8669604A6804F145BD84 /* GrantDeskView.swift in Sources */,
+				F8EE1F289CBE1BAA4880AC45 /* LeakGuardPrivacyPane.swift in Sources */,
 				00DBF19AC121C8F39A24370D /* MailGentAboutView.swift in Sources */,
 				C0CBA840E379580044926FD5 /* MailGentApp.swift in Sources */,
 				C9A6961CFF589066E3C6AAB5 /* MailGentLog.swift in Sources */,

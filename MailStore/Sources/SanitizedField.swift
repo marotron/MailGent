@@ -71,7 +71,7 @@ public struct SanitizedField: Equatable, Sendable {
 }
 
 extension FieldAccess {
-    var auditBodyAccess: AuditBodyAccess {
+    public var auditBodyAccess: AuditBodyAccess {
         switch self {
         case .granted: .granted
         case .notGranted: .notGranted

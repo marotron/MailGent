@@ -9,6 +9,7 @@ struct GrantDeskView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case scope = "Scope"
         case access = "Access"
+        case privacy = "Privacy"
         var id: String { rawValue }
     }
 
@@ -24,7 +25,7 @@ struct GrantDeskView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 220)
+                .frame(maxWidth: 300)
                 .accessibilityLabel("Grant desk section")
 
                 Spacer(minLength: 8)
@@ -36,6 +37,8 @@ struct GrantDeskView: View {
                 scopePane
             case .access:
                 accessPane
+            case .privacy:
+                LeakGuardPrivacyPane(session: session)
             }
 
             Spacer(minLength: 0)
@@ -72,6 +75,17 @@ struct GrantDeskView: View {
             Text("Check placements to allow. Click field badges to toggle Access caps (default: headers only).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Toggle("Leak guard", isOn: Binding(
+                get: { session.agents.leakGuardEnabled },
+                set: { session.agents.setLeakGuardEnabled($0) }
+            ))
+            .disabled(!isEditing)
+            .help("Master switch for on-device subject/body scanning")
+            if session.agents.leakGuardEnabled, session.agents.leakGuardPolicy.scopes.isEmpty {
+                Text("Leak guard is on but no placements are opted in for scanning.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             TextField("Narrow From (optional)", text: Binding(
                 get: { session.agents.draftFromFilter },
                 set: { session.agents.draftFromFilter = $0 }
@@ -104,6 +118,7 @@ struct GrantDeskView: View {
                     }
                     .padding(.vertical, 2)
                     .id(session.agents.grantRevision)
+                    .id(session.agents.leakGuardRevision)
                 }
             }
 
@@ -206,6 +221,23 @@ struct GrantDeskView: View {
             .padding(.top, 4)
             .disabled(!isEditing)
 
+            Toggle("Leak guard scan", isOn: Binding(
+                get: {
+                    session.agents.isScopeInLeakGuardAllowlist(
+                        accountID: grant.accountID,
+                        placement: grant.placement
+                    )
+                },
+                set: { _ in
+                    session.agents.toggleLeakGuardScope(
+                        accountID: grant.accountID,
+                        placement: grant.placement
+                    )
+                }
+            ))
+            .disabled(!isEditing || !session.agents.leakGuardEnabled)
+            .help("Opt this placement into subject/body scanning when leak guard is on")
+
             Text("Envelope")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
@@ -305,6 +337,17 @@ struct GrantDeskView: View {
                         )
                     }
                 }
+                if session.agents.leakGuardEnabled,
+                   session.agents.hasAccountWideGrant(accountID: account.id),
+                   !session.agents.draftDenyMode {
+                    LeakGuardScanToggle(
+                        session: session,
+                        accountID: account.id,
+                        placement: nil,
+                        isEditing: isEditing
+                    )
+                    .accessibilityLabel("Scan all mailboxes")
+                }
             }
 
             ForEach(account.mailboxes) { mailbox in
@@ -345,6 +388,17 @@ struct GrantDeskView: View {
                             )
                         }
                     }
+                    if session.agents.leakGuardEnabled,
+                       allowed,
+                       !session.agents.draftDenyMode,
+                       !accountWide {
+                        LeakGuardScanToggle(
+                            session: session,
+                            accountID: account.id,
+                            placement: mailbox.placement,
+                            isEditing: isEditing
+                        )
+                    }
                 }
                 .padding(.leading, 16)
             }
@@ -378,25 +432,59 @@ private struct AgentAccessPreview: View {
                 showsFieldBadges: false,
                 attachmentContentDetail: sample.attachmentContentDetail
             )
+            if let rules = sampleRef.sanitizedRules, !rules.isEmpty {
+                Text("Sanitized: \(rules.joined(separator: ", "))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             LockedFieldsLegend()
         }
+        .id(session.agents.leakGuardRevision)
     }
 
     private var sampleRef: AuditMessageRef {
-        AuditMessageRef(
+        let scanPlacement = grant.placement ?? "INBOX"
+        let leakGuard = OutboundLeakGuard(policy: session.agents.leakGuardPolicy)
+        let subjectField = leakGuard.sanitize(
+            text: sample.subject,
+            field: .subject,
+            accountID: grant.accountID,
+            placement: scanPlacement,
+            fieldGranted: grant.fields.subject
+        )
+        let bodyField = leakGuard.sanitize(
+            text: sample.body,
+            field: .body,
+            accountID: grant.accountID,
+            placement: scanPlacement,
+            fieldGranted: grant.fields.body
+        )
+        let disclosed = Array(Set(subjectField.disclosedRules + bodyField.disclosedRules)).sorted()
+        return AuditMessageRef(
             accountID: grant.accountID,
             placement: grant.placement ?? "all mailboxes",
             id: "sample",
-            subject: sample.subject,
+            subject: displayText(subjectField, granted: grant.fields.subject),
             from: sample.from,
             date: sample.date,
             to: sample.to,
             cc: sample.cc,
-            bodySnippet: sample.body,
-            bodyAccess: grant.fields.body ? .granted : .notGranted,
+            bodySnippet: displayText(bodyField, granted: grant.fields.body),
+            subjectAccess: grant.fields.subject ? subjectField.access.auditBodyAccess : .notGranted,
+            bodyAccess: grant.fields.body ? bodyField.access.auditBodyAccess : .notGranted,
+            subjectOriginal: subjectField.original != subjectField.text ? subjectField.original : nil,
+            bodyOriginal: bodyField.original != bodyField.text ? bodyField.original : nil,
+            sanitizedRules: disclosed.isEmpty ? nil : disclosed,
+            stealth: subjectField.stealth || bodyField.stealth,
             fields: grant.fields,
             attachments: grant.fields.attachmentMetadata ? sample.mailAttachments : []
         )
+    }
+
+    private func displayText(_ field: SanitizedField, granted: Bool) -> String {
+        guard granted else { return "" }
+        if field.access == .withheldConfidential { return "" }
+        return field.text
     }
 }
 
@@ -415,7 +503,7 @@ private struct SampleMessage {
         to: "you@yahoo.com",
         cc: "finance@hostco.example",
         date: "2026-03-12T09:14:00Z",
-        body: "Hi,\n\nAttached is your March invoice ($48.00).\nCard ending 4412 was charged.\n\nThanks,\nHostCo billing",
+        body: "Hi,\n\nAttached is your March invoice ($48.00).\nAPI key: sk-live-demo1234567890\nCard ending 4412 was charged.\n\nThanks,\nHostCo billing",
         attachments: [
             ("invoice-4412.pdf", 82),
             ("receipt.png", 21),
