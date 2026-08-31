@@ -1250,6 +1250,14 @@ struct MessageAccessCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             case .notGranted:
                 HatchDeniedLabel(placeholder: "Body / snippet")
+            case .sanitized, .withheldConfidential:
+                Text(ref.bodySnippet)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
     }

@@ -24,6 +24,8 @@ public enum AuditBodyAccess: String, Codable, Equatable, Hashable, Sendable {
     case granted
     case notGranted = "not_granted"
     case notAvailable = "not_available"
+    case sanitized
+    case withheldConfidential = "withheld_confidential"
 }
 
 public struct AuditRetention: Equatable, Sendable {
@@ -66,7 +68,12 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let cc: String
     public let date: String
     public let bodySnippet: String
+    public let subjectAccess: AuditBodyAccess?
     public let bodyAccess: AuditBodyAccess
+    public let subjectOriginal: String?
+    public let bodyOriginal: String?
+    public let sanitizedRules: [String]?
+    public let stealth: Bool?
     public let fields: GrantFields
     public let attachments: [MailAttachment]
 
@@ -80,7 +87,12 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         to: String = "",
         cc: String = "",
         bodySnippet: String = "",
+        subjectAccess: AuditBodyAccess? = nil,
         bodyAccess: AuditBodyAccess = .notAvailable,
+        subjectOriginal: String? = nil,
+        bodyOriginal: String? = nil,
+        sanitizedRules: [String]? = nil,
+        stealth: Bool? = nil,
         fields: GrantFields = .headersOnly,
         attachments: [MailAttachment] = []
     ) {
@@ -93,7 +105,12 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.cc = cc
         self.date = date
         self.bodySnippet = bodySnippet
+        self.subjectAccess = subjectAccess
         self.bodyAccess = bodyAccess
+        self.subjectOriginal = subjectOriginal
+        self.bodyOriginal = bodyOriginal
+        self.sanitizedRules = sanitizedRules
+        self.stealth = stealth
         self.fields = fields
         self.attachments = attachments
     }
@@ -380,7 +397,8 @@ extension AuditOutcome: Codable {
 extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, cc, date
-        case bodySnippet, bodyAccess, fields, attachments
+        case bodySnippet, subjectAccess, bodyAccess, subjectOriginal, bodyOriginal
+        case sanitizedRules, stealth, fields, attachments
     }
 
     public init(from decoder: Decoder) throws {
@@ -394,8 +412,13 @@ extension AuditMessageRef: Codable {
         to = try container.decodeIfPresent(String.self, forKey: .to) ?? ""
         cc = try container.decodeIfPresent(String.self, forKey: .cc) ?? ""
         bodySnippet = try container.decodeIfPresent(String.self, forKey: .bodySnippet) ?? ""
+        subjectAccess = try container.decodeIfPresent(AuditBodyAccess.self, forKey: .subjectAccess)
         bodyAccess = try container.decodeIfPresent(AuditBodyAccess.self, forKey: .bodyAccess)
             ?? .notAvailable
+        subjectOriginal = try container.decodeIfPresent(String.self, forKey: .subjectOriginal)
+        bodyOriginal = try container.decodeIfPresent(String.self, forKey: .bodyOriginal)
+        sanitizedRules = try container.decodeIfPresent([String].self, forKey: .sanitizedRules)
+        stealth = try container.decodeIfPresent(Bool.self, forKey: .stealth)
         fields = try container.decodeIfPresent(GrantFields.self, forKey: .fields) ?? .headersOnly
         attachments = try container.decodeIfPresent([MailAttachment].self, forKey: .attachments) ?? []
     }
@@ -411,7 +434,12 @@ extension AuditMessageRef: Codable {
         try container.encode(cc, forKey: .cc)
         try container.encode(date, forKey: .date)
         try container.encode(bodySnippet, forKey: .bodySnippet)
+        try container.encodeIfPresent(subjectAccess, forKey: .subjectAccess)
         try container.encode(bodyAccess, forKey: .bodyAccess)
+        try container.encodeIfPresent(subjectOriginal, forKey: .subjectOriginal)
+        try container.encodeIfPresent(bodyOriginal, forKey: .bodyOriginal)
+        try container.encodeIfPresent(sanitizedRules, forKey: .sanitizedRules)
+        try container.encodeIfPresent(stealth, forKey: .stealth)
         try container.encode(fields, forKey: .fields)
         try container.encode(attachments, forKey: .attachments)
     }
@@ -420,7 +448,11 @@ extension AuditMessageRef: Codable {
 extension AuditEntry: Codable {}
 
 extension AuditMessageRef {
-    public init(_ message: IndexedMessage, fields: GrantFields = .headersOnly) {
+    public init(
+        _ message: IndexedMessage,
+        fields: GrantFields = .headersOnly,
+        subjectSanitized: SanitizedField? = nil
+    ) {
         let access: AuditBodyAccess
         let snippet: String
         if !fields.body {
@@ -433,6 +465,10 @@ extension AuditMessageRef {
             access = .granted
             snippet = String(message.body.prefix(Self.bodySnippetCap))
         }
+        let subjectAccess = subjectSanitized?.access.auditBodyAccess
+        let subjectOriginal = subjectSanitized.flatMap { field in
+            field.original != field.text ? field.original : nil
+        }
         self.init(
             accountID: message.accountID,
             placement: message.placement,
@@ -443,30 +479,53 @@ extension AuditMessageRef {
             to: fields.to ? message.to : "",
             cc: fields.cc ? message.cc : "",
             bodySnippet: snippet,
+            subjectAccess: subjectAccess,
             bodyAccess: access,
+            subjectOriginal: subjectOriginal,
             fields: fields
         )
     }
 
-    public init(_ message: ReadMessage, fields: GrantFields = .headersOnly) {
-        let access: AuditBodyAccess
+    public init(
+        _ message: ReadMessage,
+        fields: GrantFields = .headersOnly,
+        subjectSanitized: SanitizedField? = nil,
+        bodySanitized: SanitizedField? = nil
+    ) {
+        let bodyAuditAccess: AuditBodyAccess
         let snippet: String
-        switch message.body {
-        case .text(let text):
-            if text.isEmpty {
-                access = .notAvailable
+        if let bodySanitized {
+            bodyAuditAccess = bodySanitized.access.auditBodyAccess
+            snippet = String(bodySanitized.original.prefix(Self.bodySnippetCap))
+        } else {
+            switch message.body {
+            case .text(let text):
+                if text.isEmpty {
+                    bodyAuditAccess = .notAvailable
+                    snippet = ""
+                } else {
+                    bodyAuditAccess = .granted
+                    snippet = String(text.prefix(Self.bodySnippetCap))
+                }
+            case .notAvailable:
+                bodyAuditAccess = .notAvailable
                 snippet = ""
-            } else {
-                access = .granted
-                snippet = String(text.prefix(Self.bodySnippetCap))
+            case .notGranted:
+                bodyAuditAccess = .notGranted
+                snippet = ""
             }
-        case .notAvailable:
-            access = .notAvailable
-            snippet = ""
-        case .notGranted:
-            access = .notGranted
-            snippet = ""
         }
+        let subjectAccess = subjectSanitized?.access.auditBodyAccess
+        let subjectOriginal = subjectSanitized.flatMap { field in
+            field.original != field.text ? field.original : nil
+        }
+        let bodyOriginal = bodySanitized.flatMap { field in
+            field.original != field.text ? field.original : nil
+        }
+        let disclosed = Array(
+            Set((subjectSanitized?.disclosedRules ?? []) + (bodySanitized?.disclosedRules ?? []))
+        ).sorted()
+        let stealth = (subjectSanitized?.stealth == true) || (bodySanitized?.stealth == true)
         self.init(
             accountID: message.accountID,
             placement: message.placement,
@@ -477,7 +536,12 @@ extension AuditMessageRef {
             to: message.to,
             cc: message.cc,
             bodySnippet: snippet,
-            bodyAccess: access,
+            subjectAccess: subjectAccess,
+            bodyAccess: bodyAuditAccess,
+            subjectOriginal: subjectOriginal,
+            bodyOriginal: bodyOriginal,
+            sanitizedRules: disclosed.isEmpty ? nil : disclosed,
+            stealth: stealth ? true : nil,
             fields: fields,
             attachments: message.attachments
         )

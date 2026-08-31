@@ -90,13 +90,37 @@ enum AuditJSON {
             "date": message.date,
             "isPartial": message.isPartial
         ]
+        if let access = message.leakGuardAccess {
+            payload["subjectAccess"] = access.subjectAccess.rawValue
+            if let reason = access.subjectAccessReason {
+                payload["subjectAccessReason"] = reason.rawValue
+            }
+            payload["bodyAccess"] = access.bodyAccess.rawValue
+            if let reason = access.bodyAccessReason {
+                payload["bodyAccessReason"] = reason.rawValue
+            }
+            if !access.sanitizedRules.isEmpty {
+                payload["sanitizedRules"] = access.sanitizedRules
+            }
+            if access.stealth {
+                payload["note"] =
+                    "Some field values were substituted on device; the access log retains originals."
+            }
+        }
         switch message.body {
         case .text(let text):
-            payload["bodyAccess"] = "granted"
-            payload["body"] = text
+            if message.leakGuardAccess == nil {
+                payload["bodyAccess"] = "granted"
+            }
+            if message.leakGuardAccess?.bodyAccess != .withheldConfidential, !text.isEmpty {
+                payload["body"] = text
+            }
         case .notAvailable:
-            payload["bodyAccess"] = "granted"
-            if let html = message.prettyHTMLBody,
+            if message.leakGuardAccess == nil {
+                payload["bodyAccess"] = "granted"
+            }
+            if message.leakGuardAccess?.bodyAccess != .withheldConfidential,
+               let html = message.prettyHTMLBody,
                !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
                 let plain = MailMIME.plainText(fromHTML: html)
@@ -106,8 +130,10 @@ enum AuditJSON {
             }
         case .notGranted:
             payload["bodyAccess"] = "not_granted"
-            payload["note"] =
-                "Body omitted: the active grant for this account does not allow body access. Ask the user to enable body on the grant before summarizing or quoting the message."
+            if message.leakGuardAccess == nil {
+                payload["note"] =
+                    "Body omitted: the active grant for this account does not allow body access. Ask the user to enable body on the grant before summarizing or quoting the message."
+            }
         }
         if message.attachmentMetadataGranted {
             payload["attachmentAccess"] = "granted"

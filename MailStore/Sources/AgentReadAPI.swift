@@ -6,17 +6,20 @@ public struct AgentReadAPI {
     public let read: ReadAPI
     public let pairing: Pairing
     public let grants: GrantGate
+    public let leakGuard: OutboundLeakGuard
     public let audit: AuditLog?
 
     public init(
         read: ReadAPI,
         pairing: Pairing,
         grants: GrantGate = GrantGate(),
+        leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
         audit: AuditLog? = nil
     ) {
         self.read = read
         self.pairing = pairing
         self.grants = grants
+        self.leakGuard = leakGuard
         self.audit = audit
     }
 
@@ -198,16 +201,26 @@ public struct AgentReadAPI {
                 throw PairingError.unauthorized
             }
             let granted = message.applying(fields)
+            let (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
+            let access = ReadMessageAccess(subject: subjectField, body: bodyField)
+            let agentMessage = sanitized.withLeakGuardAccess(access)
             record(
                 kind: .get,
                 agent: agent,
                 started: started,
                 detail: path,
                 requestSummary: request,
-                responseSummary: AuditJSON.json(AuditJSON.messageDetail(granted)),
-                messages: [AuditMessageRef(granted, fields: fields)]
+                responseSummary: AuditJSON.json(AuditJSON.messageDetail(agentMessage)),
+                messages: [
+                    AuditMessageRef(
+                        agentMessage,
+                        fields: fields,
+                        subjectSanitized: subjectField,
+                        bodySanitized: bodyField
+                    )
+                ]
             )
-            return granted
+            return agentMessage
         } catch let error as PairingError where error == .unauthorized {
             throw error
         } catch {
@@ -314,11 +327,103 @@ public struct AgentReadAPI {
     ) -> Page<IndexedMessage> {
         let clamped = min(max(limit, 1), 100)
         let allowed = grants.filter(page.items, agentID: agentID)
-        let items = Array(allowed.prefix(clamped))
+        let items = Array(allowed.prefix(clamped)).map { sanitizeListItem($0, agentID: agentID) }
         // Cursor semantics under filtering are approximate for first ship; denied rows
         // never appear and never inflate the returned page.
         let next = allowed.count > clamped ? page.nextCursor : nil
         return Page(items: items, nextCursor: next)
+    }
+
+    private func sanitizeListItem(_ item: IndexedMessage, agentID: String) -> IndexedMessage {
+        guard let fields = grants.effectiveFields(for: item, agentID: agentID) else { return item }
+        let subjectField = leakGuard.sanitize(
+            text: item.subject,
+            field: .subject,
+            accountID: item.accountID,
+            placement: item.placement,
+            fieldGranted: fields.subject
+        )
+        guard subjectField.text != item.subject else { return item }
+        return IndexedMessage(
+            id: item.id,
+            accountID: item.accountID,
+            placement: item.placement,
+            from: item.from,
+            to: item.to,
+            cc: item.cc,
+            date: item.date,
+            subject: subjectField.text,
+            body: item.body,
+            isPartial: item.isPartial
+        )
+    }
+
+    private func sanitizeGet(
+        _ message: ReadMessage,
+        fields: GrantFields
+    ) -> (ReadMessage, SanitizedField, SanitizedField) {
+        let subjectField = leakGuard.sanitize(
+            text: message.subject,
+            field: .subject,
+            accountID: message.accountID,
+            placement: message.placement,
+            fieldGranted: fields.subject
+        )
+        var current = message.withSanitizedSubject(subjectField.text)
+
+        let bodyPlain = Self.plainBodyText(from: message)
+        let bodyField = leakGuard.sanitize(
+            text: bodyPlain,
+            field: .body,
+            accountID: message.accountID,
+            placement: message.placement,
+            fieldGranted: fields.body
+        )
+        let sanitizedBody = Self.readBody(from: bodyField, fields: fields, fallback: message.body)
+        current = current.withSanitizedBody(sanitizedBody)
+        return (current, subjectField, bodyField)
+    }
+
+    private static func plainBodyText(from message: ReadMessage) -> String {
+        switch message.body {
+        case .text(let text):
+            return text
+        case .notAvailable:
+            if let html = message.prettyHTMLBody,
+               !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return MailMIME.plainText(fromHTML: html)
+            }
+            return ""
+        case .notGranted:
+            return ""
+        }
+    }
+
+    private static func readBody(
+        from field: SanitizedField,
+        fields: GrantFields,
+        fallback: ReadBody
+    ) -> ReadBody {
+        guard fields.body else { return .notGranted }
+        switch field.agentAccess {
+        case .notGranted:
+            return .notGranted
+        case .withheldConfidential:
+            return .text("")
+        case .granted, .sanitized:
+            return field.text.isEmpty ? .notAvailable : .text(field.text)
+        }
+    }
+
+    private func subjectField(for item: IndexedMessage, fields: GrantFields) -> SanitizedField {
+        leakGuard.sanitize(
+            text: item.subject,
+            field: .subject,
+            accountID: item.accountID,
+            placement: item.placement,
+            fieldGranted: fields.subject
+        )
     }
 
     private func record(
@@ -351,9 +456,12 @@ public struct AgentReadAPI {
 
     private func messageRefs(_ items: [IndexedMessage], agentID: String) -> [AuditMessageRef] {
         items.prefix(AuditLog.messageRefCap).map { item in
-            AuditMessageRef(
+            let fields = grants.effectiveFields(for: item, agentID: agentID) ?? .headersOnly
+            let subjectSanitized = subjectField(for: item, fields: fields)
+            return AuditMessageRef(
                 item,
-                fields: grants.effectiveFields(for: item, agentID: agentID) ?? .headersOnly
+                fields: fields,
+                subjectSanitized: subjectSanitized
             )
         }
     }

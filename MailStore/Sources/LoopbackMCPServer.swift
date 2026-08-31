@@ -461,7 +461,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "get",
                 "description":
-                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. bodyAccess \"not_granted\" means the grant denies body — ask the user to enable body on the grant. bodyAccess \"granted\" with no body field means truly empty.",
+                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant or leak_guard. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [

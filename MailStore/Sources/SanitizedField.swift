@@ -69,3 +69,36 @@ public struct SanitizedField: Equatable, Sendable {
         )
     }
 }
+
+extension FieldAccess {
+    var auditBodyAccess: AuditBodyAccess {
+        switch self {
+        case .granted: .granted
+        case .notGranted: .notGranted
+        case .sanitized: .sanitized
+        case .withheldConfidential: .withheldConfidential
+        }
+    }
+}
+
+public struct ReadMessageAccess: Equatable, Sendable {
+    public let subjectAccess: FieldAccess
+    public let bodyAccess: FieldAccess
+    public let subjectAccessReason: FieldAccessReason?
+    public let bodyAccessReason: FieldAccessReason?
+    public let sanitizedRules: [String]
+    public let subjectOriginal: String?
+    public let bodyOriginal: String?
+    public let stealth: Bool
+
+    public init(subject: SanitizedField, body: SanitizedField) {
+        subjectAccess = subject.agentAccess
+        bodyAccess = body.agentAccess
+        subjectAccessReason = subject.reason
+        bodyAccessReason = body.reason
+        sanitizedRules = Array(Set(subject.disclosedRules + body.disclosedRules)).sorted()
+        subjectOriginal = subject.original != subject.text ? subject.original : nil
+        bodyOriginal = body.original != body.text ? body.original : nil
+        stealth = subject.stealth || body.stealth
+    }
+}
