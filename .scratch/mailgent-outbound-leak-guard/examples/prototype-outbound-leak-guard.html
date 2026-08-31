@@ -1,0 +1,2247 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: outbound leak guard v1 integrated into Grant desk.
+     Branch: proto/outbound-leak-guard
+     Ticket: .scratch/mailgent-outbound-leak-guard/issues/01-prototype-leak-guard.md -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Grant desk + leak guard prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --paper: #fff;
+      --canvas: #e8eaef;
+      --accent: #007aff;
+      --accent-soft: rgba(0, 122, 255, 0.12);
+      --accent-border: rgba(0, 122, 255, 0.45);
+      --blue: #007aff;
+      --blue-soft: #e8f2ff;
+      --green: #248a3d;
+      --amber: #b86e00;
+      --amber-soft: #fff4e0;
+      --red: #ff3b30;
+      --red-soft: rgba(255, 59, 48, 0.06);
+      --red-stripe: rgba(255, 59, 48, 0.28);
+      --red-legend: rgba(255, 59, 48, 0.72);
+      --sel: rgba(0, 122, 255, 0.12);
+      --shadow: 0 12px 40px #00000022, 0 1px 0 #ffffff80 inset;
+      --radius: 10px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+      --toggle-w: 32px;
+      --toggle-h: 18px;
+      --toggle-thumb: 14px;
+      --toggle-pad: 2px;
+      --chip-h: 16px;
+      --chip-pad-x: 4px;
+      --chip-font: 10px;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #b8c4d4 0%, #8a96a8 100%);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      color: var(--ink);
+      padding: 24px 20px 48px;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .top {
+      max-width: 1280px;
+      margin: 0 auto 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+    }
+    .top h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; }
+    .top p { margin: 4px 0 0; color: #2c3a4a; font-size: 12px; }
+    .note {
+      max-width: 420px;
+      background: #ffffffb8;
+      border: 1px solid #ffffff90;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #2c3a4a;
+      line-height: 1.5;
+    }
+    .layout {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    .window {
+      background: var(--paper);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid #00000018;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 36px;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec);
+      border-bottom: 1px solid var(--line);
+      position: relative;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .traffic {
+      position: absolute;
+      left: 12px;
+      display: flex;
+      gap: 7px;
+    }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+    .body { padding: 14px 16px 16px; }
+    .desk-head {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+      min-height: 24px;
+    }
+    .desk-toolbar .desk-head {
+      margin-bottom: 0;
+    }
+    .desk-head .btn-sm {
+      border: 1px solid var(--line);
+      background: #f5f5f7;
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .desk-head .btn-sm.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .desk-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      min-height: 28px;
+    }
+    .tabs {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background: rgba(0, 0, 0, 0.06);
+      border-radius: 6px;
+      padding: 1px;
+      width: 220px;
+      flex: none;
+      align-self: center;
+    }
+    .tabs button {
+      border: 0;
+      background: transparent;
+      border-radius: 5px;
+      padding: 4px 0;
+      font-weight: 500;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 0.5px 1px #0000001a; }
+    .seg {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: rgba(0, 0, 0, 0.06);
+      border-radius: 6px;
+      padding: 1px;
+      margin-bottom: 10px;
+    }
+    .seg button {
+      border: 0;
+      background: transparent;
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-weight: 500;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .seg button.on { background: #fff; color: var(--ink); }
+    .pane.hidden { display: none; }
+    .hint { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .field {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 10px;
+      margin-bottom: 8px;
+      background: #fff;
+    }
+    .check {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 0;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      color: inherit;
+    }
+    .check .box {
+      width: 14px; height: 14px; margin-top: 1px; flex: none;
+      border: 1px solid #8e8e93;
+      border-radius: 3px;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      color: #fff;
+    }
+    .check.on .box { background: var(--accent); border-color: var(--accent); }
+    .check.on .box::after { content: "✓"; }
+    .check .t { font-size: 12px; }
+    .check.emph .t { font-weight: 650; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+    }
+    .check-row .check { flex: 1; min-width: 0; }
+    .check-row.indent { padding-left: 18px; }
+    .check-row .mini {
+      margin-left: 0;
+      flex: none;
+      max-width: 62%;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px;
+      align-items: center;
+    }
+    .chip {
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: var(--chip-h);
+      min-height: var(--chip-h);
+      padding: 0 var(--chip-pad-x);
+      border-radius: 9999px;
+      background: #eef1f6;
+      border: 1px solid #d5dae3;
+      font-weight: 500;
+      font-size: var(--chip-font);
+      line-height: 1;
+      letter-spacing: 0;
+      color: #516079;
+      white-space: nowrap;
+      flex: none;
+    }
+    .chip.on {
+      background: var(--accent-soft);
+      border-color: rgba(0, 122, 255, 0.35);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .chip.off {
+      opacity: 0.38;
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+    }
+    button.chip {
+      font: inherit;
+      font-size: var(--chip-font);
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .12s, border-color .12s, opacity .12s;
+    }
+    button.chip.on { font-weight: 600; }
+    button.chip:hover { opacity: 1; border-color: #7eb6ff; }
+    .chip.shield.on {
+      background: var(--amber-soft);
+      border-color: rgba(184, 110, 0, 0.35);
+      color: var(--amber);
+      opacity: 1;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .chip.shield.off {
+      opacity: 0.38;
+      text-decoration: none;
+      background: #eef1f6;
+      border-color: #d5dae3;
+      color: #516079;
+    }
+    .chip.shield.off .leak-guard-ico { opacity: 0.55; }
+    .chip.shield.pending {
+      opacity: 0.72;
+      text-decoration: none;
+      background: var(--amber-soft);
+      border-color: rgba(184, 110, 0, 0.25);
+      color: var(--amber);
+    }
+    .chip.shield {
+      position: relative;
+    }
+    .chip-glyph-proxy {
+      visibility: hidden;
+      font-weight: 600;
+      line-height: 1;
+      pointer-events: none;
+      user-select: none;
+    }
+    .chip-glyph-icon {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .chip-glyph-icon .leak-guard-ico {
+      width: 1.25em;
+      height: 1.25em;
+      display: block;
+    }
+    .catalog {
+      max-height: 340px;
+      overflow: auto;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 8px;
+      padding: 6px 8px;
+      margin: 8px 0 10px;
+      background: #fafafa;
+    }
+    .card-body.flush .catalog,
+    .card-body.flush .rules {
+      border: 0;
+      border-radius: 0;
+      margin: 0;
+      background: transparent;
+    }
+    .acct { margin-bottom: 8px; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fafafa;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      min-height: 34px;
+      border-bottom: 1px solid var(--line);
+      background: #f5f5f7;
+    }
+    .card-hint {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .card-hint .info-btn {
+      vertical-align: middle;
+      margin: 0 1px;
+      position: relative;
+      top: -1px;
+    }
+    .card-body.card-hint-row { padding-bottom: 4px; }
+    .chip.shield.demo {
+      pointer-events: none;
+      vertical-align: middle;
+      margin: 0 2px;
+    }
+    .info-panel .chip.shield.demo { margin: 0 4px 0 2px; }
+    .card-title {
+      flex: 1;
+      font-weight: 600;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .card-body { padding: 6px 10px 8px; }
+    .card-body.flush { padding: 0; }
+    .card .info-panel {
+      margin: 8px 10px;
+      border-radius: 6px;
+    }
+    .card-body .info-panel { margin: 4px 0 8px; }
+    .card-body .row-wrap + .row-wrap {
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      padding-top: 4px;
+      margin-top: 2px;
+    }
+    .master-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .master-row label { flex: 1; font-weight: 600; font-size: 12px; line-height: 1.35; }
+    .master-row label small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .master-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+      min-height: var(--toggle-h);
+    }
+    .master-controls .info-btn,
+    .master-controls .toggle {
+      margin: 0;
+      flex: none;
+    }
+    .toggle {
+      width: var(--toggle-w);
+      height: var(--toggle-h);
+      border-radius: calc(var(--toggle-h) / 2);
+      border: 0;
+      background: #c7c7cc;
+      position: relative;
+      transition: background .15s;
+      flex: none;
+    }
+    .toggle.on { background: var(--green); }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: var(--toggle-pad);
+      left: var(--toggle-pad);
+      width: var(--toggle-thumb);
+      height: var(--toggle-thumb);
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 2px #00000026;
+      transition: transform .15s;
+    }
+    .toggle.on::after {
+      transform: translateX(calc(var(--toggle-w) - var(--toggle-thumb) - var(--toggle-pad) * 2));
+    }
+    .section { margin-bottom: 14px; }
+    .section h3 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      min-height: var(--toggle-h);
+    }
+    .row label { flex: 1; min-width: 0; line-height: 1.35; }
+    .row label small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+      margin-top: 1px;
+      line-height: 1.3;
+    }
+    .row-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+    }
+    select, input[type=text], textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: #fff;
+    }
+    textarea { min-height: 88px; resize: vertical; font-family: inherit; }
+    .rules { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .rule {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      align-items: start;
+    }
+    .rule:last-child { border-bottom: 0; }
+    .rule .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .rule .actions { display: flex; gap: 4px; }
+    .rule .actions button {
+      border: 1px solid var(--line);
+      background: #f5f5f7;
+      border-radius: 5px;
+      padding: 2px 6px;
+      font-size: 11px;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: #f5f5f7;
+      border-radius: 7px;
+      padding: 6px 10px;
+      font-weight: 600;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.danger { color: var(--red); border: 0; background: transparent; padding: 0; font-size: 12px; }
+    .editor {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fafafa;
+      margin-top: 8px;
+    }
+    .editor.hidden { display: none; }
+    .hidden { display: none !important; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .access-split {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    @media (max-width: 720px) { .access-split { grid-template-columns: 1fr; } }
+    .asset-list {
+      border: 0;
+      border-radius: 0;
+      overflow: auto;
+      max-height: none;
+      margin-bottom: 0;
+    }
+    .asset {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .asset:last-child { border-bottom: 0; }
+    .asset.sel { background: var(--sel); }
+    .asset .path { font-weight: 600; font-size: 12px; line-height: 1.35; }
+    .asset .caps { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .assets-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .field-headline { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+    .field-sub { font-size: 11px; color: var(--muted); margin: 0 0 10px; }
+    .preset-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .preset-row .label { font-size: 11px; font-weight: 600; color: var(--muted); margin-right: 4px; }
+    .btn-preset {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .btn-preset.on {
+      border-color: var(--accent-border);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .btn-preset:disabled { opacity: 0.45; cursor: default; }
+    .pill-group { margin-bottom: 8px; }
+    .pill-group-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid rgba(142, 142, 147, 0.25);
+      background: rgba(142, 142, 147, 0.08);
+      color: var(--muted);
+      cursor: pointer;
+      font-weight: 400;
+    }
+    .pill.on {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: var(--accent-border);
+      border-width: 1.5px;
+      font-weight: 500;
+    }
+    .pill.off { text-decoration: line-through; text-decoration-color: rgba(142, 142, 147, 0.45); }
+    .pill svg { width: 11px; height: 11px; flex: none; opacity: 0.85; }
+    .pill:disabled { opacity: 0.45; cursor: default; }
+    .divider { height: 1px; background: var(--line); margin: 10px 0; }
+    .preview-title { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+    .preview-caption { font-size: 10px; color: var(--muted); margin: 0 0 8px; }
+    .msg-card {
+      border: 1px solid rgba(142, 142, 147, 0.2);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .source-chip {
+      display: inline-block;
+      font-size: 10px;
+      color: var(--muted);
+      background: rgba(142, 142, 147, 0.1);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-bottom: 8px;
+    }
+    .preview-line {
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .preview-line .lbl {
+      font-weight: 300;
+      color: var(--muted);
+      flex: none;
+    }
+    .preview-line .val { flex: 1; word-break: break-word; }
+    .addr-pill {
+      display: inline-block;
+      font-size: 11px;
+      background: rgba(142, 142, 147, 0.12);
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-right: 4px;
+    }
+    .body-box {
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 8px;
+      background: rgba(142, 142, 147, 0.06);
+      border-radius: 8px;
+      margin-top: 4px;
+    }
+    .attach-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .attach-col .lbl { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .attach-tile {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px;
+      min-height: 32px;
+      background: rgba(142, 142, 147, 0.05);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .lock-legend {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--red-legend);
+      margin-top: 8px;
+    }
+    .lock-legend .lock-icon { font-size: 9px; }
+    .dev-panel {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+    .dev-panel summary {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 3px; border: 1px solid #0002;
+    }
+    .swatch.grant { background: repeating-linear-gradient(-45deg,#eee,#eee 2px,#e0e0e0 2px,#e0e0e0 4px); }
+    .swatch.withheld { background: var(--amber-soft); border-color: #e8b84d; }
+    .swatch.sanitized { background: #fff8e6; border: 2px dashed #e8b84d; }
+    .preview-block {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: #fafafa;
+    }
+    .preview-block h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .preview-block .text { white-space: pre-wrap; word-break: break-word; }
+    .json {
+      font: 11px/1.45 var(--mono);
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 8px;
+      padding: 10px 12px;
+      overflow: auto;
+      max-height: 220px;
+    }
+    .json .k { color: #9cdcfe; }
+    .json .s { color: #ce9178; }
+    .json .n { color: #b5cea8; }
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+    .badge.grant { background: var(--red-soft); color: var(--red-legend); }
+    .badge.leak { background: var(--amber-soft); color: var(--amber); }
+    .badge.stealth { background: #eef2ff; color: #3d5afe; }
+    .badge.ok { background: #e8f5e9; color: var(--green); }
+    .hatch {
+      display: block;
+      width: 100%;
+      min-height: 18px;
+      border-radius: 4px;
+      position: relative;
+      background:
+        repeating-linear-gradient(-45deg, var(--red-stripe) 0, var(--red-stripe) 1px, var(--red-soft) 1px, var(--red-soft) 5px);
+    }
+    .hatch.inline {
+      display: inline-block;
+      min-width: 80px;
+      vertical-align: middle;
+    }
+    .hatch::after {
+      content: "🔒";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      opacity: 0.52;
+    }
+    .hatch-text {
+      visibility: hidden;
+      font-size: 12px;
+      padding: 2px 4px;
+    }
+    .withheld-label {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--amber-soft);
+      border: 1px solid #e8b84d;
+      color: var(--amber);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .sanitized-text {
+      background: linear-gradient(180deg, transparent 60%, #ffe8a8 60%);
+      cursor: help;
+      border-bottom: 1px dotted var(--amber);
+    }
+    .warn { color: var(--amber); font-size: 11px; margin-top: 6px; }
+    .err { color: var(--red); font-size: 11px; margin-top: 4px; }
+    .check-inline {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 4px 0; cursor: pointer;
+    }
+    .check-inline input { margin-top: 2px; }
+    .info-btn {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 0;
+      background: rgba(142, 142, 147, 0.18);
+      color: #636366;
+      font-size: 11px;
+      font-weight: 600;
+      font-style: italic;
+      font-family: Georgia, "Times New Roman", Times, serif;
+      flex: none;
+      line-height: 1;
+      padding: 0;
+      transition: background .12s, color .12s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .info-btn:hover { color: var(--blue); background: var(--blue-soft); }
+    .info-btn.on { background: var(--blue-soft); color: var(--blue); }
+    .info-panel {
+      margin: 0 0 10px;
+      padding: 10px 12px;
+      border: 1px solid #cfe0f5;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #f8fbff, #f3f8fe);
+      font-size: 11px;
+      line-height: 1.55;
+      color: #2c3340;
+      animation: infoIn .18s ease;
+    }
+    @keyframes infoIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .info-panel h4 { margin: 0 0 6px; font-size: 12px; font-weight: 650; color: var(--ink); }
+    .info-panel p { margin: 0 0 6px; }
+    .info-panel p:last-child { margin-bottom: 0; }
+    .info-panel ul, .info-panel ol { margin: 4px 0 6px; padding-left: 18px; }
+    .info-panel li { margin-bottom: 3px; }
+    .info-panel code {
+      font: 10px/1.35 var(--mono);
+      background: #0000000a;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .info-panel .tag {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      padding: 1px 5px;
+      border-radius: 4px;
+      margin-right: 4px;
+    }
+    .info-panel .tag.grant { background: var(--red-soft); color: var(--red); }
+    .info-panel .tag.leak { background: var(--amber-soft); color: var(--amber); }
+    .info-panel .info-examples {
+      margin: 6px 0 0;
+      padding: 6px 8px;
+      border-radius: 5px;
+      background: rgba(0, 0, 0, 0.04);
+      font-size: 10px;
+      color: #636366;
+      line-height: 1.45;
+    }
+    .info-panel .info-examples strong {
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+    .row-wrap { margin-bottom: 0; }
+    .access-leak-row { margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <h1>Grant desk + leak guard</h1>
+      <p>Throwaway prototype · scope shields + privacy rules · no Core ML</p>
+    </div>
+    <div class="note">
+      <strong>HITL gate.</strong> Leak guard lives inside Grant desk: opt-in per placement on Scope, detectors on Privacy.
+      Preview on the right shows grant caps + sanitization together.
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="window">
+      <div class="titlebar">
+        <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        Grant desk
+      </div>
+      <div class="body">
+        <div class="desk-toolbar">
+          <div class="tabs" role="tablist">
+            <button type="button" class="on" data-desk-tab="scope">Scope</button>
+            <button type="button" data-desk-tab="access">Access</button>
+            <button type="button" data-desk-tab="privacy">Privacy</button>
+          </div>
+          <div style="flex:1"></div>
+          <div class="desk-head" id="editControls"></div>
+        </div>
+
+        <div id="pane-scope"></div>
+        <div id="pane-access" class="pane hidden"></div>
+        <div id="pane-privacy" class="pane hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden sample inputs (edited via dev panel) -->
+  <div class="hidden" aria-hidden="true">
+    <input type="text" id="sampleSubject" value="Re: API key for PROJECT-8842 — call Marotron at +1 555-0100">
+    <textarea id="sampleBody">Hi team,
+
+Please rotate the key: sk-live-abc123xyz789secretkey00001
+
+My home address is 742 Evergreen Terrace. Reach me at marotron@gmail.com or call +1 555-0100.
+
+Thanks,
+Marotron</textarea>
+    <input type="text" id="sampleFrom" value="billing@hostco.example">
+    <input type="text" id="sampleTo" value="you@yahoo.com">
+    <input type="text" id="sampleCc" value="finance@hostco.example">
+    <input type="text" id="sampleDate" value="2026-03-12T09:14:00Z">
+  </div>
+
+  <script>
+    const DEFAULT_FIELDS = {
+      subject: true, from: true, to: true, cc: true, date: true,
+      body: false, attachmentMetadata: false, attachmentContent: false,
+    };
+
+    const PRESETS = {
+      headersOnly: { subject: true, from: true, to: true, cc: true, date: true, body: false, attachmentMetadata: false, attachmentContent: false },
+      readMail: { subject: true, from: true, to: true, cc: true, date: true, body: true, attachmentMetadata: false, attachmentContent: false },
+      full: { subject: true, from: true, to: true, cc: true, date: true, body: true, attachmentMetadata: true, attachmentContent: true },
+    };
+
+    const FIELD_PILLS = {
+      envelope: [
+        { key: "subject", label: "Subject", icon: "text" },
+        { key: "from", label: "From", icon: "envelope" },
+        { key: "to", label: "To", icon: "tray" },
+        { key: "cc", label: "Cc", icon: "people" },
+        { key: "date", label: "Date & Time", icon: "calendar" },
+      ],
+      content: [
+        { key: "body", label: "Body / snippet", icon: "doc" },
+        { key: "attachmentMetadata", label: "Attachment names", icon: "clip" },
+        { key: "attachmentContent", label: "Attachment content", icon: "file" },
+      ],
+    };
+
+    const PILL_ICONS = {
+      text: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 3h8M2 6h5M2 9h6"/></svg>',
+      envelope: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2.5" width="10" height="7" rx="1"/><path d="M1 3.5l5 3.5 5-3.5"/></svg>',
+      tray: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 4h8v5a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/><path d="M4.5 4V3a1.5 1.5 0 013 0v1"/></svg>',
+      people: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4" cy="4" r="1.5"/><circle cx="8" cy="4" r="1.5"/><path d="M1.5 9c0-1.5 1.1-2.5 2.5-2.5s2.5 1 2.5 2.5M6 9c0-1.5 1.1-2.5 2.5-2.5S11 7.5 11 9"/></svg>',
+      calendar: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="9" height="8" rx="1"/><path d="M4 1.5v2M8 1.5v2M1.5 5h9"/></svg>',
+      doc: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 1.5h4l2 2v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-8a1 1 0 011-1z"/><path d="M7 1.5v2h2"/></svg>',
+      clip: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5 6.5V3.5a1.5 1.5 0 013 0v4a2.5 2.5 0 01-5 0V3"/></svg>',
+      file: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 1.5h4l2 2v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-8a1 1 0 011-1z"/></svg>',
+    };
+
+    const CATALOG = [
+      { id: "work", label: "work@gmail.com", mailboxes: ["INBOX", "Sent", "Archive"] },
+      { id: "personal", label: "personal@icloud.com", mailboxes: ["INBOX", "Drafts"] },
+    ];
+
+    const FIELD_BADGES = [
+      { label: "S", key: "subject" },
+      { label: "F", key: "from" },
+      { label: "T", key: "to" },
+      { label: "Cc", key: "cc" },
+      { label: "D", key: "date" },
+      { label: "B", key: "body" },
+      { label: "A", key: "attachmentMetadata" },
+      { label: "C", key: "attachmentContent" },
+    ];
+
+    const LEAK_GUARD_ICON_SVG = `<svg class="leak-guard-ico" viewBox="0 0 12 12" aria-hidden="true"><path fill="currentColor" d="M6 1 1.8 2.8v3.2c0 2.4 1.7 4.6 4.2 5.2 2.5-.6 4.2-2.8 4.2-5.2V2.8L6 1z"/><text x="6" y="7.35" text-anchor="middle" font-size="4.8" font-weight="700" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,sans-serif">L</text></svg>`;
+
+    function leakGuardChipDemo(state = "on") {
+      return `<span class="chip shield ${state} demo" aria-hidden="true">${shieldChipInner()}</span>`;
+    }
+
+    const BUILT_INS = [
+      { id: "apiKeys", label: "API keys", hint: "Stripe, AWS, GitHub prefixes", examples: "e.g. sk-live-abc123…, AKIAIOSFODNN7EXAMPLE, ghp_xxxxxxxx", pattern: /\b(sk-[a-zA-Z0-9_-]{8,}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{20,})\b/g },
+      { id: "jwt", label: "JWT tokens", hint: "Three-part base64 tokens", examples: "e.g. eyJhbGciOiJIUzI1NiIs…", pattern: /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/g },
+      { id: "privateKeys", label: "Private keys", hint: "PEM blocks in mail", examples: "e.g. -----BEGIN RSA PRIVATE KEY-----", pattern: /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g },
+      { id: "passwordCtx", label: "Password patterns", hint: "Label = value lines", examples: "e.g. password=hunter2, secret: abc123, token=xyz", pattern: /\b(?:password|passwd|secret|token)\s*[:=]\s*\S+/gi },
+      { id: "creditCards", label: "Credit cards", hint: "13–19 digit runs", examples: "e.g. 4111 1111 1111 1111, 3782-822463-10005", pattern: /\b(?:\d[ -]*?){13,19}\b/g },
+      { id: "ssn", label: "SSN", hint: "US social security", examples: "e.g. 123-45-6789", pattern: /\b\d{3}-\d{2}-\d{4}\b/g },
+      { id: "phones", label: "Phone numbers", hint: "US / intl formats", examples: "e.g. +1 555-0100, (415) 555-1212, 555.867.5309", pattern: /\+?\d[\d\s().-]{8,}\d/g },
+      { id: "emails", label: "Email addresses", hint: "name@domain.tld", examples: "e.g. marotron@gmail.com, user@acme.co.uk", pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g }
+    ];
+
+    const INFO_CONTENT = {
+      "scope-overview": {
+        title: "Scope tab",
+        body: `<p>Scope decides <strong>which placements an agent may touch</strong> and sets default Access caps per row.</p>
+          <ul>
+            <li><strong>Checkbox</strong> → allow or deny a mailbox (or whole account).</li>
+            <li><strong>Field badges</strong> (S/F/T/D/B/A/C) → per-placement grant caps; click to toggle what the agent may read.</li>
+            <li>${leakGuardChipDemo()} <strong>Leak guard</strong> → opt-in scanning for that placement only. Grant must exist first.</li>
+          </ul>
+          <p>Grants and leak guard are independent: you can allow body access but still scan subject + body for secrets before MCP responses leave MailGent.</p>`
+      },
+      "leak-guard-master": {
+        title: "Leak guard master switch",
+        body: `<p>Global on/off for outbound sanitization. When off, MCP responses pass through after grant checks only — no heuristic scan, no custom rules.</p>
+          <ul>
+            <li>Runs <strong>on device</strong> after GrantGate, before JSON is returned to the agent.</li>
+            <li>Scans <strong>subject + body only</strong> in v1 (headers like From/To are not scanned).</li>
+            <li>Requires at least one placement with ${leakGuardChipDemo()} leak guard enabled; otherwise nothing is scanned even if master is on.</li>
+            <li>Alpha policy: detector errors <strong>fail open</strong> (content passes unmodified).</li>
+          </ul>`
+      },
+      "shield-scan": {
+        title: "Leak guard icon (per placement)",
+        body: `<p>Opt-in allowlist entry for leak guard. Same ${leakGuardChipDemo()} icon everywhere — Scope rows, Access asset list, and docs.</p>
+          <ul>
+            <li>Click ${leakGuardChipDemo("off")} on allowed rows to opt in; ${leakGuardChipDemo("on")} when active.</li>
+            <li><strong>Active</strong> ${leakGuardChipDemo("on")} → master on and placement opted in.</li>
+            <li><strong>Pending</strong> ${leakGuardChipDemo("pending")} → opted in but master switch off.</li>
+            <li><strong>Off</strong> ${leakGuardChipDemo("off")} → not opted in.</li>
+            <li>Account-wide grants show one icon for the whole account (<code>accountID/*</code>).</li>
+            <li>Empty allowlist → warning on Scope when master is on; preview shows <em>scan skipped</em>.</li>
+          </ul>`
+      },
+      "grant-field-badges": {
+        title: "Grant field badges",
+        body: `<p>Compact caps for what the agent may read on this placement. Blue = granted; struck-through = withheld.</p>
+          <ul>
+            <li><strong>S</strong> Subject · <strong>F</strong> From · <strong>T</strong> To · <strong>D</strong> Date</li>
+            <li><strong>B</strong> Body · <strong>A</strong> Attachment names · <strong>C</strong> Attachment content</li>
+          </ul>
+          <p>Denied fields return <code>not_granted</code> in MCP JSON and show red hatch in the access log. Leak guard never upgrades a denied field — it only sanitizes granted subject/body text.</p>`
+      },
+      "access-overview": {
+        title: "Access tab",
+        body: `<p>Edit field caps for one allowed placement at a time. Each grant asset keeps its own <code>GrantFields</code> snapshot.</p>
+          <ul>
+            <li>Select an asset in the list → badges below toggle caps for that placement only.</li>
+            <li><strong>Preview as</strong> dropdown drives the live preview on the right (grant + leak guard for that path).</li>
+            <li>${leakGuardChipDemo()} state mirrors Scope — toggle on Scope rows or below when editing.</li>
+          </ul>
+          <p>Presets (Headers only / Read mail / Full) ship in production; this prototype uses per-badge toggles only.</p>`
+      },
+      "privacy-builtins": {
+        title: "Built-in detectors",
+        body: `<p>Heuristic regex classes applied to granted subject + body on ${leakGuardChipDemo()} opted-in placements. No Core ML in v1.</p>
+          <ul>
+            <li>Each class can be toggled independently.</li>
+            <li>On match → redact with <code>[REDACTED:category]</code> unless a custom rule overlaps with replace action.</li>
+            <li>Longest match wins when spans overlap; custom rules follow list order after built-ins are collected.</li>
+          </ul>
+          <p>Tap <strong>i</strong> on a detector row for examples, pattern detail, and false-positive notes.</p>`
+      },
+      "custom-filters": {
+        title: "Custom filters",
+        body: `<p>User-defined patterns for names, addresses, internal IDs, etc.</p>
+          <ul>
+            <li><strong>Literal</strong> — exact substring (optional case insensitive).</li>
+            <li><strong>Wildcard</strong> — <code>*</code> and <code>?</code> glob, not path-style.</li>
+            <li><strong>Regex</strong> — JavaScript regex; invalid patterns blocked on save.</li>
+            <li><strong>Redact</strong> → marker in output; agent always sees <code>sanitized</code>.</li>
+            <li><strong>Replace</strong> → fake value; choose whether agent is told (disclosed) or not (stealth).</li>
+          </ul>
+          <p>Rules are global — they apply on every ${leakGuardChipDemo()} opted-in placement when enabled.</p>`
+      },
+      "hit-modes": {
+        title: "On confidential hit",
+        body: `<p>Per-field behavior when any detector or custom rule matches.</p>
+          <ul>
+            <li><strong>Redact / replace matching parts</strong> — only matched spans change; rest of field stays granted. MCP: <code>sanitized</code> + <code>sanitizedRules</code> when disclosed.</li>
+            <li><strong>Block entire field</strong> — whole subject or body withheld. MCP: <code>withheld_confidential</code>, reason <code>leak_guard</code>; access log shows amber shield, not hatch.</li>
+          </ul>
+          <p>Subject and body can use different modes (e.g. redact body spans but block sensitive subjects entirely).</p>`
+      },
+      "stealth-replace": {
+        title: "Stealth vs disclosed replace",
+        body: `<p>When a custom rule uses <strong>Replace with fake value</strong>:</p>
+          <ul>
+            <li><strong>Tell agent sanitized</strong> (on) → MCP flags <code>sanitized</code>, includes rule label in <code>sanitizedRules</code>; access log shows dashed amber spans with hover original.</li>
+            <li><strong>Stealth</strong> (off) → agent sees <code>granted</code> plain text with fake value baked in; human audit log still retains original for hover/tooltip.</li>
+          </ul>
+          <p>Redact actions are always disclosed. Stealth is for cases where the agent should treat substituted text as real (e.g. pseudonym in a coaching thread).</p>`
+      },
+      "preview-states": {
+        title: "Preview: grant vs leak guard",
+        body: `<p>Three visually distinct outcomes — never conflate grant denial with autodetect.</p>
+          <ul>
+            <li><span class="tag grant">Grant</span> Red hatch / <code>not_granted</code> — you did not allow this field on Scope. Leak guard did not run on withheld text.</li>
+            <li><span class="tag leak">Leak</span> Amber shield — whole field blocked because hit mode = block entire field.</li>
+            <li><span class="tag leak">Leak</span> Dashed underline — span redacted or replaced; hover for original in access log mock.</li>
+            <li><strong>Stealth replace</strong> — preview badge shows granted; JSON may include a <code>note</code> for humans only.</li>
+          </ul>`
+      },
+      "mcp-access-flags": {
+        title: "MCP access flags",
+        body: `<p>Fragment fields the agent consumes on <code>get</code> (v1 subject + body):</p>
+          <ul>
+            <li><code>subjectAccess</code> / <code>bodyAccess</code> — <code>granted</code> · <code>not_granted</code> · <code>sanitized</code> · <code>withheld_confidential</code></li>
+            <li><code>subjectAccessReason</code> / <code>bodyAccessReason</code> — <code>grant</code> or <code>leak_guard</code></li>
+            <li><code>sanitizedRules</code> — labels of rules that fired (disclosed replaces + all redactions)</li>
+          </ul>
+          <p>Grant denial uses <code>not_granted</code> + reason <code>grant</code>. Autodetect never uses <code>not_granted</code>.</p>`
+      }
+    };
+
+    BUILT_INS.forEach(b => {
+      const examplesHtml = b.examples
+        ? `<p class="info-examples"><strong>Examples</strong>${esc(b.examples)}</p>`
+        : "";
+      INFO_CONTENT["builtin-" + b.id] = {
+        title: b.label,
+        body: builtinDetail(b.id) + examplesHtml
+      };
+    });
+
+    function builtinDetail(id) {
+      const map = {
+        apiKeys: `<p>Matches common secret prefixes in mail threads and forwards.</p>
+          <ul><li>Stripe <code>sk-…</code> · AWS <code>AKIA…</code> · GitHub <code>ghp_…</code></li>
+          <li>Action: redact span → <code>[REDACTED:apiKeys]</code></li>
+          <li>False positives: product codes starting with <code>sk-</code> in non-secret context — tune with custom allow patterns later.</li></ul>`,
+        jwt: `<p>Three base64url segments separated by dots (<code>header.payload.sig</code>).</p>
+          <ul><li>Often pasted into support tickets or CI logs forwarded by email.</li>
+          <li>Action: redact entire token string.</li></ul>`,
+        privateKeys: `<p>PEM blocks between BEGIN/END PRIVATE KEY lines, including multiline bodies.</p>
+          <ul><li>Common when devs email themselves backup keys (bad practice, frequent in real mail).</li>
+          <li>Action: redact full PEM block.</li></ul>`,
+        passwordCtx: `<p>Labelled secrets: <code>password=</code>, <code>secret:</code>, <code>token=</code>, etc.</p>
+          <ul><li>Case-insensitive label; value runs to next whitespace.</li>
+          <li>May catch login URLs in prose — disable if noisy for your mail.</li></ul>`,
+        creditCards: `<p>13–19 digit runs with optional spaces/dashes (Luhn not verified in v1).</p>
+          <ul><li>May match long order/tracking numbers — pair with hit mode or custom exceptions.</li></ul>`,
+        ssn: `<p>US Social Security format <code>###-##-####</code> only.</p>`,
+        phones: `<p>US and loose international formats: <code>+1 …</code>, parentheses, dots.</p>
+          <ul><li>Custom literal rules better for your known numbers (see sample “My phone”).</li></ul>`,
+        emails: `<p>Generic <code>local@domain.tld</code> pattern.</p>
+          <ul><li>Can be broad — disable if you rely on From/To headers and only want custom address rules.</li></ul>`
+      };
+      return map[id] || "<p>Built-in heuristic detector.</p>";
+    }
+
+    function infoBtn(id) {
+      const on = state.expandedInfo === id;
+      return `<button type="button" class="info-btn ${on ? "on" : ""}" data-info="${id}" aria-expanded="${on}" title="More information">i</button>`;
+    }
+
+    function infoPanel(id) {
+      if (state.expandedInfo !== id) return "";
+      const content = INFO_CONTENT[id];
+      if (!content) return "";
+      return `<div class="info-panel" role="region" aria-labelledby="info-title-${id}"><h4 id="info-title-${id}">${esc(content.title)}</h4>${content.body}</div>`;
+    }
+
+    function toggleInfo(id) {
+      state.expandedInfo = state.expandedInfo === id ? null : id;
+      renderDesk();
+    }
+
+    function mountPreviewInfoSlots() {
+      ["preview-states", "mcp-access-flags"].forEach(id => {
+        const slot = document.getElementById("info-slot-" + id);
+        if (slot) slot.innerHTML = infoPanel(id);
+        document.querySelectorAll(`[data-info="${id}"]`).forEach(btn => {
+          const on = state.expandedInfo === id;
+          btn.classList.toggle("on", on);
+          btn.setAttribute("aria-expanded", on);
+        });
+      });
+    }
+
+    const state = {
+      deskTab: "scope",
+      isEditing: true,
+      guardOn: false,
+      leakGuardScopes: new Set(),
+      draftFrom: "",
+      draftDate: "",
+      denyMode: false,
+      grants: [
+        { mode: "allow", accountID: "work", placement: "INBOX", fields: { ...DEFAULT_FIELDS, body: true } },
+        { mode: "allow", accountID: "work", placement: "Sent", fields: { ...DEFAULT_FIELDS, body: true } },
+        { mode: "allow", accountID: "personal", placement: "INBOX", fields: { ...DEFAULT_FIELDS } },
+      ],
+      selectedKey: "allow|work|INBOX",
+      previewScope: "work/INBOX",
+      builtIn: Object.fromEntries(BUILT_INS.map(b => [b.id, ["apiKeys", "jwt", "passwordCtx"].includes(b.id)])),
+      rules: [
+        { id: crypto.randomUUID(), label: "My name", kind: "literal", pattern: "Marotron", caseInsensitive: true, action: "replace", actionValue: "John Smith", discloseToAgent: false, enabled: true },
+        { id: crypto.randomUUID(), label: "My phone", kind: "literal", pattern: "+1 555-0100", caseInsensitive: false, action: "redact", actionValue: "[REDACTED:phone]", discloseToAgent: true, enabled: true },
+        { id: crypto.randomUUID(), label: "Home address", kind: "wildcard", pattern: "*Evergreen Terrace*", caseInsensitive: true, action: "redact", actionValue: "[REDACTED:address]", discloseToAgent: true, enabled: true }
+      ],
+      subjectHitMode: "redactSpans",
+      bodyHitMode: "redactSpans",
+      editingRuleId: null,
+      expandedInfo: null
+    };
+
+    function assetKey(g) {
+      return `${g.mode}|${g.accountID}|${g.placement ?? "*"}`;
+    }
+
+    function scopeKey(accountID, placement) {
+      return placement == null ? accountID + "/*" : accountID + "/" + placement;
+    }
+
+    function labelFor(accountID) {
+      return CATALOG.find(c => c.id === accountID)?.label || accountID;
+    }
+
+    function pathLabel(g) {
+      const acct = labelFor(g.accountID);
+      if (g.placement == null) return `${acct} · all mailboxes`;
+      return `${acct} / ${g.placement}`;
+    }
+
+    function findGrant(accountID, placement, mode) {
+      return state.grants.find(g => g.mode === mode && g.accountID === accountID && g.placement === placement);
+    }
+
+    function hasAccountWide(accountID) {
+      return !!findGrant(accountID, null, "allow");
+    }
+
+    function hasMailbox(accountID, placement) {
+      return !!findGrant(accountID, placement, "allow");
+    }
+
+    function effectiveAllowFields(accountID, placement) {
+      const aw = findGrant(accountID, null, "allow");
+      if (aw) return aw.fields;
+      const mb = findGrant(accountID, placement, "allow");
+      return mb ? mb.fields : null;
+    }
+
+    function allowAssets() {
+      return state.grants.filter(g => g.mode === "allow");
+    }
+
+    function selectedGrant() {
+      return state.grants.find(g => assetKey(g) === state.selectedKey) || allowAssets()[0] || null;
+    }
+
+    function badgeCaps(f, opts = {}) {
+      const { interactive, accountID, placement } = opts;
+      return FIELD_BADGES.map(({ label, key }) => {
+        const on = !!f[key];
+        const cls = `chip ${on ? "on" : "off"}`;
+        if (!interactive) return `<span class="${cls}">${label}</span>`;
+        const placeAttr = placement == null ? "*" : placement;
+        return `<button type="button" class="${cls}" title="Toggle ${key}" data-field="${key}" data-acct="${accountID}" data-place="${escAttr(placeAttr)}">${label}</button>`;
+      }).join("");
+    }
+
+    function leakGuardIcon() {
+      return LEAK_GUARD_ICON_SVG;
+    }
+
+    function shieldChipInner() {
+      return `<span class="chip-glyph-proxy">L</span><span class="chip-glyph-icon">${leakGuardIcon()}</span>`;
+    }
+
+    function isShieldOptedIn(accountID, placement) {
+      const key = scopeKey(accountID, placement);
+      return state.leakGuardScopes.has(key)
+        || (placement != null && state.leakGuardScopes.has(accountID + "/*"));
+    }
+
+    function shieldChipState(accountID, placement) {
+      if (!isShieldOptedIn(accountID, placement)) return "off";
+      return state.guardOn ? "on" : "pending";
+    }
+
+    function shieldChip(accountID, placement, opts = {}) {
+      const { interactive, key } = opts;
+      const chipState = shieldChipState(accountID, placement);
+      const cls = `chip shield ${chipState}`;
+      const title = chipState === "on"
+        ? "Leak guard — scanning subject & body on MCP responses"
+        : chipState === "pending"
+          ? "Leak guard opted in — enable master switch to scan"
+          : "Leak guard — click to scan subject & body on MCP responses";
+      const inner = shieldChipInner();
+      if (!interactive) return `<span class="${cls}" title="${title}">${inner}</span>`;
+      const placeAttr = placement == null ? "*" : placement;
+      return `<button type="button" class="${cls}" title="${title}" data-shield="${escAttr(key || scopeKey(accountID, placement))}" data-acct="${accountID}" data-place="${escAttr(placeAttr)}">${inner}</button>`;
+    }
+
+    function shieldButton(accountID, placement, allowed) {
+      if (!allowed || !state.guardOn) return "";
+      const key = scopeKey(accountID, placement);
+      return shieldChip(accountID, placement, { interactive: true, key });
+    }
+
+    function shieldBadge(accountID, placement) {
+      if (!state.guardOn) return "";
+      const chipState = shieldChipState(accountID, placement);
+      if (chipState === "off") return "";
+      return shieldChip(accountID, placement, { interactive: false });
+    }
+
+    function leakGuardAccessHtml(g) {
+      if (!state.guardOn) return "";
+      const place = g.placement;
+      const placeAttr = place == null ? "*" : place;
+      const optedIn = isShieldOptedIn(g.accountID, place);
+      const toggleId = `accessShield-${g.accountID}-${String(placeAttr).replace(/[^a-zA-Z0-9]/g, "_")}`;
+      return `
+        <div class="row-wrap access-leak-row">
+          <div class="row">
+            <label for="${toggleId}">Leak guard<small>Scan subject & body before MCP responses leave MailGent</small></label>
+            <div class="row-controls">
+              ${infoBtn("shield-scan")}
+              <button type="button" class="toggle ${optedIn ? "on" : ""}" id="${toggleId}" data-shield-toggle data-acct="${g.accountID}" data-place="${escAttr(placeAttr)}" aria-pressed="${optedIn}"></button>
+            </div>
+          </div>
+          ${infoPanel("shield-scan")}
+        </div>`;
+    }
+
+    function renderEditControls() {
+      const root = document.getElementById("editControls");
+      if (!root) return;
+      if (state.isEditing) {
+        root.innerHTML = `
+          <button type="button" class="btn-sm" id="cancelEdit">Cancel</button>
+          <button type="button" class="btn-sm primary" id="saveEdit">Save</button>`;
+        document.getElementById("cancelEdit").onclick = () => { state.isEditing = false; renderDesk(); };
+        document.getElementById("saveEdit").onclick = () => { state.isEditing = false; renderDesk(); };
+      } else {
+        root.innerHTML = `<button type="button" class="btn-sm" id="beginEdit">Edit</button>`;
+        document.getElementById("beginEdit").onclick = () => { state.isEditing = true; renderDesk(); };
+      }
+    }
+
+    function pillIcon(name) {
+      return PILL_ICONS[name] || "";
+    }
+
+    function fieldPillRow(group, fields, accountID, placement, interactive) {
+      const items = FIELD_PILLS[group];
+      return items.map(p => {
+        const on = !!fields[p.key];
+        const cls = `pill ${on ? "on" : "off"}`;
+        if (!interactive) return `<span class="${cls}">${pillIcon(p.icon)}${p.label}</span>`;
+        const placeAttr = placement == null ? "*" : placement;
+        const dis = state.isEditing ? "" : " disabled";
+        return `<button type="button" class="${cls}" title="${p.label}" data-field="${p.key}" data-acct="${accountID}" data-place="${escAttr(placeAttr)}"${dis}>${pillIcon(p.icon)}${p.label}</button>`;
+      }).join("");
+    }
+
+    function fieldsMatchPreset(fields, preset) {
+      return Object.keys(preset).every(k => !!fields[k] === !!preset[k]);
+    }
+
+    function applyPreset(accountID, placement, presetKey) {
+      const place = placement === "*" ? null : placement;
+      const g = findGrant(accountID, place, "allow");
+      if (!g) return;
+      g.fields = { ...PRESETS[presetKey] };
+      state.selectedKey = assetKey(g);
+      renderDesk();
+    }
+
+    function presetButtonsHtml(g) {
+      const f = g.fields;
+      const dis = state.isEditing ? "" : " disabled";
+      return `
+        <div class="preset-row">
+          <span class="label">Presets</span>
+          <button type="button" class="btn-preset ${fieldsMatchPreset(f, PRESETS.headersOnly) ? "on" : ""}" data-preset="headersOnly" data-acct="${g.accountID}" data-place="${escAttr(g.placement ?? "*")}"${dis}>Headers only</button>
+          <button type="button" class="btn-preset ${fieldsMatchPreset(f, PRESETS.readMail) ? "on" : ""}" data-preset="readMail" data-acct="${g.accountID}" data-place="${escAttr(g.placement ?? "*")}"${dis}>Read mail</button>
+          <button type="button" class="btn-preset ${fieldsMatchPreset(f, PRESETS.full) ? "on" : ""}" data-preset="full" data-acct="${g.accountID}" data-place="${escAttr(g.placement ?? "*")}"${dis}>Full</button>
+        </div>`;
+    }
+
+    function hatchHtml(placeholder) {
+      return `<span class="hatch inline"><span class="hatch-text">${esc(placeholder || " ")}</span></span>`;
+    }
+
+    function addrHtml(raw) {
+      if (!raw) return '<span style="color:var(--muted)"> </span>';
+      return raw.split(/[,;]/).map(s => s.trim()).filter(Boolean)
+        .map(a => `<span class="addr-pill">${esc(a)}</span>`).join("");
+    }
+
+    function previewFieldHtml(label, value, granted, sanitizedResult, hitMode) {
+      if (!granted) {
+        return `<div class="preview-line"><span class="lbl">${label}:</span><span class="val">${hatchHtml(value || label)}</span></div>`;
+      }
+      let inner;
+      if (sanitizedResult.access === "withheld_confidential") {
+        inner = '<span class="withheld-label">Withheld — autodetect</span>';
+      } else if (sanitizedResult.access === "not_granted") {
+        inner = hatchHtml(value);
+      } else if (sanitizedResult.hitSpans?.length && hitMode !== "blockWhole") {
+        inner = renderSanitizedHtml(sanitizedResult.original, sanitizedResult.text, sanitizedResult.hitSpans, hitMode);
+      } else {
+        inner = escapeHtml(sanitizedResult.text || value || "");
+      }
+      return `<div class="preview-line"><span class="lbl">${label}:</span><span class="val">${inner}</span></div>`;
+    }
+
+    function renderPreviewSection(mountId) {
+      const mount = document.getElementById(mountId);
+      if (!mount) return;
+
+      const simKey = state.previewScope;
+      const [accountID, placement] = simKey.split("/");
+      const grant = grantFieldsForScope(simKey);
+      const subjRaw = document.getElementById("sampleSubject").value;
+      const bodyRaw = document.getElementById("sampleBody").value;
+      const fromRaw = document.getElementById("sampleFrom").value;
+      const toRaw = document.getElementById("sampleTo").value;
+      const ccRaw = document.getElementById("sampleCc").value;
+      const dateRaw = document.getElementById("sampleDate").value;
+
+      const subj = sanitizeField(subjRaw, "subject", simKey);
+      const body = sanitizeField(bodyRaw, "body", simKey);
+      const scanning = state.guardOn && isScopeProtected(simKey);
+
+      const attachMeta = grant.attachmentMetadata
+        ? `<div class="attach-tile">📎 invoice-4412.pdf · 82 KB</div><div class="attach-tile">📎 receipt.png · 21 KB</div>`
+        : hatchHtml("none in this response");
+      const attachContent = grant.attachmentContent
+        ? `<div class="attach-tile">📎 2 files</div>`
+        : hatchHtml("");
+
+      mount.innerHTML = `
+        <p class="preview-title">Preview</p>
+        <p class="preview-caption">Sample message under this placement's caps${scanning ? " · leak guard active" : ""}.</p>
+        <div class="msg-card" id="msgCard">
+          <div class="source-chip">${esc(pathLabel({ mode: "allow", accountID, placement }))}</div>
+          ${previewFieldHtml("Subject", subjRaw, grant.subject, subj, state.subjectHitMode)}
+          ${previewFieldHtml("From", fromRaw, grant.from, { text: fromRaw, access: "granted", original: fromRaw, hitSpans: [] }, "redactSpans")}
+          ${previewFieldHtml("To", toRaw, grant.to, { text: toRaw, access: "granted", original: toRaw, hitSpans: [] }, "redactSpans")}
+          ${previewFieldHtml("Cc", ccRaw, grant.cc, { text: ccRaw, access: "granted", original: ccRaw, hitSpans: [] }, "redactSpans")}
+          ${previewFieldHtml("Date & Time", dateRaw, grant.date, { text: dateRaw, access: "granted", original: dateRaw, hitSpans: [] }, "redactSpans")}
+          <div class="divider"></div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Body</div>
+          ${grant.body
+            ? `<div class="body-box">${body.access === "withheld_confidential"
+              ? '<span class="withheld-label">Withheld — autodetect</span>'
+              : (body.access === "not_granted" ? hatchHtml("Body / snippet") :
+                (body.hitSpans?.length ? renderSanitizedHtml(body.original, body.text, body.hitSpans, state.bodyHitMode) : escapeHtml(body.text)))}</div>`
+            : `<div>${hatchHtml("Body / snippet")}</div>`}
+          <div class="divider"></div>
+          <div class="attach-grid">
+            <div class="attach-col"><div class="lbl">Attachment Info</div>${attachMeta}</div>
+            <div class="attach-col"><div class="lbl">Attachment Content</div>${attachContent}</div>
+          </div>
+        </div>
+        <div class="lock-legend"><span class="lock-icon">🔒</span> Locked. Grant does not allow the agent to read this field.</div>
+        ${renderDevPanelHtml(subj, body, scanning, simKey)}`;
+    }
+
+    function renderDevPanelHtml(subj, body, scanning, simKey) {
+      const g = grantFieldsForScope(simKey);
+      const payload = {
+        subject: subj.text,
+        subjectAccess: subj.agentAccess,
+        subjectAccessReason: subj.agentAccess === "sanitized" || subj.agentAccess === "withheld_confidential" ? "leak_guard" : "grant",
+        body: body.text,
+        bodyAccess: body.agentAccess,
+        bodyAccessReason: body.agentAccess === "sanitized" || body.agentAccess === "withheld_confidential" ? "leak_guard" : "grant"
+      };
+      const disclosed = [...new Set([...(subj.disclosedRules || []), ...(body.disclosedRules || [])])];
+      if (disclosed.length) payload.sanitizedRules = disclosed;
+      if (subj.stealth || body.stealth) payload.note = "Stealth replace active — agent sees granted; human audit retains originals.";
+
+      const accessHtml = `
+        <div style="margin-bottom:8px"><strong>get</strong> · ${simKey}</div>
+        <div style="margin-bottom:6px"><strong>Subject</strong> ${badgeFor(subj.access, subj.reason)}</div>
+        <div style="margin-bottom:10px">${subj.access === "not_granted" ? hatchHtml("") :
+          renderSanitizedHtml(subj.original, subj.text, subj.hitSpans, state.subjectHitMode)}</div>
+        <div style="margin-bottom:6px"><strong>Body</strong> ${badgeFor(body.access, body.reason)}</div>
+        <div>${body.access === "not_granted" ? hatchHtml("") :
+          renderSanitizedHtml(body.original, body.text, body.hitSpans, state.bodyHitMode)}</div>`;
+
+      return `
+        <details class="dev-panel">
+          <summary>Developer · sample source, MCP JSON, access log mock</summary>
+          <div class="section-head" style="margin:8px 0 6px">
+            <span style="font-size:11px;font-weight:600;color:var(--muted);flex:1">Agent-visible marks</span>
+            ${infoBtn("preview-states")}
+          </div>
+          ${infoPanel("preview-states")}
+          <div class="legend" style="margin-bottom:8px">
+            <span><i class="swatch grant"></i> Grant denied</span>
+            <span><i class="swatch withheld"></i> Autodetect — whole field</span>
+            <span><i class="swatch sanitized"></i> Autodetect — sanitized span</span>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin:0 0 8px">
+            Grant: ${g.subject ? "subject" : "—"} · ${g.body ? "body" : "no body"} ·
+            <span class="badge ${scanning ? "ok" : "grant"}" style="margin-left:4px">${scanning ? "scan active" : "scan skipped"}</span>
+          </p>
+          <label style="font-size:11px;color:var(--muted)">Sample subject</label>
+          <input class="field" id="devSubject" value="${escAttr(document.getElementById("sampleSubject").value)}">
+          <label style="font-size:11px;color:var(--muted);margin-top:6px;display:block">Sample body</label>
+          <textarea id="devBody" style="min-height:72px">${esc(document.getElementById("sampleBody").value)}</textarea>
+          <div class="section-head" style="margin:10px 0 6px">
+            <span style="font-size:11px;font-weight:600;color:var(--muted);flex:1">MCP JSON fragment</span>
+            ${infoBtn("mcp-access-flags")}
+          </div>
+          ${infoPanel("mcp-access-flags")}
+          <pre class="json" id="mcpJson">${syntaxJson(JSON.stringify(payload, null, 2))}</pre>
+          <p style="font-size:11px;color:var(--muted);margin:10px 0 6px">Access log mock — hover sanitized spans for original.</p>
+          <div class="preview-block" id="accessCard">${accessHtml}</div>
+        </details>`;
+    }
+
+    function wireDevPanel() {
+      const devSubj = document.getElementById("devSubject");
+      const devBody = document.getElementById("devBody");
+      if (devSubj) {
+        devSubj.oninput = e => {
+          document.getElementById("sampleSubject").value = e.target.value;
+          runPreview();
+        };
+      }
+      if (devBody) {
+        devBody.oninput = e => {
+          document.getElementById("sampleBody").value = e.target.value;
+          runPreview();
+        };
+      }
+    }
+
+    function wireFieldPills(rootSelector) {
+      document.querySelectorAll(`${rootSelector} button.pill[data-field]`).forEach(btn => {
+        btn.onclick = () => toggleGrantField(btn.dataset.acct, btn.dataset.place, btn.dataset.field);
+      });
+      document.querySelectorAll(`${rootSelector} button.btn-preset[data-preset]`).forEach(btn => {
+        btn.onclick = () => applyPreset(btn.dataset.acct, btn.dataset.place, btn.dataset.preset);
+      });
+    }
+
+    function upsert(grant) {
+      const key = assetKey(grant);
+      const i = state.grants.findIndex(g => assetKey(g) === key);
+      if (i >= 0) state.grants[i] = grant;
+      else state.grants.push(grant);
+      state.selectedKey = key;
+    }
+
+    function remove(accountID, placement, mode) {
+      const key = `${mode}|${accountID}|${placement ?? "*"}`;
+      state.grants = state.grants.filter(g => assetKey(g) !== key);
+      const sk = scopeKey(accountID, placement);
+      state.leakGuardScopes.delete(sk);
+      if (state.selectedKey === key) {
+        const next = allowAssets()[0];
+        state.selectedKey = next ? assetKey(next) : null;
+      }
+    }
+
+    function allow(accountID, placement) {
+      const existing = findGrant(accountID, placement, "allow");
+      upsert({
+        mode: "allow",
+        accountID,
+        placement,
+        fields: existing ? { ...existing.fields } : { ...DEFAULT_FIELDS },
+      });
+    }
+
+    function setAccountWide(accountID, enabled) {
+      if (!enabled) {
+        remove(accountID, null, "allow");
+        renderDesk();
+        return;
+      }
+      state.grants = state.grants.filter(g => !(g.mode === "allow" && g.accountID === accountID && g.placement != null));
+      allow(accountID, null);
+      renderDesk();
+    }
+
+    function setMailbox(accountID, placement, enabled) {
+      if (enabled) allow(accountID, placement);
+      else remove(accountID, placement, "allow");
+      renderDesk();
+    }
+
+    function toggleGrantField(accountID, placement, fieldKey) {
+      const place = placement === "*" ? null : placement;
+      const g = findGrant(accountID, place, "allow");
+      if (!g) return;
+      const fields = { ...g.fields };
+      fields[fieldKey] = !fields[fieldKey];
+      if (fieldKey === "attachmentMetadata" && !fields.attachmentMetadata) fields.attachmentContent = false;
+      if (fieldKey === "attachmentContent" && fields.attachmentContent) fields.attachmentMetadata = true;
+      g.fields = fields;
+      state.selectedKey = assetKey(g);
+      renderDesk();
+    }
+
+    function toggleShield(accountID, placement) {
+      const key = scopeKey(accountID, placement === "*" ? null : placement);
+      if (state.leakGuardScopes.has(key)) state.leakGuardScopes.delete(key);
+      else state.leakGuardScopes.add(key);
+      renderDesk();
+    }
+
+    function isScopeProtected(simKey) {
+      if (!state.guardOn || !state.leakGuardScopes.size) return false;
+      if (state.leakGuardScopes.has(simKey)) return true;
+      const [accountID] = simKey.split("/");
+      return state.leakGuardScopes.has(accountID + "/*");
+    }
+
+    function grantFieldsForScope(simKey) {
+      const [accountID, placement] = simKey.split("/");
+      return effectiveAllowFields(accountID, placement) || DEFAULT_FIELDS;
+    }
+
+    function globToRegExp(glob, ci) {
+      const esc = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+      return new RegExp(esc, ci ? "gi" : "g");
+    }
+
+    function findLiteral(text, needle, ci) {
+      const hits = [];
+      const hay = ci ? text.toLowerCase() : text;
+      const nd = ci ? needle.toLowerCase() : needle;
+      let i = 0;
+      while ((i = hay.indexOf(nd, i)) !== -1) {
+        hits.push({ start: i, end: i + needle.length });
+        i += needle.length || 1;
+      }
+      return hits;
+    }
+
+    function findRegex(text, pattern, ci) {
+      try {
+        const re = pattern instanceof RegExp ? pattern : new RegExp(pattern, ci ? "gi" : "g");
+        const hits = [];
+        let m;
+        re.lastIndex = 0;
+        while ((m = re.exec(text)) !== null) {
+          hits.push({ start: m.index, end: m.index + m[0].length });
+          if (m[0].length === 0) re.lastIndex++;
+        }
+        return hits;
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function collectHits(text) {
+      const hits = [];
+      for (const b of BUILT_INS) {
+        if (!state.builtIn[b.id]) continue;
+        for (const span of findRegex(text, b.pattern)) {
+          hits.push({ ...span, label: b.label, source: "builtIn:" + b.id, action: "redact", actionValue: `[REDACTED:${b.id}]`, discloseToAgent: true });
+        }
+      }
+      for (const rule of state.rules) {
+        if (!rule.enabled) continue;
+        let spans = [];
+        if (rule.kind === "literal") spans = findLiteral(text, rule.pattern, rule.caseInsensitive);
+        else if (rule.kind === "wildcard") spans = findRegex(text, globToRegExp(rule.pattern, rule.caseInsensitive));
+        else spans = findRegex(text, rule.pattern, rule.caseInsensitive);
+        for (const span of spans) {
+          hits.push({
+            ...span,
+            label: rule.label,
+            source: "custom:" + rule.id,
+            action: rule.action,
+            actionValue: rule.actionValue || `[REDACTED:${rule.label}]`,
+            discloseToAgent: rule.action === "redact" ? true : !!rule.discloseToAgent
+          });
+        }
+      }
+      return hits;
+    }
+
+    function resolveOverlaps(hits) {
+      const sorted = [...hits].sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start);
+      const kept = [];
+      for (const h of sorted) {
+        if (kept.some(k => !(h.end <= k.start || h.start >= k.end))) continue;
+        kept.push(h);
+      }
+      return kept.sort((a, b) => a.start - b.start);
+    }
+
+    function applyHits(text, hits, hitMode) {
+      if (!hits.length) {
+        return { text, access: "granted", agentAccess: "granted", reason: null, rules: [], disclosedRules: [], hitSpans: [], stealth: false };
+      }
+      if (hitMode === "blockWhole") {
+        const labels = [...new Set(hits.map(h => h.label))];
+        return {
+          text: "",
+          access: "withheld_confidential",
+          agentAccess: "withheld_confidential",
+          reason: "leak_guard",
+          rules: labels,
+          disclosedRules: labels,
+          hitSpans: hits,
+          stealth: false
+        };
+      }
+      let out = text;
+      const rules = new Set();
+      const disclosedRules = new Set();
+      for (const h of [...hits].sort((a, b) => b.start - a.start)) {
+        const rep = h.action === "replace" ? h.actionValue : (h.actionValue || `[REDACTED:${h.label}]`);
+        out = out.slice(0, h.start) + rep + out.slice(h.end);
+        rules.add(h.label);
+        if (h.discloseToAgent) disclosedRules.add(h.label);
+      }
+      const agentAccess = disclosedRules.size > 0 ? "sanitized" : "granted";
+      return {
+        text: out,
+        access: "sanitized",
+        agentAccess,
+        reason: agentAccess === "sanitized" ? "leak_guard" : "grant",
+        rules: [...rules],
+        disclosedRules: [...disclosedRules],
+        hitSpans: hits,
+        stealth: agentAccess === "granted"
+      };
+    }
+
+    function sanitizeField(raw, field, simKey) {
+      const grant = grantFieldsForScope(simKey);
+      if (!grant[field]) {
+        return { text: "", access: "not_granted", reason: "grant", rules: [], original: raw };
+      }
+      if (!state.guardOn || !isScopeProtected(simKey)) {
+        return { text: raw, access: "granted", reason: "grant", rules: [], original: raw };
+      }
+      const hits = resolveOverlaps(collectHits(raw));
+      const hitMode = field === "subject" ? state.subjectHitMode : state.bodyHitMode;
+      const applied = applyHits(raw, hits, hitMode);
+      return { ...applied, original: raw, hitSpans: hits };
+    }
+
+    function renderSanitizedHtml(original, sanitized, hitSpans, hitMode) {
+      if (hitMode === "blockWhole") return '<span class="withheld-label">Withheld — autodetect</span>';
+      if (!hitSpans?.length) return escapeHtml(sanitized);
+      let html = "";
+      let cursor = 0;
+      for (const h of hitSpans) {
+        html += escapeHtml(original.slice(cursor, h.start));
+        const orig = original.slice(h.start, h.end);
+        const rep = h.action === "replace" ? h.actionValue : (h.actionValue || `[REDACTED:${h.label}]`);
+        html += `<span class="sanitized-text" title="Original: ${escapeAttr(orig)}">${escapeHtml(rep)}</span>`;
+        cursor = h.end;
+      }
+      html += escapeHtml(original.slice(cursor));
+      return html;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function escapeAttr(s) { return escapeHtml(s).replace(/"/g, "&quot;"); }
+    const escAttr = escapeAttr;
+    function esc(s) { return escapeHtml(String(s)); }
+
+    function badgeFor(access, reason, stealth) {
+      if (access === "not_granted") return '<span class="badge grant">not_granted · grant</span>';
+      if (access === "withheld_confidential") return '<span class="badge leak">withheld · leak_guard</span>';
+      if (access === "sanitized") return '<span class="badge leak">sanitized · leak_guard</span>';
+      if (stealth) return '<span class="badge stealth">granted · stealth replace</span>';
+      return '<span class="badge ok">granted</span>';
+    }
+
+    function highlightAgentText(result) {
+      if (result.access === "not_granted") return '<span class="hatch"></span>';
+      if (result.access === "withheld_confidential") return '<span class="withheld-label">Field withheld (confidential)</span>';
+      return escapeHtml(result.text);
+    }
+
+    function runPreview() {
+      const mount = document.getElementById("previewMount");
+      if (mount) {
+        renderPreviewSection("previewMount");
+        wireDevPanel();
+        mountPreviewInfoSlots();
+      }
+    }
+
+    function syntaxJson(raw) {
+      return raw.replace(/"([^"]+)":/g, '<span class="k">"$1"</span>:')
+        .replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>')
+        .replace(/: (\d+)/g, ': <span class="n">$1</span>');
+    }
+
+    function renderScope() {
+      const rows = CATALOG.map(acct => {
+        const accountWide = hasAccountWide(acct.id);
+        const awGrant = accountWide ? findGrant(acct.id, null, "allow") : null;
+        const head = `<div class="check-row">
+          <button type="button" class="check emph ${accountWide ? "on" : ""}" data-acct="${acct.id}">
+            <span class="box"></span><span class="t">${acct.label}</span>
+          </button>
+          ${awGrant ? `<span class="mini">${badgeCaps(awGrant.fields, { interactive: true, accountID: acct.id, placement: null })}${shieldButton(acct.id, null, true)}</span>` : ""}
+        </div>`;
+        const boxes = acct.mailboxes.map(m => {
+          const mb = findGrant(acct.id, m, "allow");
+          const allowed = accountWide || !!mb;
+          const editGrant = accountWide ? awGrant : mb;
+          const editPlace = accountWide ? null : m;
+          const caps = editGrant && allowed
+            ? badgeCaps(editGrant.fields, { interactive: true, accountID: acct.id, placement: editPlace })
+            : "";
+          const shield = allowed ? shieldButton(acct.id, editPlace ?? m, true) : "";
+          return `<div class="check-row indent">
+            <button type="button" class="check ${allowed ? "on" : ""}" data-acct="${acct.id}" data-mb="${m}" ${accountWide ? "disabled" : ""}>
+              <span class="box"></span><span class="t">${m}</span>
+            </button>
+            ${(caps || shield) ? `<span class="mini">${caps}${shield}</span>` : ""}
+          </div>`;
+        }).join("");
+        return `<div class="acct">${head}${boxes}</div>`;
+      }).join("");
+
+      const anyShield = state.leakGuardScopes.size > 0;
+      document.getElementById("pane-scope").innerHTML = `
+        <div class="master-row">
+          <label for="guardOnScope">Leak guard master<small>Same switch as Privacy — disables all scanning when off</small></label>
+          <div class="master-controls">
+            ${infoBtn("leak-guard-master")}
+            <button type="button" class="toggle ${state.guardOn ? "on" : ""}" id="guardOnScope" aria-pressed="${state.guardOn}"></button>
+          </div>
+        </div>
+        ${infoPanel("leak-guard-master")}
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Allowed placements</span>
+            ${infoBtn("scope-overview")}
+          </div>
+          ${infoPanel("scope-overview")}
+          <div class="card-body card-hint-row">
+            <p class="card-hint">Check placements to allow. Field badges = Access caps ${infoBtn("grant-field-badges")} · Leak guard ${infoBtn("shield-scan")} = opt-in scanning.</p>
+            ${infoPanel("grant-field-badges")}
+            ${infoPanel("shield-scan")}
+          </div>
+          <div class="card-body flush"><div class="catalog">${rows}</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">Narrow scope</span></div>
+          <div class="card-body">
+            <input class="field" id="from" placeholder="Narrow From (optional)" value="${escAttr(state.draftFrom)}" style="margin-bottom:8px">
+            <input class="field" id="date" placeholder="On/after date ISO8601 (optional)" value="${escAttr(state.draftDate)}" style="margin-bottom:0">
+          </div>
+        </div>
+        ${state.grants.length ? `<button type="button" class="btn danger" id="clear">Clear all grants</button>` : ""}
+        <p class="warn" id="allowlistWarn" ${state.guardOn && !anyShield ? "" : "hidden"}>Leak guard is on but no placements are opted in — nothing will be scanned.</p>
+        ${allowAssets().length ? `<p class="hint" style="margin-top:8px">Detectors & custom rules → <button type="button" id="goto-privacy" style="border:0;background:none;color:var(--blue);font-weight:700;padding:0;text-decoration:underline">Privacy</button> tab.</p>` : ""}
+      `;
+
+      document.getElementById("guardOnScope").onclick = () => {
+        state.guardOn = !state.guardOn;
+        renderDesk();
+      };
+      document.getElementById("from").oninput = e => { state.draftFrom = e.target.value; };
+      document.getElementById("date").oninput = e => { state.draftDate = e.target.value; };
+      const clear = document.getElementById("clear");
+      if (clear) clear.onclick = () => {
+        state.grants = [];
+        state.leakGuardScopes.clear();
+        state.selectedKey = null;
+        renderDesk();
+      };
+      const go = document.getElementById("goto-privacy");
+      if (go) go.onclick = () => setDeskTab("privacy");
+
+      document.querySelectorAll("#pane-scope .check[data-acct]:not([data-mb])").forEach(btn => {
+        btn.onclick = () => setAccountWide(btn.dataset.acct, !hasAccountWide(btn.dataset.acct));
+      });
+      document.querySelectorAll("#pane-scope .check[data-mb]").forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.dataset.acct;
+          const m = btn.dataset.mb;
+          setMailbox(id, m, !(hasAccountWide(id) || hasMailbox(id, m)));
+        };
+      });
+      document.querySelectorAll("#pane-scope button.chip[data-field]").forEach(btn => {
+        btn.onclick = e => {
+          e.stopPropagation();
+          toggleGrantField(btn.dataset.acct, btn.dataset.place, btn.dataset.field);
+        };
+      });
+      document.querySelectorAll("#pane-scope button.chip[data-shield]").forEach(btn => {
+        btn.onclick = e => {
+          e.stopPropagation();
+          toggleShield(btn.dataset.acct, btn.dataset.place);
+        };
+      });
+    }
+
+    function renderAccess() {
+      const assets = allowAssets();
+      if (!assets.length) {
+        document.getElementById("pane-access").innerHTML = `
+          <p class="hint">No placement assets yet. Allow mailboxes on Scope first.</p>
+          <button type="button" class="btn" id="back-scope">← Scope</button>`;
+        document.getElementById("back-scope").onclick = () => setDeskTab("scope");
+        return;
+      }
+      if (!selectedGrant()) state.selectedKey = assetKey(assets[0]);
+      const g = selectedGrant();
+      const list = assets.map(a => {
+        const key = assetKey(a);
+        return `<button type="button" class="asset ${key === state.selectedKey ? "sel" : ""}" data-key="${key}">
+          <div class="path">${esc(pathLabel(a))}</div>
+          <div class="caps">${badgeCaps(a.fields)}${shieldBadge(a.accountID, a.placement)}</div>
+        </button>`;
+      }).join("");
+
+      if (g.placement != null) state.previewScope = scopeKey(g.accountID, g.placement);
+      else {
+        const acct = CATALOG.find(c => c.id === g.accountID);
+        state.previewScope = g.accountID + "/" + (acct?.mailboxes[0] || "INBOX");
+      }
+
+      document.getElementById("pane-access").innerHTML = `
+        <div class="access-split">
+          <div>
+            <div class="assets-label">Assets</div>
+            <div class="asset-list">${list}</div>
+          </div>
+          <div>
+            <p class="field-headline">${esc(pathLabel(g))}</p>
+            <p class="field-sub">Fields apply only to this allow.</p>
+            ${leakGuardAccessHtml(g)}
+            ${presetButtonsHtml(g)}
+            <div class="pill-group">
+              <div class="pill-group-label">Envelope</div>
+              <div class="pill-row">${fieldPillRow("envelope", g.fields, g.accountID, g.placement ?? "*", true)}</div>
+            </div>
+            <div class="pill-group">
+              <div class="pill-group-label">Content</div>
+              <div class="pill-row">${fieldPillRow("content", g.fields, g.accountID, g.placement ?? "*", true)}</div>
+            </div>
+            <div class="divider"></div>
+            <div id="previewMount"></div>
+          </div>
+        </div>`;
+
+      document.querySelectorAll("#pane-access .asset").forEach(btn => {
+        btn.onclick = () => {
+          state.selectedKey = btn.dataset.key;
+          const sel = state.grants.find(g => assetKey(g) === state.selectedKey);
+          if (sel?.placement != null) state.previewScope = scopeKey(sel.accountID, sel.placement);
+          renderDesk();
+        };
+      });
+      document.querySelectorAll("#pane-access button.chip[data-field]").forEach(btn => {
+        btn.onclick = () => toggleGrantField(btn.dataset.acct, btn.dataset.place, btn.dataset.field);
+      });
+      document.querySelectorAll("#pane-access button[data-shield-toggle]").forEach(btn => {
+        btn.onclick = () => toggleShield(btn.dataset.acct, btn.dataset.place);
+      });
+      wireFieldPills("#pane-access");
+    }
+
+    function renderPrivacy() {
+      document.getElementById("pane-privacy").innerHTML = `
+        <div class="master-row">
+          <label for="guardOnPrivacy">Leak guard master<small>Same switch as Scope — disables all scanning when off</small></label>
+          <div class="master-controls">
+            ${infoBtn("leak-guard-master")}
+            <button type="button" class="toggle ${state.guardOn ? "on" : ""}" id="guardOnPrivacy" aria-pressed="${state.guardOn}"></button>
+          </div>
+        </div>
+        ${infoPanel("leak-guard-master")}
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Built-in detectors</span>
+            ${infoBtn("privacy-builtins")}
+          </div>
+          ${infoPanel("privacy-builtins")}
+          <div class="card-body" id="builtIns"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Custom filters</span>
+            ${infoBtn("custom-filters")}
+          </div>
+          ${infoPanel("custom-filters")}
+          <div class="card-body flush">
+            <div class="rules" id="ruleList"></div>
+          </div>
+          <div class="card-body">
+            <button type="button" class="btn primary" id="addRule">Add filter</button>
+            <div class="editor hidden" id="ruleEditor">
+              <div class="grid2" style="margin-bottom:8px">
+                <div><label>Label</label><input type="text" id="editLabel" placeholder="My name"></div>
+                <div><label>Match kind</label>
+                  <select id="editKind">
+                    <option value="literal">Literal</option>
+                    <option value="wildcard">Wildcard (* ?)</option>
+                    <option value="regex">Regex</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-bottom:8px"><label>Pattern</label><input type="text" id="editPattern" placeholder="Marotron"></div>
+              <div class="grid2" style="margin-bottom:8px">
+                <div><label>Action</label>
+                  <select id="editAction">
+                    <option value="redact">Redact with marker</option>
+                    <option value="replace">Replace with fake value</option>
+                  </select>
+                </div>
+                <div><label id="editActionValueLabel">Marker / replacement</label><input type="text" id="editActionValue"></div>
+              </div>
+              <label class="check-inline"><input type="checkbox" id="editCaseInsensitive" checked> Case insensitive</label>
+              <div class="row" id="discloseRow" style="margin-top:8px">
+                <label for="editDisclose">Tell agent this value was sanitized<small>Off = stealth fake value</small></label>
+                <div class="row-controls">
+                  ${infoBtn("stealth-replace")}
+                  <button type="button" class="toggle" id="editDisclose" aria-pressed="false"></button>
+                </div>
+              </div>
+              ${infoPanel("stealth-replace")}
+              <div style="margin-top:8px;display:flex;gap:6px">
+                <button type="button" class="btn primary" id="saveRule">Save</button>
+                <button type="button" class="btn" id="cancelRule">Cancel</button>
+              </div>
+              <div class="err" id="editErr" hidden></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">On confidential hit</span>
+            ${infoBtn("hit-modes")}
+          </div>
+          ${infoPanel("hit-modes")}
+          <div class="card-body">
+            <div class="grid2">
+              <div><label>Subject</label>
+                <select id="subjectHitMode">
+                  <option value="redactSpans">Redact / replace matching parts</option>
+                  <option value="blockWhole">Block entire field</option>
+                </select>
+              </div>
+              <div><label>Body</label>
+                <select id="bodyHitMode">
+                  <option value="redactSpans">Redact / replace matching parts</option>
+                  <option value="blockWhole">Block entire field</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="hint">Per-placement opt-in is on <button type="button" id="goto-scope" style="border:0;background:none;color:var(--blue);font-weight:700;padding:0;text-decoration:underline">Scope</button> (leak guard icon).</p>
+        <div class="divider"></div>
+        <div id="previewMount"></div>`;
+
+      document.getElementById("guardOnPrivacy").onclick = () => {
+        state.guardOn = !state.guardOn;
+        renderDesk();
+      };
+      document.getElementById("goto-scope").onclick = () => setDeskTab("scope");
+      document.getElementById("subjectHitMode").value = state.subjectHitMode;
+      document.getElementById("bodyHitMode").value = state.bodyHitMode;
+      document.getElementById("subjectHitMode").onchange = e => { state.subjectHitMode = e.target.value; runPreview(); };
+      document.getElementById("bodyHitMode").onchange = e => { state.bodyHitMode = e.target.value; runPreview(); };
+
+      renderBuiltIns();
+      renderRules();
+      wireRuleEditor();
+    }
+
+    function renderBuiltIns() {
+      const root = document.getElementById("builtIns");
+      if (!root) return;
+      root.innerHTML = BUILT_INS.map(b => {
+        const infoId = "builtin-" + b.id;
+        return `
+        <div class="row-wrap">
+          <div class="row">
+            <label for="builtin-${b.id}">${b.label}<small>${b.hint}</small></label>
+            <div class="row-controls">
+              ${infoBtn(infoId)}
+              <button type="button" class="toggle ${state.builtIn[b.id] ? "on" : ""}" id="builtin-${b.id}" data-builtin="${b.id}" aria-pressed="${state.builtIn[b.id]}"></button>
+            </div>
+          </div>
+          ${infoPanel(infoId)}
+        </div>`;
+      }).join("");
+      root.querySelectorAll(".toggle[data-builtin]").forEach(btn => {
+        btn.onclick = () => {
+          state.builtIn[btn.dataset.builtin] = !state.builtIn[btn.dataset.builtin];
+          renderDesk();
+        };
+      });
+    }
+
+    function renderRules() {
+      const list = document.getElementById("ruleList");
+      if (!list) return;
+      if (!state.rules.length) {
+        list.innerHTML = '<div class="rule"><span style="color:var(--muted)">No custom filters yet.</span></div>';
+        return;
+      }
+      list.innerHTML = state.rules.map(r => `
+        <div class="rule">
+          <div>
+            <strong>${esc(r.label)}</strong>${r.enabled ? "" : ' <span style="color:var(--muted)">(off)</span>'}
+            <div class="meta">${r.kind} · “${esc(r.pattern)}” → ${r.action === "replace" ? "replace" : "redact"} “${esc(r.actionValue)}”${r.action === "replace" ? (r.discloseToAgent ? " · agent aware" : " · stealth") : ""}</div>
+          </div>
+          <div class="actions">
+            <button type="button" data-edit="${r.id}">Edit</button>
+            <button type="button" data-toggle="${r.id}">${r.enabled ? "Off" : "On"}</button>
+            <button type="button" class="danger" data-del="${r.id}">Del</button>
+          </div>
+        </div>
+      `).join("");
+      list.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openEditor(b.dataset.edit)));
+      list.querySelectorAll("[data-toggle]").forEach(b => b.addEventListener("click", () => {
+        state.rules.find(x => x.id === b.dataset.toggle).enabled = !state.rules.find(x => x.id === b.dataset.toggle).enabled;
+        renderDesk();
+      }));
+      list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+        state.rules = state.rules.filter(x => x.id !== b.dataset.del);
+        renderDesk();
+      }));
+    }
+
+    function setDiscloseToggle(on) {
+      const btn = document.getElementById("editDisclose");
+      if (!btn) return;
+      btn.classList.toggle("on", on);
+      btn.setAttribute("aria-pressed", on);
+    }
+
+    function openEditor(id) {
+      state.editingRuleId = id;
+      const r = state.rules.find(x => x.id === id) || {
+        label: "", kind: "literal", pattern: "", action: "redact", actionValue: "[REDACTED:custom]", caseInsensitive: true, discloseToAgent: false, enabled: true
+      };
+      document.getElementById("ruleEditor").classList.remove("hidden");
+      document.getElementById("editLabel").value = r.label;
+      document.getElementById("editKind").value = r.kind;
+      document.getElementById("editPattern").value = r.pattern;
+      document.getElementById("editAction").value = r.action;
+      document.getElementById("editActionValue").value = r.actionValue;
+      document.getElementById("editCaseInsensitive").checked = r.caseInsensitive;
+      document.getElementById("editErr").hidden = true;
+      syncActionPlaceholder(r.discloseToAgent);
+    }
+
+    function syncActionPlaceholder(disclose) {
+      const action = document.getElementById("editAction").value;
+      document.getElementById("editActionValueLabel").textContent = action === "replace" ? "Fake value" : "Marker";
+      document.getElementById("editActionValue").placeholder = action === "replace" ? "John Smith" : "[REDACTED:label]";
+      const showDisclose = action === "replace";
+      document.getElementById("discloseRow").classList.toggle("hidden", !showDisclose);
+      if (showDisclose) setDiscloseToggle(disclose !== undefined ? disclose : false);
+    }
+
+    function wireRuleEditor() {
+      document.getElementById("editAction").onchange = () => syncActionPlaceholder();
+      document.getElementById("editDisclose").onclick = function () {
+        setDiscloseToggle(!this.classList.contains("on"));
+      };
+      document.getElementById("addRule").onclick = () => {
+        state.editingRuleId = null;
+        openEditor(null);
+        document.getElementById("editLabel").value = "";
+        document.getElementById("editPattern").value = "";
+      };
+      document.getElementById("cancelRule").onclick = () => {
+        document.getElementById("ruleEditor").classList.add("hidden");
+        state.editingRuleId = null;
+      };
+      document.getElementById("saveRule").onclick = () => {
+        const label = document.getElementById("editLabel").value.trim();
+        const pattern = document.getElementById("editPattern").value;
+        const kind = document.getElementById("editKind").value;
+        const err = document.getElementById("editErr");
+        if (!label || !pattern) {
+          err.textContent = "Label and pattern are required.";
+          err.hidden = false;
+          return;
+        }
+        if (kind === "regex") {
+          try { new RegExp(pattern); } catch (e) {
+            err.textContent = "Invalid regex: " + e.message;
+            err.hidden = false;
+            return;
+          }
+        }
+        err.hidden = true;
+        const action = document.getElementById("editAction").value;
+        const payload = {
+          id: state.editingRuleId || crypto.randomUUID(),
+          label, kind, pattern,
+          caseInsensitive: document.getElementById("editCaseInsensitive").checked,
+          action,
+          actionValue: document.getElementById("editActionValue").value.trim() || (action === "replace" ? "REDACTED" : `[REDACTED:${label}]`),
+          discloseToAgent: action === "replace" ? document.getElementById("editDisclose").classList.contains("on") : true,
+          enabled: true
+        };
+        const idx = state.rules.findIndex(r => r.id === payload.id);
+        if (idx >= 0) state.rules[idx] = payload; else state.rules.push(payload);
+        document.getElementById("ruleEditor").classList.add("hidden");
+        state.editingRuleId = null;
+        renderDesk();
+      };
+    }
+
+    function setDeskTab(tab) {
+      state.deskTab = tab;
+      document.querySelectorAll("[data-desk-tab]").forEach(b => {
+        b.classList.toggle("on", b.dataset.deskTab === tab);
+      });
+      document.getElementById("pane-scope").classList.toggle("hidden", tab !== "scope");
+      document.getElementById("pane-access").classList.toggle("hidden", tab !== "access");
+      document.getElementById("pane-privacy").classList.toggle("hidden", tab !== "privacy");
+      renderDesk();
+    }
+
+    function renderDesk() {
+      renderEditControls();
+      if (state.deskTab === "scope") renderScope();
+      else if (state.deskTab === "access") renderAccess();
+      else renderPrivacy();
+      runPreview();
+    }
+
+    document.body.addEventListener("click", e => {
+      const btn = e.target.closest("[data-info]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleInfo(btn.dataset.info);
+    });
+
+    document.querySelectorAll("[data-desk-tab]").forEach(btn => {
+      btn.onclick = () => setDeskTab(btn.dataset.deskTab);
+    });
+
+    document.getElementById("sampleSubject").addEventListener("input", runPreview);
+    document.getElementById("sampleBody").addEventListener("input", runPreview);
+
+    renderDesk();
+  </script>
+</body>
+</html>
