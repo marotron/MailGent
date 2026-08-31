@@ -110,6 +110,41 @@ struct OutboundLeakGuardTests {
         #expect(result.disclosedRules.contains("API keys"))
     }
 
+    @Test func builtInJWTRedact() {
+        let guard_ = guardWith(builtIns: [.jwt: true])
+        let token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature"
+        let result = guard_.sanitize(
+            text: "Bearer \(token)",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .sanitized)
+        #expect(result.text == "Bearer [REDACTED:jwt]")
+        #expect(result.disclosedRules.contains("JWT tokens"))
+    }
+
+    @Test func customRegexRuleMatches() {
+        let rule = CustomLeakRule(
+            label: "Project code",
+            kind: .regex,
+            pattern: #"\bPRJ-\d{4}\b"#,
+            action: .redact,
+            actionValue: "[REDACTED:project]"
+        )
+        let guard_ = guardWith(builtIns: [:], rules: [rule])
+        let result = guard_.sanitize(
+            text: "See PRJ-1234 for details",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.text == "See [REDACTED:project] for details")
+        #expect(result.agentAccess == .sanitized)
+    }
+
     @Test func customLiteralRedact() {
         let rule = CustomLeakRule(
             label: "My name",

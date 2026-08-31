@@ -368,10 +368,134 @@ struct LoopbackMCPServerTests {
 
         #expect(response.status == 200)
         #expect(response.body.contains("Invoice due"))
-        #expect(try Self.extractJSONString(response.body, key: "bodyAccess") == "not_granted")
-        #expect(try Self.extractJSONString(response.body, key: "note").contains("does not allow body access"))
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["bodyAccess"] as? String == "not_granted")
+        #expect(payload["bodyAccessReason"] as? String == "grant")
+        #expect(payload["body"] == nil)
         #expect(!response.body.contains("Please pay"))
-        #expect(try Self.toolPayload(response.body)["body"] == nil)
+    }
+
+    @Test func getReportsSanitizedLeakGuardFields() async throws {
+        let env = try LoopbackFixture(
+            body: "password=hunter2\nPlease pay",
+            leakGuard: OutboundLeakGuard(
+                policy: OutboundLeakGuardPolicy(
+                    enabled: true,
+                    scopes: ["AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/INBOX"],
+                    builtInClasses: [.passwordCtx: true]
+                )
+            )
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["subjectAccess"] as? String == "granted")
+        #expect(payload["bodyAccess"] as? String == "sanitized")
+        #expect(payload["bodyAccessReason"] as? String == "leak_guard")
+        #expect((payload["sanitizedRules"] as? [String])?.contains("Password patterns") == true)
+        #expect(payload["body"] as? String == "[REDACTED:passwordCtx]\nPlease pay")
+        #expect(payload["note"] == nil)
+    }
+
+    @Test func getReportsWithheldConfidentialWhenBlockWhole() async throws {
+        let env = try LoopbackFixture(
+            body: "password=hunter2\nPlease pay",
+            leakGuard: OutboundLeakGuard(
+                policy: OutboundLeakGuardPolicy(
+                    enabled: true,
+                    scopes: ["AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/INBOX"],
+                    builtInClasses: [.passwordCtx: true],
+                    bodyHitMode: .blockWhole
+                )
+            )
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["bodyAccess"] as? String == "withheld_confidential")
+        #expect(payload["bodyAccessReason"] as? String == "leak_guard")
+        #expect(payload["body"] == nil)
+    }
+
+    @Test func getStealthReplaceIncludesNoteNotSanitizedRules() async throws {
+        let rule = CustomLeakRule(
+            label: "My name",
+            kind: .literal,
+            pattern: "Marotron",
+            action: .replace,
+            actionValue: "John Smith",
+            discloseToAgent: false
+        )
+        let env = try LoopbackFixture(
+            body: "From Marotron",
+            leakGuard: OutboundLeakGuard(
+                policy: OutboundLeakGuardPolicy(
+                    enabled: true,
+                    scopes: ["AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/INBOX"],
+                    builtInClasses: [:],
+                    customRules: [rule]
+                )
+            )
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["bodyAccess"] as? String == "granted")
+        #expect(payload["bodyAccessReason"] as? String == "grant")
+        #expect(payload["sanitizedRules"] == nil)
+        #expect((payload["note"] as? String)?.contains("substituted on device") == true)
+        #expect(payload["body"] as? String == "From John Smith")
     }
 
     @Test func initializeReturnsServerCapabilities() async throws {
@@ -654,7 +778,13 @@ private struct LoopbackFixture {
     let grants: GrantGate
     let server: LoopbackMCPServer
 
-    init(bodyGranted: Bool = true, sourceController: (any MailSourceControlling)? = nil) throws {
+    init(
+        bodyGranted: Bool = true,
+        sourceController: (any MailSourceControlling)? = nil,
+        subject: String = "Invoice due",
+        body: String = "Please pay",
+        leakGuard: OutboundLeakGuard = OutboundLeakGuard()
+    ) throws {
         root = try FixtureTree()
         let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         try root.writeEmlx(
@@ -663,11 +793,11 @@ private struct LoopbackFixture {
             From: Alice <alice@example.com>
             To: Bob <bob@example.com>
             Cc: Finance <finance@example.com>
-            Subject: Invoice due
+            Subject: \(subject)
             Date: Mon, 1 Jan 2024 00:00:00 +0000
             Content-Type: text/plain
 
-            Please pay
+            \(body)
             """,
             account: accountID,
             mailbox: "INBOX.mbox"
@@ -695,6 +825,7 @@ private struct LoopbackFixture {
             read: ReadAPI(index: index),
             pairing: pairing,
             grants: grants,
+            leakGuard: leakGuard,
             audit: audit
         )
         server = LoopbackMCPServer(gateway: gateway, sourceController: sourceController)
