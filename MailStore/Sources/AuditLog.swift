@@ -45,17 +45,25 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
     public let label: String
     public let disposition: Disposition
     public let discloseToAgent: Bool
+    /// Matched substring from the original field.
+    public let original: String
+    /// Replacement text when disposition is `.replaced`; empty otherwise.
+    public let replacement: String
 
     public init(
         field: Field,
         label: String,
         disposition: Disposition,
-        discloseToAgent: Bool
+        discloseToAgent: Bool,
+        original: String = "",
+        replacement: String = ""
     ) {
         self.field = field
         self.label = label
         self.disposition = disposition
         self.discloseToAgent = discloseToAgent
+        self.original = original
+        self.replacement = replacement
     }
 
     public static func from(
@@ -74,22 +82,63 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
 
     private static func from(field: Field, sanitized: SanitizedField) -> [AuditLeakDetection] {
         let withheld = sanitized.access == .withheldConfidential
-        return sanitized.hitSpans.map { hit in
+        return sanitized.hitSpans.compactMap { hit in
+            guard let originalPart = substring(sanitized.original, start: hit.start, end: hit.end)
+            else { return nil }
             let disposition: Disposition
+            let replacement: String
             if withheld {
                 disposition = .withheld
+                replacement = ""
             } else if hit.action == .replace {
                 disposition = .replaced
+                replacement = hit.actionValue
             } else {
                 disposition = .redacted
+                replacement = ""
             }
             return AuditLeakDetection(
                 field: field,
                 label: hit.label,
                 disposition: disposition,
-                discloseToAgent: hit.discloseToAgent
+                discloseToAgent: hit.discloseToAgent,
+                original: originalPart,
+                replacement: replacement
             )
         }
+    }
+
+    private static func substring(_ text: String, start: Int, end: Int) -> String? {
+        guard start >= 0, end >= start, end <= text.count else { return nil }
+        let lower = text.index(text.startIndex, offsetBy: start)
+        let upper = text.index(text.startIndex, offsetBy: end)
+        return String(text[lower..<upper])
+    }
+}
+
+extension AuditLeakDetection {
+    enum CodingKeys: String, CodingKey {
+        case field, label, disposition, discloseToAgent, original, replacement
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        field = try container.decode(Field.self, forKey: .field)
+        label = try container.decode(String.self, forKey: .label)
+        disposition = try container.decode(Disposition.self, forKey: .disposition)
+        discloseToAgent = try container.decode(Bool.self, forKey: .discloseToAgent)
+        original = try container.decodeIfPresent(String.self, forKey: .original) ?? label
+        replacement = try container.decodeIfPresent(String.self, forKey: .replacement) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(field, forKey: .field)
+        try container.encode(label, forKey: .label)
+        try container.encode(disposition, forKey: .disposition)
+        try container.encode(discloseToAgent, forKey: .discloseToAgent)
+        try container.encode(original, forKey: .original)
+        try container.encode(replacement, forKey: .replacement)
     }
 }
 
@@ -221,27 +270,89 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
             disposition = .redacted
         }
         let field: AuditLeakDetection.Field =
-            (bodyAccess == .sanitized || bodyAccess == .withheldConfidential || stealth == true)
+            (bodyAccess == .sanitized || bodyAccess == .withheldConfidential || stealth == true
+                || bodyOriginal != nil)
                 ? .body
                 : .subject
+        let originalForField: String = {
+            switch field {
+            case .body:
+                return bodyOriginal ?? ""
+            case .subject:
+                return subjectOriginal ?? ""
+            }
+        }()
+        let deliveredForField: String = {
+            switch field {
+            case .body:
+                return bodySnippet
+            case .subject:
+                return subject
+            }
+        }()
+        let label = sanitizedRules?.first
+            ?? (stealth == true ? "Stealth replace" : "Sensitive content")
+        // Older logs often lack per-span hits; avoid fake A → A rows when snippet == original.
+        let originalsMatchDelivered =
+            !originalForField.isEmpty && originalForField == deliveredForField
+        if originalsMatchDelivered || (originalForField.isEmpty && deliveredForField.isEmpty) {
+            return [
+                AuditLeakDetection(
+                    field: field,
+                    label: label,
+                    disposition: disposition,
+                    discloseToAgent: stealth != true,
+                    original: "Hit details not retained in this log entry",
+                    replacement: disposition == .replaced ? "re-fetch message to record spans" : ""
+                )
+            ]
+        }
         if let sanitizedRules, !sanitizedRules.isEmpty {
             return sanitizedRules.map {
                 AuditLeakDetection(
                     field: field,
                     label: $0,
                     disposition: disposition,
-                    discloseToAgent: stealth != true
+                    discloseToAgent: stealth != true,
+                    original: previewSpan(originalForField, fallback: $0),
+                    replacement: disposition == .replaced
+                        ? previewSpan(deliveredForField, fallback: "…")
+                        : ""
                 )
             }
         }
         return [
             AuditLeakDetection(
                 field: field,
-                label: stealth == true ? "Stealth replace" : "Sensitive content",
+                label: label,
                 disposition: disposition,
-                discloseToAgent: stealth != true
+                discloseToAgent: stealth != true,
+                original: previewSpan(
+                    originalForField,
+                    fallback: stealth == true ? "Stealth replace" : "Sensitive content"
+                ),
+                replacement: disposition == .replaced
+                    ? previewSpan(deliveredForField, fallback: "…")
+                    : ""
             )
         ]
+    }
+
+    private static func previewSpan(_ text: String, fallback: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return fallback }
+        if let firstLine = trimmed.split(whereSeparator: \.isNewline).first {
+            let line = String(firstLine)
+            if line.count > 80 {
+                return String(line.prefix(80)) + "…"
+            }
+            return line
+        }
+        return fallback
+    }
+
+    private func previewSpan(_ text: String, fallback: String) -> String {
+        Self.previewSpan(text, fallback: fallback)
     }
 
     public var attachmentNamesDetail: String {
@@ -629,7 +740,8 @@ extension AuditMessageRef {
         let snippet: String
         if let bodySanitized {
             bodyAuditAccess = bodySanitized.access.auditBodyAccess
-            snippet = String(bodySanitized.original.prefix(Self.bodySnippetCap))
+            // Agent-facing text for preview; original stays in bodyOriginal.
+            snippet = String(bodySanitized.text.prefix(Self.bodySnippetCap))
         } else {
             switch message.body {
             case .text(let text):

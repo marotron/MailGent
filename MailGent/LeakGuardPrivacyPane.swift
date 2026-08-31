@@ -388,7 +388,7 @@ struct GrantDeskInfoTopic: Equatable {
             "Opt-in allowlist entry for leak guard. Same L shield icon everywhere — Scope rows, Access asset list, and docs."
         ],
         bullets: [
-            "Click L on allowed rows to opt in; orange when active.",
+            "Click L on allowed rows to opt in; purple when active.",
             "Active → master on and placement opted in.",
             "Pending → opted in but master switch off.",
             "Off → not opted in.",
@@ -658,24 +658,24 @@ struct LeakGuardShieldChip: View {
     private var foreground: Color {
         switch state {
         case .off: Color.secondary.opacity(0.55)
-        case .pending: Color.orange.opacity(0.88)
-        case .on: Color.orange
+        case .pending: LeakGuardStyle.text
+        case .on: LeakGuardStyle.ink
         }
     }
 
     private var background: Color {
         switch state {
         case .off: Color.secondary.opacity(0.08)
-        case .pending: Color.orange.opacity(0.12)
-        case .on: Color.orange.opacity(0.15)
+        case .pending: LeakGuardStyle.fill
+        case .on: LeakGuardStyle.fillStrong
         }
     }
 
     private var border: Color {
         switch state {
         case .off: Color.secondary.opacity(0.2)
-        case .pending: Color.orange.opacity(0.25)
-        case .on: Color.orange.opacity(0.35)
+        case .pending: LeakGuardStyle.borderSoft
+        case .on: LeakGuardStyle.border
         }
     }
 

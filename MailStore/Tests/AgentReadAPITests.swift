@@ -123,12 +123,57 @@ struct AgentReadAPITests {
         #expect((response["sanitizedRules"] as? [String])?.contains("Password patterns") == true)
         #expect(get.messages.count == 1)
         #expect(get.messages[0].bodyOriginal == "password=hunter2\nPlease pay")
+        #expect(get.messages[0].bodySnippet.contains("[REDACTED:Password patterns]"))
         #expect(get.messages[0].sanitizedRules?.contains("Password patterns") == true)
         #expect(get.messages[0].bodyAccess == .sanitized)
         #expect(get.messages[0].leakDetectionCount >= 1)
         #expect(
             get.messages[0].leakDetections?.contains {
-                $0.field == .body && $0.label == "Password patterns" && $0.disposition == .redacted
+                $0.field == .body
+                    && $0.label == "Password patterns"
+                    && $0.disposition == .redacted
+                    && $0.original.contains("password=hunter2")
+            } == true
+        )
+    }
+
+    @Test func getAuditRefRetainsStealthReplaceHits() throws {
+        let rule = CustomLeakRule(
+            label: "My name",
+            kind: .literal,
+            pattern: "Marotron",
+            action: .replace,
+            actionValue: "John Smith",
+            discloseToAgent: false
+        )
+        let env = try LeakGuardReadFixture(
+            body: "From Marotron",
+            builtIns: [:],
+            customRules: [rule],
+            audit: true
+        )
+        defer { env.remove() }
+
+        _ = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        let get = try #require(env.audit?.entries().last { $0.kind == .get })
+        #expect(get.messages.count == 1)
+        #expect(get.messages[0].bodyAccess == .sanitized)
+        #expect(get.messages[0].stealth == true)
+        #expect(get.messages[0].bodyOriginal == "From Marotron")
+        #expect(get.messages[0].bodySnippet == "From John Smith")
+        #expect(
+            get.messages[0].leakDetections?.contains {
+                $0.field == .body
+                    && $0.label == "My name"
+                    && $0.disposition == .replaced
+                    && $0.original == "Marotron"
+                    && $0.replacement == "John Smith"
+                    && $0.discloseToAgent == false
             } == true
         )
     }

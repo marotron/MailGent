@@ -23,6 +23,9 @@
       --green: #248a3d;
       --amber: #b86e00;
       --amber-soft: #fff4e0;
+      --leak: #7a3db8;
+      --leak-soft: #f3e8ff;
+      --leak-border: #c4a0e8;
       --red: #ff3b30;
       --red-soft: rgba(255, 59, 48, 0.06);
       --red-stripe: rgba(255, 59, 48, 0.28);
@@ -268,9 +271,9 @@
     button.chip.on { font-weight: 600; }
     button.chip:hover { opacity: 1; border-color: #7eb6ff; }
     .chip.shield.on {
-      background: var(--amber-soft);
-      border-color: rgba(184, 110, 0, 0.35);
-      color: var(--amber);
+      background: var(--leak-soft);
+      border-color: rgba(122, 61, 184, 0.35);
+      color: var(--leak);
       opacity: 1;
       text-decoration: none;
       font-weight: 500;
@@ -286,9 +289,9 @@
     .chip.shield.pending {
       opacity: 0.72;
       text-decoration: none;
-      background: var(--amber-soft);
-      border-color: rgba(184, 110, 0, 0.25);
-      color: var(--amber);
+      background: var(--leak-soft);
+      border-color: rgba(122, 61, 184, 0.25);
+      color: var(--leak);
     }
     .chip.shield {
       position: relative;
@@ -704,8 +707,8 @@
       width: 14px; height: 14px; border-radius: 3px; border: 1px solid #0002;
     }
     .swatch.grant { background: repeating-linear-gradient(-45deg,#eee,#eee 2px,#e0e0e0 2px,#e0e0e0 4px); }
-    .swatch.withheld { background: var(--amber-soft); border-color: #e8b84d; }
-    .swatch.sanitized { background: #fff8e6; border: 2px dashed #e8b84d; }
+    .swatch.withheld { background: var(--leak-soft); border-color: var(--leak-border); }
+    .swatch.sanitized { background: var(--leak-soft); border: 2px solid var(--leak-border); }
     .preview-block {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -745,7 +748,7 @@
       margin-left: 6px;
     }
     .badge.grant { background: var(--red-soft); color: var(--red-legend); }
-    .badge.leak { background: var(--amber-soft); color: var(--amber); }
+    .badge.leak { background: var(--leak-soft); color: var(--leak); }
     .badge.stealth { background: #eef2ff; color: #3d5afe; }
     .badge.ok { background: #e8f5e9; color: var(--green); }
     .hatch {
@@ -781,16 +784,17 @@
       display: inline-block;
       padding: 2px 8px;
       border-radius: 4px;
-      background: var(--amber-soft);
-      border: 1px solid #e8b84d;
-      color: var(--amber);
+      background: var(--leak-soft);
+      border: 1px solid var(--leak-border);
+      color: var(--leak);
       font-size: 11px;
       font-weight: 600;
     }
     .sanitized-text {
-      background: linear-gradient(180deg, transparent 60%, #ffe8a8 60%);
+      background: rgba(122, 61, 184, 0.14);
+      border-radius: 3px;
+      padding: 0 2px;
       cursor: help;
-      border-bottom: 1px dotted var(--amber);
     }
     .warn { color: var(--amber); font-size: 11px; margin-top: 6px; }
     .err { color: var(--red); font-size: 11px; margin-top: 4px; }
@@ -857,7 +861,7 @@
       margin-right: 4px;
     }
     .info-panel .tag.grant { background: var(--red-soft); color: var(--red); }
-    .info-panel .tag.leak { background: var(--amber-soft); color: var(--amber); }
+    .info-panel .tag.leak { background: var(--leak-soft); color: var(--leak); }
     .info-panel .info-examples {
       margin: 6px 0 0;
       padding: 6px 8px;
@@ -1082,7 +1086,7 @@ Marotron</textarea>
         body: `<p>Per-field behavior when any detector or custom rule matches.</p>
           <ul>
             <li><strong>Redact / replace matching parts</strong> — only matched spans change; rest of field stays granted. MCP: <code>sanitized</code> + <code>sanitizedRules</code> when disclosed.</li>
-            <li><strong>Block entire field</strong> — whole subject or body withheld. MCP: <code>withheld_confidential</code>, reason <code>leak_guard</code>; access log shows amber shield, not hatch.</li>
+            <li><strong>Block entire field</strong> — whole subject or body withheld. MCP: <code>withheld_confidential</code>, reason <code>leak_guard</code>; access log shows purple shield, not hatch.</li>
           </ul>
           <p>Subject and body can use different modes (e.g. redact body spans but block sensitive subjects entirely).</p>`
       },
@@ -1090,7 +1094,7 @@ Marotron</textarea>
         title: "Stealth vs disclosed replace",
         body: `<p>When a custom rule uses <strong>Replace with fake value</strong>:</p>
           <ul>
-            <li><strong>Tell agent sanitized</strong> (on) → MCP flags <code>sanitized</code>, includes rule label in <code>sanitizedRules</code>; access log shows dashed amber spans with hover original.</li>
+            <li><strong>Tell agent sanitized</strong> (on) → MCP flags <code>sanitized</code>, includes rule label in <code>sanitizedRules</code>; access log shows purple-tinted spans with hover original.</li>
             <li><strong>Stealth</strong> (off) → agent sees <code>granted</code> plain text with fake value baked in; human audit log still retains original for hover/tooltip.</li>
           </ul>
           <p>Redact actions are always disclosed. Stealth is for cases where the agent should treat substituted text as real (e.g. pseudonym in a coaching thread).</p>`
@@ -1100,8 +1104,8 @@ Marotron</textarea>
         body: `<p>Three visually distinct outcomes — never conflate grant denial with autodetect.</p>
           <ul>
             <li><span class="tag grant">Grant</span> Red hatch / <code>not_granted</code> — you did not allow this field on Scope. Leak guard did not run on withheld text.</li>
-            <li><span class="tag leak">Leak</span> Amber shield — whole field blocked because hit mode = block entire field.</li>
-            <li><span class="tag leak">Leak</span> Dashed underline — span redacted or replaced; hover for original in access log mock.</li>
+            <li><span class="tag leak">Leak</span> Purple shield — whole field blocked because hit mode = block entire field.</li>
+            <li><span class="tag leak">Leak</span> Purple tint — span redacted or replaced; hover for original in access log mock.</li>
             <li><strong>Stealth replace</strong> — preview badge shows granted; JSON may include a <code>note</code> for humans only.</li>
           </ul>`
       },

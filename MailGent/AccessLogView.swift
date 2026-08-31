@@ -286,7 +286,7 @@ private struct AccessLogRow: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             if leakHitCount > 0 {
-                AccessLogLeakHitBadge(count: leakHitCount)
+                AccessLogLeakHitBadge(count: leakHitCount, compact: true)
             }
             Text(timeLabel)
                 .font(.caption2)
@@ -494,12 +494,6 @@ private struct AccessLogDetail: View {
                         .foregroundStyle(HeadersOnlyStyle.text)
                 }
             }
-            if !entry.messages.isEmpty {
-                LockedFieldsLegend()
-            }
-            if AccessLogFormat.showsSanitizedLegend(for: displayMessages) {
-                SanitizedFieldsLegend()
-            }
             ForEach(displayMessages, id: \.rowID) { ref in
                 CollapsibleAuditMessage(
                     session: session,
@@ -688,7 +682,7 @@ private struct CollapsibleAuditMessage: View {
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .padding(.top, 2)
                         .frame(width: 10)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(collapsedTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
@@ -698,13 +692,30 @@ private struct CollapsibleAuditMessage: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
-                            GrantFieldBadgeRow(
-                                fields: ref.fields,
-                                labelMode: expanded ? .short : .icon
-                            )
-                            .fixedSize(horizontal: true, vertical: false)
-                            if ref.leakDetectionCount > 0 {
-                                AccessLogLeakHitBadge(count: ref.leakDetectionCount)
+                            if !expanded {
+                                GrantFieldBadgeRow(
+                                    fields: ref.fields,
+                                    labelMode: .icon
+                                )
+                                .fixedSize(horizontal: true, vertical: false)
+                                if ref.leakDetectionCount > 0 {
+                                    AccessLogLeakHitBadge(
+                                        count: ref.leakDetectionCount,
+                                        compact: true
+                                    )
+                                }
+                            }
+                        }
+                        if expanded {
+                            HStack(alignment: .center, spacing: 6) {
+                                GrantFieldBadgeRow(
+                                    fields: ref.fields,
+                                    labelMode: .short
+                                )
+                                .fixedSize(horizontal: true, vertical: false)
+                                if ref.leakDetectionCount > 0 {
+                                    AccessLogLeakHitBadge(count: ref.leakDetectionCount)
+                                }
                             }
                         }
                     }
@@ -740,6 +751,11 @@ private struct CollapsibleAuditMessage: View {
                     }
                     .buttonStyle(.plain)
                     .help("Open in Companion Read")
+
+                    if AccessLogFormat.showsSanitizedLegend(for: [ref]) {
+                        SanitizedFieldsLegend()
+                    }
+                    LockedFieldsLegend()
                 }
                 .padding(.leading, 18)
             }
@@ -1111,26 +1127,106 @@ enum AccessLogFormat {
             || mergedStealth == true
         else { return ref }
 
+        let recovered = Self.recoverStealthBodies(ref: ref, response: obj, stealth: mergedStealth == true)
+
         return AuditMessageRef(
             accountID: ref.accountID,
             placement: ref.placement,
             id: ref.id,
-            subject: ref.subject,
+            subject: recovered.subject,
             from: ref.from,
             date: ref.date,
             to: ref.to,
             cc: ref.cc,
-            bodySnippet: ref.bodySnippet,
-            subjectAccess: ref.subjectAccess ?? parsedSubjectAccess,
-            bodyAccess: parsedBodyAccess ?? ref.bodyAccess,
-            subjectOriginal: ref.subjectOriginal,
-            bodyOriginal: ref.bodyOriginal,
+            bodySnippet: recovered.bodySnippet,
+            subjectAccess: Self.preferHumanAccess(
+                recorded: ref.subjectAccess,
+                parsed: parsedSubjectAccess,
+                stealth: mergedStealth == true,
+                hasLeakEvidence: recovered.subjectOriginal != nil
+                    || (ref.leakDetections ?? []).contains { $0.field == .subject }
+            ),
+            bodyAccess: Self.preferHumanAccess(
+                recorded: ref.bodyAccess,
+                parsed: parsedBodyAccess,
+                stealth: mergedStealth == true,
+                hasLeakEvidence: recovered.bodyOriginal != nil
+                    || (ref.leakDetections ?? []).contains { $0.field == .body }
+            ) ?? ref.bodyAccess,
+            subjectOriginal: recovered.subjectOriginal,
+            bodyOriginal: recovered.bodyOriginal,
             sanitizedRules: mergedRules,
             stealth: mergedStealth,
             leakDetections: ref.leakDetections,
             fields: ref.fields,
             attachments: ref.attachments
         )
+    }
+
+    /// Older stealth audits stored original as bodySnippet. Prefer agent text from response JSON.
+    private static func recoverStealthBodies(
+        ref: AuditMessageRef,
+        response: [String: Any],
+        stealth: Bool
+    ) -> (
+        subject: String,
+        subjectOriginal: String?,
+        bodySnippet: String,
+        bodyOriginal: String?
+    ) {
+        var subject = ref.subject
+        var subjectOriginal = ref.subjectOriginal
+        var bodySnippet = ref.bodySnippet
+        var bodyOriginal = ref.bodyOriginal
+
+        guard stealth else {
+            return (subject, subjectOriginal, bodySnippet, bodyOriginal)
+        }
+
+        if let responseBody = response["body"] as? String, !responseBody.isEmpty {
+            let capped = String(responseBody.prefix(AuditMessageRef.bodySnippetCap))
+            if let original = bodyOriginal, original != responseBody {
+                bodySnippet = capped
+            } else if bodyOriginal == nil, capped != ref.bodySnippet {
+                bodyOriginal = ref.bodySnippet
+                bodySnippet = capped
+            } else if bodyOriginal == ref.bodySnippet, capped != ref.bodySnippet {
+                bodySnippet = capped
+            }
+        }
+
+        if let responseSubject = response["subject"] as? String, !responseSubject.isEmpty {
+            if let original = subjectOriginal, original != responseSubject {
+                subject = responseSubject
+            } else if subjectOriginal == nil, responseSubject != ref.subject {
+                subjectOriginal = ref.subject
+                subject = responseSubject
+            } else if subjectOriginal == ref.subject, responseSubject != ref.subject {
+                subject = responseSubject
+            }
+        }
+
+        return (subject, subjectOriginal, bodySnippet, bodyOriginal)
+    }
+
+    /// Prefer audit-recorded human access over agent-facing JSON.
+    /// Stealth responses report `granted` to the agent; Access Log must keep sanitized.
+    private static func preferHumanAccess(
+        recorded: AuditBodyAccess?,
+        parsed: AuditBodyAccess?,
+        stealth: Bool,
+        hasLeakEvidence: Bool
+    ) -> AuditBodyAccess? {
+        if let recorded, recorded == .sanitized || recorded == .withheldConfidential {
+            return recorded
+        }
+        if stealth, hasLeakEvidence {
+            if recorded == .granted || recorded == nil, parsed == .granted || parsed == nil {
+                return .sanitized
+            }
+        }
+        if let recorded { return recorded }
+        return parsed
     }
 
     static func leakGuardDetail(from responseSummary: String) -> LeakGuardResponseDetail? {

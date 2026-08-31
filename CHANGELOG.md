@@ -16,6 +16,11 @@ Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called o
 - Access log shows sanitized spans and withheld fields; hover reveals originals; audit refs record per-hit leak detections for badges and detail.
 - Leak guard policy persisted in `~/Library/Application Support/MailGent/sensitive-filter.json`.
 
+### Changed
+
+- Access log leak-guard chrome uses purple (not warning orange); sanitized fields use a purple tint instead of a dashed underline.
+- Access log leak-hit badges and detection rows show original → replacement; stealth audits keep human-visible sanitized markers.
+
 ## [0.1.9] - 2026-08-28
 
 ### Fixed

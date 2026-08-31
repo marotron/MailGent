@@ -1232,7 +1232,7 @@ struct MessageAccessCard: View {
             label: "Subject",
             text: ref.subject.isEmpty ? "(no subject)" : ref.subject,
             fieldGranted: ref.fields.subject,
-            access: ref.subjectAccess ?? .granted,
+            access: effectiveSubjectAccess,
             original: ref.subjectOriginal,
             deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject
         )
@@ -1240,9 +1240,9 @@ struct MessageAccessCard: View {
 
     @ViewBuilder
     private var bodyPreview: some View {
-        if omitsBody, ref.bodyAccess != .notGranted {
+        if omitsBody, effectiveBodyAccess != .notGranted {
             omittedBodyPreview
-        } else if ref.bodyAccess == .notGranted {
+        } else if effectiveBodyAccess == .notGranted {
             HatchDeniedLabel(placeholder: "Body / snippet", fixedHeight: 112)
                 .frame(maxWidth: .infinity)
                 .padding(10)
@@ -1260,7 +1260,7 @@ struct MessageAccessCard: View {
 
     @ViewBuilder
     private var bodyFieldContent: some View {
-        switch ref.bodyAccess {
+        switch effectiveBodyAccess {
         case .granted:
             Text(ref.bodySnippet)
                 .font(.caption)
@@ -1282,6 +1282,28 @@ struct MessageAccessCard: View {
         case .withheldConfidential:
             WithheldLabel(original: ref.bodyOriginal, rules: ref.sanitizedRules)
         }
+    }
+
+    /// Agent JSON may report stealth substitutes as `granted`; Access Log still marks them.
+    private var effectiveBodyAccess: AuditBodyAccess {
+        if ref.bodyAccess == .granted,
+           ref.stealth == true,
+           (ref.bodyOriginal != nil || ref.displayLeakDetections.contains { $0.field == .body })
+        {
+            return .sanitized
+        }
+        return ref.bodyAccess
+    }
+
+    private var effectiveSubjectAccess: AuditBodyAccess {
+        let access = ref.subjectAccess ?? .granted
+        if access == .granted,
+           ref.stealth == true,
+           (ref.subjectOriginal != nil || ref.displayLeakDetections.contains { $0.field == .subject })
+        {
+            return .sanitized
+        }
+        return access
     }
 
     @ViewBuilder
@@ -1485,10 +1507,35 @@ struct HatchPattern: View {
 
 struct AccessLogLeakHitBadge: View {
     let count: Int
+    /// Collapsed / list: shield chip + count. Expanded: `{shield} leak` chip + count.
+    var compact: Bool = false
 
     var body: some View {
         HStack(spacing: 3) {
-            LeakGuardShieldChip(state: .on)
+            HStack(spacing: compact ? 0 : 3) {
+                ZStack {
+                    Text("L")
+                        .font(.system(size: 8, weight: .semibold))
+                        .opacity(0)
+                    Image(systemName: "shield.fill")
+                        .font(.system(size: 9, weight: .medium))
+                    Text("L")
+                        .font(.system(size: 5.5, weight: .bold))
+                        .offset(y: 0.5)
+                }
+                if !compact {
+                    Text("leak")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .foregroundStyle(WithheldStyle.text)
+            .padding(.horizontal, compact ? 4 : 5)
+            .frame(height: 14)
+            .background(Capsule().fill(WithheldStyle.fill))
+            .overlay {
+                Capsule().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+            }
+
             Text("\(count)")
                 .font(.caption2.weight(.semibold).monospacedDigit())
                 .foregroundStyle(WithheldStyle.text)
@@ -1507,76 +1554,158 @@ struct LeakGuardDetectionsList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                LeakGuardShieldChip(state: .on)
-                Text("Leak guard · \(detections.count)")
-                    .font(.caption.weight(.semibold))
-                Spacer(minLength: 0)
+            ForEach(Array(detections.enumerated()), id: \.offset) { _, detection in
+                detectionRow(detection)
             }
-            .foregroundStyle(WithheldStyle.text)
-
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(detections.enumerated()), id: \.offset) { _, detection in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(fieldLabel(detection.field))
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 52, alignment: .leading)
-                        Text(detection.label)
-                            .font(.caption)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        dispositionBadge(detection)
-                    }
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WithheldStyle.fill, in: RoundedRectangle(cornerRadius: 6))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(WithheldStyle.border, lineWidth: 0.5)
-            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WithheldStyle.fill, in: RoundedRectangle(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(WithheldStyle.border, lineWidth: 0.5)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Leak guard detections")
     }
 
-    private func fieldLabel(_ field: AuditLeakDetection.Field) -> String {
+    @ViewBuilder
+    private func detectionRow(_ detection: AuditLeakDetection) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Text(fieldTitle(detection.field))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(WithheldStyle.text)
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(detection.label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(modeTitle(detection))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(WithheldStyle.text)
+                Spacer(minLength: 0)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(displayOriginal(detection))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Text("→")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                replacementView(detection)
+                Spacer(minLength: 0)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText(detection))
+        .help(helpText(detection))
+    }
+
+    private func fieldTitle(_ field: AuditLeakDetection.Field) -> String {
         switch field {
         case .subject: "Subject"
         case .body: "Body"
         }
     }
 
-    @ViewBuilder
-    private func dispositionBadge(_ detection: AuditLeakDetection) -> some View {
-        let title: String
+    private func modeTitle(_ detection: AuditLeakDetection) -> String {
         switch detection.disposition {
-        case .redacted: title = "Redacted"
-        case .replaced: title = detection.discloseToAgent ? "Replaced" : "Replaced · stealth"
-        case .withheld: title = "Withheld"
+        case .redacted:
+            return "redacted"
+        case .replaced:
+            return detection.discloseToAgent ? "replaced" : "stealth replace"
+        case .withheld:
+            return "withheld"
         }
-        Text(title)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(WithheldStyle.text)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(WithheldStyle.fill, in: Capsule())
-            .overlay {
-                Capsule().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
-            }
-            .accessibilityLabel(title)
+    }
+
+    private func displayOriginal(_ detection: AuditLeakDetection) -> String {
+        let text = detection.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? detection.label : text
+    }
+
+    @ViewBuilder
+    private func replacementView(_ detection: AuditLeakDetection) -> some View {
+        switch detection.disposition {
+        case .redacted:
+            RedactedTokenChip()
+        case .replaced:
+            Text(detection.replacement.isEmpty ? "…" : detection.replacement)
+                .font(.caption.monospaced())
+                .foregroundStyle(WithheldStyle.text)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        case .withheld:
+            WithheldLabel(rules: [detection.label])
+        }
+    }
+
+    private func accessibilityText(_ detection: AuditLeakDetection) -> String {
+        let whereField = fieldTitle(detection.field)
+        let mode = modeTitle(detection)
+        let original = displayOriginal(detection)
+        switch detection.disposition {
+        case .redacted:
+            return "\(whereField), \(detection.label), \(mode): \(original) redacted"
+        case .replaced:
+            return "\(whereField), \(detection.label), \(mode): \(original) to \(detection.replacement)"
+        case .withheld:
+            return "\(whereField), \(detection.label), \(mode): \(original)"
+        }
+    }
+
+    private func helpText(_ detection: AuditLeakDetection) -> String {
+        "\(fieldTitle(detection.field)) · \(detection.label) · \(modeTitle(detection))"
     }
 }
 
+/// Compact hatch chip for `[REDACTED]` in leak-detection rows.
+struct RedactedTokenChip: View {
+    var body: some View {
+        Text("[REDACTED]")
+            .font(.system(size: 9, weight: .bold).monospaced())
+            .foregroundStyle(HatchDeniedStyle.lock)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background {
+                HatchPattern().opacity(0.95)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(HatchDeniedStyle.stripe, lineWidth: 0.5)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .accessibilityLabel("Redacted")
+    }
+}
+
+/// Leak guard chrome — violet, not warning orange / grant red / success green / accent blue.
+enum LeakGuardStyle {
+    static let ink = Color.purple
+    static let text = Color.purple.opacity(0.88)
+    static let fill = Color.purple.opacity(0.12)
+    static let fillStrong = Color.purple.opacity(0.15)
+    static let border = Color.purple.opacity(0.38)
+    static let borderSoft = Color.purple.opacity(0.25)
+    static let legend = Color.purple.opacity(0.78)
+}
+
 enum WithheldStyle {
-    static let text = Color.orange.opacity(0.88)
-    static let fill = Color.orange.opacity(0.12)
-    static let border = Color.orange.opacity(0.38)
-    static let legend = Color.orange.opacity(0.78)
+    static let text = LeakGuardStyle.text
+    static let fill = LeakGuardStyle.fill
+    static let border = LeakGuardStyle.border
+    static let legend = LeakGuardStyle.legend
 }
 
 struct WithheldLabel: View {
@@ -1615,8 +1744,8 @@ struct WithheldLabel: View {
 }
 
 enum SanitizedFieldStyle {
-    static let underline = Color.orange.opacity(0.72)
-    static let legend = Color.orange.opacity(0.78)
+    static let fill = Color.purple.opacity(0.14)
+    static let legend = LeakGuardStyle.legend
 }
 
 struct SanitizedFieldText: View {
@@ -1630,7 +1759,14 @@ struct SanitizedFieldText: View {
         Text(displayText)
             .font(font)
             .foregroundStyle(displayText.isEmpty ? .secondary : .primary)
-            .underline(hasSanitizationMarker, pattern: .dash, color: SanitizedFieldStyle.underline)
+            .padding(.horizontal, hasSanitizationMarker ? 4 : 0)
+            .padding(.vertical, hasSanitizationMarker ? 2 : 0)
+            .background {
+                if hasSanitizationMarker {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(SanitizedFieldStyle.fill)
+                }
+            }
             .textSelection(.enabled)
             .help(tooltip)
             .accessibilityLabel(accessibilityLabel)
@@ -1681,13 +1817,13 @@ struct SanitizedFieldsLegend: View {
         HStack(alignment: .center, spacing: 4) {
             Image(systemName: "text.line.first.and.arrowtriangle.forward")
                 .font(.system(size: 9, weight: .semibold))
-            Text("Sanitized. Dashed underline — hover for original text and matching rules.")
+            Text("Sanitized. Purple tint — hover for original text and matching rules.")
                 .font(.system(size: 10))
         }
         .foregroundStyle(SanitizedFieldStyle.legend)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "Sanitized. Dashed underline. Hover for original text and matching rules."
+            "Sanitized. Purple tint. Hover for original text and matching rules."
         )
     }
 }

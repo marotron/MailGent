@@ -69,7 +69,7 @@ enum SpanFinder {
               let range = haystack.range(of: needleNorm, range: searchStart..<haystack.endIndex)
         {
             let start = haystack.distance(from: haystack.startIndex, to: range.lowerBound)
-            let end = start + needle.count
+            let end = start + needleNorm.count
             hits.append((start, end))
             searchStart = haystack.index(range.lowerBound, offsetBy: max(needleNorm.count, 1))
         }
