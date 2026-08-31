@@ -1483,6 +1483,95 @@ struct HatchPattern: View {
 
 // MARK: - Leak guard access log visuals
 
+struct AccessLogLeakHitBadge: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 3) {
+            LeakGuardShieldChip(state: .on)
+            Text("\(count)")
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(WithheldStyle.text)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Leak guard detected \(count) part\(count == 1 ? "" : "s")"
+        )
+        .help("Leak guard detected \(count) sensitive part\(count == 1 ? "" : "s")")
+        .layoutPriority(1)
+    }
+}
+
+struct LeakGuardDetectionsList: View {
+    let detections: [AuditLeakDetection]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                LeakGuardShieldChip(state: .on)
+                Text("Leak guard · \(detections.count)")
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(WithheldStyle.text)
+
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(detections.enumerated()), id: \.offset) { _, detection in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(fieldLabel(detection.field))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 52, alignment: .leading)
+                        Text(detection.label)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        dispositionBadge(detection)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WithheldStyle.fill, in: RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Leak guard detections")
+    }
+
+    private func fieldLabel(_ field: AuditLeakDetection.Field) -> String {
+        switch field {
+        case .subject: "Subject"
+        case .body: "Body"
+        }
+    }
+
+    @ViewBuilder
+    private func dispositionBadge(_ detection: AuditLeakDetection) -> some View {
+        let title: String
+        switch detection.disposition {
+        case .redacted: title = "Redacted"
+        case .replaced: title = detection.discloseToAgent ? "Replaced" : "Replaced · stealth"
+        case .withheld: title = "Withheld"
+        }
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(WithheldStyle.text)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(WithheldStyle.fill, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+            }
+            .accessibilityLabel(title)
+    }
+}
+
 enum WithheldStyle {
     static let text = Color.orange.opacity(0.88)
     static let fill = Color.orange.opacity(0.12)

@@ -491,17 +491,15 @@ private struct AgentAccessPreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if !sampleRef.displayLeakDetections.isEmpty {
+                LeakGuardDetectionsList(detections: sampleRef.displayLeakDetections)
+            }
             MessageAccessCard(
                 session: session,
                 ref: sampleRef,
                 showsFieldBadges: false,
                 attachmentContentDetail: sample.attachmentContentDetail
             )
-            if let rules = sampleRef.sanitizedRules, !rules.isEmpty {
-                Text("Sanitized: \(rules.joined(separator: ", "))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
             if AccessLogFormat.showsSanitizedLegend(for: [sampleRef]) {
                 SanitizedFieldsLegend()
             }
@@ -544,6 +542,7 @@ private struct AgentAccessPreview: View {
             bodyOriginal: bodyField.original != bodyField.text ? bodyField.original : nil,
             sanitizedRules: disclosed.isEmpty ? nil : disclosed,
             stealth: subjectField.stealth || bodyField.stealth,
+            leakDetections: AuditLeakDetection.from(subject: subjectField, body: bodyField),
             fields: grant.fields,
             attachments: grant.fields.attachmentMetadata ? sample.mailAttachments : []
         )

@@ -125,6 +125,12 @@ struct AgentReadAPITests {
         #expect(get.messages[0].bodyOriginal == "password=hunter2\nPlease pay")
         #expect(get.messages[0].sanitizedRules?.contains("Password patterns") == true)
         #expect(get.messages[0].bodyAccess == .sanitized)
+        #expect(get.messages[0].leakDetectionCount >= 1)
+        #expect(
+            get.messages[0].leakDetections?.contains {
+                $0.field == .body && $0.label == "Password patterns" && $0.disposition == .redacted
+            } == true
+        )
     }
 
     @Test func getDoesNotScanDeniedBodyEvenWithLeakGuard() throws {
