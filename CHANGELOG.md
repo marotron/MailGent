@@ -6,6 +6,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.3.0] - 2026-09-04
+
+### Added
+
+- **Multi-agent pairing** — Pair Cursor and Pair Grok Bot as independent machine-local agents on the same loopback MCP URL (distinct Bearers).
+- Companion **half-width agent cards** (2-column grid) with per-agent snippet, revoke, grant count, and selection for Grant Desk.
+- Grant Desk **agent picker**; allows/denies stay per `agentID`. Leak guard policy remains global.
+- `GrokMark` asset + `AgentGlyph` support for Grok Bot; Cursor keeps auto-sync into `~/.cursor/mcp.json` (Grok Bot is copyable snippet only).
+- `pairing.json` **v2** (agents array + selectedAgentID) with automatic v1→v2 migration; `grants.json` persists the union of all agents’ grants.
+
+### Changed
+
+- Startup restores all persisted agents; auto-pairs **Cursor only** when none exist. Revoke no longer re-pairs another agent.
+- Menu bar / status shows selected name, or `N agents` when more than one is paired.
+
 ## [0.2.0] - 2026-08-31
 
 ### Added

@@ -2,6 +2,26 @@ import Foundation
 import MailStore
 import Observation
 
+/// Machine-local pairing presets shown as half-width companion cards.
+enum AgentPairingPreset: String, CaseIterable, Identifiable {
+    case cursor = "Cursor"
+    case grok = "Grok Bot"
+
+    var id: String { rawValue }
+    var displayName: String { rawValue }
+}
+
+struct PairedAgentCredential: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let trustClass: AgentTrustClass
+    let credential: String
+
+    var pairedAgent: PairedAgent {
+        PairedAgent(id: id, name: name, trustClass: trustClass)
+    }
+}
+
 /// First-ship agent pairing + audit surface for the companion control center.
 @MainActor
 @Observable
@@ -11,8 +31,8 @@ final class AgentBridge {
     let grants = GrantGate()
     let ledger = DraftLedger()
 
-    private(set) var agent: PairedAgent?
-    private(set) var credential: String?
+    private(set) var pairedAgents: [PairedAgentCredential] = []
+    private(set) var selectedAgentID: String?
     private(set) var isListening = false
     private(set) var listenNote = "Loopback MCP not bound yet"
     /// Bumped whenever grants change so SwiftUI refreshes checkbox state.
@@ -21,7 +41,7 @@ final class AgentBridge {
     private(set) var auditRevision = 0
     /// Status-item pulse for the latest agent request (success / error linger + fade).
     private(set) var iconPulse = MenuBarIconPulse()
-    /// Observable mirror of GrantGate rows for the current agent (UI source of truth).
+    /// Observable mirror of GrantGate rows for the selected agent (UI source of truth).
     private(set) var grantRows: [Grant] = []
     /// On-device outbound leak guard policy (loaded from sensitive-filter.json).
     private(set) var leakGuardPolicy: OutboundLeakGuardPolicy = .default
@@ -33,6 +53,39 @@ final class AgentBridge {
     private var loopbackHost: LoopbackHost?
     private var lastPulsedRequestID: String?
     private var pulseClearTask: Task<Void, Never>?
+
+    var selectedAgent: PairedAgent? {
+        pairedAgents.first { $0.id == selectedAgentID }?.pairedAgent
+            ?? pairedAgents.first?.pairedAgent
+    }
+
+    var selectedCredential: String? {
+        pairedAgents.first { $0.id == selectedAgentID }?.credential
+            ?? pairedAgents.first?.credential
+    }
+
+    /// Menu / status label: selected name, or `N agents` when more than one is paired.
+    var connectedAgentLabel: String {
+        switch pairedAgents.count {
+        case 0: return "—"
+        case 1: return pairedAgents[0].name
+        default: return "\(pairedAgents.count) agents"
+        }
+    }
+
+    func pairedCredential(named name: String) -> PairedAgentCredential? {
+        pairedAgents.first {
+            $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
+    }
+
+    func isPaired(named name: String) -> Bool {
+        pairedCredential(named: name) != nil
+    }
+
+    func grantCount(for agentID: String) -> Int {
+        grants.list(agentID: agentID).count
+    }
 
     var allAudit: [AuditEntry] {
         _ = auditRevision
@@ -83,11 +136,8 @@ final class AgentBridge {
         }
     }
 
-    var cursorConfigSnippet: String {
-        guard let credential else {
-            return "Pair an agent to generate a Cursor MCP snippet."
-        }
-        return """
+    func configSnippet(for credential: String) -> String {
+        """
         {
           "mcpServers": {
             "mailgent": {
@@ -99,6 +149,18 @@ final class AgentBridge {
           }
         }
         """
+    }
+
+    func configSnippet(for agent: PairedAgentCredential) -> String {
+        configSnippet(for: agent.credential)
+    }
+
+    /// Selected agent's Bearer MCP snippet (Grant Desk / legacy call sites).
+    var cursorConfigSnippet: String {
+        guard let credential = selectedCredential else {
+            return "Pair an agent to generate an MCP snippet."
+        }
+        return configSnippet(for: credential)
     }
 
     init() {
@@ -218,24 +280,61 @@ final class AgentBridge {
         audit.removeOlderThan(Date().addingTimeInterval(-86_400))
     }
 
-    func ensureMachineLocalAgent(named name: String = "Cursor") {
-        if agent != nil { return }
+    /// Auto-pair Cursor only when nothing is persisted yet. Never auto-pairs Grok Bot.
+    func ensureMachineLocalAgent() {
+        guard pairedAgents.isEmpty else { return }
+        _ = pairAgent(named: AgentPairingPreset.cursor.displayName)
+    }
+
+    @discardableResult
+    func pairAgent(named name: String) -> PairedAgentCredential? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if isPaired(named: trimmed) {
+            MailGentLog.trace("agent pair refused: duplicate name \(trimmed)")
+            return pairedCredential(named: trimmed)
+        }
         let token = Self.makeCredential()
         do {
             let paired = try pairing.register(
-                name: name,
+                name: trimmed,
                 trustClass: .machineLocal,
                 credential: token
             )
-            agent = paired
-            credential = token
+            let row = PairedAgentCredential(
+                id: paired.id,
+                name: paired.name,
+                trustClass: paired.trustClass,
+                credential: token
+            )
+            pairedAgents.append(row)
+            selectedAgentID = row.id
             persistPairing()
-            // Deny-by-default: no grants until the human picks mailboxes.
             persistGrants()
-            syncCursorMCPConfig()
+            refreshGrantRows()
+            if Self.isCursorName(row.name) {
+                syncCursorMCPConfig()
+            }
+            return row
         } catch {
             MailGentLog.trace("agent pair failed: \(error)")
+            return nil
         }
+    }
+
+    func selectAgent(id: String?) {
+        guard id != selectedAgentID else { return }
+        if isEditingGrants {
+            cancelGrantDeskEdits()
+        }
+        selectedAgentID = id
+        persistPairing()
+        refreshGrantRows()
+    }
+
+    func selectAgent(named name: String) {
+        guard let row = pairedCredential(named: name) else { return }
+        selectAgent(id: row.id)
     }
 
     /// Optional From filter applied to new allows until cleared (ticket 03 minimal UI).
@@ -281,7 +380,7 @@ final class AgentBridge {
         guard isEditingGrants else { return }
         grantDeskPersistDeferred = false
         if let baseline = grantDeskEditBaseline {
-            if let agent {
+            if let agent = selectedAgent {
                 grants.replaceAll(agentID: agent.id, with: baseline.rows)
             } else {
                 grantRows = baseline.rows
@@ -301,7 +400,7 @@ final class AgentBridge {
 
     /// Adds or updates one allow and persists. Does not invent grants for new accounts.
     func allow(accountID: String, placement: String? = nil) {
-        guard let agent else { return }
+        guard let agent = selectedAgent else { return }
         var participants: [GrantParticipant] = []
         let from = draftFromFilter.trimmingCharacters(in: .whitespacesAndNewlines)
         if !from.isEmpty {
@@ -325,7 +424,7 @@ final class AgentBridge {
     }
 
     func revokeGrant(accountID: String, placement: String? = nil) {
-        guard let agent else { return }
+        guard let agent = selectedAgent else { return }
         let kept = grants.list(agentID: agent.id).filter {
             !($0.accountID == accountID && $0.placement == placement)
         }
@@ -338,7 +437,7 @@ final class AgentBridge {
     }
 
     func clearGrants() {
-        guard let agent else { return }
+        guard let agent = selectedAgent else { return }
         grants.revokeAll(agentID: agent.id)
         selectedAccessKey = nil
         persistGrants()
@@ -373,7 +472,7 @@ final class AgentBridge {
 
     /// Updates field caps on an existing allow (per-placement Access).
     func updateAllowFields(accountID: String, placement: String?, fields: GrantFields) {
-        guard let agent else { return }
+        guard let agent = selectedAgent else { return }
         guard let existing = grantRows.first(where: {
             $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
         }) else { return }
@@ -436,14 +535,12 @@ final class AgentBridge {
 
     /// Account-wide allow: clears per-mailbox allow rows for that account first.
     func setAccountWide(accountID: String, enabled: Bool) {
-        guard agent != nil else { return }
+        guard let agent = selectedAgent else { return }
         if enabled {
             let withoutAllows = grantRows.filter {
                 !($0.accountID == accountID && $0.mode == .allow)
             }
-            if let agent {
-                grants.replaceAll(agentID: agent.id, with: withoutAllows)
-            }
+            grants.replaceAll(agentID: agent.id, with: withoutAllows)
             allow(accountID: accountID, placement: nil)
         } else {
             revokeGrant(accountID: accountID, placement: nil)
@@ -451,7 +548,7 @@ final class AgentBridge {
     }
 
     func setMailbox(accountID: String, placement: String, enabled: Bool) {
-        guard let agent else { return }
+        guard let agent = selectedAgent else { return }
         if draftDenyMode {
             if enabled {
                 try? grants.deny(agentID: agent.id, accountID: accountID, placement: placement)
@@ -651,52 +748,115 @@ final class AgentBridge {
         listenNote = "Loopback MCP not bound yet"
     }
 
+    func revokeSelected() {
+        guard let id = selectedAgentID ?? selectedAgent?.id else { return }
+        revoke(agentID: id)
+    }
+
+    /// Revoke one agent only — no auto re-pair of anyone else.
+    func revoke(agentID: String) {
+        guard let index = pairedAgents.firstIndex(where: { $0.id == agentID }) else { return }
+        let removed = pairedAgents[index]
+        pairing.revoke(agentID: agentID)
+        grants.revokeAll(agentID: agentID)
+        pairedAgents.remove(at: index)
+
+        if selectedAgentID == agentID {
+            selectedAgentID = pairedAgents.first?.id
+            selectedAccessKey = nil
+            isEditingGrants = false
+            grantDeskEditBaseline = nil
+            grantDeskPersistDeferred = false
+        }
+
+        if Self.isCursorName(removed.name) {
+            clearCursorMCPConfig()
+        }
+
+        if pairedAgents.isEmpty {
+            clearPersistedPairing()
+            clearPersistedGrants()
+            grantRows = []
+            grantRevision += 1
+        } else {
+            persistPairing()
+            persistGrants()
+            refreshGrantRows()
+        }
+    }
+
+    /// Legacy alias used by older call sites.
     func revoke() {
-        guard let agent else { return }
-        pairing.revoke(agentID: agent.id)
-        grants.revokeAll(agentID: agent.id)
-        self.agent = nil
-        credential = nil
-        grantRows = []
-        grantRevision += 1
-        isEditingGrants = false
-        grantDeskEditBaseline = nil
-        grantDeskPersistDeferred = false
-        clearPersistedPairing()
-        clearPersistedGrants()
+        revokeSelected()
     }
 
     private func restorePersistedPairing() {
-        guard
-            let data = try? Data(contentsOf: Self.pairingFileURL),
-            let saved = try? JSONDecoder().decode(PersistedPairing.self, from: data),
-            let trust = AgentTrustClass(rawValue: saved.trustClass),
-            !saved.credential.isEmpty
-        else {
-            return
+        guard let data = try? Data(contentsOf: Self.pairingFileURL) else { return }
+        do {
+            let (document, migrated) = try PersistedPairingDocument.decodeMigrating(from: data)
+            var restored: [PairedAgentCredential] = []
+            var renamedLegacyGrok = false
+            for saved in document.agents {
+                guard
+                    let trust = AgentTrustClass(rawValue: saved.trustClass),
+                    !saved.credential.isEmpty
+                else { continue }
+                let name = Self.canonicalAgentDisplayName(saved.name)
+                if name != saved.name { renamedLegacyGrok = true }
+                let agent = PairedAgent(id: saved.agentID, name: name, trustClass: trust)
+                pairing.restore(agent: agent, credential: saved.credential)
+                restored.append(
+                    PairedAgentCredential(
+                        id: saved.agentID,
+                        name: name,
+                        trustClass: trust,
+                        credential: saved.credential
+                    )
+                )
+            }
+            pairedAgents = restored
+            if let selected = document.selectedAgentID,
+               restored.contains(where: { $0.id == selected })
+            {
+                selectedAgentID = selected
+            } else {
+                selectedAgentID = restored.first?.id
+            }
+            restorePersistedGrants()
+            if migrated || renamedLegacyGrok {
+                persistPairing()
+            }
+            if pairedAgents.contains(where: { Self.isCursorName($0.name) }) {
+                syncCursorMCPConfig()
+            }
+        } catch {
+            MailGentLog.trace("agent pair restore failed: \(error)")
         }
-        let restored = PairedAgent(id: saved.agentID, name: saved.name, trustClass: trust)
-        pairing.restore(agent: restored, credential: saved.credential)
-        agent = restored
-        credential = saved.credential
-        restorePersistedGrants()
-        syncCursorMCPConfig()
     }
 
     private func persistPairing() {
-        guard let agent, let credential else { return }
-        let saved = PersistedPairing(
-            agentID: agent.id,
-            name: agent.name,
-            trustClass: agent.trustClass.rawValue,
-            credential: credential
+        guard !pairedAgents.isEmpty else {
+            clearPersistedPairing()
+            return
+        }
+        let document = PersistedPairingDocument(
+            version: 2,
+            agents: pairedAgents.map {
+                PersistedAgentCredential(
+                    agentID: $0.id,
+                    name: $0.name,
+                    trustClass: $0.trustClass.rawValue,
+                    credential: $0.credential
+                )
+            },
+            selectedAgentID: selectedAgentID ?? pairedAgents.first?.id
         )
         do {
             try FileManager.default.createDirectory(
                 at: Self.pairingFileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try JSONEncoder().encode(saved).write(to: Self.pairingFileURL, options: .atomic)
+            try JSONEncoder().encode(document).write(to: Self.pairingFileURL, options: .atomic)
         } catch {
             MailGentLog.trace("agent pair persist failed: \(error)")
         }
@@ -707,38 +867,35 @@ final class AgentBridge {
     }
 
     private func restorePersistedGrants() {
-        guard let agent else { return }
         guard
             let data = try? Data(contentsOf: Self.grantsFileURL),
             let snapshot = try? JSONDecoder().decode(GrantSnapshot.self, from: data)
         else {
-            grants.revokeAll(agentID: agent.id)
+            for agent in pairedAgents {
+                grants.revokeAll(agentID: agent.id)
+            }
             refreshGrantRows()
             return
         }
-        let owned = snapshot.grants.map {
-            Grant(
-                agentID: agent.id,
-                accountID: $0.accountID,
-                placement: $0.placement,
-                participants: $0.participants,
-                dateStart: $0.dateStart,
-                dateEnd: $0.dateEnd,
-                mode: $0.mode,
-                fields: $0.fields
-            )
+        // Preserve each grant's agentID — do not rewrite to a single selected agent.
+        let byAgent = Dictionary(grouping: snapshot.grants, by: \.agentID)
+        let knownIDs = Set(pairedAgents.map(\.id))
+        for agentID in knownIDs {
+            grants.replaceAll(agentID: agentID, with: byAgent[agentID] ?? [])
         }
-        grants.replaceAll(agentID: agent.id, with: owned)
+        // Drop grants for agents that are no longer paired.
+        for agentID in byAgent.keys where !knownIDs.contains(agentID) {
+            grants.revokeAll(agentID: agentID)
+        }
         refreshGrantRows()
     }
 
     private func persistGrants() {
-        guard let agent else { return }
         if grantDeskPersistDeferred {
             refreshGrantRows()
             return
         }
-        let snapshot = GrantSnapshot(grants: grants.list(agentID: agent.id))
+        let snapshot = GrantSnapshot(grants: grants.allGrants())
         do {
             try FileManager.default.createDirectory(
                 at: Self.grantsFileURL.deletingLastPathComponent(),
@@ -752,7 +909,7 @@ final class AgentBridge {
     }
 
     private func refreshGrantRows() {
-        if let agent {
+        if let agent = selectedAgent {
             grantRows = grants.list(agentID: agent.id)
         } else {
             grantRows = []
@@ -822,9 +979,9 @@ final class AgentBridge {
         )
     }
 
-    /// Keep Cursor's local MCP entry aligned with the current Bearer (machine-local only).
+    /// Keep Cursor's local MCP entry aligned with the Cursor Bearer (machine-local only).
     func syncCursorMCPConfig() {
-        guard let credential else { return }
+        guard let cursor = pairedAgents.first(where: { Self.isCursorName($0.name) }) else { return }
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cursor/mcp.json")
         guard
@@ -837,7 +994,7 @@ final class AgentBridge {
         var mailgent = servers["mailgent"] as? [String: Any] ?? [:]
         mailgent["url"] = loopbackURL
         var headers = mailgent["headers"] as? [String: Any] ?? [:]
-        headers["Authorization"] = "Bearer \(credential)"
+        headers["Authorization"] = "Bearer \(cursor.credential)"
         mailgent["headers"] = headers
         servers["mailgent"] = mailgent
         root["mcpServers"] = servers
@@ -852,6 +1009,45 @@ final class AgentBridge {
         } catch {
             MailGentLog.trace("Cursor mcp.json sync failed: \(error)")
         }
+    }
+
+    /// Stop leaving a stale Cursor Bearer after revoke.
+    private func clearCursorMCPConfig() {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cursor/mcp.json")
+        guard
+            let data = try? Data(contentsOf: url),
+            var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            var servers = root["mcpServers"] as? [String: Any],
+            servers["mailgent"] != nil
+        else {
+            return
+        }
+        servers.removeValue(forKey: "mailgent")
+        root["mcpServers"] = servers
+        guard
+            let out = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        else {
+            return
+        }
+        do {
+            try out.write(to: url, options: .atomic)
+            MailGentLog.trace("cleared Cursor mcp.json mailgent entry")
+        } catch {
+            MailGentLog.trace("Cursor mcp.json clear failed: \(error)")
+        }
+    }
+
+    private static func isCursorName(_ name: String) -> Bool {
+        name.compare("Cursor", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+
+    /// Maps legacy short names onto current preset display names.
+    private static func canonicalAgentDisplayName(_ name: String) -> String {
+        if name.compare("Grok", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+            return AgentPairingPreset.grok.displayName
+        }
+        return name
     }
 
     static var auditFileURL: URL {
@@ -885,13 +1081,6 @@ final class AgentBridge {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
-}
-
-private struct PersistedPairing: Codable {
-    let agentID: String
-    let name: String
-    let trustClass: String
-    let credential: String
 }
 
 private struct GrantDeskEditBaseline {

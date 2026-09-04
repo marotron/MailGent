@@ -263,7 +263,10 @@ private struct AccessLogRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 6) {
-            AuditOutcomeIcon(outcome: entry.outcome)
+            AuditOutcomeIcon(
+                outcome: entry.outcome,
+                emptySuccess: AccessLogFormat.isEmptySuccess(entry)
+            )
                 .imageScale(.small)
             AuditKindBadge(kind: entry.kind, compact: true)
                 .fixedSize()
@@ -393,13 +396,14 @@ private struct AccessLogDetail: View {
 
     @ViewBuilder
     private var outcomeBadge: some View {
+        let emptySuccess = AccessLogFormat.isEmptySuccess(entry)
         HStack(spacing: 6) {
-            AuditOutcomeIcon(outcome: entry.outcome)
+            AuditOutcomeIcon(outcome: entry.outcome, emptySuccess: emptySuccess)
             switch entry.outcome {
             case .ok:
                 Text("ok")
                     .font(.caption.weight(.semibold).monospaced())
-                    .foregroundStyle(.green)
+                    .foregroundStyle(emptySuccess ? Color.secondary : Color.green)
             case .error(let message):
                 Text(message.isEmpty ? "error" : message)
                     .font(.caption.weight(.semibold).monospaced())
@@ -995,6 +999,43 @@ enum AccessLogFormat {
             return error
         }
         return text
+    }
+
+    /// Successful search / list / list_new / placements call that returned zero items.
+    static func isEmptySuccess(_ entry: AuditEntry) -> Bool {
+        guard case .ok = entry.outcome else { return false }
+        switch entry.kind {
+        case .search, .list, .listNew:
+            return resultCount(for: entry) == 0
+        case .listPlacements:
+            return placementCount(for: entry) == 0
+        default:
+            return false
+        }
+    }
+
+    private static func resultCount(for entry: AuditEntry) -> Int? {
+        if let count = jsonInt(entry.responseSummary, key: "count") {
+            return count
+        }
+        if let obj = jsonObject(entry.responseSummary),
+           let items = obj["items"] as? [Any]
+        {
+            return items.count
+        }
+        if !entry.messages.isEmpty {
+            return entry.messages.count
+        }
+        return nil
+    }
+
+    private static func placementCount(for entry: AuditEntry) -> Int? {
+        if let obj = jsonObject(entry.responseSummary),
+           let placements = obj["placements"] as? [Any]
+        {
+            return placements.count
+        }
+        return entry.placements.count
     }
 
     private static func intValue(_ any: Any?) -> Int? {

@@ -18,34 +18,81 @@ struct GrantDeskView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 10) {
-                Picker("", selection: $tab) {
-                    ForEach(Tab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
+            agentPickerRow
+
+            if session.agents.pairedAgents.isEmpty {
+                ContentUnavailableView(
+                    "No agent paired",
+                    systemImage: "cpu",
+                    description: Text("Pair Cursor or Grok Bot in the companion, then edit grants here.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HStack(alignment: .center, spacing: 10) {
+                    Picker("", selection: $tab) {
+                        ForEach(Tab.allCases) { tab in
+                            Text(tab.rawValue).tag(tab)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 300)
+                    .accessibilityLabel("Grant desk section")
+
+                    Spacer(minLength: 8)
+                    editModeControls
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 300)
-                .accessibilityLabel("Grant desk section")
 
-                Spacer(minLength: 8)
-                editModeControls
+                switch tab {
+                case .scope:
+                    scopePane
+                case .access:
+                    accessPane
+                case .privacy:
+                    LeakGuardPrivacyPane(session: session, expandedInfo: $expandedInfo)
+                }
+
+                Spacer(minLength: 0)
             }
-
-            switch tab {
-            case .scope:
-                scopePane
-            case .access:
-                accessPane
-            case .privacy:
-                LeakGuardPrivacyPane(session: session, expandedInfo: $expandedInfo)
-            }
-
-            Spacer(minLength: 0)
         }
         .padding(16)
         .frame(minWidth: 700, minHeight: 560)
+    }
+
+    private var agentPickerRow: some View {
+        HStack(spacing: 8) {
+            Text("Agent")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if session.agents.pairedAgents.isEmpty {
+                Text("—")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker(
+                    "Agent",
+                    selection: Binding(
+                        get: { session.agents.selectedAgentID ?? session.agents.pairedAgents.first?.id ?? "" },
+                        set: { session.agents.selectAgent(id: $0.isEmpty ? nil : $0) }
+                    )
+                ) {
+                    ForEach(session.agents.pairedAgents) { agent in
+                        Text(agent.name).tag(agent.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 280)
+                .disabled(isEditing)
+                .help(isEditing ? "Save or cancel edits before switching agents" : "Grants apply to the selected agent only")
+            }
+            Spacer(minLength: 0)
+            if let agent = session.agents.selectedAgent {
+                Text("\(agent.name) · \(agent.trustClass.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder

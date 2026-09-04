@@ -630,7 +630,7 @@ struct CompanionStatusCopy {
 
     var source: String { session.source.title }
 
-    var connectedAgent: String { session.agents.agent?.name ?? "—" }
+    var connectedAgent: String { session.agents.connectedAgentLabel }
 
     var lastAgentKind: String {
         session.agents.lastAgentRequest?.kind.rawValue ?? "—"
@@ -928,14 +928,16 @@ struct AuditKindBadge: View {
 
 struct AuditOutcomeIcon: View {
     let outcome: AuditOutcome
+    /// Successful call that returned zero items (search / list / new / placements).
+    var emptySuccess: Bool = false
 
     var body: some View {
         switch outcome {
         case .ok:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .help("Succeeded")
-                .accessibilityLabel("Succeeded")
+                .foregroundStyle(emptySuccess ? Color.secondary : Color.green)
+                .help(emptySuccess ? "Succeeded — no results" : "Succeeded")
+                .accessibilityLabel(emptySuccess ? "Succeeded, no results" : "Succeeded")
         case .error(let message):
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.orange)
@@ -949,14 +951,22 @@ struct AgentGlyph: View {
     let name: String
     var size: CGFloat = 16
 
-    private var isCursor: Bool {
-        name.compare("Cursor", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    private var markName: String? {
+        if name.compare("Cursor", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+            return "CursorMark"
+        }
+        if name.compare("Grok", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            || name.compare("Grok Bot", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        {
+            return "GrokMark"
+        }
+        return nil
     }
 
     var body: some View {
         Group {
-            if isCursor {
-                CursorMark(size: size)
+            if let markName {
+                markImage(markName)
             } else {
                 Image(systemName: "cpu")
                     .font(.system(size: size * 0.62, weight: .semibold))
@@ -972,6 +982,22 @@ struct AgentGlyph: View {
         .help(name)
         .accessibilityLabel(name)
     }
+
+    @ViewBuilder
+    private func markImage(_ markName: String) -> some View {
+        let image = Image(markName)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+        if markName == "GrokMark" {
+            image.clipShape(
+                RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+            )
+        } else {
+            image
+        }
+    }
 }
 
 struct CursorMark: View {
@@ -983,6 +1009,22 @@ struct CursorMark: View {
             .interpolation(.high)
             .scaledToFit()
             .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+struct GrokMark: View {
+    var size: CGFloat = 16
+
+    var body: some View {
+        Image("GrokMark")
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(
+                RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+            )
             .accessibilityHidden(true)
     }
 }

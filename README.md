@@ -1,6 +1,6 @@
 # MailGent
 
-**0.2.0 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
+**0.3.0 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
@@ -75,9 +75,9 @@ git push origin v0.1.8
 
 `make prototype-accounts` is a **dev CLI**, not part of the `.app`.
 
-## Pair Cursor
+## Pair agents
 
-In the companion, **Pair Cursor** → paste the snippet into `~/.cursor/mcp.json`. The app can write that file with the Bearer.
+In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL; each agent gets its own Bearer. Cursor can sync into `~/.cursor/mcp.json`; Grok Bot shows a copyable MCP snippet for the host to wire itself. Grants are independent per agent in Grant Desk.
 
 Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (source switch is off unless Settings allows it).
 

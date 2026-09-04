@@ -234,6 +234,24 @@ struct GrantGateTests {
         #expect(message.cc == "")
         #expect(!message.to.isEmpty)
     }
+
+    @Test func grantsForAgentADoNotAllowAgentB() throws {
+        let grants = GrantGate()
+        try grants.allow(agentID: "agent-a", accountID: "acc-a")
+        try grants.allow(agentID: "agent-a", accountID: "acc-a", placement: "INBOX")
+
+        #expect(grants.allows(agentID: "agent-a", accountID: "acc-a", placement: "INBOX"))
+        #expect(!grants.allows(agentID: "agent-b", accountID: "acc-a", placement: "INBOX"))
+        #expect(grants.list(agentID: "agent-b").isEmpty)
+        #expect(grants.allGrants().allSatisfy { $0.agentID == "agent-a" })
+    }
+
+    @Test func allGrantsReturnsUnionAcrossAgents() throws {
+        let grants = GrantGate()
+        try grants.allow(agentID: "a", accountID: "acc-a")
+        try grants.allow(agentID: "b", accountID: "acc-b")
+        #expect(Set(grants.allGrants().map(\.agentID)) == ["a", "b"])
+    }
 }
 
 private struct GrantFixture {
