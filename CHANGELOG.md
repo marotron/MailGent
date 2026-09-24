@@ -20,6 +20,8 @@ Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called o
 
 - Startup restores all persisted agents; auto-pairs **Cursor only** when none exist. Revoke no longer re-pairs another agent.
 - Menu bar / status shows selected name, or `N agents` when more than one is paired.
+- Grok pairing label is **Grok Bot** (existing `Grok` entries migrate on restore). `GrokMark` uses macOS-style rounded corners.
+- Access log success icon for a zero-result search, list, new, or placements call is secondary grey; hits with results stay green.
 
 ## [0.2.0] - 2026-08-31
 

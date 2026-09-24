@@ -30,11 +30,16 @@ jobs:
         id: release
         run: echo "title=${GITHUB_REF_NAME#v} alpha" >> "$GITHUB_OUTPUT"
 
+      - name: Release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: Scripts/release/notes.sh
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           name: ${{ steps.release.outputs.title }}
-          body_path: .github/RELEASE_BODY.md
+          body_path: dist/RELEASE_NOTES.md
           files: dist/MailGent-*.dmg
           generate_release_notes: true
           prerelease: true

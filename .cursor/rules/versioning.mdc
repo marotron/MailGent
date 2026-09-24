@@ -55,4 +55,4 @@ All **0.1.x** ships as **pre-release alpha**. Same semver everywhere in code; **
 
 **Do not** put `-alpha` on new git tags (legacy exception: `v0.1.0-alpha.1` — first alpha; keep the tag, title is `0.1.0 alpha`).
 
-Workflow sets release title from the tag: strip leading `v`, append ` alpha`.
+Workflow sets release title from the tag: strip leading `v`, append ` alpha`. Release notes start with that version’s `CHANGELOG.md` section (`Scripts/release/notes.sh`), then the install notes in `.github/RELEASE_BODY.md`.
