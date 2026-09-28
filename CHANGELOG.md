@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.3.1] - 2026-09-28
+
+### Fixed
+
+- Grant saves no longer replace a non-empty `grants.json` with an empty list when pairing an agent or saving an incidental edit. Explicit Clear and agent revoke still remove grants. Rows for an agent id that is not currently paired stay on disk.
+- Before a save that shrinks the grant file, the previous file is copied to `grants.json.bak`.
+
+### Added
+
+- Grant load and save logging (`[MailGent][grants]`) with file size, decode errors, per-agent counts, placement keys, and the reason for each write. No message bodies or pairing credentials.
+
 ## [0.3.0] - 2026-09-04
 
 ### Added

@@ -310,7 +310,7 @@ final class AgentBridge {
             pairedAgents.append(row)
             selectedAgentID = row.id
             persistPairing()
-            persistGrants()
+            persistGrants(reason: .pair)
             refreshGrantRows()
             if Self.isCursorName(row.name) {
                 syncCursorMCPConfig()
@@ -372,7 +372,7 @@ final class AgentBridge {
         grantDeskPersistDeferred = false
         grantDeskEditBaseline = nil
         isEditingGrants = false
-        persistGrants()
+        persistGrants(reason: .save)
         persistLeakGuardPolicy()
     }
 
@@ -394,7 +394,7 @@ final class AgentBridge {
         }
         grantDeskEditBaseline = nil
         isEditingGrants = false
-        persistGrants()
+        persistGrants(reason: .cancel)
         persistLeakGuardPolicy()
     }
 
@@ -420,7 +420,7 @@ final class AgentBridge {
             fields: existing?.fields ?? .headersOnly
         )
         selectedAccessKey = Self.accessKey(mode: .allow, accountID: accountID, placement: placement)
-        persistGrants()
+        persistGrants(reason: .allow)
     }
 
     func revokeGrant(accountID: String, placement: String? = nil) {
@@ -433,14 +433,16 @@ final class AgentBridge {
             selectedAccessKey = nil
         }
         removeLeakGuardScope(accountID: accountID, placement: placement)
-        persistGrants()
+        persistGrants(reason: .revokeRow)
     }
 
     func clearGrants() {
         guard let agent = selectedAgent else { return }
+        let before = grants.list(agentID: agent.id).count
         grants.revokeAll(agentID: agent.id)
         selectedAccessKey = nil
-        persistGrants()
+        MailGentLog.grantsEvent("clear agent=\(Self.shortID(agent.id)) before=\(before)")
+        persistGrants(reason: .clear)
     }
 
     var currentGrants: [Grant] {
@@ -493,7 +495,7 @@ final class AgentBridge {
             fields: next
         )
         selectedAccessKey = Self.accessKey(mode: .allow, accountID: accountID, placement: placement)
-        persistGrants()
+        persistGrants(reason: .fields)
     }
 
     func toggleAllowField(
@@ -552,13 +554,13 @@ final class AgentBridge {
         if draftDenyMode {
             if enabled {
                 try? grants.deny(agentID: agent.id, accountID: accountID, placement: placement)
-                persistGrants()
+                persistGrants(reason: .mailbox)
             } else {
                 let kept = grantRows.filter {
                     !($0.mode == .deny && $0.accountID == accountID && $0.placement == placement)
                 }
                 grants.replaceAll(agentID: agent.id, with: kept)
-                persistGrants()
+                persistGrants(reason: .mailbox)
             }
             return
         }
@@ -775,12 +777,12 @@ final class AgentBridge {
 
         if pairedAgents.isEmpty {
             clearPersistedPairing()
-            clearPersistedGrants()
+            clearPersistedGrants(reason: "last-agent-revoked")
             grantRows = []
             grantRevision += 1
         } else {
             persistPairing()
-            persistGrants()
+            persistGrants(reason: .revokeAgent, dropAgentIDs: [agentID])
             refreshGrantRows()
         }
     }
@@ -866,44 +868,104 @@ final class AgentBridge {
         try? FileManager.default.removeItem(at: Self.pairingFileURL)
     }
 
+    private enum GrantWriteReason: String {
+        case pair
+        case save
+        case cancel
+        case allow
+        case revokeRow
+        case clear
+        case fields
+        case mailbox
+        case revokeAgent
+    }
+
     private func restorePersistedGrants() {
-        guard
-            let data = try? Data(contentsOf: Self.grantsFileURL),
-            let snapshot = try? JSONDecoder().decode(GrantSnapshot.self, from: data)
-        else {
+        let disk = Self.readGrantDisk()
+        let pairedIDs = pairedAgents.map(\.id)
+        guard let snapshot = disk.snapshot else {
             for agent in pairedAgents {
                 grants.revokeAll(agentID: agent.id)
+            }
+            if disk.missing {
+                MailGentLog.grantsEvent("restore missing file paired=\(pairedIDs.count)")
+            } else {
+                MailGentLog.grantsEvent(
+                    "restore decode failed bytes=\(disk.bytes) error=\(disk.error ?? "unknown") — file left untouched"
+                )
             }
             refreshGrantRows()
             return
         }
-        // Preserve each grant's agentID — do not rewrite to a single selected agent.
+
         let byAgent = Dictionary(grouping: snapshot.grants, by: \.agentID)
-        let knownIDs = Set(pairedAgents.map(\.id))
+        let knownIDs = Set(pairedIDs)
         for agentID in knownIDs {
             grants.replaceAll(agentID: agentID, with: byAgent[agentID] ?? [])
         }
-        // Drop grants for agents that are no longer paired.
-        for agentID in byAgent.keys where !knownIDs.contains(agentID) {
-            grants.revokeAll(agentID: agentID)
+        let orphanIDs = byAgent.keys.filter { !knownIDs.contains($0) }.sorted()
+        let orphanCount = orphanIDs.reduce(0) { $0 + (byAgent[$1]?.count ?? 0) }
+        MailGentLog.grantsEvent(
+            "restore bytes=\(disk.bytes) total=\(snapshot.grants.count) loaded=\(grants.allGrants().count) orphans=\(orphanCount) \(Self.grantDigest(snapshot.grants))"
+        )
+        if !orphanIDs.isEmpty {
+            let detail = orphanIDs.map { id in
+                "\(Self.shortID(id)):\(byAgent[id]?.count ?? 0)"
+            }.joined(separator: ",")
+            MailGentLog.grantsEvent(
+                "restore kept unpaired-agent grants on disk (\(detail)); they are not shown until that agent id is paired again"
+            )
         }
         refreshGrantRows()
     }
 
-    private func persistGrants() {
+    private func persistGrants(reason: GrantWriteReason, dropAgentIDs: Set<String> = []) {
         if grantDeskPersistDeferred {
+            MailGentLog.grantsEvent(
+                "persist deferred reason=\(reason.rawValue) memory=\(grants.allGrants().count)"
+            )
             refreshGrantRows()
             return
         }
-        let snapshot = GrantSnapshot(grants: grants.allGrants())
+
+        let disk = Self.readGrantDisk()
+        let pairedIDs = Set(pairedAgents.map(\.id))
+        let next = GrantPersistPolicy.mergedGrants(
+            memory: grants.allGrants(),
+            disk: disk.snapshot?.grants ?? [],
+            pairedAgentIDs: pairedIDs,
+            dropAgentIDs: dropAgentIDs
+        )
+        let allowsEmpty = reason == .clear || reason == .revokeAgent
+        if GrantPersistPolicy.shouldKeepExistingFile(
+            diskGrantCount: disk.snapshot?.grants.count,
+            diskReadable: disk.missing || disk.snapshot != nil,
+            nextGrantCount: next.count,
+            allowsEmptyOverwrite: allowsEmpty
+        ) {
+            MailGentLog.grantsEvent(
+                "persist refused reason=\(reason.rawValue) memory=\(grants.allGrants().count) disk=\(disk.snapshot?.grants.count ?? -1) readable=\(disk.snapshot != nil) — kept existing file"
+            )
+            restorePersistedGrants()
+            return
+        }
+
+        let previousCount = disk.snapshot?.grants.count
+        if let previousCount, next.count < previousCount {
+            Self.backupGrantsFile(reason: reason.rawValue)
+        }
+        let snapshot = GrantSnapshot(grants: next)
         do {
             try FileManager.default.createDirectory(
                 at: Self.grantsFileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
             try JSONEncoder().encode(snapshot).write(to: Self.grantsFileURL, options: .atomic)
+            MailGentLog.grantsEvent(
+                "persist wrote reason=\(reason.rawValue) count=\(next.count) previous=\(previousCount.map(String.init) ?? "none") \(Self.grantDigest(next))"
+            )
         } catch {
-            MailGentLog.trace("agent grants persist failed: \(error)")
+            MailGentLog.grantsEvent("persist failed reason=\(reason.rawValue) error=\(error)")
         }
         refreshGrantRows()
     }
@@ -915,11 +977,86 @@ final class AgentBridge {
             grantRows = []
         }
         grantRevision += 1
-        MailGentLog.trace("grants rows=\(grantRows.count) rev=\(grantRevision)")
+        MailGentLog.grantsEvent(
+            "rows selected=\(grantRows.count) total=\(grants.allGrants().count) rev=\(grantRevision)"
+        )
     }
 
-    private func clearPersistedGrants() {
-        try? FileManager.default.removeItem(at: Self.grantsFileURL)
+    private func clearPersistedGrants(reason: String) {
+        let disk = Self.readGrantDisk()
+        if (disk.snapshot?.grants.count ?? 0) > 0 || (!disk.missing && disk.snapshot == nil) {
+            Self.backupGrantsFile(reason: reason)
+        }
+        guard !disk.missing else {
+            MailGentLog.grantsEvent("file remove skipped reason=\(reason) — already absent")
+            return
+        }
+        do {
+            try FileManager.default.removeItem(at: Self.grantsFileURL)
+            MailGentLog.grantsEvent(
+                "file removed reason=\(reason) previous=\(disk.snapshot?.grants.count ?? -1)"
+            )
+        } catch {
+            MailGentLog.grantsEvent("file remove failed reason=\(reason) error=\(error)")
+        }
+    }
+
+    private struct GrantDisk {
+        var missing: Bool
+        var bytes: Int
+        var snapshot: GrantSnapshot?
+        var error: String?
+    }
+
+    private static func readGrantDisk() -> GrantDisk {
+        let url = grantsFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return GrantDisk(missing: true, bytes: 0, snapshot: nil, error: nil)
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            do {
+                let snapshot = try JSONDecoder().decode(GrantSnapshot.self, from: data)
+                return GrantDisk(missing: false, bytes: data.count, snapshot: snapshot, error: nil)
+            } catch {
+                return GrantDisk(missing: false, bytes: data.count, snapshot: nil, error: String(describing: error))
+            }
+        } catch {
+            return GrantDisk(missing: false, bytes: 0, snapshot: nil, error: String(describing: error))
+        }
+    }
+
+    private static func backupGrantsFile(reason: String) {
+        let source = grantsFileURL
+        let backup = source.deletingLastPathComponent().appendingPathComponent("grants.json.bak")
+        do {
+            if FileManager.default.fileExists(atPath: backup.path) {
+                try FileManager.default.removeItem(at: backup)
+            }
+            try FileManager.default.copyItem(at: source, to: backup)
+            MailGentLog.grantsEvent("backup wrote \(backup.lastPathComponent) reason=\(reason)")
+        } catch {
+            MailGentLog.grantsEvent("backup failed reason=\(reason) error=\(error)")
+        }
+    }
+
+    private static func shortID(_ id: String) -> String {
+        String(id.prefix(8))
+    }
+
+    /// Agent, account, placement, and mode. No participant addresses.
+    private static func grantDigest(_ grants: [Grant]) -> String {
+        guard !grants.isEmpty else { return "digest=empty" }
+        let grouped = Dictionary(grouping: grants, by: \.agentID)
+        let parts = grouped.keys.sorted().map { agentID in
+            let rows = grouped[agentID] ?? []
+            let sample = rows.prefix(12).map { grant in
+                "\(grant.mode.rawValue):\(grant.accountID)/\(grant.placement ?? "*")"
+            }.joined(separator: ",")
+            let extra = rows.count > 12 ? " +\(rows.count - 12)" : ""
+            return "\(shortID(agentID)):\(rows.count)[\(sample)\(extra)]"
+        }
+        return parts.joined(separator: " ")
     }
 
     private func restorePersistedLeakGuardPolicy() {
