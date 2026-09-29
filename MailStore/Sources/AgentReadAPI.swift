@@ -7,6 +7,7 @@ public struct AgentReadAPI {
     public let pairing: Pairing
     public let grants: GrantGate
     public let leakGuard: OutboundLeakGuard
+    public let passes: PassStore
     public let audit: AuditLog?
 
     public init(
@@ -14,12 +15,14 @@ public struct AgentReadAPI {
         pairing: Pairing,
         grants: GrantGate = GrantGate(),
         leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
+        passes: PassStore = PassStore(),
         audit: AuditLog? = nil
     ) {
         self.read = read
         self.pairing = pairing
         self.grants = grants
         self.leakGuard = leakGuard
+        self.passes = passes
         self.audit = audit
     }
 
@@ -189,7 +192,7 @@ public struct AgentReadAPI {
                 body: "",
                 isPartial: message.isPartial
             )
-            guard let fields = grants.effectiveFields(for: probe, agentID: agent.id) else {
+            guard let fields = effectiveFields(for: probe, agentID: agent.id) else {
                 record(
                     kind: .get,
                     agent: agent,
@@ -335,7 +338,7 @@ public struct AgentReadAPI {
     }
 
     private func sanitizeListItem(_ item: IndexedMessage, agentID: String) -> IndexedMessage {
-        guard let fields = grants.effectiveFields(for: item, agentID: agentID) else { return item }
+        guard let fields = effectiveFields(for: item, agentID: agentID) else { return item }
         let subjectField = leakGuard.sanitize(
             text: item.subject,
             field: .subject,
@@ -426,6 +429,18 @@ public struct AgentReadAPI {
         )
     }
 
+    /// Base grant fields, then pass upgrades. nil → no access (passes never open the gate).
+    private func effectiveFields(for message: IndexedMessage, agentID: String) -> GrantFields? {
+        guard let base = grants.effectiveFields(for: message, agentID: agentID) else { return nil }
+        return PassEngine.upgrade(
+            base: base,
+            message: message,
+            agentID: agentID,
+            passes: passes.allPasses(),
+            enablements: passes.allEnablements()
+        )
+    }
+
     private func record(
         kind: AuditKind,
         agent: PairedAgent,
@@ -456,7 +471,7 @@ public struct AgentReadAPI {
 
     private func messageRefs(_ items: [IndexedMessage], agentID: String) -> [AuditMessageRef] {
         items.prefix(AuditLog.messageRefCap).map { item in
-            let fields = grants.effectiveFields(for: item, agentID: agentID) ?? .headersOnly
+            let fields = effectiveFields(for: item, agentID: agentID) ?? .headersOnly
             let subjectSanitized = subjectField(for: item, fields: fields)
             return AuditMessageRef(
                 item,

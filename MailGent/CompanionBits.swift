@@ -1121,6 +1121,8 @@ struct GrantFieldBadgeRow: View {
 
     let fields: GrantFields
     var interactive: Bool = false
+    /// When false, omit greyed-out (disabled) field chips.
+    var showOff: Bool = true
     var labelMode: LabelMode = .letter
     var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
 
@@ -1148,19 +1150,21 @@ struct GrantFieldBadgeRow: View {
         HStack(spacing: 2) {
             ForEach(Self.items) { item in
                 let on = fields[keyPath: item.keyPath]
-                if interactive, let onToggle {
-                    Button {
-                        onToggle(item.keyPath)
-                    } label: {
-                        compactBadge(item, on: on)
-                    }
-                    .buttonStyle(.plain)
-                    .help(item.title)
-                    .accessibilityLabel(item.title)
-                } else {
-                    compactBadge(item, on: on)
+                if showOff || on {
+                    if interactive, let onToggle {
+                        Button {
+                            onToggle(item.keyPath)
+                        } label: {
+                            compactBadge(item, on: on)
+                        }
+                        .buttonStyle(.plain)
                         .help(item.title)
                         .accessibilityLabel(item.title)
+                    } else {
+                        compactBadge(item, on: on)
+                            .help(item.title)
+                            .accessibilityLabel(item.title)
+                    }
                 }
             }
         }
@@ -1212,6 +1216,10 @@ struct MessageAccessCard: View {
     var omitsBody: Bool = false
     var showsFieldBadges: Bool = true
     var attachmentContentDetail: String = "none in this response"
+    /// Pass nick when a field is visible only via a matching Pass (Access preview).
+    var bodyViaPassNick: String? = nil
+    var attachmentInfoViaPassNick: String? = nil
+    var attachmentContentViaPassNick: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1241,13 +1249,16 @@ struct MessageAccessCard: View {
                 ref.fields.date
             )
             Divider()
-            Text("Body")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            bodyPreview
+            labeledSection("Body", viaPassNick: bodyViaPassNick) {
+                bodyPreview
+            }
             Divider()
             HStack(alignment: .top, spacing: 6) {
-                attachmentColumn("Attachment Info", granted: ref.fields.attachmentMetadata) {
+                attachmentColumn(
+                    "Attachment Info",
+                    granted: ref.fields.attachmentMetadata,
+                    viaPassNick: attachmentInfoViaPassNick
+                ) {
                     if ref.attachments.isEmpty {
                         attachmentTile(detail: "none in this response")
                     } else {
@@ -1256,7 +1267,11 @@ struct MessageAccessCard: View {
                         }
                     }
                 }
-                attachmentColumn("Attachment Content", granted: ref.fields.attachmentContent) {
+                attachmentColumn(
+                    "Attachment Content",
+                    granted: ref.fields.attachmentContent,
+                    viaPassNick: attachmentContentViaPassNick
+                ) {
                     attachmentTile(detail: attachmentContentDetail)
                 }
             }
@@ -1402,6 +1417,29 @@ struct MessageAccessCard: View {
         .help("Search and list do not include message body")
     }
 
+    private func labeledSection<Content: View>(
+        _ title: String,
+        viaPassNick: String?,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            sectionTitle(title, viaPassNick: viaPassNick)
+            content()
+        }
+    }
+
+    private func sectionTitle(_ title: String, viaPassNick: String?) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            if let viaPassNick {
+                PassRevealChip(nick: viaPassNick)
+            }
+        }
+    }
+
     private func previewRow(_ label: String, _ value: String, _ granted: Bool, empty: String = " ") -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
@@ -1421,12 +1459,11 @@ struct MessageAccessCard: View {
     private func attachmentColumn<Content: View>(
         _ title: String,
         granted: Bool,
+        viaPassNick: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            sectionTitle(title, viaPassNick: viaPassNick)
             if granted {
                 content()
             } else {
@@ -1457,6 +1494,26 @@ struct MessageAccessCard: View {
         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
         .background(Color.secondary.opacity(0.05))
         .cornerRadius(6)
+    }
+}
+
+/// Compact mark for a field revealed by a matching Pass in Access preview.
+struct PassRevealChip: View {
+    let nick: String
+
+    /// Same green as the former PASS banner / Scope pass chips.
+    private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+            Text(nick)
+                .font(.caption.weight(.bold))
+        }
+        .foregroundStyle(Self.passGreen)
+        .accessibilityLabel("Via pass \(nick)")
     }
 }
 

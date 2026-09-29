@@ -4,7 +4,13 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
-Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+
+## [0.4.0] - 2026-09-29
+
+### Added
+
+- **Passes** — conditional field green lights on already-allowed messages (From/Subject match rules, AND/OR join, per-agent enablement on Scope placements). Persisted in `passes.json`; Grant Desk Passes tab + Access preview shows via-pass reveals.
 
 ## [0.3.1] - 2026-09-28
 

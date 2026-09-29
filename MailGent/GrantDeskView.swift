@@ -1,14 +1,16 @@
 import MailStore
 import SwiftUI
 
-/// Lean grant desk: Scope (placements) + Access (per-placement field caps + sample preview).
+/// Lean grant desk: Scope (placements) + Passes + Access (field caps + sample preview).
 struct GrantDeskView: View {
     @Bindable var session: CompanionSession
     @State private var tab: Tab = .scope
     @State private var expandedInfo: String?
+    @State private var selectedPassID: String?
 
     enum Tab: String, CaseIterable, Identifiable {
         case scope = "Scope"
+        case passes = "Passes"
         case access = "Access"
         case privacy = "Privacy"
         var id: String { rawValue }
@@ -46,6 +48,12 @@ struct GrantDeskView: View {
                 switch tab {
                 case .scope:
                     scopePane
+                case .passes:
+                    PassDeskPane(
+                        session: session,
+                        selectedPassID: $selectedPassID,
+                        isEditing: isEditing
+                    )
                 case .access:
                     accessPane
                 case .privacy:
@@ -152,6 +160,7 @@ struct GrantDeskView: View {
                         .padding(.vertical, 2)
                         .id(session.agents.grantRevision)
                         .id(session.agents.leakGuardRevision)
+                        .id(session.agents.passRevision)
                     }
                     .frame(maxHeight: 340)
                 }
@@ -179,6 +188,7 @@ struct GrantDeskView: View {
                     }
                     .disabled(!isEditing)
                 }
+                .frame(maxHeight: .infinity)
             }
 
             if isEditing, !session.agents.grantRows.isEmpty {
@@ -193,6 +203,7 @@ struct GrantDeskView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var accessPane: some View {
@@ -209,15 +220,21 @@ struct GrantDeskView: View {
                 HStack(alignment: .top, spacing: 12) {
                     assetList(allows: allows, selected: selected)
                         .frame(width: 280, alignment: .top)
-                    VStack(alignment: .leading, spacing: 10) {
-                        fieldEditor(for: selected)
-                        Divider()
-                        Text("Preview")
-                            .font(.subheadline.weight(.semibold))
-                        previewCaption(for: selected)
-                        AgentAccessPreview(session: session, grant: selected)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            fieldEditor(for: selected)
+                            Divider()
+                            Text("Preview")
+                                .font(.subheadline.weight(.semibold))
+                            previewCaption(for: selected)
+                            AgentAccessPreview(session: session, grant: selected)
+                                .id("\(session.agents.grantRevision)-\(session.agents.passRevision)-\(session.agents.leakGuardRevision)-\(AgentBridge.accessKey(for: selected))")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 8)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
     }
@@ -245,6 +262,7 @@ struct GrantDeskView: View {
                     }
                 }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -285,7 +303,7 @@ struct GrantDeskView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(pathLabel(grant))
                 .font(.headline)
-            Text("Fields apply only to this allow.")
+            Text("Fields apply only to this allow. Passes can green-light more fields on match.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -353,6 +371,26 @@ struct GrantDeskView: View {
                 )
             }
             .disabled(!isEditing)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Passes on this placement")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                if session.agents.passDefinitions.isEmpty {
+                    Text("No passes yet — create one on Passes tab.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    PassToggleChips(
+                        session: session,
+                        accountID: grant.accountID,
+                        placement: grant.placement,
+                        isEditing: isEditing && !session.agents.draftDenyMode,
+                        density: .roomy
+                    )
+                }
+            }
+            .padding(.top, 6)
         }
     }
 
@@ -420,6 +458,12 @@ struct GrantDeskView: View {
                             keyPath: keyPath
                         )
                     }
+                    PassToggleChips(
+                        session: session,
+                        accountID: account.id,
+                        placement: nil,
+                        isEditing: isEditing
+                    )
                 }
             }
 
@@ -468,6 +512,12 @@ struct GrantDeskView: View {
                                 mailboxPlacements: account.mailboxes.map(\.placement)
                             )
                         }
+                        PassToggleChips(
+                            session: session,
+                            accountID: account.id,
+                            placement: mailbox.placement,
+                            isEditing: isEditing
+                        )
                     }
                 }
                 .padding(.leading, 16)
@@ -477,6 +527,10 @@ struct GrantDeskView: View {
 
     private func accessAssetLabel(_ grant: Grant) -> some View {
         let shieldState = session.agents.leakGuardShieldState(
+            accountID: grant.accountID,
+            placement: grant.placement
+        )
+        let passes = session.agents.enabledPasses(
             accountID: grant.accountID,
             placement: grant.placement
         )
@@ -491,6 +545,9 @@ struct GrantDeskView: View {
                 )
                 if shieldState != .off {
                     LeakGuardShieldChip(state: shieldState)
+                }
+                if !passes.isEmpty {
+                    AccessPassNickChip(nicks: passes.map(\.nick).joined())
                 }
             }
         }
@@ -530,13 +587,93 @@ struct GrantDeskView: View {
     }
 }
 
-// MARK: - Access sample preview (hatch)
+// MARK: - Access sample preview (hatch + pass green lights)
+
+private struct AccessPassNickChip: View {
+    let nicks: String
+
+    private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
+    private static let passSoft = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255).opacity(0.12)
+    private static let passBorder = Color(red: 143 / 255, green: 209 / 255, blue: 160 / 255)
+
+    var body: some View {
+        Text("✓\(nicks)")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(Self.passGreen)
+            .tracking(0.4)
+            .padding(.horizontal, 5)
+            .frame(height: 14)
+            .background(Self.passSoft, in: Capsule())
+            .overlay(Capsule().strokeBorder(Self.passBorder, lineWidth: 0.5))
+    }
+}
 
 private struct AgentAccessPreview: View {
     let session: CompanionSession
     let grant: Grant
 
-    private let sample = SampleMessage.invoice
+    private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
+
+    private var attached: [Pass] {
+        session.agents.enabledPasses(accountID: grant.accountID, placement: grant.placement)
+    }
+
+    private var sample: SampleMessage {
+        SampleMessage.forAccessPreview(matching: attached.first)
+    }
+
+    private var indexedSample: IndexedMessage {
+        IndexedMessage(
+            id: "sample",
+            accountID: grant.accountID,
+            placement: grant.placement ?? "INBOX",
+            from: sample.from,
+            to: sample.to,
+            cc: sample.cc,
+            date: sample.date,
+            subject: sample.subject,
+            body: sample.body,
+            isPartial: false
+        )
+    }
+
+    private var effectiveFields: GrantFields {
+        guard let agentID = session.agents.selectedAgent?.id else { return grant.fields }
+        return PassEngine.upgrade(
+            base: grant.fields,
+            message: indexedSample,
+            agentID: agentID,
+            passes: session.agents.passDefinitions,
+            enablements: session.agents.passes.allEnablements()
+        )
+    }
+
+    private var firedPasses: [Pass] {
+        guard let agentID = session.agents.selectedAgent?.id else { return [] }
+        var current = grant.fields
+        var fired: [Pass] = []
+        for pass in attached {
+            let next = PassEngine.upgrade(
+                base: current,
+                message: indexedSample,
+                agentID: agentID,
+                passes: [pass],
+                enablements: session.agents.passes.allEnablements()
+            )
+            if next != current {
+                fired.append(pass)
+                current = next
+            }
+        }
+        return fired
+    }
+
+    private func viaPassNick(for keyPath: KeyPath<GrantFields, Bool>) -> String? {
+        guard !grant.fields[keyPath: keyPath], effectiveFields[keyPath: keyPath],
+              let pass = firedPasses.first(where: { $0.fields[keyPath: keyPath] })
+        else { return nil }
+        return pass.nick
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -547,17 +684,58 @@ private struct AgentAccessPreview: View {
                 session: session,
                 ref: sampleRef,
                 showsFieldBadges: false,
-                attachmentContentDetail: sample.attachmentContentDetail
+                attachmentContentDetail: sample.attachmentContentDetail,
+                bodyViaPassNick: viaPassNick(for: \.body),
+                attachmentInfoViaPassNick: viaPassNick(for: \.attachmentMetadata),
+                attachmentContentViaPassNick: viaPassNick(for: \.attachmentContent)
             )
+            ForEach(firedPasses) { pass in
+                Text(passNote(pass))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Self.passGreen)
+            }
+            if !attached.isEmpty, firedPasses.isEmpty {
+                Text("Attached passes did not match this sample (or their fields are already covered).")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
             if AccessLogFormat.showsSanitizedLegend(for: [sampleRef]) {
                 SanitizedFieldsLegend()
             }
-            LockedFieldsLegend()
+            if hasLockedFields {
+                LockedFieldsLegend()
+            }
         }
-        .id(session.agents.leakGuardRevision)
+        .id("\(session.agents.leakGuardRevision)-\(session.agents.passRevision)")
+    }
+
+    private var hasLockedFields: Bool {
+        let f = effectiveFields
+        return !f.subject || !f.from || !f.to || !f.cc || !f.date
+            || !f.body || !f.attachmentMetadata || !f.attachmentContent
+    }
+
+    private func passNote(_ pass: Pass) -> String {
+        let labels = greenLitLabels(pass: pass, base: grant.fields)
+        let joined = labels.isEmpty ? "fields" : labels.joined(separator: ", ")
+        return "PASS — \(pass.name) (✓ \(pass.nick)) green-lit \(joined)."
+    }
+
+    private func greenLitLabels(pass: Pass, base: GrantFields) -> [String] {
+        var labels: [String] = []
+        if pass.fields.body && !base.body { labels.append("body") }
+        if pass.fields.attachmentMetadata && !base.attachmentMetadata { labels.append("attachment names") }
+        if pass.fields.attachmentContent && !base.attachmentContent { labels.append("attachment content") }
+        if pass.fields.subject && !base.subject { labels.append("subject") }
+        if pass.fields.from && !base.from { labels.append("from") }
+        if pass.fields.to && !base.to { labels.append("to") }
+        if pass.fields.cc && !base.cc { labels.append("cc") }
+        if pass.fields.date && !base.date { labels.append("date") }
+        return labels
     }
 
     private var sampleRef: AuditMessageRef {
+        let fields = effectiveFields
         let scanPlacement = grant.placement ?? "INBOX"
         let leakGuard = OutboundLeakGuard(policy: session.agents.leakGuardPolicy)
         let subjectField = leakGuard.sanitize(
@@ -565,35 +743,35 @@ private struct AgentAccessPreview: View {
             field: .subject,
             accountID: grant.accountID,
             placement: scanPlacement,
-            fieldGranted: grant.fields.subject
+            fieldGranted: fields.subject
         )
         let bodyField = leakGuard.sanitize(
             text: sample.body,
             field: .body,
             accountID: grant.accountID,
             placement: scanPlacement,
-            fieldGranted: grant.fields.body
+            fieldGranted: fields.body
         )
         let disclosed = Array(Set(subjectField.disclosedRules + bodyField.disclosedRules)).sorted()
         return AuditMessageRef(
             accountID: grant.accountID,
             placement: grant.placement ?? "all mailboxes",
             id: "sample",
-            subject: displayText(subjectField, granted: grant.fields.subject),
+            subject: displayText(subjectField, granted: fields.subject),
             from: sample.from,
             date: sample.date,
             to: sample.to,
             cc: sample.cc,
-            bodySnippet: displayText(bodyField, granted: grant.fields.body),
-            subjectAccess: grant.fields.subject ? subjectField.access.auditBodyAccess : .notGranted,
-            bodyAccess: grant.fields.body ? bodyField.access.auditBodyAccess : .notGranted,
+            bodySnippet: displayText(bodyField, granted: fields.body),
+            subjectAccess: fields.subject ? subjectField.access.auditBodyAccess : .notGranted,
+            bodyAccess: fields.body ? bodyField.access.auditBodyAccess : .notGranted,
             subjectOriginal: subjectField.original != subjectField.text ? subjectField.original : nil,
             bodyOriginal: bodyField.original != bodyField.text ? bodyField.original : nil,
             sanitizedRules: disclosed.isEmpty ? nil : disclosed,
             stealth: subjectField.stealth || bodyField.stealth,
             leakDetections: AuditLeakDetection.from(subject: subjectField, body: bodyField),
-            fields: grant.fields,
-            attachments: grant.fields.attachmentMetadata ? sample.mailAttachments : []
+            fields: fields,
+            attachments: fields.attachmentMetadata ? sample.mailAttachments : []
         )
     }
 
@@ -625,6 +803,37 @@ private struct SampleMessage {
             ("receipt.png", 21),
         ]
     )
+
+    /// Prefer a sample that satisfies an attached pass so Access preview can show green lights.
+    static func forAccessPreview(matching pass: Pass?) -> SampleMessage {
+        guard let pass else { return .invoice }
+        let from = Self.haystack(for: pass.fromRules) ?? invoice.from
+        let subject = Self.haystack(for: pass.subjectRules) ?? invoice.subject
+        return SampleMessage(
+            subject: subject,
+            from: from,
+            to: invoice.to,
+            cc: invoice.cc,
+            date: invoice.date,
+            body: invoice.body,
+            attachments: invoice.attachments
+        )
+    }
+
+    private static func haystack(for rules: [MatchRule]) -> String? {
+        guard let rule = rules.first, !rule.value.isEmpty else { return nil }
+        switch rule.mode {
+        case .exact:
+            return rule.value
+        case .contains:
+            return "Sample \(rule.value) notice"
+        case .starts:
+            return "\(rule.value) weekly update"
+        case .ends:
+            if rule.value.contains("@") { return rule.value }
+            return "noreply@\(rule.value)"
+        }
+    }
 
     var mailAttachments: [MailAttachment] {
         attachments.map { MailAttachment(filename: $0.name, byteCount: $0.kb * 1024) }

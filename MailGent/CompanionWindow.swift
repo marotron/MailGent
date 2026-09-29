@@ -6,8 +6,9 @@ import SwiftUI
 /// `openWindow` / `SettingsLink` then fail after the first close. Own the windows in
 /// AppKit: hide on close, flip to `.regular` on the click that shows them.
 ///
-/// MenuBarExtra `.window` dismiss also calls `NSApp.hide()` / `orderOut` on the new
-/// key window ~0.3–0.8s later. Delaying present is not enough — block those hides.
+/// MenuBarExtra `.window` dismiss also calls `NSApp.hide()` / `close()` / `orderOut`
+/// on the new key window ~0.3–1.5s later. Delaying present is not enough — block
+/// those hides, ignore synthetic `close()`, and only `orderOut` on traffic-light / ⌘W.
 @MainActor
 final class DetachedWindowHost: NSObject, NSWindowDelegate {
     static let shared = DetachedWindowHost()
@@ -250,8 +251,16 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // Extra dismiss synthesizes close on the new key window. Ignore that flash.
-        if isRecentPresent { return false }
+        // MenuBarExtra teardown synthesizes close/orderOut on whoever became key —
+        // often after the old ~1.2s "recent present" window. Only honor a real
+        // traffic-light click or ⌘W; keep intended windows up otherwise.
+        guard isUserInitiatedClose else {
+            if wantsVisible(sender) {
+                sender.orderFrontRegardless()
+                sender.makeKeyAndOrderFront(nil)
+            }
+            return false
+        }
         intendedVisible.remove(ObjectIdentifier(sender))
         allowingOrderOut = true
         sender.orderOut(nil)
@@ -260,6 +269,20 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             NSApp.setActivationPolicy(.accessory)
         }
         return false
+    }
+
+    /// Close button / ⌘W produce mouse or Cmd-key events. Synthetic teardown does not.
+    private var isUserInitiatedClose: Bool {
+        guard let event = NSApp.currentEvent else { return false }
+        switch event.type {
+        case .leftMouseDown, .leftMouseUp:
+            return true
+        case .keyDown:
+            let key = event.charactersIgnoringModifiers?.lowercased()
+            return event.modifierFlags.contains(.command) && key == "w"
+        default:
+            return false
+        }
     }
 
     private func recoverFromHideIfNeeded() {
@@ -339,8 +362,23 @@ final class MailGentApplication: NSApplication {
     }
 }
 
-/// Status-item teardown calls `orderOut` on whoever became key. Only user close may hide us.
+/// Status-item teardown calls `close` / `orderOut` on whoever became key.
+/// Never destroy hosted windows; only the host may `orderOut` on a real user close.
 private final class HostedWindow: NSWindow {
+    override func close() {
+        // `close()` skips `windowShouldClose` — MenuBarExtra uses it and would
+        // flash-dismiss the new key window. Route through the delegate instead.
+        if let delegate = delegate {
+            _ = delegate.windowShouldClose?(self)
+            return
+        }
+        let blocked = MainActor.assumeIsolated {
+            DetachedWindowHost.shared.shouldBlockOrderOut
+        }
+        if blocked { return }
+        super.close()
+    }
+
     override func orderOut(_ sender: Any?) {
         let blocked = MainActor.assumeIsolated {
             DetachedWindowHost.shared.shouldBlockOrderOut
