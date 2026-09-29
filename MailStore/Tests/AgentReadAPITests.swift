@@ -28,17 +28,107 @@ struct AgentReadAPITests {
         let page = try env.gateway.search("invoice", credential: env.credential)
         #expect(page.items.map(\.subject) == ["Invoice due"])
     }
+
+    @Test func matchingPassUpgradesBodyOnGet() throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(envelope: true, body: false)
+        )
+        defer { env.remove() }
+
+        let withoutPass = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(withoutPass.body == .notGranted)
+
+        env.passes.upsert(
+            Pass(
+                id: "p1",
+                name: "Invoices",
+                nick: "A",
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true),
+                agentIDs: [env.agentID]
+            )
+        )
+        env.passes.setEnabled(true, passID: "p1", accountID: env.accountID, placement: "INBOX")
+
+        let withPass = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(withPass.body == .text("Please pay"))
+    }
+
+    @Test func passDoesNotGrantAccessWithoutBaseAllow() throws {
+        let env = try AgentReadFixture(grantFields: nil)
+        defer { env.remove() }
+
+        env.passes.upsert(
+            Pass(
+                id: "p1",
+                name: "Invoices",
+                nick: "A",
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true),
+                agentIDs: [env.agentID]
+            )
+        )
+        env.passes.setEnabled(true, passID: "p1", accountID: env.accountID, placement: "INBOX")
+
+        #expect(throws: PairingError.unauthorized) {
+            try env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+        }
+    }
+
+    @Test func passDoesNotUpgradeWhenSubjectMismatches() throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(envelope: true, body: false)
+        )
+        defer { env.remove() }
+
+        env.passes.upsert(
+            Pass(
+                id: "p1",
+                name: "Receipts",
+                nick: "A",
+                subjectRules: [MatchRule(value: "receipt", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true),
+                agentIDs: [env.agentID]
+            )
+        )
+        env.passes.setEnabled(true, passID: "p1", accountID: env.accountID, placement: "INBOX")
+
+        let message = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(message.body == .notGranted)
+    }
 }
 
 private struct AgentReadFixture {
     let root: FixtureTree
     let db: URL
     let credential = "secret-token"
+    let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+    let agentID: String
+    let passes: PassStore
     let gateway: AgentReadAPI
 
-    init() throws {
+    init(grantFields: GrantFields? = .default) throws {
         root = try FixtureTree()
-        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         try root.writeEmlx(
             named: "1.emlx",
             rfc822: """
@@ -65,12 +155,17 @@ private struct AgentReadFixture {
             trustClass: .machineLocal,
             credential: credential
         )
+        agentID = agent.id
         let grants = GrantGate()
-        try grants.allow(agentID: agent.id, accountID: accountID)
+        if let grantFields {
+            try grants.allow(agentID: agent.id, accountID: accountID, fields: grantFields)
+        }
+        passes = PassStore()
         gateway = AgentReadAPI(
             read: ReadAPI(index: index),
             pairing: pairing,
-            grants: grants
+            grants: grants,
+            passes: passes
         )
     }
 

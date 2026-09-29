@@ -6,17 +6,20 @@ public struct AgentReadAPI {
     public let read: ReadAPI
     public let pairing: Pairing
     public let grants: GrantGate
+    public let passes: PassStore
     public let audit: AuditLog?
 
     public init(
         read: ReadAPI,
         pairing: Pairing,
         grants: GrantGate = GrantGate(),
+        passes: PassStore = PassStore(),
         audit: AuditLog? = nil
     ) {
         self.read = read
         self.pairing = pairing
         self.grants = grants
+        self.passes = passes
         self.audit = audit
     }
 
@@ -186,7 +189,7 @@ public struct AgentReadAPI {
                 body: "",
                 isPartial: message.isPartial
             )
-            guard let fields = grants.effectiveFields(for: probe, agentID: agent.id) else {
+            guard let fields = effectiveFields(for: probe, agentID: agent.id) else {
                 record(
                     kind: .get,
                     agent: agent,
@@ -321,6 +324,18 @@ public struct AgentReadAPI {
         return Page(items: items, nextCursor: next)
     }
 
+    /// Base grant fields, then pass upgrades. nil → no access (passes never open the gate).
+    private func effectiveFields(for message: IndexedMessage, agentID: String) -> GrantFields? {
+        guard let base = grants.effectiveFields(for: message, agentID: agentID) else { return nil }
+        return PassEngine.upgrade(
+            base: base,
+            message: message,
+            agentID: agentID,
+            passes: passes.allPasses(),
+            enablements: passes.allEnablements()
+        )
+    }
+
     private func record(
         kind: AuditKind,
         agent: PairedAgent,
@@ -353,7 +368,7 @@ public struct AgentReadAPI {
         items.prefix(AuditLog.messageRefCap).map { item in
             AuditMessageRef(
                 item,
-                fields: grants.effectiveFields(for: item, agentID: agentID) ?? .headersOnly
+                fields: effectiveFields(for: item, agentID: agentID) ?? .headersOnly
             )
         }
     }
