@@ -1,6 +1,6 @@
 # MailGent
 
-**0.1.9 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
+**0.3.1 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
@@ -12,7 +12,8 @@ This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local
 - Menu status times sit in chips; Changes shows the ingest window as `12:15–12:31 (16m)` (yesterday or the date when that window is not today); Last agent call uses clock + elapsed like Last ingest
 - One paired `machine-local` agent on loopback `http://127.0.0.1:8788/mcp` (8787 reserved for Cursor OAuth callbacks)
 - Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments
-- Append-only access log
+- Outbound leak guard: on-device subject/body scan before agents receive mail (opt in per placement; built-in + custom rules)
+- Append-only access log (sanitized/withheld field overlays)
 - MailGent-owned draft ledger (in-memory; not written into Mail.app)
 
 Default source is **fixture mail**. Live Mail needs a readable `~/Library/Mail` (Full Disk Access, or Choose Mail Folder…).
@@ -63,7 +64,7 @@ export MAILGENT_SIGN_IDENTITY='Developer ID Application: …'
 export MAILGENT_NOTARY_PROFILE='mailgent-notary'   # `xcrun notarytool store-credentials`
 ```
 
-**GitHub Release:** push tag `vX.Y.Z` matching `MARKETING_VERSION` (e.g. `v0.1.8` for `0.1.8`). The [Release workflow](.github/workflows/release.yml) builds the DMG, publishes a **pre-release** titled **`X.Y.Z alpha`**, and attaches the disk image. Optional repo secrets: `MAILGENT_SIGN_IDENTITY`, `MAILGENT_NOTARY_PROFILE`.
+**GitHub Release:** push tag `vX.Y.Z` matching `MARKETING_VERSION` (e.g. `v0.1.8` for `0.1.8`). The [Release workflow](.github/workflows/release.yml) builds the DMG, publishes a **pre-release** titled **`X.Y.Z alpha`**, and attaches the disk image. Notes start with that version’s section from `CHANGELOG.md`, then the install text in [`.github/RELEASE_BODY.md`](.github/RELEASE_BODY.md). Optional repo secrets: `MAILGENT_SIGN_IDENTITY`, `MAILGENT_NOTARY_PROFILE`.
 
 ```bash
 git tag v0.1.8
@@ -74,9 +75,9 @@ git push origin v0.1.8
 
 `make prototype-accounts` is a **dev CLI**, not part of the `.app`.
 
-## Pair Cursor
+## Pair agents
 
-In the companion, **Pair Cursor** → paste the snippet into `~/.cursor/mcp.json`. The app can write that file with the Bearer.
+In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL; each agent gets its own Bearer. Cursor can sync into `~/.cursor/mcp.json`; Grok Bot shows a copyable MCP snippet for the host to wire itself. Grants are independent per agent in Grant Desk.
 
 Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (source switch is off unless Settings allows it).
 

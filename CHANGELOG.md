@@ -4,7 +4,50 @@ All notable changes to MailGent are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
 
-Release sections use semver only (`## [0.1.9]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+Release sections use semver only (`## [0.2.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+
+## [0.3.1] - 2026-09-28
+
+### Fixed
+
+- Grant saves no longer replace a non-empty `grants.json` with an empty list when pairing an agent or saving an incidental edit. Explicit Clear and agent revoke still remove grants. Rows for an agent id that is not currently paired stay on disk.
+- Before a save that shrinks the grant file, the previous file is copied to `grants.json.bak`.
+
+### Added
+
+- Grant load and save logging (`[MailGent][grants]`) with file size, decode errors, per-agent counts, placement keys, and the reason for each write. No message bodies or pairing credentials.
+
+## [0.3.0] - 2026-09-04
+
+### Added
+
+- **Multi-agent pairing** — Pair Cursor and Pair Grok Bot as independent machine-local agents on the same loopback MCP URL (distinct Bearers).
+- Companion **half-width agent cards** (2-column grid) with per-agent snippet, revoke, grant count, and selection for Grant Desk.
+- Grant Desk **agent picker**; allows/denies stay per `agentID`. Leak guard policy remains global.
+- `GrokMark` asset + `AgentGlyph` support for Grok Bot; Cursor keeps auto-sync into `~/.cursor/mcp.json` (Grok Bot is copyable snippet only).
+- `pairing.json` **v2** (agents array + selectedAgentID) with automatic v1→v2 migration; `grants.json` persists the union of all agents’ grants.
+
+### Changed
+
+- Startup restores all persisted agents; auto-pairs **Cursor only** when none exist. Revoke no longer re-pairs another agent.
+- Menu bar / status shows selected name, or `N agents` when more than one is paired.
+- Grok pairing label is **Grok Bot** (existing `Grok` entries migrate on restore). `GrokMark` uses macOS-style rounded corners.
+- Access log success icon for a zero-result search, list, new, or placements call is secondary grey; hits with results stay green.
+
+## [0.2.0] - 2026-08-31
+
+### Added
+
+- **Outbound leak guard** — on-device scan of subject and body before paired agents receive mail; opt in per placement in Grant Desk → Scope.
+- Grant Desk **Privacy** tab: built-in detectors (API keys, JWT, password patterns, and more), custom literal/wildcard/regex filters, subject/body hit modes (redact spans or block whole field), with expandable info panels matching Scope/Access.
+- MCP `get` and list/search summaries expose `subjectAccess` / `bodyAccess` (`granted`, `not_granted`, `sanitized`, `withheld_confidential`), `subjectAccessReason` / `bodyAccessReason` (`grant`, `leak_guard`), and `sanitizedRules` when disclosed.
+- Access log shows sanitized spans and withheld fields; hover reveals originals; audit refs record per-hit leak detections for badges and detail.
+- Leak guard policy persisted in `~/Library/Application Support/MailGent/sensitive-filter.json`.
+
+### Changed
+
+- Access log leak-guard chrome uses purple (not warning orange); sanitized fields use a purple tint instead of a dashed underline.
+- Access log leak-hit badges and detection rows show original → replacement; stealth audits keep human-visible sanitized markers.
 
 ## [0.1.9] - 2026-08-28
 

@@ -73,4 +73,45 @@ struct PairingTests {
             try pairing.authenticate(credential: "other-token")
         }
     }
+
+    @Test func twoCredentialsBothAuthenticate() throws {
+        let pairing = Pairing()
+        let cursor = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: "cursor-token"
+        )
+        let grok = try pairing.register(
+            name: "Grok Bot",
+            trustClass: .machineLocal,
+            credential: "grok-token"
+        )
+
+        let authCursor = try pairing.authenticate(credential: "cursor-token")
+        let authGrok = try pairing.authenticate(credential: "grok-token")
+        #expect(authCursor.id == cursor.id)
+        #expect(authGrok.id == grok.id)
+    }
+
+    @Test func revokeOneLeavesTheOther() throws {
+        let pairing = Pairing()
+        let cursor = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: "cursor-token"
+        )
+        _ = try pairing.register(
+            name: "Grok Bot",
+            trustClass: .machineLocal,
+            credential: "grok-token"
+        )
+
+        pairing.revoke(agentID: cursor.id)
+
+        #expect(throws: PairingError.unauthorized) {
+            try pairing.authenticate(credential: "cursor-token")
+        }
+        let grok = try pairing.authenticate(credential: "grok-token")
+        #expect(grok.name == "Grok Bot")
+    }
 }

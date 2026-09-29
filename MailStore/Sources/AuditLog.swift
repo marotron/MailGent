@@ -24,6 +24,122 @@ public enum AuditBodyAccess: String, Codable, Equatable, Hashable, Sendable {
     case granted
     case notGranted = "not_granted"
     case notAvailable = "not_available"
+    case sanitized
+    case withheldConfidential = "withheld_confidential"
+}
+
+/// One leak-guard hit recorded for the Access Log (human-facing).
+public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
+    public enum Field: String, Codable, Sendable {
+        case subject
+        case body
+    }
+
+    public enum Disposition: String, Codable, Sendable {
+        case redacted
+        case replaced
+        case withheld
+    }
+
+    public let field: Field
+    public let label: String
+    public let disposition: Disposition
+    public let discloseToAgent: Bool
+    /// Matched substring from the original field.
+    public let original: String
+    /// Replacement text when disposition is `.replaced`; empty otherwise.
+    public let replacement: String
+
+    public init(
+        field: Field,
+        label: String,
+        disposition: Disposition,
+        discloseToAgent: Bool,
+        original: String = "",
+        replacement: String = ""
+    ) {
+        self.field = field
+        self.label = label
+        self.disposition = disposition
+        self.discloseToAgent = discloseToAgent
+        self.original = original
+        self.replacement = replacement
+    }
+
+    public static func from(
+        subject: SanitizedField?,
+        body: SanitizedField?
+    ) -> [AuditLeakDetection]? {
+        var out: [AuditLeakDetection] = []
+        if let subject {
+            out.append(contentsOf: from(field: .subject, sanitized: subject))
+        }
+        if let body {
+            out.append(contentsOf: from(field: .body, sanitized: body))
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    private static func from(field: Field, sanitized: SanitizedField) -> [AuditLeakDetection] {
+        let withheld = sanitized.access == .withheldConfidential
+        return sanitized.hitSpans.compactMap { hit in
+            guard let originalPart = substring(sanitized.original, start: hit.start, end: hit.end)
+            else { return nil }
+            let disposition: Disposition
+            let replacement: String
+            if withheld {
+                disposition = .withheld
+                replacement = ""
+            } else if hit.action == .replace {
+                disposition = .replaced
+                replacement = hit.actionValue
+            } else {
+                disposition = .redacted
+                replacement = ""
+            }
+            return AuditLeakDetection(
+                field: field,
+                label: hit.label,
+                disposition: disposition,
+                discloseToAgent: hit.discloseToAgent,
+                original: originalPart,
+                replacement: replacement
+            )
+        }
+    }
+
+    private static func substring(_ text: String, start: Int, end: Int) -> String? {
+        guard start >= 0, end >= start, end <= text.count else { return nil }
+        let lower = text.index(text.startIndex, offsetBy: start)
+        let upper = text.index(text.startIndex, offsetBy: end)
+        return String(text[lower..<upper])
+    }
+}
+
+extension AuditLeakDetection {
+    enum CodingKeys: String, CodingKey {
+        case field, label, disposition, discloseToAgent, original, replacement
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        field = try container.decode(Field.self, forKey: .field)
+        label = try container.decode(String.self, forKey: .label)
+        disposition = try container.decode(Disposition.self, forKey: .disposition)
+        discloseToAgent = try container.decode(Bool.self, forKey: .discloseToAgent)
+        original = try container.decodeIfPresent(String.self, forKey: .original) ?? label
+        replacement = try container.decodeIfPresent(String.self, forKey: .replacement) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(field, forKey: .field)
+        try container.encode(label, forKey: .label)
+        try container.encode(disposition, forKey: .disposition)
+        try container.encode(discloseToAgent, forKey: .discloseToAgent)
+        try container.encode(original, forKey: .original)
+        try container.encode(replacement, forKey: .replacement)
+    }
 }
 
 public struct AuditRetention: Equatable, Sendable {
@@ -66,7 +182,13 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let cc: String
     public let date: String
     public let bodySnippet: String
+    public let subjectAccess: AuditBodyAccess?
     public let bodyAccess: AuditBodyAccess
+    public let subjectOriginal: String?
+    public let bodyOriginal: String?
+    public let sanitizedRules: [String]?
+    public let stealth: Bool?
+    public let leakDetections: [AuditLeakDetection]?
     public let fields: GrantFields
     public let attachments: [MailAttachment]
 
@@ -80,7 +202,13 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         to: String = "",
         cc: String = "",
         bodySnippet: String = "",
+        subjectAccess: AuditBodyAccess? = nil,
         bodyAccess: AuditBodyAccess = .notAvailable,
+        subjectOriginal: String? = nil,
+        bodyOriginal: String? = nil,
+        sanitizedRules: [String]? = nil,
+        stealth: Bool? = nil,
+        leakDetections: [AuditLeakDetection]? = nil,
         fields: GrantFields = .headersOnly,
         attachments: [MailAttachment] = []
     ) {
@@ -93,12 +221,139 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.cc = cc
         self.date = date
         self.bodySnippet = bodySnippet
+        self.subjectAccess = subjectAccess
         self.bodyAccess = bodyAccess
+        self.subjectOriginal = subjectOriginal
+        self.bodyOriginal = bodyOriginal
+        self.sanitizedRules = sanitizedRules
+        self.stealth = stealth
+        self.leakDetections = leakDetections
         self.fields = fields
         self.attachments = attachments
     }
 
     public var rowID: String { "\(accountID)/\(placement)/\(id)" }
+
+    /// Count of leak-guard parts for list badges. Prefers recorded hits; falls back for older logs.
+    public var leakDetectionCount: Int {
+        if let leakDetections, !leakDetections.isEmpty {
+            return leakDetections.count
+        }
+        if let sanitizedRules, !sanitizedRules.isEmpty {
+            return sanitizedRules.count
+        }
+        if stealth == true
+            || subjectAccess == .sanitized
+            || subjectAccess == .withheldConfidential
+            || bodyAccess == .sanitized
+            || bodyAccess == .withheldConfidential
+        {
+            return 1
+        }
+        return 0
+    }
+
+    /// Rows shown in Access Log detail (recorded hits, or a legacy proxy from rule labels).
+    public var displayLeakDetections: [AuditLeakDetection] {
+        if let leakDetections, !leakDetections.isEmpty {
+            return leakDetections
+        }
+        guard leakDetectionCount > 0 else { return [] }
+        let withheldSubject = subjectAccess == .withheldConfidential
+        let withheldBody = bodyAccess == .withheldConfidential
+        let disposition: AuditLeakDetection.Disposition
+        if withheldSubject || withheldBody {
+            disposition = .withheld
+        } else if stealth == true {
+            disposition = .replaced
+        } else {
+            disposition = .redacted
+        }
+        let field: AuditLeakDetection.Field =
+            (bodyAccess == .sanitized || bodyAccess == .withheldConfidential || stealth == true
+                || bodyOriginal != nil)
+                ? .body
+                : .subject
+        let originalForField: String = {
+            switch field {
+            case .body:
+                return bodyOriginal ?? ""
+            case .subject:
+                return subjectOriginal ?? ""
+            }
+        }()
+        let deliveredForField: String = {
+            switch field {
+            case .body:
+                return bodySnippet
+            case .subject:
+                return subject
+            }
+        }()
+        let label = sanitizedRules?.first
+            ?? (stealth == true ? "Stealth replace" : "Sensitive content")
+        // Older logs often lack per-span hits; avoid fake A → A rows when snippet == original.
+        let originalsMatchDelivered =
+            !originalForField.isEmpty && originalForField == deliveredForField
+        if originalsMatchDelivered || (originalForField.isEmpty && deliveredForField.isEmpty) {
+            return [
+                AuditLeakDetection(
+                    field: field,
+                    label: label,
+                    disposition: disposition,
+                    discloseToAgent: stealth != true,
+                    original: "Hit details not retained in this log entry",
+                    replacement: disposition == .replaced ? "re-fetch message to record spans" : ""
+                )
+            ]
+        }
+        if let sanitizedRules, !sanitizedRules.isEmpty {
+            return sanitizedRules.map {
+                AuditLeakDetection(
+                    field: field,
+                    label: $0,
+                    disposition: disposition,
+                    discloseToAgent: stealth != true,
+                    original: previewSpan(originalForField, fallback: $0),
+                    replacement: disposition == .replaced
+                        ? previewSpan(deliveredForField, fallback: "…")
+                        : ""
+                )
+            }
+        }
+        return [
+            AuditLeakDetection(
+                field: field,
+                label: label,
+                disposition: disposition,
+                discloseToAgent: stealth != true,
+                original: previewSpan(
+                    originalForField,
+                    fallback: stealth == true ? "Stealth replace" : "Sensitive content"
+                ),
+                replacement: disposition == .replaced
+                    ? previewSpan(deliveredForField, fallback: "…")
+                    : ""
+            )
+        ]
+    }
+
+    private static func previewSpan(_ text: String, fallback: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return fallback }
+        if let firstLine = trimmed.split(whereSeparator: \.isNewline).first {
+            let line = String(firstLine)
+            if line.count > 80 {
+                return String(line.prefix(80)) + "…"
+            }
+            return line
+        }
+        return fallback
+    }
+
+    private func previewSpan(_ text: String, fallback: String) -> String {
+        Self.previewSpan(text, fallback: fallback)
+    }
 
     public var attachmentNamesDetail: String {
         if attachments.isEmpty { return "none in this response" }
@@ -380,7 +635,8 @@ extension AuditOutcome: Codable {
 extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, cc, date
-        case bodySnippet, bodyAccess, fields, attachments
+        case bodySnippet, subjectAccess, bodyAccess, subjectOriginal, bodyOriginal
+        case sanitizedRules, stealth, leakDetections, fields, attachments
     }
 
     public init(from decoder: Decoder) throws {
@@ -394,8 +650,17 @@ extension AuditMessageRef: Codable {
         to = try container.decodeIfPresent(String.self, forKey: .to) ?? ""
         cc = try container.decodeIfPresent(String.self, forKey: .cc) ?? ""
         bodySnippet = try container.decodeIfPresent(String.self, forKey: .bodySnippet) ?? ""
+        subjectAccess = try container.decodeIfPresent(AuditBodyAccess.self, forKey: .subjectAccess)
         bodyAccess = try container.decodeIfPresent(AuditBodyAccess.self, forKey: .bodyAccess)
             ?? .notAvailable
+        subjectOriginal = try container.decodeIfPresent(String.self, forKey: .subjectOriginal)
+        bodyOriginal = try container.decodeIfPresent(String.self, forKey: .bodyOriginal)
+        sanitizedRules = try container.decodeIfPresent([String].self, forKey: .sanitizedRules)
+        stealth = try container.decodeIfPresent(Bool.self, forKey: .stealth)
+        leakDetections = try container.decodeIfPresent(
+            [AuditLeakDetection].self,
+            forKey: .leakDetections
+        )
         fields = try container.decodeIfPresent(GrantFields.self, forKey: .fields) ?? .headersOnly
         attachments = try container.decodeIfPresent([MailAttachment].self, forKey: .attachments) ?? []
     }
@@ -411,7 +676,13 @@ extension AuditMessageRef: Codable {
         try container.encode(cc, forKey: .cc)
         try container.encode(date, forKey: .date)
         try container.encode(bodySnippet, forKey: .bodySnippet)
+        try container.encodeIfPresent(subjectAccess, forKey: .subjectAccess)
         try container.encode(bodyAccess, forKey: .bodyAccess)
+        try container.encodeIfPresent(subjectOriginal, forKey: .subjectOriginal)
+        try container.encodeIfPresent(bodyOriginal, forKey: .bodyOriginal)
+        try container.encodeIfPresent(sanitizedRules, forKey: .sanitizedRules)
+        try container.encodeIfPresent(stealth, forKey: .stealth)
+        try container.encodeIfPresent(leakDetections, forKey: .leakDetections)
         try container.encode(fields, forKey: .fields)
         try container.encode(attachments, forKey: .attachments)
     }
@@ -420,7 +691,11 @@ extension AuditMessageRef: Codable {
 extension AuditEntry: Codable {}
 
 extension AuditMessageRef {
-    public init(_ message: IndexedMessage, fields: GrantFields = .headersOnly) {
+    public init(
+        _ message: IndexedMessage,
+        fields: GrantFields = .headersOnly,
+        subjectSanitized: SanitizedField? = nil
+    ) {
         let access: AuditBodyAccess
         let snippet: String
         if !fields.body {
@@ -433,6 +708,10 @@ extension AuditMessageRef {
             access = .granted
             snippet = String(message.body.prefix(Self.bodySnippetCap))
         }
+        let subjectAccess = subjectSanitized?.access.auditBodyAccess
+        let subjectOriginal = subjectSanitized.flatMap { field in
+            field.original != field.text ? field.original : nil
+        }
         self.init(
             accountID: message.accountID,
             placement: message.placement,
@@ -443,30 +722,55 @@ extension AuditMessageRef {
             to: fields.to ? message.to : "",
             cc: fields.cc ? message.cc : "",
             bodySnippet: snippet,
+            subjectAccess: subjectAccess,
             bodyAccess: access,
+            subjectOriginal: subjectOriginal,
+            leakDetections: AuditLeakDetection.from(subject: subjectSanitized, body: nil),
             fields: fields
         )
     }
 
-    public init(_ message: ReadMessage, fields: GrantFields = .headersOnly) {
-        let access: AuditBodyAccess
+    public init(
+        _ message: ReadMessage,
+        fields: GrantFields = .headersOnly,
+        subjectSanitized: SanitizedField? = nil,
+        bodySanitized: SanitizedField? = nil
+    ) {
+        let bodyAuditAccess: AuditBodyAccess
         let snippet: String
-        switch message.body {
-        case .text(let text):
-            if text.isEmpty {
-                access = .notAvailable
+        if let bodySanitized {
+            bodyAuditAccess = bodySanitized.access.auditBodyAccess
+            // Agent-facing text for preview; original stays in bodyOriginal.
+            snippet = String(bodySanitized.text.prefix(Self.bodySnippetCap))
+        } else {
+            switch message.body {
+            case .text(let text):
+                if text.isEmpty {
+                    bodyAuditAccess = .notAvailable
+                    snippet = ""
+                } else {
+                    bodyAuditAccess = .granted
+                    snippet = String(text.prefix(Self.bodySnippetCap))
+                }
+            case .notAvailable:
+                bodyAuditAccess = .notAvailable
                 snippet = ""
-            } else {
-                access = .granted
-                snippet = String(text.prefix(Self.bodySnippetCap))
+            case .notGranted:
+                bodyAuditAccess = .notGranted
+                snippet = ""
             }
-        case .notAvailable:
-            access = .notAvailable
-            snippet = ""
-        case .notGranted:
-            access = .notGranted
-            snippet = ""
         }
+        let subjectAccess = subjectSanitized?.access.auditBodyAccess
+        let subjectOriginal = subjectSanitized.flatMap { field in
+            field.original != field.text ? field.original : nil
+        }
+        let bodyOriginal = bodySanitized.flatMap { field in
+            field.original != field.text ? field.original : nil
+        }
+        let disclosed = Array(
+            Set((subjectSanitized?.disclosedRules ?? []) + (bodySanitized?.disclosedRules ?? []))
+        ).sorted()
+        let stealth = (subjectSanitized?.stealth == true) || (bodySanitized?.stealth == true)
         self.init(
             accountID: message.accountID,
             placement: message.placement,
@@ -477,7 +781,16 @@ extension AuditMessageRef {
             to: message.to,
             cc: message.cc,
             bodySnippet: snippet,
-            bodyAccess: access,
+            subjectAccess: subjectAccess,
+            bodyAccess: bodyAuditAccess,
+            subjectOriginal: subjectOriginal,
+            bodyOriginal: bodyOriginal,
+            sanitizedRules: disclosed.isEmpty ? nil : disclosed,
+            stealth: stealth ? true : nil,
+            leakDetections: AuditLeakDetection.from(
+                subject: subjectSanitized,
+                body: bodySanitized
+            ),
             fields: fields,
             attachments: message.attachments
         )

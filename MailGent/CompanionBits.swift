@@ -630,7 +630,7 @@ struct CompanionStatusCopy {
 
     var source: String { session.source.title }
 
-    var connectedAgent: String { session.agents.agent?.name ?? "—" }
+    var connectedAgent: String { session.agents.connectedAgentLabel }
 
     var lastAgentKind: String {
         session.agents.lastAgentRequest?.kind.rawValue ?? "—"
@@ -928,14 +928,16 @@ struct AuditKindBadge: View {
 
 struct AuditOutcomeIcon: View {
     let outcome: AuditOutcome
+    /// Successful call that returned zero items (search / list / new / placements).
+    var emptySuccess: Bool = false
 
     var body: some View {
         switch outcome {
         case .ok:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .help("Succeeded")
-                .accessibilityLabel("Succeeded")
+                .foregroundStyle(emptySuccess ? Color.secondary : Color.green)
+                .help(emptySuccess ? "Succeeded — no results" : "Succeeded")
+                .accessibilityLabel(emptySuccess ? "Succeeded, no results" : "Succeeded")
         case .error(let message):
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.orange)
@@ -949,14 +951,22 @@ struct AgentGlyph: View {
     let name: String
     var size: CGFloat = 16
 
-    private var isCursor: Bool {
-        name.compare("Cursor", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    private var markName: String? {
+        if name.compare("Cursor", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+            return "CursorMark"
+        }
+        if name.compare("Grok", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            || name.compare("Grok Bot", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        {
+            return "GrokMark"
+        }
+        return nil
     }
 
     var body: some View {
         Group {
-            if isCursor {
-                CursorMark(size: size)
+            if let markName {
+                markImage(markName)
             } else {
                 Image(systemName: "cpu")
                     .font(.system(size: size * 0.62, weight: .semibold))
@@ -972,6 +982,22 @@ struct AgentGlyph: View {
         .help(name)
         .accessibilityLabel(name)
     }
+
+    @ViewBuilder
+    private func markImage(_ markName: String) -> some View {
+        let image = Image(markName)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+        if markName == "GrokMark" {
+            image.clipShape(
+                RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+            )
+        } else {
+            image
+        }
+    }
 }
 
 struct CursorMark: View {
@@ -983,6 +1009,22 @@ struct CursorMark: View {
             .interpolation(.high)
             .scaledToFit()
             .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+struct GrokMark: View {
+    var size: CGFloat = 16
+
+    var body: some View {
+        Image("GrokMark")
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(
+                RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+            )
             .accessibilityHidden(true)
     }
 }
@@ -1172,86 +1214,176 @@ struct MessageAccessCard: View {
     var attachmentContentDetail: String = "none in this response"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
-            VStack(alignment: .leading, spacing: 8) {
-                if showsFieldBadges {
-                    GrantFieldBadgeRow(fields: ref.fields)
-                }
-                previewRow("Subject", ref.subject, ref.fields.subject, empty: "(no subject)")
-                if ref.fields.from {
-                    AddressLine(label: "From", raw: ref.from)
-                } else {
-                    previewRow("From", ref.from, false)
-                }
-                if ref.fields.to {
-                    AddressLine(label: "To", raw: ref.to)
-                } else {
-                    previewRow("To", ref.to, false)
-                }
-                if ref.fields.cc {
-                    AddressLine(label: "Cc", raw: ref.cc)
-                } else {
-                    previewRow("Cc", ref.cc, false)
-                }
-                previewRow(
-                    "Date & Time",
-                    AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
-                    ref.fields.date
-                )
-                Divider()
-                Text("Body")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                bodyPreview
-                Divider()
-                HStack(alignment: .top, spacing: 6) {
-                    attachmentColumn("Attachment Info", granted: ref.fields.attachmentMetadata) {
-                        if ref.attachments.isEmpty {
-                            attachmentTile(detail: "none in this response")
-                        } else {
-                            ForEach(Array(ref.attachments.enumerated()), id: \.offset) { _, attachment in
-                                attachmentTile(detail: "\(attachment.filename) · \(attachment.sizeLabel)")
-                            }
+            if showsFieldBadges {
+                GrantFieldBadgeRow(fields: ref.fields)
+            }
+            subjectPreview
+            if ref.fields.from {
+                AddressLine(label: "From", raw: ref.from)
+            } else {
+                previewRow("From", ref.from, false)
+            }
+            if ref.fields.to {
+                AddressLine(label: "To", raw: ref.to)
+            } else {
+                previewRow("To", ref.to, false)
+            }
+            if ref.fields.cc {
+                AddressLine(label: "Cc", raw: ref.cc)
+            } else {
+                previewRow("Cc", ref.cc, false)
+            }
+            previewRow(
+                "Date & Time",
+                AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
+                ref.fields.date
+            )
+            Divider()
+            Text("Body")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            bodyPreview
+            Divider()
+            HStack(alignment: .top, spacing: 6) {
+                attachmentColumn("Attachment Info", granted: ref.fields.attachmentMetadata) {
+                    if ref.attachments.isEmpty {
+                        attachmentTile(detail: "none in this response")
+                    } else {
+                        ForEach(Array(ref.attachments.enumerated()), id: \.offset) { _, attachment in
+                            attachmentTile(detail: "\(attachment.filename) · \(attachment.sizeLabel)")
                         }
                     }
-                    attachmentColumn("Attachment Content", granted: ref.fields.attachmentContent) {
-                        attachmentTile(detail: attachmentContentDetail)
-                    }
+                }
+                attachmentColumn("Attachment Content", granted: ref.fields.attachmentContent) {
+                    attachmentTile(detail: attachmentContentDetail)
                 }
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
+        }
+        .padding(10)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
         }
     }
 
     @ViewBuilder
+    private var subjectPreview: some View {
+        leakGuardRow(
+            label: "Subject",
+            text: ref.subject.isEmpty ? "(no subject)" : ref.subject,
+            fieldGranted: ref.fields.subject,
+            access: effectiveSubjectAccess,
+            original: ref.subjectOriginal,
+            deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject
+        )
+    }
+
+    @ViewBuilder
     private var bodyPreview: some View {
-        if omitsBody, ref.bodyAccess != .notGranted {
+        if omitsBody, effectiveBodyAccess != .notGranted {
             omittedBodyPreview
+        } else if effectiveBodyAccess == .notGranted {
+            HatchDeniedLabel(placeholder: "Body / snippet", fixedHeight: 112)
+                .frame(maxWidth: .infinity)
+                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+                .background(Color.secondary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
-            switch ref.bodyAccess {
-            case .granted:
-                Text(ref.bodySnippet)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .notAvailable:
-                Text("not available")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .notGranted:
-                HatchDeniedLabel(placeholder: "Body / snippet")
+            bodyFieldContent
+                .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+                .padding(10)
+                .background(Color.secondary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private var bodyFieldContent: some View {
+        switch effectiveBodyAccess {
+        case .granted:
+            Text(ref.bodySnippet)
+                .font(.caption)
+                .textSelection(.enabled)
+        case .notAvailable:
+            Text("not available")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .italic()
+        case .notGranted:
+            HatchDeniedLabel(placeholder: "Body / snippet")
+        case .sanitized:
+            SanitizedFieldText(
+                text: ref.bodySnippet,
+                original: ref.bodyOriginal,
+                rules: ref.sanitizedRules,
+                stealth: ref.stealth == true
+            )
+        case .withheldConfidential:
+            WithheldLabel(original: ref.bodyOriginal, rules: ref.sanitizedRules)
+        }
+    }
+
+    /// Agent JSON may report stealth substitutes as `granted`; Access Log still marks them.
+    private var effectiveBodyAccess: AuditBodyAccess {
+        if ref.bodyAccess == .granted,
+           ref.stealth == true,
+           (ref.bodyOriginal != nil || ref.displayLeakDetections.contains { $0.field == .body })
+        {
+            return .sanitized
+        }
+        return ref.bodyAccess
+    }
+
+    private var effectiveSubjectAccess: AuditBodyAccess {
+        let access = ref.subjectAccess ?? .granted
+        if access == .granted,
+           ref.stealth == true,
+           (ref.subjectOriginal != nil || ref.displayLeakDetections.contains { $0.field == .subject })
+        {
+            return .sanitized
+        }
+        return access
+    }
+
+    @ViewBuilder
+    private func leakGuardRow(
+        label: String,
+        text: String,
+        fieldGranted: Bool,
+        access: AuditBodyAccess,
+        original: String?,
+        deniedPlaceholder: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("\(label):")
+                .fontWeight(.light)
+                .foregroundStyle(.secondary)
+            if !fieldGranted {
+                HatchDeniedLabel(placeholder: deniedPlaceholder)
+            } else {
+                switch access {
+                case .granted, .notAvailable:
+                    Text(text)
+                        .foregroundStyle(text.hasPrefix("(") ? .secondary : .primary)
+                        .textSelection(.enabled)
+                case .notGranted:
+                    HatchDeniedLabel(placeholder: deniedPlaceholder)
+                case .sanitized:
+                    SanitizedFieldText(
+                        text: text,
+                        original: original,
+                        rules: ref.sanitizedRules,
+                        stealth: ref.stealth == true
+                    )
+                case .withheldConfidential:
+                    WithheldLabel(original: original, rules: ref.sanitizedRules)
+                }
             }
         }
+        .font(.caption)
     }
 
     private var omittedBodyPreview: some View {
@@ -1410,5 +1542,330 @@ struct HatchPattern: View {
                 with: .color(HatchDeniedStyle.fill)
             )
         }
+    }
+}
+
+// MARK: - Leak guard access log visuals
+
+struct AccessLogLeakHitBadge: View {
+    let count: Int
+    /// Collapsed / list: shield chip + count. Expanded: `{shield} leak` chip + count.
+    var compact: Bool = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            HStack(spacing: compact ? 0 : 3) {
+                ZStack {
+                    Text("L")
+                        .font(.system(size: 8, weight: .semibold))
+                        .opacity(0)
+                    Image(systemName: "shield.fill")
+                        .font(.system(size: 9, weight: .medium))
+                    Text("L")
+                        .font(.system(size: 5.5, weight: .bold))
+                        .offset(y: 0.5)
+                }
+                if !compact {
+                    Text("leak")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+            }
+            .foregroundStyle(WithheldStyle.text)
+            .padding(.horizontal, compact ? 4 : 5)
+            .frame(height: 14)
+            .background(Capsule().fill(WithheldStyle.fill))
+            .overlay {
+                Capsule().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+            }
+
+            Text("\(count)")
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(WithheldStyle.text)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Leak guard detected \(count) part\(count == 1 ? "" : "s")"
+        )
+        .help("Leak guard detected \(count) sensitive part\(count == 1 ? "" : "s")")
+        .layoutPriority(1)
+    }
+}
+
+struct LeakGuardDetectionsList: View {
+    let detections: [AuditLeakDetection]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(detections.enumerated()), id: \.offset) { _, detection in
+                detectionRow(detection)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WithheldStyle.fill, in: RoundedRectangle(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Leak guard detections")
+    }
+
+    @ViewBuilder
+    private func detectionRow(_ detection: AuditLeakDetection) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Text(fieldTitle(detection.field))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(WithheldStyle.text)
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(detection.label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(modeTitle(detection))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(WithheldStyle.text)
+                Spacer(minLength: 0)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(displayOriginal(detection))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Text("→")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                replacementView(detection)
+                Spacer(minLength: 0)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText(detection))
+        .help(helpText(detection))
+    }
+
+    private func fieldTitle(_ field: AuditLeakDetection.Field) -> String {
+        switch field {
+        case .subject: "Subject"
+        case .body: "Body"
+        }
+    }
+
+    private func modeTitle(_ detection: AuditLeakDetection) -> String {
+        switch detection.disposition {
+        case .redacted:
+            return "redacted"
+        case .replaced:
+            return detection.discloseToAgent ? "replaced" : "stealth replace"
+        case .withheld:
+            return "withheld"
+        }
+    }
+
+    private func displayOriginal(_ detection: AuditLeakDetection) -> String {
+        let text = detection.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? detection.label : text
+    }
+
+    @ViewBuilder
+    private func replacementView(_ detection: AuditLeakDetection) -> some View {
+        switch detection.disposition {
+        case .redacted:
+            RedactedTokenChip()
+        case .replaced:
+            Text(detection.replacement.isEmpty ? "…" : detection.replacement)
+                .font(.caption.monospaced())
+                .foregroundStyle(WithheldStyle.text)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        case .withheld:
+            WithheldLabel(rules: [detection.label])
+        }
+    }
+
+    private func accessibilityText(_ detection: AuditLeakDetection) -> String {
+        let whereField = fieldTitle(detection.field)
+        let mode = modeTitle(detection)
+        let original = displayOriginal(detection)
+        switch detection.disposition {
+        case .redacted:
+            return "\(whereField), \(detection.label), \(mode): \(original) redacted"
+        case .replaced:
+            return "\(whereField), \(detection.label), \(mode): \(original) to \(detection.replacement)"
+        case .withheld:
+            return "\(whereField), \(detection.label), \(mode): \(original)"
+        }
+    }
+
+    private func helpText(_ detection: AuditLeakDetection) -> String {
+        "\(fieldTitle(detection.field)) · \(detection.label) · \(modeTitle(detection))"
+    }
+}
+
+/// Compact hatch chip for `[REDACTED]` in leak-detection rows.
+struct RedactedTokenChip: View {
+    var body: some View {
+        Text("[REDACTED]")
+            .font(.system(size: 9, weight: .bold).monospaced())
+            .foregroundStyle(HatchDeniedStyle.lock)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background {
+                HatchPattern().opacity(0.95)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(HatchDeniedStyle.stripe, lineWidth: 0.5)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .accessibilityLabel("Redacted")
+    }
+}
+
+/// Leak guard chrome — violet, not warning orange / grant red / success green / accent blue.
+enum LeakGuardStyle {
+    static let ink = Color.purple
+    static let text = Color.purple.opacity(0.88)
+    static let fill = Color.purple.opacity(0.12)
+    static let fillStrong = Color.purple.opacity(0.15)
+    static let border = Color.purple.opacity(0.38)
+    static let borderSoft = Color.purple.opacity(0.25)
+    static let legend = Color.purple.opacity(0.78)
+}
+
+enum WithheldStyle {
+    static let text = LeakGuardStyle.text
+    static let fill = LeakGuardStyle.fill
+    static let border = LeakGuardStyle.border
+    static let legend = LeakGuardStyle.legend
+}
+
+struct WithheldLabel: View {
+    var original: String? = nil
+    var rules: [String]? = nil
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "eye.slash.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text("Withheld")
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(WithheldStyle.text)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(WithheldStyle.fill, in: RoundedRectangle(cornerRadius: 4))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+        }
+        .accessibilityLabel("Withheld by leak guard")
+        .help(tooltip)
+    }
+
+    private var tooltip: String {
+        var parts = ["Whole field withheld — leak guard blocked outbound content."]
+        if let rules, !rules.isEmpty {
+            parts.append("Rules: \(rules.joined(separator: ", "))")
+        }
+        if let original, !original.isEmpty {
+            parts.append("Original: \(original)")
+        }
+        return parts.joined(separator: "\n")
+    }
+}
+
+enum SanitizedFieldStyle {
+    static let fill = Color.purple.opacity(0.14)
+    static let legend = LeakGuardStyle.legend
+}
+
+struct SanitizedFieldText: View {
+    let text: String
+    var original: String? = nil
+    var rules: [String]? = nil
+    var stealth: Bool = false
+    var font: Font = .caption
+
+    var body: some View {
+        Text(displayText)
+            .font(font)
+            .foregroundStyle(displayText.isEmpty ? .secondary : .primary)
+            .padding(.horizontal, hasSanitizationMarker ? 4 : 0)
+            .padding(.vertical, hasSanitizationMarker ? 2 : 0)
+            .background {
+                if hasSanitizationMarker {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(SanitizedFieldStyle.fill)
+                }
+            }
+            .textSelection(.enabled)
+            .help(tooltip)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var displayText: String {
+        text.isEmpty ? "(empty)" : text
+    }
+
+    private var hasSanitizationMarker: Bool {
+        if let original, original != text { return true }
+        if stealth { return true }
+        if let rules, !rules.isEmpty { return true }
+        return false
+    }
+
+    private var tooltip: String {
+        var parts: [String] = []
+        if stealth {
+            parts.append("Stealth replace — agent saw substituted text.")
+        }
+        if let original, original != text {
+            parts.append("Original: \(original)")
+        }
+        if let rules, !rules.isEmpty {
+            parts.append("Rules: \(rules.joined(separator: ", "))")
+        }
+        if parts.isEmpty {
+            parts.append("Sanitized on device before the agent received this field.")
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    private var accessibilityLabel: String {
+        var label = displayText
+        if hasSanitizationMarker {
+            label += ". Sanitized"
+        }
+        if let original, original != text {
+            label += ". Original: \(original)"
+        }
+        return label
+    }
+}
+
+struct SanitizedFieldsLegend: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                .font(.system(size: 9, weight: .semibold))
+            Text("Sanitized. Purple tint — hover for original text and matching rules.")
+                .font(.system(size: 10))
+        }
+        .foregroundStyle(SanitizedFieldStyle.legend)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Sanitized. Purple tint. Hover for original text and matching rules."
+        )
     }
 }

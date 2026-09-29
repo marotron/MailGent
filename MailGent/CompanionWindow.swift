@@ -394,7 +394,7 @@ struct CompanionWindow: View {
                     ingestCard
                 }
 
-                agentCard
+                agentCards
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Detected on disk")
@@ -422,59 +422,94 @@ struct CompanionWindow: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private var agentCard: some View {
+    private var agentCards: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !session.agents.isListening {
+                Text(session.agents.listenNote)
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+            }
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12),
+                ],
+                spacing: 12
+            ) {
+                ForEach(AgentPairingPreset.allCases) { preset in
+                    agentPresetCard(preset)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func agentPresetCard(_ preset: AgentPairingPreset) -> some View {
+        let paired = session.agents.pairedCredential(named: preset.displayName)
+        let isSelected = paired.map { $0.id == session.agents.selectedAgentID } ?? false
+
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Paired agent")
-                    .font(.headline)
-                Spacer()
-                if let agent = session.agents.agent {
-                    Text("\(agent.name) · \(agent.trustClass.rawValue)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("No agent paired")
+            HStack(spacing: 8) {
+                AgentGlyph(name: preset.displayName, size: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preset.displayName)
+                        .font(.headline)
+                    Text(paired?.trustClass.rawValue ?? "Not paired")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Spacer(minLength: 0)
             }
-            if session.agents.agent != nil {
-                Text(session.agents.listenNote)
-                    .font(.caption)
-                    .foregroundStyle(session.agents.isListening ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
-                Text(session.agents.cursorConfigSnippet)
+
+            if let paired {
+                if session.agents.isListening {
+                    Text(session.agents.listenNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Text(session.agents.configSnippet(for: paired))
                     .font(.system(.caption2, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            }
-            HStack(spacing: 8) {
-                if session.agents.agent != nil {
+
+                HStack(spacing: 8) {
                     Button("Revoke credential") {
-                        session.agents.revoke()
-                        session.agents.ensureMachineLocalAgent()
+                        session.agents.revoke(agentID: paired.id)
                     }
-                } else {
-                    Button("Pair Cursor") {
-                        session.agents.ensureMachineLocalAgent()
-                    }
+                    Spacer(minLength: 0)
+                    let count = session.agents.grantCount(for: paired.id)
+                    Text(count == 0
+                         ? "Nothing granted"
+                         : "\(count) grant(s)")
+                        .font(.caption)
+                        .foregroundStyle(count == 0 ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
                 }
-            }
-            if session.agents.agent != nil {
-                Text(session.agents.currentGrants.isEmpty
-                     ? "Nothing granted — agent search stays empty."
-                     : "\(session.agents.currentGrants.count) grant(s) active · edit in grant desk")
+            } else {
+                Text("Pair to issue a Bearer for this host.")
                     .font(.caption)
-                    .foregroundStyle(session.agents.currentGrants.isEmpty ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(.secondary)
+                Button("Pair \(preset.displayName)") {
+                    _ = session.agents.pairAgent(named: preset.displayName)
+                }
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
         .overlay {
-            RoundedRectangle(cornerRadius: 12).stroke(.separator)
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isSelected ? 2 : 1)
         }
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture {
+            guard let paired else { return }
+            session.agents.selectAgent(id: paired.id)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var healthCard: some View {
