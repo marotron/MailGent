@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.5.0] - 2026-09-30
+
+### Added
+
+- **Rules** — Pass and Block polarity with optional When date windows on already-allowed messages (From/Subject match, AND/OR join, per-agent enablement on Scope placements). Persisted in `rules.json`; Grant Desk Rules tab + Access preview shows via-rule field changes.
+
+### Changed
+
+- Replaces Passes (`passes.json` / Pass types) with Rules (`rules.json` / `GrantRule`). No in-app migration from `passes.json`.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added
