@@ -7,7 +7,7 @@ struct GrantDeskView: View {
     @State private var tab: Tab = .scope
     @State private var deskFocus: DeskFocus = .agent
     @State private var expandedInfo: String?
-    @State private var selectedRuleID: String?
+    @State private var selectedPassID: String?
 
     /// Top picker: a paired agent (Scope/Access) or Shared (Rules/Privacy).
     private enum DeskFocus: Equatable {
@@ -68,7 +68,7 @@ struct GrantDeskView: View {
                 case .rules:
                     PassDeskPane(
                         session: session,
-                        selectedRuleID: $selectedRuleID,
+                        selectedPassID: $selectedPassID,
                         isEditing: isEditing
                     )
                 case .access:
@@ -358,7 +358,7 @@ struct GrantDeskView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(pathLabel(grant))
                 .font(.headline)
-            Text("Fields apply only to this allow. Rules can green-light or withhold fields on match.")
+            Text("Fields are the Scope base. Matching Pass/Block rules overwrite fields on allowed mail.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -391,7 +391,7 @@ struct GrantDeskView: View {
             Text("Envelope")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
-            HStack(spacing: 6) {
+            GrantChipFlow(spacing: 6) {
                 fieldBadge("Subject", fields.subject, grant, \.subject, systemImage: "text.alignleft")
                 fieldBadge("From", fields.from, grant, \.from, systemImage: "envelope")
                 fieldBadge("To", fields.to, grant, \.to, systemImage: "envelope")
@@ -402,7 +402,7 @@ struct GrantDeskView: View {
             Text("Content")
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
-            HStack(spacing: 6) {
+            GrantChipFlow(spacing: 6) {
                 fieldBadge(
                     "Body / snippet",
                     fields.body,
@@ -598,9 +598,7 @@ struct GrantDeskView: View {
                 if shieldState != .off {
                     LeakGuardShieldChip(state: shieldState)
                 }
-                if !rules.isEmpty {
-                    AccessPassNickChip(rules: rules)
-                }
+                AccessTabRuleCountBadges(rules: rules)
             }
         }
     }
@@ -675,24 +673,67 @@ private struct GrantDeskPickButton<Icon: View>: View {
 
 // MARK: - Access sample preview (hatch + rule effects)
 
-private struct AccessPassNickChip: View {
+/// Compact Access-tab list marks: green ✓ + pass count, red ✗ + block count (no nick letters).
+private struct AccessTabRuleCountBadges: View {
     let rules: [GrantRule]
+
+    private var passCount: Int { rules.filter { $0.polarity == .pass }.count }
+    private var blockCount: Int { rules.filter { $0.polarity == .block }.count }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if passCount > 0 {
+                AccessTabRuleCountBadge(polarity: .pass, count: passCount)
+            }
+            if blockCount > 0 {
+                AccessTabRuleCountBadge(polarity: .block, count: blockCount)
+            }
+        }
+    }
+}
+
+private struct AccessTabRuleCountBadge: View {
+    let polarity: RulePolarity
+    let count: Int
+
+    private var color: Color {
+        polarity == .pass ? RuleMarkStyle.passGreen : RuleMarkStyle.blockRed
+    }
+
+    private var accessibilityText: String {
+        switch polarity {
+        case .pass:
+            return count == 1 ? "1 Pass enabled" : "\(count) Passes enabled"
+        case .block:
+            return count == 1 ? "1 Block enabled" : "\(count) Blocks enabled"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(rules) { rule in
-                RuleNickChip(nick: rule.nick, polarity: rule.polarity)
-                    .scaleEffect(0.85, anchor: .center)
-            }
+            Image(systemName: polarity == .pass ? "checkmark" : "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 14, height: 14)
+                .background(Circle().fill(color.opacity(0.12)))
+                .overlay {
+                    Circle().strokeBorder(color.opacity(0.45), lineWidth: 0.5)
+                }
+
+            Text("\(count)")
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(color)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+        .help(accessibilityText)
+        .layoutPriority(1)
     }
 }
 
 private struct AgentAccessPreview: View {
     let session: CompanionSession
     let grant: Grant
-
-    private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
 
     private var attached: [GrantRule] {
         session.agents.enabledRules(accountID: grant.accountID, placement: grant.placement)
@@ -719,7 +760,7 @@ private struct AgentAccessPreview: View {
 
     private var effectiveFields: GrantFields {
         guard let agentID = session.agents.selectedAgent?.id else { return grant.fields }
-        return RuleEngine.upgrade(
+        return RuleEngine.applyOverlays(
             base: grant.fields,
             message: indexedSample,
             agentID: agentID,
@@ -763,7 +804,7 @@ private struct AgentAccessPreview: View {
                 Text(ruleNote(pass))
                     .font(.system(size: 10))
                     .foregroundStyle(
-                        pass.polarity == .pass ? Self.passGreen : RuleMarkStyle.blockRed
+                        pass.polarity == .pass ? RuleMarkStyle.passGreen : RuleMarkStyle.blockRed
                     )
             }
             if !attached.isEmpty, firedRules.isEmpty {
@@ -932,8 +973,14 @@ private struct SampleMessage {
         case .starts:
             return "\(rule.value) weekly update"
         case .ends:
-            if rule.value.contains("@") { return rule.value }
-            return "noreply@\(rule.value)"
+            // Prefer display-name form so Access preview matches real Apple Mail From lines.
+            if rule.value.hasPrefix("@") {
+                return "Sample Sender <noreply\(rule.value)>"
+            }
+            if rule.value.contains("@") {
+                return "Sample Sender <\(rule.value)>"
+            }
+            return "Sample Sender <noreply@\(rule.value)>"
         }
     }
 

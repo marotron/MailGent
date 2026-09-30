@@ -111,6 +111,132 @@ struct AuditLogTests {
         #expect(status.requestSummary == "{}")
     }
 
+    @Test func messageRefRoundTripsAppliedRules() throws {
+        let ref = AuditMessageRef(
+            accountID: "acc",
+            placement: "INBOX",
+            id: "1",
+            subject: "Invoice",
+            from: "a@example.com",
+            date: "2024-01-01T00:00:00Z",
+            appliedRules: [
+                AppliedGrantRule(
+                    id: "p1",
+                    nick: "A",
+                    polarity: .pass,
+                    fields: GrantFields(envelope: false, body: true)
+                ),
+                AppliedGrantRule(
+                    id: "b1",
+                    nick: "B",
+                    polarity: .block,
+                    fields: GrantFields(envelope: false, body: false, attachmentMetadata: true)
+                ),
+                AppliedGrantRule(
+                    id: "p2",
+                    nick: "C",
+                    polarity: .pass,
+                    fields: GrantFields(
+                        subject: false,
+                        from: true,
+                        to: false,
+                        cc: false,
+                        date: false,
+                        body: false
+                    )
+                )
+            ]
+        )
+        let data = try JSONEncoder().encode(ref)
+        let decoded = try JSONDecoder().decode(AuditMessageRef.self, from: data)
+
+        #expect(decoded.appliedRules == [
+            AppliedGrantRule(
+                id: "p1",
+                nick: "A",
+                polarity: .pass,
+                fields: GrantFields(envelope: false, body: true)
+            ),
+            AppliedGrantRule(
+                id: "b1",
+                nick: "B",
+                polarity: .block,
+                fields: GrantFields(envelope: false, body: false, attachmentMetadata: true)
+            ),
+            AppliedGrantRule(
+                id: "p2",
+                nick: "C",
+                polarity: .pass,
+                fields: GrantFields(
+                    subject: false,
+                    from: true,
+                    to: false,
+                    cc: false,
+                    date: false,
+                    body: false
+                )
+            )
+        ])
+        #expect(decoded.passApplicationCount == 2)
+        #expect(decoded.blockApplicationCount == 1)
+        #expect(decoded.passRevealedFields.body == true)
+        #expect(decoded.passRevealedFields.from == true)
+        #expect(decoded.blockWithheldFields.attachmentMetadata == true)
+        #expect(decoded.appliedRuleMark(for: \.body)?.nick == "A")
+        #expect(decoded.appliedRuleMark(for: \.attachmentMetadata)?.polarity == .block)
+    }
+
+    @Test func appliedRuleMarkPrefersBlockWhenBothTouchedField() {
+        let ref = AuditMessageRef(
+            accountID: "acc",
+            placement: "INBOX",
+            id: "1",
+            subject: "Invoice",
+            from: "a@example.com",
+            date: "2024-01-01T00:00:00Z",
+            appliedRules: [
+                AppliedGrantRule(
+                    id: "p1",
+                    nick: "A",
+                    polarity: .pass,
+                    fields: GrantFields(envelope: false, body: true)
+                ),
+                AppliedGrantRule(
+                    id: "b1",
+                    nick: "B",
+                    polarity: .block,
+                    fields: GrantFields(envelope: false, body: true)
+                )
+            ]
+        )
+        #expect(ref.appliedRuleMark(for: \.body)?.nick == "B")
+        #expect(ref.appliedRuleMark(for: \.body)?.polarity == .block)
+    }
+
+    @Test func messageRefAbsentAppliedRulesDecodesEmpty() throws {
+        let json = """
+        {
+          "accountID":"acc",
+          "placement":"INBOX",
+          "id":"1",
+          "subject":"Hi",
+          "from":"a@example.com",
+          "date":"2024-01-01T00:00:00Z",
+          "bodySnippet":"",
+          "bodyAccess":"not_available",
+          "fields":{"subject":true,"from":true,"to":true,"cc":true,"date":true,"body":false,"attachmentMetadata":false,"attachmentContent":false},
+          "attachments":[]
+        }
+        """
+        let decoded = try JSONDecoder().decode(
+            AuditMessageRef.self,
+            from: Data(json.utf8)
+        )
+        #expect(decoded.appliedRules == nil || decoded.appliedRules?.isEmpty == true)
+        #expect(decoded.passApplicationCount == 0)
+        #expect(decoded.blockApplicationCount == 0)
+    }
+
     @Test func persistsAcrossReload() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("MailGent-audit-\(UUID().uuidString).json")

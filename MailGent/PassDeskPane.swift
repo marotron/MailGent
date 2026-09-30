@@ -4,7 +4,7 @@ import SwiftUI
 /// Shared Rules tab: Pass (green-light) + Block (withhold) definitions with optional When window.
 struct PassDeskPane: View {
     @Bindable var session: CompanionSession
-    @Binding var selectedRuleID: String?
+    @Binding var selectedPassID: String?
     var isEditing: Bool
 
     @State private var listFilter: ListFilter = .all
@@ -112,14 +112,14 @@ struct PassDeskPane: View {
     private func addRule(polarity: RulePolarity) {
         let draft = session.agents.createRuleDraft(polarity: polarity)
         session.agents.upsertRule(draft)
-        selectedRuleID = draft.id
+        selectedPassID = draft.id
         listFilter = .all
     }
 
     private func ruleRow(_ pass: GrantRule) -> some View {
-        let on = selectedRuleID == pass.id
+        let on = selectedPassID == pass.id
         return Button {
-            selectedRuleID = pass.id
+            selectedPassID = pass.id
         } label: {
             HStack(alignment: .top, spacing: 8) {
                 RuleNickChip(nick: pass.nick, polarity: pass.polarity)
@@ -186,33 +186,33 @@ struct PassDeskPane: View {
                     onChange: { session.agents.upsertRule($0) },
                     onDelete: {
                         session.agents.deleteRule(id: pass.id)
-                        selectedRuleID = session.agents.ruleDefinitions.first?.id
+                        selectedPassID = session.agents.ruleDefinitions.first?.id
                     }
                 )
             } else {
                 ContentUnavailableView(
                     "Select a rule",
                     systemImage: "checklist",
-                    description: Text("Passes green-light fields on match. Blocks withhold them. Attach on Scope.")
+                    description: Text("Pass grants denied fields on match; Block denies granted fields. Attach on Scope.")
                 )
                 .frame(maxWidth: .infinity, minHeight: 200)
             }
         }
         .onAppear {
-            if selectedRuleID == nil {
-                selectedRuleID = definitions.first?.id
+            if selectedPassID == nil {
+                selectedPassID = definitions.first?.id
             }
         }
         .onChange(of: definitions.map(\.id)) { _, ids in
-            if let selectedRuleID, !ids.contains(selectedRuleID) {
-                self.selectedRuleID = ids.first
+            if let selectedPassID, !ids.contains(selectedPassID) {
+                self.selectedPassID = ids.first
             }
         }
     }
 
     private var selectedRule: GrantRule? {
-        guard let selectedRuleID else { return nil }
-        return definitions.first { $0.id == selectedRuleID }
+        guard let selectedPassID else { return nil }
+        return definitions.first { $0.id == selectedPassID }
     }
 
     private func hasMatchers(_ pass: GrantRule) -> Bool {
@@ -242,13 +242,6 @@ struct PassDeskPane: View {
             }
         }
     }
-}
-
-enum RuleMarkStyle {
-    static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
-    static let passBorder = Color(red: 143 / 255, green: 209 / 255, blue: 160 / 255)
-    static let blockRed = Color(red: 215 / 255, green: 0 / 255, blue: 21 / 255)
-    static let blockBorder = Color(red: 240 / 255, green: 180 / 255, blue: 187 / 255)
 }
 
 struct RuleNickChip: View {
@@ -416,8 +409,8 @@ private struct PassEditorForm: View {
                 }
                 Text(
                     polarity == .pass
-                        ? "Union onto base grant when match hits (needs allow first)."
-                        : "Subtract from effective fields when match hits — selected details stay hidden."
+                        ? "Grant overwrite: turn these fields on when match hits (only if Scope left them off). Mailbox must be Scope-allowed first."
+                        : "Deny overwrite: turn these fields off when match hits (only if they would otherwise be on)."
                 )
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

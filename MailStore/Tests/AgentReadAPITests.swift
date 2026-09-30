@@ -301,6 +301,120 @@ struct AgentReadAPITests {
         )
         #expect(message.body == .notGranted)
     }
+
+    @Test func getAuditRecordsEffectfulPassApplication() throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(envelope: true, body: false),
+            audit: true
+        )
+        defer { env.remove() }
+
+        env.rules.upsert(
+            GrantRule(
+                id: "p1",
+                name: "Invoices",
+                nick: "A",
+                polarity: .pass,
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true),
+                agentIDs: [env.agentID]
+            )
+        )
+        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+
+        _ = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+
+        let get = env.audit!.entries().last { $0.kind == .get }!
+        #expect(get.messages[0].appliedRules == [
+            AppliedGrantRule(
+                id: "p1",
+                nick: "A",
+                polarity: .pass,
+                fields: GrantFields(envelope: false, body: true)
+            )
+        ])
+        #expect(get.messages[0].passApplicationCount == 1)
+        #expect(get.messages[0].passRevealedFields.body == true)
+        #expect(get.messages[0].appliedRuleMark(for: \.body)?.nick == "A")
+    }
+
+    @Test func getAuditOmitsNoOpPassMatch() throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(envelope: true, body: true),
+            audit: true
+        )
+        defer { env.remove() }
+
+        env.rules.upsert(
+            GrantRule(
+                id: "p1",
+                name: "Invoices",
+                nick: "A",
+                polarity: .pass,
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true),
+                agentIDs: [env.agentID]
+            )
+        )
+        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+
+        _ = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+
+        let get = env.audit!.entries().last { $0.kind == .get }!
+        #expect(get.messages[0].appliedRules == nil || get.messages[0].appliedRules?.isEmpty == true)
+        #expect(get.messages[0].passApplicationCount == 0)
+    }
+
+    @Test func getAuditRecordsEffectfulBlockApplication() throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(envelope: true, body: true),
+            audit: true
+        )
+        defer { env.remove() }
+
+        env.rules.upsert(
+            GrantRule(
+                id: "b1",
+                name: "Hide body",
+                nick: "B",
+                polarity: .block,
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true),
+                agentIDs: [env.agentID]
+            )
+        )
+        env.rules.setEnabled(true, ruleID: "b1", accountID: env.accountID, placement: "INBOX")
+
+        _ = try env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+
+        let get = env.audit!.entries().last { $0.kind == .get }!
+        #expect(get.messages[0].appliedRules == [
+            AppliedGrantRule(
+                id: "b1",
+                nick: "B",
+                polarity: .block,
+                fields: GrantFields(envelope: false, body: true)
+            )
+        ])
+        #expect(get.messages[0].blockApplicationCount == 1)
+        #expect(get.messages[0].blockWithheldFields.body == true)
+        #expect(get.messages[0].appliedRuleMark(for: \.body)?.polarity == .block)
+    }
 }
 
 private struct AgentReadFixture {
@@ -310,9 +424,10 @@ private struct AgentReadFixture {
     let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     let agentID: String
     let rules: RuleStore
+    let audit: AuditLog?
     let gateway: AgentReadAPI
 
-    init(grantFields: GrantFields? = .default) throws {
+    init(grantFields: GrantFields? = .default, audit: Bool = false) throws {
         root = try FixtureTree()
         try root.writeEmlx(
             named: "1.emlx",
@@ -334,7 +449,9 @@ private struct AgentReadFixture {
         let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
         _ = try index.ingest()
 
-        let pairing = Pairing()
+        let auditLog = audit ? AuditLog() : nil
+        self.audit = auditLog
+        let pairing = Pairing(audit: auditLog)
         let agent = try pairing.register(
             name: "Cursor",
             trustClass: .machineLocal,
@@ -350,7 +467,8 @@ private struct AgentReadFixture {
             read: ReadAPI(index: index),
             pairing: pairing,
             grants: grants,
-            rules: rules
+            rules: rules,
+            audit: auditLog
         )
     }
 

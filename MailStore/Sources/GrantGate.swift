@@ -91,6 +91,36 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         attachmentMetadata: false,
         attachmentContent: false
     )
+
+    /// No fields granted (rule-delta identity / empty mask).
+    public static let none = GrantFields(
+        subject: false,
+        from: false,
+        to: false,
+        cc: false,
+        date: false,
+        body: false,
+        attachmentMetadata: false,
+        attachmentContent: false
+    )
+
+    /// Bits that are true here and false in `other`.
+    public func bitsNotIn(_ other: GrantFields) -> GrantFields {
+        GrantFields(
+            subject: subject && !other.subject,
+            from: from && !other.from,
+            to: to && !other.to,
+            cc: cc && !other.cc,
+            date: date && !other.date,
+            body: body && !other.body,
+            attachmentMetadata: attachmentMetadata && !other.attachmentMetadata,
+            attachmentContent: attachmentContent && !other.attachmentContent
+        )
+    }
+
+    public var hasAnyGranted: Bool {
+        subject || from || to || cc || date || body || attachmentMetadata || attachmentContent
+    }
 }
 
 extension GrantFields: Codable {

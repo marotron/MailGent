@@ -12,7 +12,7 @@ public enum JoinOp: String, Codable, Sendable {
     case or
 }
 
-/// Pass green-lights fields on match; Block withholds them.
+/// Pass = potential grant overwrite; Block = potential deny overwrite.
 public enum RulePolarity: String, Codable, Sendable {
     case pass
     case block
@@ -39,7 +39,7 @@ public struct RuleWhen: Equatable, Codable, Sendable {
     }
 }
 
-/// Conditional field reveal (Pass) or withhold (Block) on already-allowed messages.
+/// Field overlay on Scope-allowed messages: Pass grants denied fields; Block denies granted fields.
 public struct GrantRule: Identifiable, Equatable, Codable, Sendable {
     public var id: String
     public var name: String
@@ -92,25 +92,106 @@ public struct RuleEnablement: Equatable, Codable, Sendable {
     }
 }
 
+/// Rule that actually changed grant fields when applied (Pass grant / Block deny overwrite).
+public struct AppliedGrantRule: Equatable, Hashable, Codable, Sendable {
+    public var id: String
+    public var nick: String
+    public var polarity: RulePolarity
+    /// Fields this application changed (Pass: newly granted; Block: newly denied).
+    public var fields: GrantFields
+
+    public init(
+        id: String,
+        nick: String,
+        polarity: RulePolarity,
+        fields: GrantFields = .none
+    ) {
+        self.id = id
+        self.nick = nick
+        self.polarity = polarity
+        self.fields = fields
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, nick, polarity, fields
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        nick = try c.decode(String.self, forKey: .nick)
+        polarity = try c.decode(RulePolarity.self, forKey: .polarity)
+        fields = try c.decodeIfPresent(GrantFields.self, forKey: .fields) ?? .none
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(nick, forKey: .nick)
+        try c.encode(polarity, forKey: .polarity)
+        try c.encode(fields, forKey: .fields)
+    }
+}
+
 public enum RuleEngine {
-    /// Applies matching rules onto an already-allowed base. Passes union first; Blocks subtract after.
-    /// Does not grant access when base is denied.
-    public static func upgrade(
+    /// Field overlays on a Scope-allowed base: Pass grant-overwrite (union), then Block deny-overwrite (subtract).
+    /// Irrelevant when a Pass field is already on, or a Block field is already off. Never opens a closed Scope gate.
+    public static func applyOverlays(
         base: GrantFields,
         message: IndexedMessage,
         agentID: String,
         rules: [GrantRule],
         enablements: [RuleEnablement]
     ) -> GrantFields {
+        applyOverlaysWithApplied(
+            base: base,
+            message: message,
+            agentID: agentID,
+            rules: rules,
+            enablements: enablements
+        ).fields
+    }
+
+    /// Same as `applyOverlays`, plus rules that changed fields (match with no delta is omitted).
+    public static func applyOverlaysWithApplied(
+        base: GrantFields,
+        message: IndexedMessage,
+        agentID: String,
+        rules: [GrantRule],
+        enablements: [RuleEnablement]
+    ) -> (fields: GrantFields, applied: [AppliedGrantRule]) {
         let matching = rules.filter { applies($0, to: message, agentID: agentID, enablements: enablements) }
         var result = base
+        var applied: [AppliedGrantRule] = []
         for rule in matching where rule.polarity == .pass {
-            result = result.unioning(rule.fields)
+            let next = result.unioning(rule.fields)
+            if next != result {
+                applied.append(
+                    AppliedGrantRule(
+                        id: rule.id,
+                        nick: rule.nick,
+                        polarity: .pass,
+                        fields: next.bitsNotIn(result)
+                    )
+                )
+                result = next
+            }
         }
         for rule in matching where rule.polarity == .block {
-            result = result.subtracting(rule.fields)
+            let next = result.subtracting(rule.fields)
+            if next != result {
+                applied.append(
+                    AppliedGrantRule(
+                        id: rule.id,
+                        nick: rule.nick,
+                        polarity: .block,
+                        fields: result.bitsNotIn(next)
+                    )
+                )
+                result = next
+            }
         }
-        return result
+        return (result, applied)
     }
 
     /// Whether a rule matches (agent + enablement + matchers/When), ignoring polarity effect.
@@ -156,7 +237,8 @@ public enum RuleEngine {
 
         let matcherOK: Bool = {
             guard matcherActive else { return true }
-            let fromOK = groupMatches(rule.fromRules, haystack: message.from)
+            // From matchers use the mailbox address (`Name <addr@host>` → `addr@host`).
+            let fromOK = groupMatches(rule.fromRules, haystack: Grant.normalizeAddress(message.from))
             let subjectOK = groupMatches(rule.subjectRules, haystack: message.subject)
             switch rule.betweenJoin {
             case .and:
