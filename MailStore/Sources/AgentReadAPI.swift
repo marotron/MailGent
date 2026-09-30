@@ -7,7 +7,7 @@ public struct AgentReadAPI {
     public let pairing: Pairing
     public let grants: GrantGate
     public let leakGuard: OutboundLeakGuard
-    public let passes: PassStore
+    public let rules: RuleStore
     public let audit: AuditLog?
 
     public init(
@@ -15,14 +15,14 @@ public struct AgentReadAPI {
         pairing: Pairing,
         grants: GrantGate = GrantGate(),
         leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
-        passes: PassStore = PassStore(),
+        rules: RuleStore = RuleStore(),
         audit: AuditLog? = nil
     ) {
         self.read = read
         self.pairing = pairing
         self.grants = grants
         self.leakGuard = leakGuard
-        self.passes = passes
+        self.rules = rules
         self.audit = audit
     }
 
@@ -429,15 +429,15 @@ public struct AgentReadAPI {
         )
     }
 
-    /// Base grant fields, then pass upgrades. nil → no access (passes never open the gate).
+    /// Base grant fields, then rule upgrades. nil → no access (rules never open the gate).
     private func effectiveFields(for message: IndexedMessage, agentID: String) -> GrantFields? {
         guard let base = grants.effectiveFields(for: message, agentID: agentID) else { return nil }
-        return PassEngine.upgrade(
+        return RuleEngine.upgrade(
             base: base,
             message: message,
             agentID: agentID,
-            passes: passes.allPasses(),
-            enablements: passes.allEnablements()
+            rules: rules.allRules(),
+            enablements: rules.allEnablements()
         )
     }
 

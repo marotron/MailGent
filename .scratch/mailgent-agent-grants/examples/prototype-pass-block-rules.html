@@ -1,0 +1,859 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — Rules tab: Pass + Block + When (time).
+
+  Locked (2026-09-30):
+  - Tab = Rules (variant A)
+  - Pass = green-light fields on match (circled ✓)
+  - Block = withhold fields on match (circled ✗)
+  - Letters = one shared pool across Pass + Block
+  - When = optional date window with right-aligned toggle; AND|OR join
+
+  Variants (?variant=) still flip for comparison, but A is the decision.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Pass / Block naming proto</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --window-bg: #f5f5f7;
+      --card: rgba(0, 0, 0, 0.035);
+      --card-head: rgba(0, 0, 0, 0.05);
+      --blue: #0071e3;
+      --sel: #d6e9ff;
+      --green: #248a3d;
+      --green-soft: rgba(36, 138, 61, 0.12);
+      --green-border: #8fd1a0;
+      --red: #d70015;
+      --red-soft: rgba(215, 0, 21, 0.1);
+      --red-border: #f0b4bb;
+      --amber: #b25e09;
+      --shadow: 0 18px 50px #00000028, 0 1px 0 #ffffff90 inset;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 24px 16px 100px;
+      font: 13px/1.4 var(--font-family, inherit);
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 980px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note strong { font-weight: 650; }
+    .note table { width: 100%; border-collapse: collapse; margin: 8px 0 0; font-size: 11px; }
+    .note th, .note td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid #00000012; vertical-align: top; }
+    .note th { color: var(--muted); font-weight: 600; width: 88px; }
+    .lean { color: var(--green); font-weight: 650; }
+
+    .window {
+      background: var(--window-bg); border-radius: 10px;
+      box-shadow: var(--shadow); border: 1px solid #00000018; overflow: hidden; min-height: 620px;
+    }
+    .titlebar {
+      display: flex; align-items: center; justify-content: center; height: 38px;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      position: relative; font-size: 13px; font-weight: 600;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+    .desk { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 580px; }
+
+    .agent-row { display: flex; align-items: center; gap: 8px; }
+    .agent-row .lbl { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .agent-row .meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .agent-pick { display: flex; align-items: center; gap: 8px; }
+    .agent-pick-sep { width: 1px; height: 22px; background: var(--line); flex: none; }
+    .seg {
+      display: inline-grid; grid-auto-flow: column; gap: 2px;
+      background: #e8e8ed; border-radius: 8px; padding: 2px;
+    }
+    .seg button {
+      border: 0; background: transparent; border-radius: 6px; padding: 5px 12px;
+      font-weight: 600; font-size: 12px; color: var(--muted); white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px #00000018; }
+    .glyph {
+      width: 14px; height: 14px; border-radius: 3px; flex: none;
+      display: inline-grid; place-items: center; overflow: hidden;
+    }
+    .glyph img { width: 14px; height: 14px; display: block; }
+    .glyph.shared {
+      background: #e8e8ed; color: #3a3a3c; border-radius: 50%;
+    }
+    .glyph.shared svg { width: 9px; height: 9px; }
+    .tab-row { display: flex; align-items: center; gap: 10px; }
+    .tab-row .spacer { flex: 1; }
+    .btn-edit {
+      border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      padding: 3px 10px; font-size: 12px; font-weight: 500;
+    }
+    .btn-edit.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+    .layout {
+      display: grid; grid-template-columns: 280px 1fr; gap: 12px; flex: 1; min-height: 0;
+    }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+    .list-pane, .editor-pane {
+      background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px;
+      padding: 10px; min-height: 420px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .pane-title { font-size: 11px; font-weight: 650; color: var(--muted); letter-spacing: 0.02em; }
+    .filter-row { display: flex; gap: 4px; flex-wrap: wrap; }
+    .filter-row button {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 2px 8px; font-size: 10px; font-weight: 600; color: var(--muted);
+    }
+    .filter-row button.on { border-color: var(--blue); color: var(--blue); background: #eef5ff; }
+
+    .item {
+      display: flex; gap: 8px; align-items: flex-start; padding: 8px;
+      border-radius: 8px; border: 0; background: transparent; width: 100%; text-align: left;
+    }
+    .item:hover { background: #f2f2f7; }
+    .item.sel { background: var(--sel); }
+    .nick {
+      flex: none; display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; font-weight: 700; padding: 2px 7px 2px 3px; border-radius: 999px; height: 20px;
+    }
+    .nick.pass {
+      color: var(--green); background: var(--green-soft);
+      border: 1px solid var(--green-border);
+    }
+    .nick.block {
+      color: var(--red); background: var(--red-soft);
+      border: 1px solid var(--red-border);
+    }
+    .mark-circle {
+      display: inline-grid; place-items: center;
+      width: 14px; height: 14px; border-radius: 50%;
+      font-size: 9px; font-weight: 800; line-height: 1;
+      border: 1.5px solid currentColor; flex: none;
+    }
+    .polarity .mark-circle { width: 16px; height: 16px; font-size: 10px; }
+    .polarity .t { display: inline-flex; align-items: center; gap: 6px; }
+    .item .meta { flex: 1; min-width: 0; }
+    .item .name { font-weight: 650; font-size: 12px; }
+    .item .sum {
+      font-size: 10px; color: var(--muted); margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .item .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+    .tag {
+      font-size: 9px; font-weight: 650; padding: 1px 6px; border-radius: 4px;
+      background: #eef1f6; color: #516079;
+    }
+    .tag.when { background: #fff6e8; color: var(--amber); }
+    .tag.pass-effect { background: var(--green-soft); color: var(--green); }
+    .tag.block-effect { background: var(--red-soft); color: var(--red); }
+    .list-actions { margin-top: auto; display: flex; gap: 6px; }
+    .list-actions button {
+      flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      padding: 6px; font-size: 12px; font-weight: 500;
+    }
+    .list-actions button.pass-add { color: var(--green); border-color: var(--green-border); }
+    .list-actions button.block-add { color: var(--red); border-color: var(--red-border); }
+
+    .field { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: #fff; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row label { font-size: 11px; font-weight: 650; color: var(--muted); min-width: 52px; }
+    .section {
+      border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 8px; background: var(--card);
+    }
+    .section h4 {
+      margin: 0 0 6px; font-size: 11px; font-weight: 650; color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .section h4 .h4-spacer { flex: 1; }
+    .toggle {
+      position: relative; width: 36px; height: 20px; border-radius: 999px;
+      border: 0; padding: 0; background: #d1d1d6; flex: none;
+      transition: background 0.15s ease;
+    }
+    .toggle.on { background: var(--blue); }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%; background: #fff;
+      box-shadow: 0 1px 2px #00000030; transition: transform 0.15s ease;
+    }
+    .toggle.on::after { transform: translateX(16px); }
+    .toggle:disabled { opacity: 0.45; cursor: default; }
+    .join {
+      display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; color: var(--muted);
+    }
+    .join .seg button { padding: 3px 10px; font-size: 11px; }
+    .rule-line {
+      display: flex; gap: 6px; align-items: flex-start; padding: 5px 6px;
+      background: #fff; border-radius: 6px; margin-bottom: 4px; border: 1px solid #0000000a;
+    }
+    .rule-line .mode {
+      font-size: 8px; font-weight: 700; color: #fff; background: #8e8e93;
+      padding: 2px 6px; border-radius: 999px; flex: none; margin-top: 1px;
+    }
+    .rule-line .val {
+      flex: 1; font-size: 12px; font-weight: 600; word-break: break-word;
+    }
+    .polarity {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    }
+    .polarity button {
+      border: 1px solid var(--line); background: #fff; border-radius: 8px;
+      padding: 8px; text-align: left; display: grid; gap: 2px;
+    }
+    .polarity button.on.pass { border-color: var(--green); background: var(--green-soft); }
+    .polarity button.on.block { border-color: var(--red); background: var(--red-soft); }
+    .polarity .t { font-weight: 700; font-size: 12px; }
+    .polarity .d { font-size: 10px; color: var(--muted); }
+    .fields { display: flex; gap: 4px; flex-wrap: wrap; }
+    .fields button {
+      width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line);
+      background: #fff; font-size: 10px; font-weight: 700; color: var(--muted);
+    }
+    .fields button.on.pass { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .fields button.on.block { background: var(--red); border-color: var(--red); color: #fff; }
+    .hint { font-size: 11px; color: var(--muted); margin: 0; }
+    .state-dump {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px; background: #1d1d1f; color: #f5f5f7; border-radius: 8px;
+      padding: 10px 12px; white-space: pre-wrap; overflow: auto; max-height: 160px;
+    }
+    .preview {
+      border: 1px dashed var(--line); border-radius: 8px; padding: 8px; background: #fff;
+      font-size: 11px;
+    }
+    .preview .line { margin: 2px 0; }
+    .preview .up, .preview .down { display: inline-flex; align-items: center; gap: 4px; }
+    .preview .up { color: var(--green); font-weight: 650; }
+    .preview .down { color: var(--red); font-weight: 650; }
+    .preview .skip { color: var(--muted); }
+
+    .switcher {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px; z-index: 50;
+      background: #1d1d1f; color: #f5f5f7; border-radius: 999px;
+      padding: 8px 10px; box-shadow: 0 10px 30px #00000040;
+      font-size: 12px; font-weight: 600;
+    }
+    .switcher button {
+      border: 0; background: #3a3a3c; color: #fff; border-radius: 999px;
+      width: 28px; height: 28px; font-size: 14px;
+    }
+    .switcher .label { min-width: 220px; text-align: center; }
+    .empty { color: var(--muted); font-size: 12px; padding: 12px 4px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <strong>Throwaway proto</strong> · Expand Passes with time clauses + reverse (withhold) rules.
+      Flip A/B/C below. State dump updates live.
+      <table>
+        <tr><th>Tab</th><td>Locked <span class="lean">Rules</span> (variant A)</td></tr>
+        <tr><th>Green-light</th><td>Keep <span class="lean">Pass</span> (circled ✓ + shared letter)</td></tr>
+        <tr><th>Reverse</th><td>Locked <span class="lean">Block</span> (circled ✗ + shared letter)</td></tr>
+        <tr><th>Letters</th><td>One pool across Pass + Block — A, B, C… not per polarity</td></tr>
+        <tr><th>Time</th><td><span class="lean">When</span> with right-aligned toggle; joinable via AND|OR</td></tr>
+      </table>
+    </div>
+
+    <div class="window">
+      <div class="titlebar">
+        <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        Grant desk
+      </div>
+      <div class="desk" id="desk"></div>
+    </div>
+
+    <pre class="state-dump" id="stateDump"></pre>
+  </div>
+
+  <div class="switcher" role="toolbar" aria-label="Prototype variants">
+    <button type="button" id="prevVar" aria-label="Previous variant">←</button>
+    <div class="label" id="varLabel">A — Rules</div>
+    <button type="button" id="nextVar" aria-label="Next variant">→</button>
+  </div>
+
+<script>
+const VARIANTS = {
+  A: {
+    key: "A",
+    name: "Rules",
+    blurb: "One Shared tab · Pass + Block in one list",
+    tabLabel: "Rules",
+    passWord: "Pass",
+    blockWord: "Block",
+    passVerb: "Green-light fields on match",
+    blockVerb: "Withhold fields on match",
+    effectPass: "reveal +",
+    effectBlock: "withhold −",
+    split: false,
+  },
+  B: {
+    key: "B",
+    name: "Overrides",
+    blurb: "Same list · Reveal / Withhold wording",
+    tabLabel: "Overrides",
+    passWord: "Reveal",
+    blockWord: "Withhold",
+    passVerb: "Upgrade fields beyond base grant",
+    blockVerb: "Hide selected fields even if granted",
+    effectPass: "upgrade",
+    effectBlock: "downgrade",
+    split: false,
+  },
+  C: {
+    key: "C",
+    name: "Split",
+    blurb: "Shared tabs: Passes | Blocks | Privacy",
+    tabLabel: null, // dual tabs
+    passWord: "Pass",
+    blockWord: "Block",
+    passVerb: "Green-light fields on match",
+    blockVerb: "Withhold fields on match",
+    effectPass: "reveal +",
+    effectBlock: "withhold −",
+    split: true,
+  },
+};
+
+const FIELD_KEYS = [
+  { key: "subject", short: "S" },
+  { key: "from", short: "F" },
+  { key: "to", short: "T" },
+  { key: "cc", short: "Cc" },
+  { key: "date", short: "D" },
+  { key: "body", short: "B" },
+  { key: "attachmentMetadata", short: "A" },
+  { key: "attachmentContent", short: "C" },
+];
+
+const NICKS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+/** @type {{ id: string, polarity: 'pass'|'block', name: string, nick: string, fromRules: {mode:string,value:string}[], subjectRules: {mode:string,value:string}[], when: null|{after?:string,before?:string}, fromJoin: 'and'|'or', subjectJoin: 'and'|'or', whenJoin: 'and'|'or', fields: Record<string,boolean>, agentIDs: string[] }[]} */
+let rules = [
+  {
+    id: "r1",
+    polarity: "pass",
+    name: "indeed job offers",
+    nick: "A",
+    fromRules: [
+      { mode: "exact", value: "donotreply@match.indeed.com" },
+      { mode: "exact", value: "jobalerts-noreply@linkedin.com" },
+    ],
+    subjectRules: [],
+    when: { after: "2025-01-01" },
+    fromJoin: "or",
+    subjectJoin: "or",
+    whenJoin: "and",
+    fields: { subject: true, from: true, to: true, cc: true, date: true, body: true, attachmentMetadata: true, attachmentContent: false },
+    agentIDs: ["cursor"],
+  },
+  {
+    id: "r2",
+    polarity: "block",
+    name: "payroll PDFs",
+    nick: "B",
+    fromRules: [{ mode: "ends", value: "@hr.example.com" }],
+    subjectRules: [{ mode: "contains", value: "payslip" }],
+    when: null,
+    fromJoin: "or",
+    subjectJoin: "or",
+    whenJoin: "and",
+    fields: { subject: false, from: false, to: false, cc: false, date: false, body: true, attachmentMetadata: true, attachmentContent: true },
+    agentIDs: ["cursor", "grok"],
+  },
+  {
+    id: "r3",
+    polarity: "pass",
+    name: "recent invoices",
+    nick: "C",
+    fromRules: [{ mode: "contains", value: "billing@" }],
+    subjectRules: [{ mode: "contains", value: "Invoice" }],
+    when: { after: "2026-01-01", before: "2026-12-31" },
+    fromJoin: "or",
+    subjectJoin: "or",
+    whenJoin: "and",
+    fields: { subject: true, from: true, to: true, cc: true, date: true, body: true, attachmentMetadata: true, attachmentContent: true },
+    agentIDs: ["cursor"],
+  },
+];
+
+const state = {
+  variant: "A",
+  sharedTab: "rules", // rules | passes | blocks | privacy
+  selectedID: "r1",
+  listFilter: "all", // all | pass | block
+  editing: true,
+};
+
+function $(sel, root = document) { return root.querySelector(sel); }
+function $$(sel, root = document) { return [...root.querySelectorAll(sel)]; }
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function currentVariant() {
+  return VARIANTS[state.variant] || VARIANTS.A;
+}
+
+function selectedRule() {
+  return rules.find((r) => r.id === state.selectedID) || rules[0];
+}
+
+function nextNick() {
+  // Letters are shared across Pass + Block (one pool).
+  const used = new Set(rules.map((r) => r.nick));
+  return NICKS.find((n) => !used.has(n)) || "Z";
+}
+
+function markHTML(polarity) {
+  return polarity === "pass"
+    ? `<span class="mark-circle" aria-hidden="true">✓</span>`
+    : `<span class="mark-circle" aria-hidden="true">✗</span>`;
+}
+
+function summaryLine(r) {
+  const bits = [];
+  r.fromRules.forEach((x) => bits.push(x.value));
+  r.subjectRules.forEach((x) => bits.push(x.value));
+  if (r.when?.after || r.when?.before) {
+    const a = r.when.after || "…";
+    const b = r.when.before || "…";
+    bits.push(`${a} → ${b}`);
+  }
+  return bits.join(" · ") || "No matchers yet";
+}
+
+function fieldShorts(r, v) {
+  return FIELD_KEYS.filter((f) => r.fields[f.key]).map((f) => f.short).join("") || "—";
+}
+
+function renderChrome() {
+  const v = currentVariant();
+  const tabs = v.split
+    ? `
+      <button type="button" data-stab="passes" class="${state.sharedTab === "passes" ? "on" : ""}">Passes</button>
+      <button type="button" data-stab="blocks" class="${state.sharedTab === "blocks" ? "on" : ""}">Blocks</button>
+      <button type="button" data-stab="privacy" class="${state.sharedTab === "privacy" ? "on" : ""}">Privacy</button>`
+    : `
+      <button type="button" data-stab="rules" class="${state.sharedTab === "rules" || state.sharedTab === "passes" || state.sharedTab === "blocks" ? "on" : ""}">${esc(v.tabLabel)}</button>
+      <button type="button" data-stab="privacy" class="${state.sharedTab === "privacy" ? "on" : ""}">Privacy</button>`;
+
+  const cursorMark = "../../../MailGent/Assets.xcassets/CursorMark.imageset/CUBE_2D_LIGHT.svg";
+  const grokMark = "../../../MailGent/Assets.xcassets/GrokMark.imageset/GrokMark.png";
+
+  return `
+    <div class="agent-row">
+      <span class="lbl">Agent</span>
+      <div class="agent-pick">
+        <div class="seg">
+          <button type="button" disabled><span class="glyph"><img src="${cursorMark}" alt=""></span>Cursor</button>
+          <button type="button" disabled><span class="glyph"><img src="${grokMark}" alt="" style="border-radius:3px"></span>Grok Bot</button>
+        </div>
+        <div class="agent-pick-sep"></div>
+        <div class="seg">
+          <button type="button" class="on"><span class="glyph shared"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a2.2 2.2 0 1 1 0 4.4A2.2 2.2 0 0 1 8 2Zm-4.5 9.2c0-1.7 2-2.7 4.5-2.7s4.5 1 4.5 2.7V13H3.5v-1.8Z"/></svg></span>Shared</button>
+        </div>
+      </div>
+      <span class="meta">Mailbox-wide · ${esc(v.tabLabel || "Passes / Blocks")} + privacy</span>
+    </div>
+    <div class="tab-row">
+      <div class="seg">${tabs}</div>
+      <div class="spacer"></div>
+      ${state.editing
+        ? `<button type="button" class="btn-edit" data-cancel>Cancel</button>
+           <button type="button" class="btn-edit primary" data-save>Save</button>`
+        : `<button type="button" class="btn-edit" data-begin>Edit</button>`}
+    </div>`;
+}
+
+function visibleRules() {
+  const v = currentVariant();
+  if (v.split) {
+    if (state.sharedTab === "passes") return rules.filter((r) => r.polarity === "pass");
+    if (state.sharedTab === "blocks") return rules.filter((r) => r.polarity === "block");
+    return [];
+  }
+  if (state.listFilter === "pass") return rules.filter((r) => r.polarity === "pass");
+  if (state.listFilter === "block") return rules.filter((r) => r.polarity === "block");
+  return rules;
+}
+
+function renderList() {
+  const v = currentVariant();
+  const items = visibleRules();
+  const title = v.split
+    ? (state.sharedTab === "blocks" ? "Blocks" : "Passes")
+    : v.tabLabel;
+
+  const filter = v.split ? "" : `
+    <div class="filter-row">
+      <button type="button" data-filter="all" class="${state.listFilter === "all" ? "on" : ""}">All</button>
+      <button type="button" data-filter="pass" class="${state.listFilter === "pass" ? "on" : ""}">${esc(v.passWord)}s</button>
+      <button type="button" data-filter="block" class="${state.listFilter === "block" ? "on" : ""}">${esc(v.blockWord)}s</button>
+    </div>`;
+
+  const list = items.length === 0
+    ? `<div class="empty">None yet.</div>`
+    : items.map((r) => {
+        const on = r.id === state.selectedID;
+        const nickClass = r.polarity === "pass" ? "pass" : "block";
+        return `
+          <button type="button" class="item ${on ? "sel" : ""}" data-select="${r.id}">
+            <span class="nick ${nickClass}">${markHTML(r.polarity)}${esc(r.nick)}</span>
+            <span class="meta">
+              <div class="name">${esc(r.name)}</div>
+              <div class="sum">${esc(summaryLine(r))}</div>
+              <div class="tags">
+                <span class="tag ${r.polarity === "pass" ? "pass-effect" : "block-effect"}">${esc(r.polarity === "pass" ? v.effectPass : v.effectBlock)} ${esc(fieldShorts(r))}</span>
+                ${r.when ? `<span class="tag when">When</span>` : ""}
+              </div>
+            </span>
+          </button>`;
+      }).join("");
+
+  const addButtons = v.split
+    ? (state.sharedTab === "blocks"
+        ? `<button type="button" class="block-add" data-add="block">+ New ${esc(v.blockWord)}</button>`
+        : `<button type="button" class="pass-add" data-add="pass">+ New ${esc(v.passWord)}</button>`)
+    : `<button type="button" class="pass-add" data-add="pass">+ ${esc(v.passWord)}</button>
+       <button type="button" class="block-add" data-add="block">+ ${esc(v.blockWord)}</button>`;
+
+  return `
+    <div class="list-pane">
+      <div class="pane-title">${esc(title)}</div>
+      ${filter}
+      <div style="overflow:auto; flex:1">${list}</div>
+      <div class="list-actions">${addButtons}</div>
+    </div>`;
+}
+
+function renderEditor() {
+  if (state.sharedTab === "privacy") {
+    return `<div class="editor-pane"><p class="hint">Privacy unchanged — leak-guard detectors live here.</p></div>`;
+  }
+  const v = currentVariant();
+  const r = selectedRule();
+  if (!r || (v.split && ((state.sharedTab === "passes" && r.polarity !== "pass") || (state.sharedTab === "blocks" && r.polarity !== "block")))) {
+    return `<div class="editor-pane"><div class="empty">Select a ${esc(v.passWord.toLowerCase())} or ${esc(v.blockWord.toLowerCase())}.</div></div>`;
+  }
+
+  const disabled = state.editing ? "" : "disabled";
+  const polPassOn = r.polarity === "pass" ? "on pass" : "";
+  const polBlockOn = r.polarity === "block" ? "on block" : "";
+  const fieldClass = r.polarity === "pass" ? "pass" : "block";
+
+  const fromLines = r.fromRules.map((x, i) => `
+    <div class="rule-line">
+      <span class="mode">${esc(x.mode.toUpperCase())}</span>
+      <span class="val">${esc(x.value)}</span>
+      ${state.editing ? `<button type="button" data-rm-from="${i}" style="border:0;background:transparent;color:var(--muted)">×</button>` : ""}
+    </div>`).join("") || `<div class="empty">No From rules</div>`;
+
+  const subjectLines = r.subjectRules.map((x, i) => `
+    <div class="rule-line">
+      <span class="mode">${esc(x.mode.toUpperCase())}</span>
+      <span class="val">${esc(x.value)}</span>
+      ${state.editing ? `<button type="button" data-rm-subject="${i}" style="border:0;background:transparent;color:var(--muted)">×</button>` : ""}
+    </div>`).join("") || `<div class="empty">No Subject rules</div>`;
+
+  const whenActive = !!r.when;
+  const fields = FIELD_KEYS.map((f) => `
+    <button type="button" class="${r.fields[f.key] ? `on ${fieldClass}` : ""}" data-field="${f.key}" ${disabled}>${f.short}</button>
+  `).join("");
+
+  const preview = r.polarity === "pass"
+    ? `<div class="line"><span class="up">PASS ${markHTML("pass")}${esc(r.nick)}</span> — if base allow + match → union fields <strong>${esc(fieldShorts(r))}</strong></div>
+       <div class="line skip">No match / no base allow → no change</div>`
+    : `<div class="line"><span class="down">BLOCK ${markHTML("block")}${esc(r.nick)}</span> — if match → subtract fields <strong>${esc(fieldShorts(r))}</strong> for selected agents</div>
+       <div class="line skip">Base grant still needed for other fields; block only withholds listed ones</div>`;
+
+  return `
+    <div class="editor-pane">
+      <div class="pane-title">${esc(r.polarity === "pass" ? v.passWord : v.blockWord)} · ${esc(r.name)}</div>
+
+      ${v.split ? "" : `
+      <div class="polarity">
+        <button type="button" class="${polPassOn}" data-polarity="pass" ${disabled}>
+          <span class="t">${markHTML("pass")} ${esc(v.passWord)}</span>
+          <span class="d">${esc(v.passVerb)}</span>
+        </button>
+        <button type="button" class="${polBlockOn}" data-polarity="block" ${disabled}>
+          <span class="t">${markHTML("block")} ${esc(v.blockWord)}</span>
+          <span class="d">${esc(v.blockVerb)}</span>
+        </button>
+      </div>`}
+
+      <div class="row">
+        <label>Name</label>
+        <input class="field" style="flex:1" data-name value="${esc(r.name)}" ${disabled}>
+        <label>Chip</label>
+        <select class="field" style="width:64px" data-nick ${disabled}>
+          ${NICKS.map((n) => `<option ${n === r.nick ? "selected" : ""}>${n}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="section">
+        <h4>From</h4>
+        ${fromLines}
+        ${state.editing ? `<div class="row"><select class="field" style="width:100px" data-from-mode><option>exact</option><option>contains</option><option>starts</option><option>ends</option></select><input class="field" style="flex:1" data-from-val placeholder="Value"><button type="button" class="btn-edit" data-add-from>Add</button></div>` : ""}
+      </div>
+
+      <div class="join">
+        <span>Between From and Subject</span>
+        <div class="seg">
+          <button type="button" data-fs-join="and" class="${r.fromJoin === "and" ? "on" : ""}" ${disabled}>AND</button>
+          <button type="button" data-fs-join="or" class="${r.fromJoin === "or" ? "on" : ""}" ${disabled}>OR</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4>Subject</h4>
+        ${subjectLines}
+        ${state.editing ? `<div class="row"><select class="field" style="width:100px" data-subject-mode><option>contains</option><option>exact</option><option>starts</option><option>ends</option></select><input class="field" style="flex:1" data-subject-val placeholder="Value"><button type="button" class="btn-edit" data-add-subject>Add</button></div>` : ""}
+      </div>
+
+      <div class="join">
+        <span>Between matchers and When</span>
+        <div class="seg">
+          <button type="button" data-when-join="and" class="${r.whenJoin === "and" ? "on" : ""}" ${disabled}>AND</button>
+          <button type="button" data-when-join="or" class="${r.whenJoin === "or" ? "on" : ""}" ${disabled}>OR</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4>
+          When
+          <span style="font-weight:500;color:var(--muted)">(optional time window)</span>
+          <span class="h4-spacer"></span>
+          <button type="button" class="toggle ${whenActive ? "on" : ""}" data-toggle-when aria-label="Enable When" aria-pressed="${whenActive}" ${disabled}></button>
+        </h4>
+        <div class="row">
+          <label>After</label>
+          <input class="field" style="width:140px" data-when-after value="${esc(r.when?.after || "")}" ${disabled || !whenActive ? "disabled" : ""} placeholder="YYYY-MM-DD">
+          <label>Before</label>
+          <input class="field" style="width:140px" data-when-before value="${esc(r.when?.before || "")}" ${disabled || !whenActive ? "disabled" : ""} placeholder="YYYY-MM-DD">
+        </div>
+        <p class="hint" style="margin-top:6px">Joined to From/Subject with AND|OR above. Empty side = open-ended.</p>
+      </div>
+
+      <div class="section">
+        <h4>${r.polarity === "pass" ? esc(v.effectPass) : esc(v.effectBlock)} fields</h4>
+        <div class="fields">${fields}</div>
+        <p class="hint" style="margin-top:6px">${r.polarity === "pass"
+          ? "Union onto base grant when match hits (needs allow first)."
+          : "Subtract from effective fields when match hits — selected details stay hidden."}</p>
+      </div>
+
+      <div class="preview">${preview}</div>
+    </div>`;
+}
+
+function render() {
+  const v = currentVariant();
+  // Normalize shared tab when switching variants
+  if (v.split && (state.sharedTab === "rules")) state.sharedTab = "passes";
+  if (!v.split && (state.sharedTab === "passes" || state.sharedTab === "blocks")) {
+    if (state.sharedTab !== "privacy") state.sharedTab = "rules";
+  }
+
+  const showRules = state.sharedTab !== "privacy";
+  $("#desk").innerHTML = `
+    ${renderChrome()}
+    ${showRules
+      ? `<div class="layout">${renderList()}${renderEditor()}</div>`
+      : `<div class="editor-pane"><p class="hint">Privacy pane (unchanged in this proto).</p></div>`}
+  `;
+
+  $("#varLabel").textContent = `${v.key} — ${v.name} · ${v.blurb}`;
+  dumpState();
+  bind();
+}
+
+function dumpState() {
+  const v = currentVariant();
+  const payload = {
+    variant: v.key,
+    tabLabel: v.tabLabel || "Passes | Blocks",
+    words: { pass: v.passWord, block: v.blockWord },
+    sharedTab: state.sharedTab,
+    listFilter: state.listFilter,
+    selectedID: state.selectedID,
+    rules: rules.map((r) => ({
+      id: r.id,
+      polarity: r.polarity,
+      nick: r.nick,
+      name: r.name,
+      when: r.when,
+      whenJoin: r.whenJoin,
+      fieldsOn: FIELD_KEYS.filter((f) => r.fields[f.key]).map((f) => f.key),
+      agents: r.agentIDs,
+    })),
+  };
+  $("#stateDump").textContent = JSON.stringify(payload, null, 2);
+}
+
+function mutateSelected(fn) {
+  const r = selectedRule();
+  if (!r || !state.editing) return;
+  fn(r);
+  render();
+}
+
+function bind() {
+  $$("[data-stab]").forEach((b) => b.addEventListener("click", () => {
+    state.sharedTab = b.dataset.stab;
+    const items = visibleRules();
+    if (items.length && !items.some((r) => r.id === state.selectedID)) {
+      state.selectedID = items[0].id;
+    }
+    render();
+  }));
+
+  $$("[data-filter]").forEach((b) => b.addEventListener("click", () => {
+    state.listFilter = b.dataset.filter;
+    render();
+  }));
+
+  $$("[data-select]").forEach((b) => b.addEventListener("click", () => {
+    state.selectedID = b.dataset.select;
+    render();
+  }));
+
+  $$("[data-add]").forEach((b) => b.addEventListener("click", () => {
+    if (!state.editing) return;
+    const polarity = b.dataset.add;
+    const id = "r" + Math.random().toString(36).slice(2, 7);
+    rules.push({
+      id,
+      polarity,
+      name: polarity === "pass" ? "New pass" : "New block",
+      nick: nextNick(),
+      fromRules: [],
+      subjectRules: [],
+      when: null,
+      fromJoin: "or",
+      subjectJoin: "or",
+      whenJoin: "and",
+      fields: Object.fromEntries(FIELD_KEYS.map((f) => [f.key, polarity === "pass" ? f.key === "body" : f.key === "body" || f.key === "attachmentContent"])),
+      agentIDs: ["cursor"],
+    });
+    state.selectedID = id;
+    if (currentVariant().split) state.sharedTab = polarity === "pass" ? "passes" : "blocks";
+    render();
+  }));
+
+  $("[data-begin]")?.addEventListener("click", () => { state.editing = true; render(); });
+  $("[data-cancel]")?.addEventListener("click", () => { state.editing = false; render(); });
+  $("[data-save]")?.addEventListener("click", () => { state.editing = false; render(); });
+
+  $$("[data-polarity]").forEach((b) => b.addEventListener("click", () => {
+    mutateSelected((r) => { r.polarity = b.dataset.polarity; });
+  }));
+
+  $("[data-name]")?.addEventListener("change", (e) => {
+    mutateSelected((r) => { r.name = e.target.value; });
+  });
+  $("[data-nick]")?.addEventListener("change", (e) => {
+    mutateSelected((r) => { r.nick = e.target.value; });
+  });
+
+  $$("[data-fs-join]").forEach((b) => b.addEventListener("click", () => {
+    mutateSelected((r) => { r.fromJoin = b.dataset.fsJoin; });
+  }));
+  $$("[data-when-join]").forEach((b) => b.addEventListener("click", () => {
+    mutateSelected((r) => { r.whenJoin = b.dataset.whenJoin; });
+  }));
+
+  $("[data-toggle-when]")?.addEventListener("click", () => {
+    mutateSelected((r) => {
+      r.when = r.when ? null : { after: "2026-01-01", before: "" };
+    });
+  });
+  $("[data-when-after]")?.addEventListener("change", (e) => {
+    mutateSelected((r) => {
+      if (!r.when) r.when = {};
+      r.when.after = e.target.value;
+    });
+  });
+  $("[data-when-before]")?.addEventListener("change", (e) => {
+    mutateSelected((r) => {
+      if (!r.when) r.when = {};
+      r.when.before = e.target.value;
+    });
+  });
+
+  $$("[data-field]").forEach((b) => b.addEventListener("click", () => {
+    mutateSelected((r) => { r.fields[b.dataset.field] = !r.fields[b.dataset.field]; });
+  }));
+
+  $("[data-add-from]")?.addEventListener("click", () => {
+    const mode = $("[data-from-mode]")?.value || "exact";
+    const value = ($("[data-from-val]")?.value || "").trim();
+    if (!value) return;
+    mutateSelected((r) => { r.fromRules.push({ mode, value }); });
+  });
+  $("[data-add-subject]")?.addEventListener("click", () => {
+    const mode = $("[data-subject-mode]")?.value || "contains";
+    const value = ($("[data-subject-val]")?.value || "").trim();
+    if (!value) return;
+    mutateSelected((r) => { r.subjectRules.push({ mode, value }); });
+  });
+  $$("[data-rm-from]").forEach((b) => b.addEventListener("click", () => {
+    mutateSelected((r) => { r.fromRules.splice(+b.dataset.rmFrom, 1); });
+  }));
+  $$("[data-rm-subject]").forEach((b) => b.addEventListener("click", () => {
+    mutateSelected((r) => { r.subjectRules.splice(+b.dataset.rmSubject, 1); });
+  }));
+}
+
+function setVariant(key) {
+  const keys = Object.keys(VARIANTS);
+  if (!VARIANTS[key]) return;
+  state.variant = key;
+  const url = new URL(location.href);
+  url.searchParams.set("variant", key);
+  history.replaceState(null, "", url);
+  const v = currentVariant();
+  state.sharedTab = v.split ? "passes" : "rules";
+  state.listFilter = "all";
+  render();
+}
+
+function cycle(delta) {
+  const keys = Object.keys(VARIANTS);
+  const i = keys.indexOf(state.variant);
+  setVariant(keys[(i + delta + keys.length) % keys.length]);
+}
+
+$("#prevVar").addEventListener("click", () => cycle(-1));
+$("#nextVar").addEventListener("click", () => cycle(1));
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select, [contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+
+const initial = new URL(location.href).searchParams.get("variant") || "A";
+setVariant(VARIANTS[initial] ? initial : "A");
+</script>
+</body>
+</html>

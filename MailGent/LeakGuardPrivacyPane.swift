@@ -18,7 +18,7 @@ struct LeakGuardPrivacyPane: View {
                 LeakGuardMasterRow(
                     isOn: leakGuardBinding,
                     isEditing: isEditing,
-                    peerTab: "Scope",
+                    peerTab: "Agent · Scope",
                     expandedInfo: $expandedInfo
                 )
                 GrantDeskInfoPanel(topic: .leakGuardMaster, expandedInfo: $expandedInfo)

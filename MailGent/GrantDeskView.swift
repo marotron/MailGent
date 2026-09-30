@@ -1,22 +1,39 @@
 import MailStore
 import SwiftUI
 
-/// Lean grant desk: Scope (placements) + Passes + Access (field caps + sample preview).
+/// Lean grant desk: agent Scope/Access, mailbox-wide Rules/Privacy via Shared pick.
 struct GrantDeskView: View {
     @Bindable var session: CompanionSession
     @State private var tab: Tab = .scope
+    @State private var deskFocus: DeskFocus = .agent
     @State private var expandedInfo: String?
-    @State private var selectedPassID: String?
+    @State private var selectedRuleID: String?
 
-    enum Tab: String, CaseIterable, Identifiable {
+    /// Top picker: a paired agent (Scope/Access) or Shared (Rules/Privacy).
+    private enum DeskFocus: Equatable {
+        case agent
+        case shared
+    }
+
+    enum Tab: String, Identifiable {
         case scope = "Scope"
-        case passes = "Passes"
         case access = "Access"
+        case rules = "Rules"
         case privacy = "Privacy"
         var id: String { rawValue }
+
+        static let agentTabs: [Tab] = [.scope, .access]
+        static let sharedTabs: [Tab] = [.rules, .privacy]
+
+        var isAgentTab: Bool {
+            Self.agentTabs.contains(self)
+        }
     }
 
     private var isEditing: Bool { session.agents.isEditingGrants }
+    private var visibleTabs: [Tab] {
+        deskFocus == .shared ? Tab.sharedTabs : Tab.agentTabs
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -32,13 +49,13 @@ struct GrantDeskView: View {
             } else {
                 HStack(alignment: .center, spacing: 10) {
                     Picker("", selection: $tab) {
-                        ForEach(Tab.allCases) { tab in
+                        ForEach(visibleTabs) { tab in
                             Text(tab.rawValue).tag(tab)
                         }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(maxWidth: 300)
+                    .frame(maxWidth: 220)
                     .accessibilityLabel("Grant desk section")
 
                     Spacer(minLength: 8)
@@ -48,10 +65,10 @@ struct GrantDeskView: View {
                 switch tab {
                 case .scope:
                     scopePane
-                case .passes:
+                case .rules:
                     PassDeskPane(
                         session: session,
-                        selectedPassID: $selectedPassID,
+                        selectedRuleID: $selectedRuleID,
                         isEditing: isEditing
                     )
                 case .access:
@@ -77,29 +94,92 @@ struct GrantDeskView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                Picker(
-                    "Agent",
-                    selection: Binding(
-                        get: { session.agents.selectedAgentID ?? session.agents.pairedAgents.first?.id ?? "" },
-                        set: { session.agents.selectAgent(id: $0.isEmpty ? nil : $0) }
+                agentSharedPick
+                    .disabled(isEditing)
+                    .help(
+                        isEditing
+                            ? "Save or cancel edits before switching"
+                            : "Agent: Scope & Access · Shared: Rules & Privacy"
                     )
-                ) {
-                    ForEach(session.agents.pairedAgents) { agent in
-                        Text(agent.name).tag(agent.id)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 280)
-                .disabled(isEditing)
-                .help(isEditing ? "Save or cancel edits before switching agents" : "Grants apply to the selected agent only")
             }
             Spacer(minLength: 0)
-            if let agent = session.agents.selectedAgent {
+            if deskFocus == .shared {
+                Text("Mailbox-wide · rules + privacy")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let agent = session.agents.selectedAgent {
                 Text("\(agent.name) · \(agent.trustClass.rawValue)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var agentSharedPick: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(session.agents.pairedAgents) { agent in
+                    let selected = deskFocus == .agent
+                        && (session.agents.selectedAgentID ?? session.agents.pairedAgents.first?.id)
+                        == agent.id
+                    GrantDeskPickButton(
+                        title: agent.name,
+                        selected: selected
+                    ) {
+                        AgentGlyph(name: agent.name, size: 14)
+                    } action: {
+                        selectDeskAgent(id: agent.id)
+                    }
+                }
+            }
+            .padding(2)
+            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.18), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(width: 1, height: 22)
+
+            HStack(spacing: 2) {
+                GrantDeskPickButton(
+                    title: "Shared",
+                    selected: deskFocus == .shared
+                ) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(deskFocus == .shared ? Color.primary : Color.secondary)
+                        .frame(width: 14, height: 14)
+                        .background(
+                            Color(nsColor: .quaternaryLabelColor).opacity(0.22),
+                            in: Circle()
+                        )
+                } action: {
+                    selectDeskShared()
+                }
+            }
+            .padding(2)
+            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.18), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Agent or shared settings")
+    }
+
+    private func selectDeskAgent(id: String) {
+        if deskFocus != .agent || session.agents.selectedAgentID != id {
+            if isEditing { return }
+            deskFocus = .agent
+            session.agents.selectAgent(id: id)
+            if !tab.isAgentTab {
+                tab = .scope
+            }
+        }
+    }
+
+    private func selectDeskShared() {
+        guard deskFocus != .shared else { return }
+        if isEditing { return }
+        deskFocus = .shared
+        if tab.isAgentTab {
+            tab = .rules
         }
     }
 
@@ -134,7 +214,7 @@ struct GrantDeskView: View {
                     set: { session.agents.setLeakGuardEnabled($0) }
                 ),
                 isEditing: isEditing,
-                peerTab: "Privacy",
+                peerTab: "Shared · Privacy",
                 expandedInfo: $expandedInfo
             )
             GrantDeskInfoPanel(topic: .leakGuardMaster, expandedInfo: $expandedInfo)
@@ -160,35 +240,10 @@ struct GrantDeskView: View {
                         .padding(.vertical, 2)
                         .id(session.agents.grantRevision)
                         .id(session.agents.leakGuardRevision)
-                        .id(session.agents.passRevision)
+                        .id(session.agents.ruleRevision)
                     }
                     .frame(maxHeight: 340)
                 }
-            }
-
-            GrantDeskCard(title: "Narrow scope", expandedInfo: $expandedInfo) {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("Narrow From (optional)", text: Binding(
-                        get: { session.agents.draftFromFilter },
-                        set: { session.agents.draftFromFilter = $0 }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(!isEditing)
-                    TextField("On/after date ISO8601 (optional)", text: Binding(
-                        get: { session.agents.draftDateStart },
-                        set: { session.agents.draftDateStart = $0 }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(!isEditing)
-                    GrantCheckRow(
-                        title: "Deny carve-out mode",
-                        isOn: session.agents.draftDenyMode
-                    ) {
-                        session.agents.draftDenyMode.toggle()
-                    }
-                    .disabled(!isEditing)
-                }
-                .frame(maxHeight: .infinity)
             }
 
             if isEditing, !session.agents.grantRows.isEmpty {
@@ -198,7 +253,7 @@ struct GrantDeskView: View {
             }
 
             if !session.agents.allowGrants.isEmpty {
-                Text("Detectors & custom rules → Privacy tab.")
+                Text("Detectors & custom rules → Shared · Privacy.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -228,7 +283,7 @@ struct GrantDeskView: View {
                                 .font(.subheadline.weight(.semibold))
                             previewCaption(for: selected)
                             AgentAccessPreview(session: session, grant: selected)
-                                .id("\(session.agents.grantRevision)-\(session.agents.passRevision)-\(session.agents.leakGuardRevision)-\(AgentBridge.accessKey(for: selected))")
+                                .id("\(session.agents.grantRevision)-\(session.agents.ruleRevision)-\(session.agents.leakGuardRevision)-\(AgentBridge.accessKey(for: selected))")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 8)
@@ -303,7 +358,7 @@ struct GrantDeskView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Text(pathLabel(grant))
                 .font(.headline)
-            Text("Fields apply only to this allow. Passes can green-light more fields on match.")
+            Text("Fields apply only to this allow. Rules can green-light or withhold fields on match.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -373,11 +428,11 @@ struct GrantDeskView: View {
             .disabled(!isEditing)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Passes on this placement")
+                Text("Rules on this placement")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                if session.agents.passDefinitions.isEmpty {
-                    Text("No passes yet — create one on Passes tab.")
+                if session.agents.ruleDefinitions.isEmpty {
+                    Text("No rules yet — create one on the Rules tab.")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 } else {
@@ -385,7 +440,7 @@ struct GrantDeskView: View {
                         session: session,
                         accountID: grant.accountID,
                         placement: grant.placement,
-                        isEditing: isEditing && !session.agents.draftDenyMode,
+                        isEditing: isEditing,
                         density: .roomy
                     )
                 }
@@ -425,7 +480,7 @@ struct GrantDeskView: View {
             GrantFieldChip(title: title, isOn: isOn, systemImage: systemImage)
         }
         .buttonStyle(.plain)
-        .disabled(!isEditing || session.agents.draftDenyMode)
+        .disabled(!isEditing)
     }
 
     private func accountBlock(_ account: DetectedAccount) -> some View {
@@ -441,10 +496,9 @@ struct GrantDeskView: View {
                         enabled: !session.agents.hasAccountWideGrant(accountID: account.id)
                     )
                 }
-                .disabled(!isEditing || session.agents.draftDenyMode)
+                .disabled(!isEditing)
                 if let grant = session.agents.allowGrant(accountID: account.id, placement: nil),
-                   session.agents.hasAccountWideGrant(accountID: account.id),
-                   !session.agents.draftDenyMode {
+                   session.agents.hasAccountWideGrant(accountID: account.id) {
                     scopeBadgeRow(
                         fields: grant.fields,
                         accountID: account.id,
@@ -481,19 +535,17 @@ struct GrantDeskView: View {
                 HStack(alignment: .top, spacing: 8) {
                     GrantCheckRow(
                         title: mailbox.placement,
-                        isOn: session.agents.draftDenyMode ? denied : allowed,
+                        isOn: allowed,
                         badge: denied ? "deny" : nil
                     ) {
                         session.agents.setMailbox(
                             accountID: account.id,
                             placement: mailbox.placement,
-                            enabled: session.agents.draftDenyMode ? !denied : !allowed
+                            enabled: !allowed
                         )
                     }
-                    .disabled(
-                        !isEditing || (!session.agents.draftDenyMode && accountWide)
-                    )
-                    if !session.agents.draftDenyMode, allowed,
+                    .disabled(!isEditing || accountWide)
+                    if allowed,
                        let fields = session.agents.effectiveAllowFields(
                            accountID: account.id,
                            placement: mailbox.placement
@@ -530,7 +582,7 @@ struct GrantDeskView: View {
             accountID: grant.accountID,
             placement: grant.placement
         )
-        let passes = session.agents.enabledPasses(
+        let rules = session.agents.enabledRules(
             accountID: grant.accountID,
             placement: grant.placement
         )
@@ -546,8 +598,8 @@ struct GrantDeskView: View {
                 if shieldState != .off {
                     LeakGuardShieldChip(state: shieldState)
                 }
-                if !passes.isEmpty {
-                    AccessPassNickChip(nicks: passes.map(\.nick).joined())
+                if !rules.isEmpty {
+                    AccessPassNickChip(rules: rules)
                 }
             }
         }
@@ -587,24 +639,52 @@ struct GrantDeskView: View {
     }
 }
 
-// MARK: - Access sample preview (hatch + pass green lights)
+// MARK: - Agent / Shared pick chrome
 
-private struct AccessPassNickChip: View {
-    let nicks: String
-
-    private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
-    private static let passSoft = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255).opacity(0.12)
-    private static let passBorder = Color(red: 143 / 255, green: 209 / 255, blue: 160 / 255)
+private struct GrantDeskPickButton<Icon: View>: View {
+    let title: String
+    let selected: Bool
+    @ViewBuilder let icon: () -> Icon
+    let action: () -> Void
 
     var body: some View {
-        Text("✓\(nicks)")
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(Self.passGreen)
-            .tracking(0.4)
-            .padding(.horizontal, 5)
-            .frame(height: 14)
-            .background(Self.passSoft, in: Capsule())
-            .overlay(Capsule().strokeBorder(Self.passBorder, lineWidth: 0.5))
+        Button(action: action) {
+            HStack(spacing: 6) {
+                icon()
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 10)
+            .padding(.vertical, 4)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .shadow(color: .black.opacity(0.08), radius: 1, y: 0.5)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+// MARK: - Access sample preview (hatch + rule effects)
+
+private struct AccessPassNickChip: View {
+    let rules: [GrantRule]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(rules) { rule in
+                RuleNickChip(nick: rule.nick, polarity: rule.polarity)
+                    .scaleEffect(0.85, anchor: .center)
+            }
+        }
     }
 }
 
@@ -614,8 +694,8 @@ private struct AgentAccessPreview: View {
 
     private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
 
-    private var attached: [Pass] {
-        session.agents.enabledPasses(accountID: grant.accountID, placement: grant.placement)
+    private var attached: [GrantRule] {
+        session.agents.enabledRules(accountID: grant.accountID, placement: grant.placement)
     }
 
     private var sample: SampleMessage {
@@ -639,38 +719,28 @@ private struct AgentAccessPreview: View {
 
     private var effectiveFields: GrantFields {
         guard let agentID = session.agents.selectedAgent?.id else { return grant.fields }
-        return PassEngine.upgrade(
+        return RuleEngine.upgrade(
             base: grant.fields,
             message: indexedSample,
             agentID: agentID,
-            passes: session.agents.passDefinitions,
-            enablements: session.agents.passes.allEnablements()
+            rules: session.agents.ruleDefinitions,
+            enablements: session.agents.rules.allEnablements()
         )
     }
 
-    private var firedPasses: [Pass] {
+    private var firedRules: [GrantRule] {
         guard let agentID = session.agents.selectedAgent?.id else { return [] }
-        var current = grant.fields
-        var fired: [Pass] = []
-        for pass in attached {
-            let next = PassEngine.upgrade(
-                base: current,
-                message: indexedSample,
-                agentID: agentID,
-                passes: [pass],
-                enablements: session.agents.passes.allEnablements()
-            )
-            if next != current {
-                fired.append(pass)
-                current = next
-            }
+        let enablements = session.agents.rules.allEnablements()
+        return attached.filter {
+            RuleEngine.matches($0, message: indexedSample, agentID: agentID, enablements: enablements)
         }
-        return fired
     }
 
     private func viaPassNick(for keyPath: KeyPath<GrantFields, Bool>) -> String? {
         guard !grant.fields[keyPath: keyPath], effectiveFields[keyPath: keyPath],
-              let pass = firedPasses.first(where: { $0.fields[keyPath: keyPath] })
+              let pass = firedRules.first(where: {
+                  $0.polarity == .pass && $0.fields[keyPath: keyPath]
+              })
         else { return nil }
         return pass.nick
     }
@@ -689,13 +759,15 @@ private struct AgentAccessPreview: View {
                 attachmentInfoViaPassNick: viaPassNick(for: \.attachmentMetadata),
                 attachmentContentViaPassNick: viaPassNick(for: \.attachmentContent)
             )
-            ForEach(firedPasses) { pass in
-                Text(passNote(pass))
+            ForEach(firedRules) { pass in
+                Text(ruleNote(pass))
                     .font(.system(size: 10))
-                    .foregroundStyle(Self.passGreen)
+                    .foregroundStyle(
+                        pass.polarity == .pass ? Self.passGreen : RuleMarkStyle.blockRed
+                    )
             }
-            if !attached.isEmpty, firedPasses.isEmpty {
-                Text("Attached passes did not match this sample (or their fields are already covered).")
+            if !attached.isEmpty, firedRules.isEmpty {
+                Text("Attached rules did not match this sample (or their fields are already covered).")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -706,7 +778,7 @@ private struct AgentAccessPreview: View {
                 LockedFieldsLegend()
             }
         }
-        .id("\(session.agents.leakGuardRevision)-\(session.agents.passRevision)")
+        .id("\(session.agents.leakGuardRevision)-\(session.agents.ruleRevision)")
     }
 
     private var hasLockedFields: Bool {
@@ -715,22 +787,40 @@ private struct AgentAccessPreview: View {
             || !f.body || !f.attachmentMetadata || !f.attachmentContent
     }
 
-    private func passNote(_ pass: Pass) -> String {
-        let labels = greenLitLabels(pass: pass, base: grant.fields)
+    private func ruleNote(_ rule: GrantRule) -> String {
+        if rule.polarity == .block {
+            let labels = fieldLabels(on: rule.fields)
+            let joined = labels.isEmpty ? "fields" : labels.joined(separator: ", ")
+            return "BLOCK — \(rule.name) (✗ \(rule.nick)) withheld \(joined)."
+        }
+        let labels = greenLitLabels(rule: rule, base: grant.fields)
         let joined = labels.isEmpty ? "fields" : labels.joined(separator: ", ")
-        return "PASS — \(pass.name) (✓ \(pass.nick)) green-lit \(joined)."
+        return "PASS — \(rule.name) (✓ \(rule.nick)) green-lit \(joined)."
     }
 
-    private func greenLitLabels(pass: Pass, base: GrantFields) -> [String] {
+    private func fieldLabels(on fields: GrantFields) -> [String] {
         var labels: [String] = []
-        if pass.fields.body && !base.body { labels.append("body") }
-        if pass.fields.attachmentMetadata && !base.attachmentMetadata { labels.append("attachment names") }
-        if pass.fields.attachmentContent && !base.attachmentContent { labels.append("attachment content") }
-        if pass.fields.subject && !base.subject { labels.append("subject") }
-        if pass.fields.from && !base.from { labels.append("from") }
-        if pass.fields.to && !base.to { labels.append("to") }
-        if pass.fields.cc && !base.cc { labels.append("cc") }
-        if pass.fields.date && !base.date { labels.append("date") }
+        if fields.body { labels.append("body") }
+        if fields.attachmentMetadata { labels.append("attachment names") }
+        if fields.attachmentContent { labels.append("attachment content") }
+        if fields.subject { labels.append("subject") }
+        if fields.from { labels.append("from") }
+        if fields.to { labels.append("to") }
+        if fields.cc { labels.append("cc") }
+        if fields.date { labels.append("date") }
+        return labels
+    }
+
+    private func greenLitLabels(rule: GrantRule, base: GrantFields) -> [String] {
+        var labels: [String] = []
+        if rule.fields.body && !base.body { labels.append("body") }
+        if rule.fields.attachmentMetadata && !base.attachmentMetadata { labels.append("attachment names") }
+        if rule.fields.attachmentContent && !base.attachmentContent { labels.append("attachment content") }
+        if rule.fields.subject && !base.subject { labels.append("subject") }
+        if rule.fields.from && !base.from { labels.append("from") }
+        if rule.fields.to && !base.to { labels.append("to") }
+        if rule.fields.cc && !base.cc { labels.append("cc") }
+        if rule.fields.date && !base.date { labels.append("date") }
         return labels
     }
 
@@ -804,20 +894,32 @@ private struct SampleMessage {
         ]
     )
 
-    /// Prefer a sample that satisfies an attached pass so Access preview can show green lights.
-    static func forAccessPreview(matching pass: Pass?) -> SampleMessage {
+    /// Prefer a sample that satisfies an attached rule so Access preview can show effects.
+    static func forAccessPreview(matching pass: GrantRule?) -> SampleMessage {
         guard let pass else { return .invoice }
         let from = Self.haystack(for: pass.fromRules) ?? invoice.from
         let subject = Self.haystack(for: pass.subjectRules) ?? invoice.subject
+        let date = Self.date(for: pass.when) ?? invoice.date
         return SampleMessage(
             subject: subject,
             from: from,
             to: invoice.to,
             cc: invoice.cc,
-            date: invoice.date,
+            date: date,
             body: invoice.body,
             attachments: invoice.attachments
         )
+    }
+
+    private static func date(for when: RuleWhen?) -> String? {
+        guard let when else { return nil }
+        if let after = when.after?.trimmingCharacters(in: .whitespacesAndNewlines), !after.isEmpty {
+            return "\(String(after.prefix(10)))T12:00:00Z"
+        }
+        if let before = when.before?.trimmingCharacters(in: .whitespacesAndNewlines), !before.isEmpty {
+            return "\(String(before.prefix(10)))T12:00:00Z"
+        }
+        return nil
     }
 
     private static func haystack(for rules: [MatchRule]) -> String? {

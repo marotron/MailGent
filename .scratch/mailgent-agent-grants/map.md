@@ -39,7 +39,9 @@ Ship usable **per-agent data access control** on top of the local-read companion
 ## Decisions so far (post-merge polish)
 
 - 2026-08-21 — Search orders `date_sort` desc, then `bm25` (subject/from weighted over body); MCP `search` exposes `nextCursor` / `cursor` / `limit`. Fixes account-UUID page flooding + “latest” miss (e.g. Birmingham Revenues).
-- 2026-09-29 — [08 · Passes](issues/08-passes-green-lights.md) — conditional field green lights (`PassEngine` + `passes.json` + Grant Desk Passes tab / Scope chips). Replaces deferred smart-folder selectors for v1.
+- 2026-09-29 — [08 · Passes](issues/08-passes-green-lights.md) — conditional field green lights (now Rules: `RuleEngine` + `rules.json` + Grant Desk Rules tab / Scope chips). Replaces deferred smart-folder selectors for v1.
+- 2026-09-30 — [09 · Rules](issues/09-rules-pass-block-when.md) — Pass + Block polarity, When window, shared nick pool; persist `rules.json`.
+- 2026-09-30 — [09 · Rules](issues/09-rules-pass-block-when.md) — Shared **Rules** tab: Pass + Block + When; shared letter pool; Blocks subtract after Passes.
 
 ## Branches
 

@@ -9,6 +9,11 @@
   - Match modes: contains / starts / ends / exact (From + Subject).
   - Multiple From (or Subject) rules = any match (OR). Between From↔Subject = AND|OR.
 
+  Chrome variants (toggle in page):
+  - A · Clustered tabs: all four visible; This agent | Mailbox labels; top row swaps.
+  - B · Mode switch: This agent | Mailbox first; only that pair of tabs shows.
+  - C · Shared in agent pick: Cursor|Grok|…|Shared → agent tabs or Passes|Privacy.
+
   Open in a browser.
 -->
 <html lang="en">
@@ -76,9 +81,45 @@
       background: var(--paper); min-height: 600px;
     }
 
-    .agent-row { display: flex; align-items: center; gap: 8px; }
+    .agent-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
     .agent-row .lbl { font-size: 11px; color: var(--muted); }
     .agent-row .meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .agent-row.shared .shared-caption {
+      font-size: 12px; color: var(--muted); font-weight: 500;
+    }
+    .agent-row.shared .shared-caption strong {
+      color: var(--ink); font-weight: 650;
+    }
+    .agent-pick {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .agent-pick-sep {
+      width: 1px; height: 22px; background: var(--line); flex: none;
+    }
+    .agent-pick .seg button {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px 4px 6px;
+    }
+    .agent-pick .seg button .glyph {
+      width: 16px; height: 16px; border-radius: 4px; flex: none;
+      display: inline-grid; place-items: center;
+      overflow: hidden; background: transparent;
+    }
+    .agent-pick .seg button .glyph img,
+    .agent-pick .seg button .glyph svg.mark {
+      width: 16px; height: 16px; display: block;
+    }
+    .agent-pick .seg button .glyph.shared {
+      background: #e8e8ed; color: #3a3a3c; border-radius: 50%;
+      font-size: 10px;
+    }
+    .agent-pick .seg button .glyph.shared svg {
+      width: 10px; height: 10px; display: block;
+    }
+    .agent-pick .seg button .glyph.fallback {
+      background: #e8e8ed; color: #3a3a3c;
+      font-size: 8px; font-weight: 800;
+    }
     .seg {
       display: inline-grid; grid-auto-flow: column; gap: 2px;
       background: #e8e8ed; border-radius: 8px; padding: 2px;
@@ -88,8 +129,17 @@
       font-weight: 600; font-size: 12px; color: var(--muted); white-space: nowrap;
     }
     .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px #00000018; }
+    .seg button:disabled { opacity: 0.55; }
     .tab-row { display: flex; align-items: center; gap: 10px; }
-    .tab-row .seg { max-width: none; }
+    .tab-clusters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .tab-cluster { display: flex; align-items: center; gap: 6px; }
+    .tab-cluster .cluster-lbl {
+      font-size: 10px; font-weight: 650; letter-spacing: 0.02em;
+      text-transform: uppercase; color: var(--muted); white-space: nowrap;
+    }
+    .tab-cluster-divider {
+      width: 1px; height: 22px; background: var(--line); flex: none;
+    }
     .tab-row .spacer { flex: 1; }
     .btn-edit {
       border: 1px solid var(--line); background: #fff; border-radius: 6px;
@@ -406,12 +456,28 @@
       white-space: pre-wrap;
     }
     [hidden] { display: none !important; }
+
+    .chrome-picker {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+    }
+    .chrome-picker .lbl { font-size: 11px; font-weight: 650; color: var(--muted); }
+    .chrome-picker .hint-inline { font-size: 11px; color: var(--muted); flex: 1 1 180px; }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="note">
-      <strong>Throwaway prototype</strong> · <strong>Passes</strong> is its own tab (definitions only).
+      <div class="chrome-picker">
+        <span class="lbl">Chrome</span>
+        <div class="seg" id="chromePicker">
+          <button type="button" data-chrome="clusters">A · Clustered</button>
+          <button type="button" data-chrome="mode">B · Mode</button>
+          <button type="button" data-chrome="shared-pick" class="on">C · Shared pick</button>
+        </div>
+        <span class="hint-inline" id="chromeHint"></span>
+      </div>
+      <strong>Throwaway prototype</strong> · Flip chrome A/B/C above.
       Attach passes on <em>Scope → Allowed placements</em> as one green chip
       <span class="badge pass" style="vertical-align:middle">✓ABC</span>
       via the <strong>+</strong> dropdown. Hit <strong>Edit</strong> before adding/removing.
@@ -423,19 +489,9 @@
         Grant desk
       </div>
       <div class="desk">
-        <div class="agent-row">
-          <span class="lbl">Agent</span>
-          <div class="seg" id="agentSeg"></div>
-          <span class="meta" id="agentMeta"></span>
-        </div>
-
+        <div class="agent-row" id="contextRow"></div>
         <div class="tab-row">
-          <div class="seg" id="tabs">
-            <button type="button" data-tab="scope" class="on">Scope</button>
-            <button type="button" data-tab="passes">Passes</button>
-            <button type="button" data-tab="access">Access</button>
-            <button type="button" data-tab="privacy">Privacy</button>
-          </div>
+          <div id="tabs"></div>
           <div class="spacer"></div>
           <div id="editControls"></div>
         </div>
@@ -567,8 +623,11 @@ let baseAllows = {
 };
 
 let state = {
+  chrome: "shared-pick", // "clusters" | "mode" | "shared-pick"
+  mode: "agent", // used when chrome === "mode": "agent" | "mailbox"
   tab: "scope",
-  agentID: "cursor",
+  agentID: "cursor", // agent id, or "__shared__" when chrome is shared-pick
+  lastAgentID: "cursor", // real agent kept for eval / return from Shared
   editing: false,
   selectedPassID: "pass-linkedin",
   selectedAsset: "y1|",
@@ -659,7 +718,7 @@ function passListLineHTML(p) {
 }
 
 function passForAgent(p) {
-  return p.agentIDs.includes(state.agentID);
+  return p.agentIDs.includes(effectiveAgentID());
 }
 
 function usedNicks(exceptID) {
@@ -928,7 +987,7 @@ function renderPasses() {
       subjectRules: [],
       betweenJoin: "and",
       fields: { subject: false, from: false, to: false, cc: false, date: false, body: true, attachmentMetadata: false, attachmentContent: false },
-      agentIDs: [state.agentID],
+      agentIDs: [effectiveAgentID()],
     };
     passes.push(p);
     state.selectedPassID = p.id;
@@ -1215,7 +1274,7 @@ function evaluateDetailed() {
   const placement = rest.join("|");
   const mode = $("#baseFields").value;
   const base = mode === "none" ? null : mode === "full" ? { ...FULL, attachmentContent: false } : { ...HEADERS_ONLY };
-  const trace = [`agent=${state.agentID}`, `placement=${placementKey}`];
+  const trace = [`agent=${effectiveAgentID()}`, `placement=${placementKey}`];
 
   if (!base) {
     return {
@@ -1300,12 +1359,178 @@ function renderEval() {
   `;
 }
 
-function renderAgents() {
-  $("#agentSeg").innerHTML = AGENTS.map(
-    (a) => `<button type="button" data-agent-pick="${a.id}" class="${a.id === state.agentID ? "on" : ""}">${escapeHtml(a.name)}</button>`
-  ).join("");
-  const a = AGENTS.find((x) => x.id === state.agentID);
-  $("#agentMeta").textContent = `${a.name} · ${a.trust}`;
+function isAgentTab(tab) {
+  return tab === "scope" || tab === "access";
+}
+
+function isSharedPick() {
+  return state.chrome === "shared-pick" && state.agentID === "__shared__";
+}
+
+function effectiveAgentID() {
+  return state.agentID === "__shared__" ? state.lastAgentID : state.agentID;
+}
+
+function ensureTabFitsChrome() {
+  if (state.chrome === "mode") {
+    if (state.mode === "agent" && !isAgentTab(state.tab)) state.tab = "scope";
+    if (state.mode === "mailbox" && isAgentTab(state.tab)) state.tab = "passes";
+  } else if (state.chrome === "shared-pick") {
+    if (isSharedPick() && isAgentTab(state.tab)) state.tab = "passes";
+    if (!isSharedPick() && !isAgentTab(state.tab)) state.tab = "scope";
+  }
+}
+
+function renderChromePicker() {
+  $$("#chromePicker [data-chrome]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.chrome === state.chrome);
+  });
+  const hints = {
+    clusters: "A: all four tabs visible; clusters label ownership; top row swaps.",
+    mode: "B: pick This agent or Mailbox first; only that pair of tabs shows.",
+    "shared-pick": "C: Shared sits in the agent picker → Passes + Privacy under that pick.",
+  };
+  $("#chromeHint").textContent = hints[state.chrome] || "";
+}
+
+function renderTabs() {
+  const el = $("#tabs");
+  if (state.chrome === "shared-pick") {
+    el.className = "seg";
+    if (isSharedPick()) {
+      el.innerHTML = `
+        <button type="button" data-tab="passes">Passes</button>
+        <button type="button" data-tab="privacy">Privacy</button>`;
+    } else {
+      el.innerHTML = `
+        <button type="button" data-tab="scope">Scope</button>
+        <button type="button" data-tab="access">Access</button>`;
+    }
+  } else if (state.chrome === "clusters") {
+    el.className = "tab-clusters";
+    el.innerHTML = `
+      <div class="tab-cluster">
+        <span class="cluster-lbl">This agent</span>
+        <div class="seg">
+          <button type="button" data-tab="scope">Scope</button>
+          <button type="button" data-tab="access">Access</button>
+        </div>
+      </div>
+      <div class="tab-cluster-divider" aria-hidden="true"></div>
+      <div class="tab-cluster">
+        <span class="cluster-lbl">Mailbox</span>
+        <div class="seg">
+          <button type="button" data-tab="passes">Passes</button>
+          <button type="button" data-tab="privacy">Privacy</button>
+        </div>
+      </div>`;
+  } else {
+    el.className = "tab-clusters";
+    const tabs =
+      state.mode === "agent"
+        ? `<button type="button" data-tab="scope">Scope</button>
+           <button type="button" data-tab="access">Access</button>`
+        : `<button type="button" data-tab="passes">Passes</button>
+           <button type="button" data-tab="privacy">Privacy</button>`;
+    el.innerHTML = `
+      <div class="tab-cluster">
+        <span class="cluster-lbl">Desk</span>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-mode="agent" class="${state.mode === "agent" ? "on" : ""}">This agent</button>
+          <button type="button" data-mode="mailbox" class="${state.mode === "mailbox" ? "on" : ""}">Mailbox</button>
+        </div>
+      </div>
+      <div class="tab-cluster-divider" aria-hidden="true"></div>
+      <div class="tab-cluster">
+        <span class="cluster-lbl">${state.mode === "agent" ? "Tabs" : "Shared"}</span>
+        <div class="seg">${tabs}</div>
+      </div>`;
+  }
+  $$("#tabs [data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === state.tab));
+}
+
+function agentGlyphHTML(id) {
+  // Same marks as MailGent Assets.xcassets (CursorMark / GrokMark).
+  const cursorMark = "../../../MailGent/Assets.xcassets/CursorMark.imageset/CUBE_2D_LIGHT.svg";
+  const grokMark = "../../../MailGent/Assets.xcassets/GrokMark.imageset/GrokMark.png";
+  if (id === "cursor") {
+    return `<span class="glyph cursor" aria-hidden="true"><img class="mark" src="${cursorMark}" alt=""></span>`;
+  }
+  if (id === "grok") {
+    return `<span class="glyph grok" aria-hidden="true"><img class="mark" src="${grokMark}" alt="" style="border-radius:3.5px"></span>`;
+  }
+  if (id === "claude") {
+    return `<span class="glyph fallback" aria-hidden="true">C</span>`;
+  }
+  if (id === "__shared__") {
+    return `<span class="glyph shared" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a2.2 2.2 0 1 1 0 4.4A2.2 2.2 0 0 1 8 2Zm-4.5 9.2c0-1.7 2-2.7 4.5-2.7s4.5 1 4.5 2.7V13H3.5v-1.8Z"/></svg></span>`;
+  }
+  return `<span class="glyph fallback" aria-hidden="true">?</span>`;
+}
+
+function agentPickButton(id, label, selected, disabled) {
+  return `<button type="button" data-agent-pick="${id}" class="${selected ? "on" : ""}" ${disabled ? "disabled" : ""}>${agentGlyphHTML(id)}<span>${escapeHtml(label)}</span></button>`;
+}
+
+function renderContextRow() {
+  const row = $("#contextRow");
+
+  if (state.chrome === "shared-pick") {
+    row.classList.toggle("shared", isSharedPick());
+    const meta = isSharedPick()
+      ? "Mailbox-wide · passes + privacy"
+      : (() => {
+          const a = AGENTS.find((x) => x.id === state.agentID);
+          return `${escapeHtml(a.name)} · ${escapeHtml(a.trust)}`;
+        })();
+    const disabled = state.editing;
+    row.innerHTML = `
+      <span class="lbl">Agent</span>
+      <div class="agent-pick" id="agentSeg">
+        <div class="seg">
+          ${AGENTS.map((ag) =>
+            agentPickButton(ag.id, ag.name, ag.id === state.agentID, disabled)
+          ).join("")}
+        </div>
+        <div class="agent-pick-sep" aria-hidden="true"></div>
+        <div class="seg">
+          ${agentPickButton("__shared__", "Shared", state.agentID === "__shared__", disabled)}
+        </div>
+      </div>
+      <span class="meta">${meta}</span>
+    `;
+    return;
+  }
+
+  const showAgent =
+    state.chrome === "mode" ? state.mode === "agent" : isAgentTab(state.tab);
+
+  if (showAgent) {
+    row.classList.remove("shared");
+    const a = AGENTS.find((x) => x.id === effectiveAgentID());
+    const disabled = state.editing;
+    row.innerHTML = `
+      <span class="lbl">Agent</span>
+      <div class="agent-pick" id="agentSeg">
+        <div class="seg">
+          ${AGENTS.map((ag) =>
+            agentPickButton(ag.id, ag.name, ag.id === effectiveAgentID(), disabled)
+          ).join("")}
+        </div>
+      </div>
+      <span class="meta">${escapeHtml(a.name)} · ${escapeHtml(a.trust)}</span>
+    `;
+    return;
+  }
+
+  row.classList.add("shared");
+  const passesCap = `<strong>Shared</strong> · agents chosen per pass`;
+  const privacyCap = `<strong>Applies to all agents</strong> · leak guard policy`;
+  const bothCap = `<strong>Mailbox-wide</strong> · passes + privacy apply to every agent`;
+  let text = bothCap;
+  if (state.tab === "passes") text = passesCap;
+  else if (state.tab === "privacy") text = privacyCap;
+  row.innerHTML = `<span class="shared-caption">${text}</span>`;
 }
 
 function renderEditControls() {
@@ -1347,9 +1572,11 @@ function renderScenarios() {
 }
 
 function render() {
-  renderAgents();
+  ensureTabFitsChrome();
+  renderChromePicker();
+  renderContextRow();
+  renderTabs();
   renderEditControls();
-  $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === state.tab));
   $("#paneScope").hidden = state.tab !== "scope";
   $("#panePasses").hidden = state.tab !== "passes";
   $("#paneAccess").hidden = state.tab !== "access";
@@ -1372,16 +1599,54 @@ document.addEventListener("click", () => {
   }
 });
 
-$("#agentSeg").addEventListener("click", (e) => {
+$("#chromePicker").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-chrome]");
+  if (!btn) return;
+  const next = btn.dataset.chrome;
+  if (state.chrome === "shared-pick" && state.agentID === "__shared__") {
+    state.agentID = state.lastAgentID;
+  }
+  state.chrome = next;
+  if (state.chrome === "mode") {
+    state.mode = isAgentTab(state.tab) ? "agent" : "mailbox";
+  }
+  if (state.chrome === "shared-pick" && !isAgentTab(state.tab)) {
+    state.agentID = "__shared__";
+  }
+  state.openMenuKey = null;
+  render();
+});
+
+$("#contextRow").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-agent-pick]");
-  if (!btn || state.editing) return;
-  state.agentID = btn.getAttribute("data-agent-pick");
+  if (!btn || state.editing || btn.disabled) return;
+  const id = btn.getAttribute("data-agent-pick");
+  if (id === "__shared__") {
+    if (state.agentID !== "__shared__") state.lastAgentID = state.agentID;
+    state.agentID = "__shared__";
+    state.tab = "passes";
+  } else {
+    state.agentID = id;
+    state.lastAgentID = id;
+    if (state.chrome === "shared-pick" && !isAgentTab(state.tab)) state.tab = "scope";
+  }
   render();
 });
 $("#tabs").addEventListener("click", (e) => {
+  const modeBtn = e.target.closest("[data-mode]");
+  if (modeBtn) {
+    state.mode = modeBtn.dataset.mode;
+    state.tab = state.mode === "agent" ? "scope" : "passes";
+    state.openMenuKey = null;
+    render();
+    return;
+  }
   const btn = e.target.closest("[data-tab]");
   if (!btn) return;
   state.tab = btn.dataset.tab;
+  if (state.chrome === "mode") {
+    state.mode = isAgentTab(state.tab) ? "agent" : "mailbox";
+  }
   state.openMenuKey = null;
   render();
 });

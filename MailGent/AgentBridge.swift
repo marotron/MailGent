@@ -29,7 +29,7 @@ final class AgentBridge {
     let audit = AuditLog(fileURL: AgentBridge.auditFileURL)
     let pairing: Pairing
     let grants = GrantGate()
-    let passes = PassStore()
+    let rules = RuleStore()
     let ledger = DraftLedger()
 
     private(set) var pairedAgents: [PairedAgentCredential] = []
@@ -38,8 +38,8 @@ final class AgentBridge {
     private(set) var listenNote = "Loopback MCP not bound yet"
     /// Bumped whenever grants change so SwiftUI refreshes checkbox state.
     private(set) var grantRevision = 0
-    /// Bumped whenever pass definitions or enablements change.
-    private(set) var passRevision = 0
+    /// Bumped whenever rule definitions or enablements change.
+    private(set) var ruleRevision = 0
     /// Bumped on each audit append so menu / detail refresh without waiting for Timeline.
     private(set) var auditRevision = 0
     /// Status-item pulse for the latest agent request (success / error linger + fade).
@@ -177,7 +177,7 @@ final class AgentBridge {
         audit.applyRetention()
         restorePersistedPairing()
         restorePersistedLeakGuardPolicy()
-        restorePersistedPasses()
+        restorePersistedRules()
     }
 
     var leakGuardEnabled: Bool {
@@ -341,17 +341,11 @@ final class AgentBridge {
         selectAgent(id: row.id)
     }
 
-    /// Optional From filter applied to new allows until cleared (ticket 03 minimal UI).
-    var draftFromFilter = ""
-    /// Optional ISO8601 lower bound for new allows.
-    var draftDateStart = ""
-    /// When true, the next mailbox checkbox writes a deny carve-out instead of an allow.
-    var draftDenyMode = false
     /// Access tab selection: grant identity key `mode|accountID|placementOr*`.
     var selectedAccessKey: String?
     /// Grant desk Scope/Access stay view-only until the human clicks Edit.
     private(set) var isEditingGrants = false
-    /// Rows + draft filters captured at Edit; Cancel restores this snapshot.
+    /// Rows captured at Edit; Cancel restores this snapshot.
     private var grantDeskEditBaseline: GrantDeskEditBaseline?
     /// While editing, GrantGate updates stay in memory until Save.
     private var grantDeskPersistDeferred = false
@@ -360,17 +354,14 @@ final class AgentBridge {
         guard !isEditingGrants else { return }
         grantDeskEditBaseline = GrantDeskEditBaseline(
             rows: grantRows,
-            passSnapshot: passes.snapshot(),
-            fromFilter: draftFromFilter,
-            dateStart: draftDateStart,
-            denyMode: draftDenyMode,
+            ruleSnapshot: rules.snapshot(),
             selectedAccessKey: selectedAccessKey,
             leakGuardPolicy: leakGuardPolicy
         )
         grantDeskPersistDeferred = true
         isEditingGrants = true
         grantRevision += 1
-        passRevision += 1
+        ruleRevision += 1
     }
 
     func commitGrantDeskEdits() {
@@ -380,7 +371,7 @@ final class AgentBridge {
         isEditingGrants = false
         persistGrants(reason: .save)
         persistLeakGuardPolicy()
-        persistPasses()
+        persistRules()
     }
 
     func cancelGrantDeskEdits() {
@@ -392,10 +383,7 @@ final class AgentBridge {
             } else {
                 grantRows = baseline.rows
             }
-            passes.replace(with: baseline.passSnapshot)
-            draftFromFilter = baseline.fromFilter
-            draftDateStart = baseline.dateStart
-            draftDenyMode = baseline.denyMode
+            rules.replace(with: baseline.ruleSnapshot)
             selectedAccessKey = baseline.selectedAccessKey
             leakGuardPolicy = baseline.leakGuardPolicy
             refreshGatewayLeakGuard()
@@ -404,18 +392,12 @@ final class AgentBridge {
         isEditingGrants = false
         persistGrants(reason: .cancel)
         persistLeakGuardPolicy()
-        persistPasses()
+        persistRules()
     }
 
     /// Adds or updates one allow and persists. Does not invent grants for new accounts.
     func allow(accountID: String, placement: String? = nil) {
         guard let agent = selectedAgent else { return }
-        var participants: [GrantParticipant] = []
-        let from = draftFromFilter.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !from.isEmpty {
-            participants.append(GrantParticipant(role: .from, address: from))
-        }
-        let start = draftDateStart.trimmingCharacters(in: .whitespacesAndNewlines)
         let existing = grantRows.first {
             $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
         }
@@ -423,8 +405,8 @@ final class AgentBridge {
             agentID: agent.id,
             accountID: accountID,
             placement: placement,
-            participants: participants,
-            dateStart: start.isEmpty ? nil : start,
+            participants: [],
+            dateStart: nil,
             dateEnd: nil,
             fields: existing?.fields ?? .headersOnly
         )
@@ -454,100 +436,113 @@ final class AgentBridge {
         persistGrants(reason: .clear)
     }
 
-    // MARK: - Passes
+    // MARK: - Rules
 
-    var passDefinitions: [Pass] {
-        _ = passRevision
-        return passes.allPasses()
+    var ruleDefinitions: [GrantRule] {
+        _ = ruleRevision
+        return rules.allRules()
     }
 
-    func enabledPasses(accountID: String, placement: String?) -> [Pass] {
-        _ = passRevision
+    func enabledRules(accountID: String, placement: String?) -> [GrantRule] {
+        _ = ruleRevision
         let agentID = selectedAgent?.id
-        return passes.allPasses().filter { pass in
+        return rules.allRules().filter { pass in
             if let agentID, !pass.agentIDs.contains(agentID) { return false }
-            let exact = passes.isEnabled(passID: pass.id, accountID: accountID, placement: placement)
+            let exact = rules.isEnabled(ruleID: pass.id, accountID: accountID, placement: placement)
             if exact { return true }
             // Account-wide enablement also covers specific mailboxes.
             if placement != nil {
-                return passes.isEnabled(passID: pass.id, accountID: accountID, placement: nil)
+                return rules.isEnabled(ruleID: pass.id, accountID: accountID, placement: nil)
             }
             return false
         }
         .sorted { $0.nick < $1.nick }
     }
 
-    func isPassEnabled(passID: String, accountID: String, placement: String?) -> Bool {
-        _ = passRevision
-        return passes.isEnabled(passID: passID, accountID: accountID, placement: placement)
+    func isRuleEnabled(ruleID: String, accountID: String, placement: String?) -> Bool {
+        _ = ruleRevision
+        return rules.isEnabled(ruleID: ruleID, accountID: accountID, placement: placement)
     }
 
     /// Toggle exact placement enablement; if only inherited account-wide, clears that.
-    func togglePassEnabled(passID: String, accountID: String, placement: String?) {
-        let currentlyOn = enabledPasses(accountID: accountID, placement: placement)
-            .contains { $0.id == passID }
+    func toggleRuleEnabled(ruleID: String, accountID: String, placement: String?) {
+        let currentlyOn = enabledRules(accountID: accountID, placement: placement)
+            .contains { $0.id == ruleID }
         if currentlyOn {
-            if isPassEnabled(passID: passID, accountID: accountID, placement: placement) {
-                setPassEnabled(false, passID: passID, accountID: accountID, placement: placement)
+            if isRuleEnabled(ruleID: ruleID, accountID: accountID, placement: placement) {
+                setRuleEnabled(false, ruleID: ruleID, accountID: accountID, placement: placement)
             } else if placement != nil {
-                setPassEnabled(false, passID: passID, accountID: accountID, placement: nil)
+                setRuleEnabled(false, ruleID: ruleID, accountID: accountID, placement: nil)
             }
         } else {
-            setPassEnabled(true, passID: passID, accountID: accountID, placement: placement)
+            setRuleEnabled(true, ruleID: ruleID, accountID: accountID, placement: placement)
         }
     }
 
-    func passUsageCount(_ passID: String) -> Int {
-        _ = passRevision
-        return passes.allEnablements().filter { $0.passID == passID }.count
+    func ruleUsageCount(_ ruleID: String) -> Int {
+        _ = ruleRevision
+        return rules.allEnablements().filter { $0.ruleID == ruleID }.count
     }
 
-    func nextPassNick() -> String {
-        let used = Set(passes.allPasses().map(\.nick))
+    func nextRuleNick() -> String {
+        let used = Set(rules.allRules().map(\.nick))
         return (65...90).compactMap { UnicodeScalar($0).map(String.init) }.first { !used.contains($0) } ?? "Z"
     }
 
-    func upsertPass(_ pass: Pass) {
-        passes.upsert(pass)
-        notePassesChanged()
+    func upsertRule(_ rule: GrantRule) {
+        rules.upsert(rule)
+        noteRulesChanged()
     }
 
-    func deletePass(id: String) {
-        passes.removePass(id: id)
-        notePassesChanged()
+    func deleteRule(id: String) {
+        rules.removeRule(id: id)
+        noteRulesChanged()
     }
 
-    func setPassEnabled(
+    func setRuleEnabled(
         _ enabled: Bool,
-        passID: String,
+        ruleID: String,
         accountID: String,
         placement: String?
     ) {
-        passes.setEnabled(enabled, passID: passID, accountID: accountID, placement: placement)
-        notePassesChanged()
+        rules.setEnabled(enabled, ruleID: ruleID, accountID: accountID, placement: placement)
+        noteRulesChanged()
     }
 
-    func createPassDraft() -> Pass {
-        Pass(
-            id: "pass-\(UUID().uuidString.prefix(8))",
-            name: "New pass",
-            nick: nextPassNick(),
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: selectedAgent.map { [$0.id] } ?? []
+    func createRuleDraft(polarity: RulePolarity = .pass) -> GrantRule {
+        let isBlock = polarity == .block
+        return GrantRule(
+            id: "rule-\(UUID().uuidString.prefix(8))",
+            name: isBlock ? "New block" : "New pass",
+            nick: nextRuleNick(),
+            polarity: polarity,
+            fields: isBlock
+                ? GrantFields(
+                    subject: false,
+                    from: false,
+                    to: false,
+                    cc: false,
+                    date: false,
+                    body: true,
+                    attachmentMetadata: true,
+                    attachmentContent: true
+                )
+                : GrantFields(envelope: false, body: true),
+            agentIDs: selectedAgent.map { [$0.id] } ?? pairedAgents.first.map { [$0.id] } ?? []
         )
     }
 
-    /// Agents available to assign on a pass definition.
-    var knownAgentsForPasses: [(id: String, name: String)] {
+    /// Agents available to assign on a rule definition.
+    var knownAgentsForRules: [(id: String, name: String)] {
         pairedAgents.map { ($0.id, $0.name) }
     }
 
-    private func notePassesChanged() {
+    private func noteRulesChanged() {
         if grantDeskPersistDeferred {
-            passRevision &+= 1
+            ruleRevision &+= 1
             return
         }
-        persistPasses()
+        persistRules()
     }
 
     var currentGrants: [Grant] {
@@ -703,20 +698,7 @@ final class AgentBridge {
     }
 
     func setMailbox(accountID: String, placement: String, enabled: Bool) {
-        guard let agent = selectedAgent else { return }
-        if draftDenyMode {
-            if enabled {
-                try? grants.deny(agentID: agent.id, accountID: accountID, placement: placement)
-                persistGrants(reason: .mailbox)
-            } else {
-                let kept = grantRows.filter {
-                    !($0.mode == .deny && $0.accountID == accountID && $0.placement == placement)
-                }
-                grants.replaceAll(agentID: agent.id, with: kept)
-                persistGrants(reason: .mailbox)
-            }
-            return
-        }
+        guard selectedAgent != nil else { return }
         if enabled {
             if hasAccountWideGrant(accountID: accountID) { return }
             allow(accountID: accountID, placement: placement)
@@ -735,14 +717,6 @@ final class AgentBridge {
     }
 
     func toggleMailbox(accountID: String, placement: String) {
-        if draftDenyMode {
-            setMailbox(
-                accountID: accountID,
-                placement: placement,
-                enabled: !hasMailboxDeny(accountID: accountID, placement: placement)
-            )
-            return
-        }
         let on = hasAccountWideGrant(accountID: accountID)
             || hasMailboxGrant(accountID: accountID, placement: placement)
         setMailbox(accountID: accountID, placement: placement, enabled: !on)
@@ -824,7 +798,7 @@ final class AgentBridge {
                 pairing: pairing,
                 grants: grants,
                 leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
-                passes: passes,
+                rules: rules,
                 audit: audit
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
@@ -934,9 +908,9 @@ final class AgentBridge {
             clearPersistedGrants(reason: "last-agent-revoked")
             grantRows = []
             grantRevision += 1
-            passes.replace(with: PassSnapshot())
-            passRevision += 1
-            clearPersistedPasses()
+            rules.replace(with: RuleSnapshot())
+            ruleRevision += 1
+            clearPersistedRules()
         } else {
             persistPairing()
             persistGrants(reason: .revokeAgent, dropAgentIDs: [agentID])
@@ -1127,39 +1101,39 @@ final class AgentBridge {
         refreshGrantRows()
     }
 
-    private func restorePersistedPasses() {
+    private func restorePersistedRules() {
         guard
-            let data = try? Data(contentsOf: Self.passesFileURL),
-            let snapshot = try? JSONDecoder().decode(PassSnapshot.self, from: data)
+            let data = try? Data(contentsOf: Self.rulesFileURL),
+            let snapshot = try? JSONDecoder().decode(RuleSnapshot.self, from: data)
         else {
-            passes.replace(with: PassSnapshot())
-            passRevision &+= 1
+            rules.replace(with: RuleSnapshot())
+            ruleRevision &+= 1
             return
         }
-        passes.replace(with: snapshot)
-        passRevision &+= 1
+        rules.replace(with: snapshot)
+        ruleRevision &+= 1
     }
 
-    private func persistPasses() {
+    private func persistRules() {
         if grantDeskPersistDeferred {
-            passRevision &+= 1
+            ruleRevision &+= 1
             return
         }
-        let snapshot = passes.snapshot()
+        let snapshot = rules.snapshot()
         do {
             try FileManager.default.createDirectory(
-                at: Self.passesFileURL.deletingLastPathComponent(),
+                at: Self.rulesFileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try JSONEncoder().encode(snapshot).write(to: Self.passesFileURL, options: .atomic)
+            try JSONEncoder().encode(snapshot).write(to: Self.rulesFileURL, options: .atomic)
         } catch {
-            MailGentLog.trace("agent passes persist failed: \(error)")
+            MailGentLog.trace("agent rules persist failed: \(error)")
         }
-        passRevision &+= 1
+        ruleRevision &+= 1
     }
 
-    private func clearPersistedPasses() {
-        try? FileManager.default.removeItem(at: Self.passesFileURL)
+    private func clearPersistedRules() {
+        try? FileManager.default.removeItem(at: Self.rulesFileURL)
     }
 
     private func refreshGrantRows() {
@@ -1299,7 +1273,7 @@ final class AgentBridge {
             pairing: existing.pairing,
             grants: existing.grants,
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
-            passes: passes,
+            rules: rules,
             audit: existing.audit
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
@@ -1404,10 +1378,10 @@ final class AgentBridge {
             .appendingPathComponent("sensitive-filter.json")
     }
 
-    private static var passesFileURL: URL {
+    private static var rulesFileURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MailGent", isDirectory: true)
-            .appendingPathComponent("passes.json")
+            .appendingPathComponent("rules.json")
     }
 
     private static func makeCredential() -> String {
@@ -1421,10 +1395,7 @@ final class AgentBridge {
 
 private struct GrantDeskEditBaseline {
     let rows: [Grant]
-    let passSnapshot: PassSnapshot
-    let fromFilter: String
-    let dateStart: String
-    let denyMode: Bool
+    let ruleSnapshot: RuleSnapshot
     let selectedAccessKey: String?
     let leakGuardPolicy: OutboundLeakGuardPolicy
 }

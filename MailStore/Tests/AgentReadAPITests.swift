@@ -228,8 +228,8 @@ struct AgentReadAPITests {
         )
         #expect(withoutPass.body == .notGranted)
 
-        env.passes.upsert(
-            Pass(
+        env.rules.upsert(
+            GrantRule(
                 id: "p1",
                 name: "Invoices",
                 nick: "A",
@@ -238,7 +238,7 @@ struct AgentReadAPITests {
                 agentIDs: [env.agentID]
             )
         )
-        env.passes.setEnabled(true, passID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
 
         let withPass = try env.gateway.get(
             credential: env.credential,
@@ -253,8 +253,8 @@ struct AgentReadAPITests {
         let env = try AgentReadFixture(grantFields: nil)
         defer { env.remove() }
 
-        env.passes.upsert(
-            Pass(
+        env.rules.upsert(
+            GrantRule(
                 id: "p1",
                 name: "Invoices",
                 nick: "A",
@@ -263,7 +263,7 @@ struct AgentReadAPITests {
                 agentIDs: [env.agentID]
             )
         )
-        env.passes.setEnabled(true, passID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
 
         #expect(throws: PairingError.unauthorized) {
             try env.gateway.get(
@@ -281,8 +281,8 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        env.passes.upsert(
-            Pass(
+        env.rules.upsert(
+            GrantRule(
                 id: "p1",
                 name: "Receipts",
                 nick: "A",
@@ -291,7 +291,7 @@ struct AgentReadAPITests {
                 agentIDs: [env.agentID]
             )
         )
-        env.passes.setEnabled(true, passID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
 
         let message = try env.gateway.get(
             credential: env.credential,
@@ -309,7 +309,7 @@ private struct AgentReadFixture {
     let credential = "secret-token"
     let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     let agentID: String
-    let passes: PassStore
+    let rules: RuleStore
     let gateway: AgentReadAPI
 
     init(grantFields: GrantFields? = .default) throws {
@@ -345,12 +345,12 @@ private struct AgentReadFixture {
         if let grantFields {
             try grants.allow(agentID: agent.id, accountID: accountID, fields: grantFields)
         }
-        passes = PassStore()
+        rules = RuleStore()
         gateway = AgentReadAPI(
             read: ReadAPI(index: index),
             pairing: pairing,
             grants: grants,
-            passes: passes
+            rules: rules
         )
     }
 
@@ -432,7 +432,7 @@ private struct LeakGuardReadFixture {
             pairing: pairing,
             grants: grants,
             leakGuard: OutboundLeakGuard(policy: policy),
-            passes: PassStore(),
+            rules: RuleStore(),
             audit: auditLog
         )
     }
