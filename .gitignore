@@ -9,6 +9,7 @@ build/
 dist/
 xcuserdata/
 DerivedData/
+.derivedData/
 *.xcuserstate
 .xcode-version
 .build/

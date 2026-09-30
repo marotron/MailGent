@@ -39,7 +39,7 @@ struct MenuBarStatus: View {
                     changesRow(at: context.date)
                     sourceRow
                     statusRow("Connected agent") {
-                        Text(session.agents.agent?.name ?? "—")
+                        Text(session.agents.connectedAgentLabel)
                     }
                     lastAgentCallRow(at: context.date)
                 }

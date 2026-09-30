@@ -4,6 +4,7 @@ import OSLog
 enum MailGentLog {
     static let index = Logger(subsystem: "app.mailgent.MailGent", category: "index")
     static let store = Logger(subsystem: "app.mailgent.MailGent", category: "store")
+    static let grants = Logger(subsystem: "app.mailgent.MailGent", category: "grants")
 
     static var verbose: Bool {
         ProcessInfo.processInfo.environment["MAILGENT_VERBOSE"] == "1"
@@ -13,6 +14,15 @@ enum MailGentLog {
     static func trace(_ message: String) {
         let line = "[MailGent] \(message)"
         index.info("\(message, privacy: .public)")
+        fputs(line + "\n", stderr)
+        fflush(stderr)
+        NSLog("%@", line)
+    }
+
+    /// Grant load/save trail. Public text only — no credentials or message bodies.
+    static func grantsEvent(_ message: String) {
+        let line = "[MailGent][grants] \(message)"
+        grants.info("\(message, privacy: .public)")
         fputs(line + "\n", stderr)
         fflush(stderr)
         NSLog("%@", line)

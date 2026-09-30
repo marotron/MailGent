@@ -1,0 +1,1670 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — Passes (conditional green lights) in Grant Desk chrome.
+
+  Locked UX (this pass):
+  - Passes = own tab (definitions only: name, nick A–Z, matchers, fields, agents).
+  - No mailboxes/placements in Passes settings.
+  - Scope → Allowed placements: one combined green chip (✓ABC) + + dropdown.
+  - Match modes: contains / starts / ends / exact (From + Subject).
+  - Multiple From (or Subject) rules = any match (OR). Between From↔Subject = AND|OR.
+
+  Chrome variants (toggle in page):
+  - A · Clustered tabs: all four visible; This agent | Mailbox labels; top row swaps.
+  - B · Mode switch: This agent | Mailbox first; only that pair of tabs shows.
+  - C · Shared in agent pick: Cursor|Grok|…|Shared → agent tabs or Passes|Privacy.
+
+  Open in a browser.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Passes · Grant Desk proto</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --paper: #ffffff;
+      --window-bg: #f5f5f7;
+      --card: rgba(0, 0, 0, 0.035);
+      --card-head: rgba(0, 0, 0, 0.05);
+      --blue: #0071e3;
+      --blue-soft: rgba(0, 113, 227, 0.12);
+      --sel: #d6e9ff;
+      --purple: #af52de;
+      --red: #d70015;
+      --green: #248a3d;
+      --green-soft: rgba(36, 138, 61, 0.12);
+      --amber: #b25e09;
+      --withheld: repeating-linear-gradient(-45deg, #f8d7da 0 6px, #fce8ea 6px 12px);
+      --shadow: 0 18px 50px #00000028, 0 1px 0 #ffffff90 inset;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink);
+      padding: 24px 16px 40px;
+      font: 13px/1.4 var(--font-family, inherit);
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 980px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note strong { font-weight: 650; }
+
+    .window {
+      background: var(--window-bg); border-radius: 10px;
+      box-shadow: var(--shadow); border: 1px solid #00000018; overflow: hidden; min-height: 640px;
+    }
+    .titlebar {
+      display: flex; align-items: center; justify-content: center; height: 38px;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      position: relative; font-size: 13px; font-weight: 600;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+    .desk {
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+      background: var(--paper); min-height: 600px;
+    }
+
+    .agent-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+    .agent-row .lbl { font-size: 11px; color: var(--muted); }
+    .agent-row .meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .agent-row.shared .shared-caption {
+      font-size: 12px; color: var(--muted); font-weight: 500;
+    }
+    .agent-row.shared .shared-caption strong {
+      color: var(--ink); font-weight: 650;
+    }
+    .agent-pick {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .agent-pick-sep {
+      width: 1px; height: 22px; background: var(--line); flex: none;
+    }
+    .agent-pick .seg button {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px 4px 6px;
+    }
+    .agent-pick .seg button .glyph {
+      width: 16px; height: 16px; border-radius: 4px; flex: none;
+      display: inline-grid; place-items: center;
+      overflow: hidden; background: transparent;
+    }
+    .agent-pick .seg button .glyph img,
+    .agent-pick .seg button .glyph svg.mark {
+      width: 16px; height: 16px; display: block;
+    }
+    .agent-pick .seg button .glyph.shared {
+      background: #e8e8ed; color: #3a3a3c; border-radius: 50%;
+      font-size: 10px;
+    }
+    .agent-pick .seg button .glyph.shared svg {
+      width: 10px; height: 10px; display: block;
+    }
+    .agent-pick .seg button .glyph.fallback {
+      background: #e8e8ed; color: #3a3a3c;
+      font-size: 8px; font-weight: 800;
+    }
+    .seg {
+      display: inline-grid; grid-auto-flow: column; gap: 2px;
+      background: #e8e8ed; border-radius: 8px; padding: 2px;
+    }
+    .seg button {
+      border: 0; background: transparent; border-radius: 6px; padding: 5px 12px;
+      font-weight: 600; font-size: 12px; color: var(--muted); white-space: nowrap;
+    }
+    .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px #00000018; }
+    .seg button:disabled { opacity: 0.55; }
+    .tab-row { display: flex; align-items: center; gap: 10px; }
+    .tab-clusters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .tab-cluster { display: flex; align-items: center; gap: 6px; }
+    .tab-cluster .cluster-lbl {
+      font-size: 10px; font-weight: 650; letter-spacing: 0.02em;
+      text-transform: uppercase; color: var(--muted); white-space: nowrap;
+    }
+    .tab-cluster-divider {
+      width: 1px; height: 22px; background: var(--line); flex: none;
+    }
+    .tab-row .spacer { flex: 1; }
+    .btn-edit {
+      border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      padding: 3px 10px; font-size: 12px; font-weight: 500;
+    }
+    .btn-edit.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn-edit.ghost { background: transparent; }
+
+    .card {
+      border: 1px solid rgba(0,0,0,0.06); border-radius: 10px;
+      background: var(--card); overflow: hidden;
+    }
+    .card-head {
+      display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+      background: var(--card-head); font-size: 13px; font-weight: 650;
+    }
+    .card-body { padding: 10px 12px 12px; }
+    .info {
+      width: 14px; height: 14px; border-radius: 50%; border: 1px solid #8e8e93;
+      color: #8e8e93; font-size: 10px; font-weight: 700;
+      display: inline-grid; place-items: center; line-height: 1; flex: none;
+    }
+    .hint { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+    .caption { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+
+    .master {
+      display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+      background: var(--card); border-radius: 10px; border: 1px solid rgba(0,0,0,0.06);
+    }
+    .master .copy { flex: 1; min-width: 0; }
+    .master .title { font-weight: 650; font-size: 13px; }
+    .master .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .toggle {
+      width: 36px; height: 22px; border-radius: 999px; background: #d1d1d6;
+      border: 0; position: relative; flex: none; margin-top: 1px;
+    }
+    .toggle.on { background: var(--blue); }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+      border-radius: 50%; background: #fff; box-shadow: 0 1px 2px #00000033;
+    }
+    .toggle.on::after { left: 16px; }
+    .toggle.purple.on { background: var(--purple); }
+
+    .check {
+      display: flex; align-items: flex-start; gap: 8px; padding: 3px 0;
+      width: 100%; border: 0; background: transparent; text-align: left;
+    }
+    .check .box {
+      width: 14px; height: 14px; margin-top: 1px; flex: none;
+      border: 1px solid #8e8e93; border-radius: 3px; background: #fff;
+      display: grid; place-items: center; font-size: 10px; color: #fff;
+    }
+    .check.on .box { background: var(--blue); border-color: var(--blue); }
+    .check.on .box::after { content: "✓"; }
+    .check .t { font-size: 12px; }
+    .check.emph .t { font-weight: 650; }
+    .indent { padding-left: 18px; }
+
+    .badges {
+      display: flex; flex-wrap: wrap; gap: 3px; align-items: center;
+      margin-left: auto; justify-content: flex-end; max-width: 62%;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px;
+      border-radius: 999px; background: var(--blue-soft); border: 1px solid #b3d4ff;
+      color: #0058b0; font-size: 9px; font-weight: 600; line-height: 1; white-space: nowrap;
+    }
+    .badge.off {
+      opacity: 0.35; text-decoration: line-through; background: #f2f2f7;
+      border-color: #e5e5ea; color: #8e8e93;
+    }
+    .badge.pass {
+      background: var(--green-soft); border-color: #8fd1a0; color: var(--green);
+      text-decoration: none; opacity: 1; gap: 2px; padding: 0 6px; letter-spacing: 0.02em;
+    }
+    .badge.pass .x {
+      border: 0; background: transparent; color: inherit; padding: 0 0 0 2px; font-size: 11px; line-height: 1;
+      opacity: 0.7;
+    }
+    .badge.pass .x:hover { opacity: 1; }
+    .pass-chip-wrap { position: relative; display: inline-flex; }
+    .pass-add {
+      position: relative; display: inline-flex;
+    }
+    .pass-add > button {
+      height: 16px; min-width: 16px; padding: 0 5px; border-radius: 999px;
+      border: 1px dashed #8fd1a0; background: #fff; color: var(--green);
+      font-size: 11px; font-weight: 700; line-height: 1;
+    }
+    .pass-add > button:disabled { opacity: 0.35; cursor: default; }
+    .pass-menu {
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+      min-width: 200px; max-width: 260px; background: #fff;
+      border: 1px solid var(--line); border-radius: 8px;
+      box-shadow: 0 10px 28px #00000028; padding: 4px; display: none;
+    }
+    .pass-menu.open { display: block; }
+    .pass-menu button {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      border: 0; background: transparent; text-align: left; padding: 7px 8px;
+      border-radius: 6px; font-size: 12px;
+    }
+    .pass-menu button:hover { background: var(--sel); }
+    .pass-menu .empty { padding: 8px; color: var(--muted); font-size: 11px; }
+    .pass-menu .nick {
+      width: 22px; height: 16px; border-radius: 999px; background: var(--green-soft);
+      border: 1px solid #8fd1a0; color: var(--green); font-size: 9px; font-weight: 700;
+      display: inline-grid; place-items: center; flex: none;
+    }
+
+    .pass-icon {
+      width: 14px; height: 14px; border-radius: 50%; background: var(--green); color: #fff;
+      display: inline-grid; place-items: center; font-size: 9px; font-weight: 800;
+      line-height: 1; flex: none; box-shadow: 0 0 0 2px var(--green-soft);
+    }
+    .pass-icon.lg { width: 18px; height: 18px; font-size: 11px; }
+    .pass-status {
+      display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 10px;
+      border-radius: 8px; border: 1px solid #8fd1a0; background: var(--green-soft);
+      color: var(--green); font-size: 12px; font-weight: 650;
+    }
+    .pass-status.warn { border-color: #f0d2a8; background: #fff6e8; color: var(--amber); }
+    .pass-status.muted { border-color: #d5dae3; background: #eef1f6; color: #516079; }
+    .pass-status.deny { border-color: #f0b4bb; background: #fdecee; color: var(--red); }
+
+    .shield {
+      width: 16px; height: 16px; border-radius: 4px; background: #f3e8ff; color: var(--purple);
+      display: inline-grid; place-items: center; font-size: 10px; flex: none;
+    }
+    .place-row { display: flex; align-items: flex-start; gap: 8px; width: 100%; }
+    .place-row .check { flex: 1; min-width: 0; }
+    .catalog { max-height: 320px; overflow: auto; margin-top: 4px; }
+    .acct { margin-bottom: 6px; }
+
+    .field {
+      width: 100%; border: 1px solid var(--line); border-radius: 6px;
+      padding: 6px 9px; background: #fff; margin-bottom: 8px;
+    }
+    .field:last-child { margin-bottom: 0; }
+    .section-label {
+      font-size: 11px; font-weight: 650; color: var(--muted); margin: 10px 0 4px;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 4px 10px; font-size: 11px; font-weight: 600; color: var(--muted);
+    }
+    .chip.on { background: var(--blue-soft); border-color: #7eb6ff; color: #0058b0; }
+    .chip.green.on { background: var(--green-soft); border-color: #8fd1a0; color: var(--green); }
+
+    .preview {
+      margin-top: 10px; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px;
+      background: #fff; padding: 10px;
+    }
+    .preview h4 { margin: 0 0 6px; font-size: 12px; font-weight: 650; }
+    .mail .row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+    .mail .k { width: 54px; flex: none; color: var(--muted); font-size: 11px; font-weight: 600; }
+    .mail .v { font-size: 12px; }
+    .withheld {
+      background: var(--withheld); border: 1px solid #f0b4bb; border-radius: 6px;
+      min-height: 48px; display: grid; place-items: center; color: var(--red); font-size: 14px;
+      margin-top: 6px;
+    }
+    .body-ok {
+      margin-top: 6px; padding: 8px 10px; border-radius: 6px; background: #f0faf2;
+      border: 1px solid #8fd1a0; white-space: pre-wrap; font-size: 12px;
+    }
+    .lock-note { margin: 8px 0 0; color: var(--red); font-size: 11px; font-weight: 600; }
+    .ok-note { margin: 8px 0 0; color: var(--green); font-size: 11px; font-weight: 600; }
+    .amber-note { margin: 8px 0 0; color: var(--amber); font-size: 11px; font-weight: 600; }
+
+    /* Passes tab — list + inline editor */
+    .passes-layout {
+      display: grid; grid-template-columns: 0.9fr 1.25fr; gap: 10px; min-height: 420px;
+    }
+    @media (max-width: 720px) { .passes-layout { grid-template-columns: 1fr; } }
+    .pass-list {
+      background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px; overflow: hidden;
+    }
+    .pass-item {
+      display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+      border: 0; border-bottom: 1px solid #f0f0f2; background: #fff; padding: 9px 10px;
+    }
+    .pass-item.sel { background: var(--sel); }
+    .pass-item .nick-pill {
+      width: 28px; height: 20px; border-radius: 999px; background: var(--green-soft);
+      border: 1px solid #8fd1a0; color: var(--green); font-size: 10px; font-weight: 700;
+      display: inline-grid; place-items: center; flex: none;
+    }
+    .pass-item .meta { flex: 1; min-width: 0; }
+    .pass-item .name { font-weight: 650; font-size: 12px; }
+    .pass-item .line {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; margin-top: 3px; font-size: 10px; color: var(--muted); line-height: 1.3;
+    }
+    .pass-item .line .left {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .pass-item .line .op { font-weight: 700; color: var(--ink); font-size: 9px; }
+    .pass-item .line .arrow { color: var(--green); font-weight: 700; }
+    .pass-item .line .tgts { letter-spacing: 0.04em; white-space: nowrap; }
+    .pass-item .line .match { white-space: nowrap; }
+    .pass-item .agents { display: inline-flex; gap: 3px; flex: none; }
+    .pass-item .agent-dot {
+      width: 16px; height: 16px; border-radius: 50%;
+      display: inline-grid; place-items: center;
+      font-size: 8px; font-weight: 700; color: #fff; line-height: 1;
+    }
+    .pass-item .agent-dot.cursor { background: #0071e3; }
+    .pass-item .agent-dot.grok { background: #1d1d1f; }
+    .pass-item .agent-dot.claude { background: #d97706; }
+    .pass-item .usage { font-size: 9px; color: #9a9aa0; margin-top: 2px; }
+    .pass-detail {
+      background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px; padding: 12px;
+      display: grid; gap: 12px;
+    }
+    .identity-grid {
+      display: grid; grid-template-columns: 1fr 56px; gap: 10px; align-items: end;
+    }
+    .identity-grid .field,
+    .identity-grid select {
+      width: 100%; height: 32px; margin: 0;
+      border: 1px solid var(--line); border-radius: 6px; background: #fff;
+      padding: 5px 8px; font-size: 12px;
+    }
+    .identity-grid select {
+      font-weight: 700; color: var(--green); text-align: center; padding: 5px 4px;
+    }
+
+    .rule-block > .label { margin-bottom: 6px; }
+    .mini-seg {
+      display: inline-grid; grid-auto-flow: column; gap: 1px; background: #e8e8ed;
+      border-radius: 6px; padding: 1px;
+    }
+    .mini-seg button {
+      border: 0; background: transparent; border-radius: 5px; padding: 3px 8px;
+      font-size: 10px; font-weight: 700; color: var(--muted);
+    }
+    .mini-seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 1px #00000014; }
+
+    .rule-block {
+      border: 1px solid rgba(0,0,0,0.06); border-radius: 8px; padding: 8px; background: #fafafa;
+    }
+    .rule-tags {
+      display: flex; flex-wrap: wrap; gap: 6px; min-height: 22px; margin-bottom: 8px;
+    }
+    .rule-tags:empty::after {
+      content: "No rules yet"; color: var(--muted); font-size: 11px;
+    }
+    .rtag {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 4px;
+      border-radius: 999px; background: var(--blue-soft); border: 1px solid #b3d4ff;
+      color: #0058b0; font-size: 11px; font-weight: 600;
+    }
+    .rtag .mode {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+      padding: 1px 5px; border-radius: 999px; background: #fff; border: 1px solid #b3d4ff;
+      color: #0058b0;
+    }
+    .rtag button {
+      border: 0; background: transparent; color: inherit; padding: 0; font-size: 14px; line-height: 1;
+    }
+    .rule-add {
+      display: grid; grid-template-columns: 96px 1fr; gap: 6px;
+    }
+    .rule-add select, .rule-add input {
+      border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: #fff;
+      font-size: 12px;
+    }
+    .between-card {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 8px 10px; border-radius: 8px; background: var(--green-soft);
+      border: 1px solid #8fd1a0;
+    }
+    .between-card .t { font-size: 11px; font-weight: 650; color: var(--green); }
+
+    .link {
+      border: 0; background: transparent; color: var(--blue); font-weight: 600; font-size: 12px; padding: 0;
+    }
+    .add-btn {
+      width: 100%; margin-top: 8px; border: 0; background: rgba(0,0,0,0.05);
+      border-radius: 8px; padding: 8px; font-weight: 600; font-size: 12px; color: var(--ink);
+    }
+    .add-btn:hover { background: rgba(0,0,0,0.08); }
+    .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 8px;
+      padding: 7px 12px; font-weight: 600; font-size: 12px;
+    }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn.danger { color: var(--red); border-color: #f5c2c7; }
+    .editor-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    .editor-actions .danger { margin-right: auto; }
+
+    .eval {
+      background: var(--paper); border-radius: 10px; box-shadow: var(--shadow);
+      border: 1px solid #00000018; overflow: hidden;
+    }
+    .eval .body { padding: 14px 16px 16px; }
+    .eval h2 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+    .scenarios { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+    .scenario {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 4px 10px; font-size: 11px; font-weight: 600;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .label {
+      display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px;
+    }
+    .trace {
+      margin: 10px 0 0; padding: 8px 10px; background: #1d1d1f; color: #e5e7eb;
+      border-radius: 6px; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+    [hidden] { display: none !important; }
+
+    .chrome-picker {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+    }
+    .chrome-picker .lbl { font-size: 11px; font-weight: 650; color: var(--muted); }
+    .chrome-picker .hint-inline { font-size: 11px; color: var(--muted); flex: 1 1 180px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <div class="chrome-picker">
+        <span class="lbl">Chrome</span>
+        <div class="seg" id="chromePicker">
+          <button type="button" data-chrome="clusters">A · Clustered</button>
+          <button type="button" data-chrome="mode">B · Mode</button>
+          <button type="button" data-chrome="shared-pick" class="on">C · Shared pick</button>
+        </div>
+        <span class="hint-inline" id="chromeHint"></span>
+      </div>
+      <strong>Throwaway prototype</strong> · Flip chrome A/B/C above.
+      Attach passes on <em>Scope → Allowed placements</em> as one green chip
+      <span class="badge pass" style="vertical-align:middle">✓ABC</span>
+      via the <strong>+</strong> dropdown. Hit <strong>Edit</strong> before adding/removing.
+    </div>
+
+    <div class="window">
+      <div class="titlebar">
+        <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        Grant desk
+      </div>
+      <div class="desk">
+        <div class="agent-row" id="contextRow"></div>
+        <div class="tab-row">
+          <div id="tabs"></div>
+          <div class="spacer"></div>
+          <div id="editControls"></div>
+        </div>
+
+        <div id="paneScope"></div>
+        <div id="panePasses" hidden></div>
+        <div id="paneAccess" hidden></div>
+        <div id="panePrivacy" hidden></div>
+      </div>
+    </div>
+
+    <div class="eval">
+      <div class="titlebar">
+        <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        Evaluation playground
+      </div>
+      <div class="body">
+        <h2>What the agent sees</h2>
+        <p class="hint" style="margin:0">Driven by Scope placement pass chips + Passes match rules.</p>
+        <div class="scenarios" id="scenarios"></div>
+        <div class="grid2">
+          <div>
+            <label class="label" for="msgFrom">From</label>
+            <input class="field" id="msgFrom" value="jobs-noreply@linkedin.com">
+          </div>
+          <div>
+            <label class="label" for="msgPlacement">Mailbox</label>
+            <select class="field" id="msgPlacement"></select>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="msgSubject">Subject</label>
+          <input class="field" id="msgSubject" value="Your weekly job recommendations">
+        </div>
+        <div>
+          <label class="label" for="msgBody">Body</label>
+          <textarea class="field" id="msgBody" rows="2">Hi — 12 new roles match your profile this week.</textarea>
+        </div>
+        <div>
+          <label class="label" for="baseFields">Base grant (Access caps)</label>
+          <select class="field" id="baseFields">
+            <option value="headers">Headers only · body off (typical)</option>
+            <option value="full">Headers + body already on</option>
+            <option value="none">No base grant (denied)</option>
+          </select>
+        </div>
+        <div class="preview" id="evalPreview"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const AGENTS = [
+  { id: "cursor", name: "Cursor", trust: "local-trusted" },
+  { id: "grok", name: "Grok", trust: "remote" },
+  { id: "claude", name: "Claude", trust: "remote" },
+];
+const ACCOUNTS = [
+  { id: "g1", label: "mar.kuj.cv@gmail.com", mailboxes: ["[Gmail]/All Mail", "INBOX", "[Gmail]/Spam"] },
+  { id: "b1", label: "marekk@bytesnap.co.uk", mailboxes: ["INBOX", "Archive"] },
+  { id: "y1", label: "myredbike2007@yahoo.com", mailboxes: ["Inbox", "Archive"] },
+];
+const FIELD_META = [
+  { key: "subject", short: "S", label: "Subject", icon: "≡" },
+  { key: "from", short: "F", label: "From", icon: "✉" },
+  { key: "to", short: "T", label: "To", icon: "↗" },
+  { key: "cc", short: "Cc", label: "Cc", icon: "👥" },
+  { key: "date", short: "D", label: "Date & Time", icon: "📅" },
+  { key: "body", short: "B", label: "Body / snippet", icon: "📄" },
+  { key: "attachmentMetadata", short: "A", label: "Attachment names", icon: "📎" },
+  { key: "attachmentContent", short: "C", label: "Attachment content", icon: "🔗" },
+];
+const MODES = [
+  { id: "contains", label: "contains" },
+  { id: "starts", label: "starts" },
+  { id: "ends", label: "ends" },
+  { id: "exact", label: "exact" },
+];
+const HEADERS_ONLY = {
+  subject: true, from: true, to: true, cc: true, date: true,
+  body: false, attachmentMetadata: false, attachmentContent: false,
+};
+const FULL = {
+  subject: true, from: true, to: true, cc: true, date: true,
+  body: true, attachmentMetadata: true, attachmentContent: true,
+};
+const NICKS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+let passes = [
+  {
+    id: "pass-linkedin",
+    name: "LinkedIn pass",
+    nick: "A",
+    fromRules: [{ value: "linkedin.com", mode: "ends" }],
+    subjectRules: [],
+    betweenJoin: "and",
+    fields: { subject: false, from: false, to: false, cc: false, date: false, body: true, attachmentMetadata: false, attachmentContent: false },
+    agentIDs: ["cursor", "grok"],
+  },
+  {
+    id: "pass-invoice",
+    name: "Invoice pass",
+    nick: "B",
+    fromRules: [],
+    subjectRules: [
+      { value: "invoice", mode: "contains" },
+      { value: "receipt", mode: "contains" },
+    ],
+    betweenJoin: "and",
+    fields: { subject: false, from: false, to: false, cc: false, date: false, body: true, attachmentMetadata: true, attachmentContent: false },
+    agentIDs: ["cursor"],
+  },
+];
+
+/** placementKey → Set(passID). Account-wide uses "acct|" */
+let enablements = {
+  "g1|INBOX": new Set(["pass-linkedin", "pass-invoice"]),
+  "y1|Inbox": new Set(["pass-linkedin"]),
+  "b1|INBOX": new Set(["pass-invoice"]),
+};
+
+let baseAllows = {
+  "g1|": { ...HEADERS_ONLY },
+  "g1|INBOX": { ...HEADERS_ONLY },
+  "g1|[Gmail]/All Mail": { ...HEADERS_ONLY },
+  "y1|": { ...HEADERS_ONLY, attachmentMetadata: true },
+  "y1|Inbox": { ...HEADERS_ONLY, attachmentMetadata: true },
+  "b1|INBOX": { ...HEADERS_ONLY },
+};
+
+let state = {
+  chrome: "shared-pick", // "clusters" | "mode" | "shared-pick"
+  mode: "agent", // used when chrome === "mode": "agent" | "mailbox"
+  tab: "scope",
+  agentID: "cursor", // agent id, or "__shared__" when chrome is shared-pick
+  lastAgentID: "cursor", // real agent kept for eval / return from Shared
+  editing: false,
+  selectedPassID: "pass-linkedin",
+  selectedAsset: "y1|",
+  openMenuKey: null, // "add|acct|place" or "rm|acct|place"
+};
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function placeKey(accountID, placement) {
+  return accountID + "|" + (placement || "");
+}
+
+function passIcon(size) {
+  return `<span class="pass-icon${size === "lg" ? " lg" : ""}" aria-hidden="true">✓</span>`;
+}
+
+function modeLabel(mode) {
+  return (MODES.find((m) => m.id === mode) || MODES[0]).label;
+}
+
+function rulesLabel(p) {
+  const fromPart = p.fromRules.length
+    ? "From " + p.fromRules.map((r) => modeLabel(r.mode) + " “" + r.value + "”").join(" OR ")
+    : "";
+  const subPart = p.subjectRules.length
+    ? "Subject " + p.subjectRules.map((r) => modeLabel(r.mode) + " “" + r.value + "”").join(" OR ")
+    : "";
+  let when = "any message";
+  if (fromPart && subPart) when = fromPart + " " + p.betweenJoin.toUpperCase() + " " + subPart;
+  else if (fromPart) when = fromPart;
+  else if (subPart) when = subPart;
+  const reveal = FIELD_META.filter((m) => p.fields[m.key]).map((m) => m.label).join(", ");
+  return "When " + when + " → green-light " + (reveal || "nothing");
+}
+
+function passUsageCount(passID) {
+  let n = 0;
+  for (const set of Object.values(enablements)) {
+    if (set.has(passID)) n++;
+  }
+  return n;
+}
+
+function usageLabel(passID) {
+  const n = passUsageCount(passID);
+  if (n === 0) return "Not used yet";
+  return n === 1 ? "Used on 1 placement" : `Used on ${n} placements`;
+}
+
+function matchRulesHTML(rules, icon) {
+  if (!rules.length) return "";
+  const bits = rules.map((r) => escapeHtml(r.value)).join(" · ");
+  return `<span class="match" title="${escapeHtml(rules.map((r) => modeLabel(r.mode) + " “" + r.value + "”").join(", "))}">${icon} ${bits}</span>`;
+}
+
+function passListLineHTML(p) {
+  const from = matchRulesHTML(p.fromRules, "✉");
+  const sub = matchRulesHTML(p.subjectRules, "≡");
+  let match;
+  if (from && sub) {
+    match = `${from}<span class="op">${p.betweenJoin.toUpperCase()}</span>${sub}`;
+  } else if (from || sub) {
+    match = from || sub;
+  } else {
+    match = `<span class="match">any</span>`;
+  }
+  const targets = FIELD_META.filter((m) => p.fields[m.key])
+    .map((m) => `<span title="${escapeHtml(m.label)}">${m.icon}</span>`)
+    .join("") || "—";
+  const agents = AGENTS.filter((a) => p.agentIDs.includes(a.id))
+    .map((a) => `<span class="agent-dot ${a.id}" title="${escapeHtml(a.name)}">${escapeHtml(a.name[0])}</span>`)
+    .join("");
+  return `
+    <div class="line">
+      <div class="left">${match}<span class="arrow">→</span><span class="tgts">${targets}</span></div>
+      <div class="agents">${agents || `<span title="No agents">—</span>`}</div>
+    </div>
+    <div class="usage">${escapeHtml(usageLabel(p.id))}</div>`;
+}
+
+function passForAgent(p) {
+  return p.agentIDs.includes(effectiveAgentID());
+}
+
+function usedNicks(exceptID) {
+  return new Set(passes.filter((p) => p.id !== exceptID).map((p) => p.nick));
+}
+
+function nextNick() {
+  const used = usedNicks(null);
+  return NICKS.find((n) => !used.has(n)) || "Z";
+}
+
+function enabledPasses(accountID, placement) {
+  const key = placeKey(accountID, placement);
+  const accountKey = placeKey(accountID, "");
+  const ids = new Set([
+    ...(enablements[key] || []),
+    ...(enablements[accountKey] || []),
+  ]);
+  return passes.filter((p) => ids.has(p.id) && passForAgent(p));
+}
+
+function isPassOn(passID, accountID, placement) {
+  const set = enablements[placeKey(accountID, placement)];
+  return !!(set && set.has(passID));
+}
+
+function addPassToPlacement(passID, accountID, placement) {
+  const k = placeKey(accountID, placement);
+  if (!enablements[k]) enablements[k] = new Set();
+  enablements[k].add(passID);
+  state.openMenuKey = null;
+  render();
+}
+
+function removePassFromPlacement(passID, accountID, placement) {
+  const k = placeKey(accountID, placement);
+  if (!enablements[k]) return;
+  enablements[k].delete(passID);
+  state.openMenuKey = null;
+  render();
+}
+
+function compactBadges(fields) {
+  return FIELD_META.map((m) => {
+    const on = !!fields[m.key];
+    return `<span class="badge ${on ? "" : "off"}" title="${escapeHtml(m.label)}">${m.icon} ${m.short}</span>`;
+  }).join("");
+}
+
+function passChipsHTML(accountID, placement) {
+  const attached = enabledPasses(accountID, placement)
+    .slice()
+    .sort((a, b) => a.nick.localeCompare(b.nick));
+  const menuKey = placeKey(accountID, placement);
+  const addOpen = state.openMenuKey === "add|" + menuKey;
+  const rmOpen = state.openMenuKey === "rm|" + menuKey;
+
+  let chip = "";
+  if (attached.length) {
+    const nicks = attached.map((p) => p.nick).join("");
+    const title = attached.map((p) => p.nick + ": " + p.name).join(" · ");
+    const rmBtn = state.editing
+      ? `<button type="button" class="x" data-rm-menu="${escapeHtml(menuKey)}" title="Remove pass">×</button>`
+      : "";
+    chip = `
+      <span class="pass-chip-wrap">
+        <span class="badge pass" title="${escapeHtml(title)}">✓${escapeHtml(nicks)}${rmBtn}</span>
+        <div class="pass-menu ${rmOpen ? "open" : ""}" data-menu="rm|${escapeHtml(menuKey)}">
+          ${attached.map((p) => `
+            <button type="button" data-rm-pass="${p.id}|${accountID}|${escapeHtml(placement)}">
+              <span class="nick">✓ ${escapeHtml(p.nick)}</span>
+              <span>Remove ${escapeHtml(p.name)}</span>
+            </button>`).join("")}
+        </div>
+      </span>`;
+  }
+
+  const available = passes.filter((p) => passForAgent(p) && !attached.some((a) => a.id === p.id));
+  const add = `
+    <span class="pass-add">
+      <button type="button" data-pass-menu="${escapeHtml(menuKey)}" ${state.editing ? "" : "disabled"} title="Add pass">+</button>
+      <div class="pass-menu ${addOpen ? "open" : ""}" data-menu="add|${escapeHtml(menuKey)}">
+        ${
+          available.length
+            ? available.map((p) => `
+                <button type="button" data-add-pass="${p.id}|${accountID}|${escapeHtml(placement)}">
+                  <span class="nick">✓ ${escapeHtml(p.nick)}</span>
+                  <span>${escapeHtml(p.name)}</span>
+                </button>`).join("")
+            : `<div class="empty">${passes.filter(passForAgent).length ? "All passes already added" : "No passes for this agent — create one on Passes tab"}</div>`
+        }
+      </div>
+    </span>`;
+  return chip + add;
+}
+
+function masterRow(peer) {
+  return `
+    <div class="master">
+      <div class="copy">
+        <div class="title">Leak guard master <span class="info">i</span></div>
+        <div class="sub">Same switch as ${peer} — disables all scanning when off.</div>
+      </div>
+      <button type="button" class="toggle on" aria-label="Leak guard"></button>
+    </div>`;
+}
+
+function placementsCatalog() {
+  let html = "";
+  for (const acct of ACCOUNTS) {
+    const fields = baseAllows[placeKey(acct.id, "")] || HEADERS_ONLY;
+    const has = !!baseAllows[placeKey(acct.id, "")];
+    html += `<div class="acct">
+      <div class="place-row">
+        <button type="button" class="check emph ${has ? "on" : ""}" disabled>
+          <span class="box"></span><span class="t">${escapeHtml(acct.label)}</span>
+        </button>
+        ${has ? `<div class="badges">${compactBadges(fields)}${passChipsHTML(acct.id, "")}<span class="shield" title="Leak guard">⛨</span><span class="info">i</span></div>` : ""}
+      </div>`;
+    for (const mb of acct.mailboxes) {
+      const key = placeKey(acct.id, mb);
+      const on = !!baseAllows[key] || has;
+      const f = baseAllows[key] || fields;
+      html += `<div class="indent">
+        <div class="place-row">
+          <button type="button" class="check ${on ? "on" : ""}" disabled>
+            <span class="box"></span><span class="t">${escapeHtml(mb)}</span>
+          </button>
+          ${on ? `<div class="badges">${compactBadges(f)}${passChipsHTML(acct.id, mb)}<span class="shield">⛨</span></div>` : ""}
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  return html;
+}
+
+function renderScope() {
+  $("#paneScope").innerHTML = `
+    ${masterRow("Privacy")}
+    <div class="card">
+      <div class="card-head">Allowed placements <span class="info">i</span></div>
+      <div class="card-body">
+        <p class="hint">Field badges = Access caps · purple ⛨ = Leak guard · green <span class="badge pass">✓AB</span> = attached passes (one chip). Use <strong>+</strong> (while editing) to attach from the Passes tab list.</p>
+        <div class="catalog">${placementsCatalog()}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">Narrow scope</div>
+      <div class="card-body">
+        <input class="field" placeholder="Narrow From (optional)" ${state.editing ? "" : "disabled"}>
+        <input class="field" placeholder="On/after date ISO8601 (optional)" ${state.editing ? "" : "disabled"}>
+        <button type="button" class="check" disabled><span class="box"></span><span class="t">Deny carve-out mode</span></button>
+      </div>
+    </div>`;
+  wirePlacementPassUI();
+}
+
+function wirePlacementPassUI() {
+  $$("[data-pass-menu]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!state.editing) return;
+      const key = "add|" + btn.getAttribute("data-pass-menu");
+      state.openMenuKey = state.openMenuKey === key ? null : key;
+      render();
+    });
+  });
+  $$("[data-rm-menu]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!state.editing) return;
+      const key = "rm|" + btn.getAttribute("data-rm-menu");
+      state.openMenuKey = state.openMenuKey === key ? null : key;
+      render();
+    });
+  });
+  $$("[data-add-pass]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const [passID, accountID, ...rest] = btn.getAttribute("data-add-pass").split("|");
+      addPassToPlacement(passID, accountID, rest.join("|"));
+    });
+  });
+  $$("[data-rm-pass]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const [passID, accountID, ...rest] = btn.getAttribute("data-rm-pass").split("|");
+      removePassFromPlacement(passID, accountID, rest.join("|"));
+    });
+  });
+}
+
+function miniSeg(name, value, options) {
+  return `<div class="mini-seg" data-join="${name}">
+    ${options.map((o) => `<button type="button" data-val="${o}" class="${value === o ? "on" : ""}">${o.toUpperCase()}</button>`).join("")}
+  </div>`;
+}
+
+function ruleTagsHTML(rules, kind) {
+  if (!rules.length) return "";
+  return rules.map((r, i) => `
+    <span class="rtag">
+      <span class="mode">${escapeHtml(modeLabel(r.mode))}</span>
+      ${escapeHtml(r.value)}
+      <button type="button" data-rm-rule="${kind}|${i}">×</button>
+    </span>`).join("");
+}
+
+function ruleAddHTML(kind) {
+  return `
+    <div class="rule-add">
+      <select data-mode-for="${kind}">
+        ${MODES.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}
+      </select>
+      <input data-input-for="${kind}" placeholder="${kind === "from" ? "address or domain · Enter" : "text · Enter"}">
+    </div>`;
+}
+
+function selectedPass() {
+  return passes.find((p) => p.id === state.selectedPassID) || passes[0] || null;
+}
+
+function renderPasses() {
+  const selected = selectedPass();
+  if (selected) state.selectedPassID = selected.id;
+
+  const list = passes.map((p) => `
+    <button type="button" class="pass-item ${p.id === state.selectedPassID ? "sel" : ""}" data-select-pass="${p.id}">
+      <span class="nick-pill">✓ ${escapeHtml(p.nick)}</span>
+      <div class="meta">
+        <div class="name">${escapeHtml(p.name)}</div>
+        ${passListLineHTML(p)}
+      </div>
+    </button>`).join("");
+
+  $("#panePasses").innerHTML = `
+    <div class="card">
+      <div class="card-head">${passIcon()} Passes <span class="info">i</span></div>
+      <div class="card-body">
+        <p class="hint">Define conditional green lights here. Mailboxes are chosen on <strong>Scope</strong> by attaching chips to placements — not here.</p>
+        <div class="passes-layout">
+          <div>
+            <div class="pass-list">${list || `<div class="empty" style="padding:12px;color:var(--muted);font-size:12px">No passes yet</div>`}</div>
+            <button type="button" class="add-btn" id="addPassBtn">Add pass…</button>
+          </div>
+          <div class="pass-detail" id="passEditor">
+            ${selected ? passEditorHTML(selected) : `<p class="hint">Select or add a pass.</p>`}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  $$("[data-select-pass]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.selectedPassID = btn.getAttribute("data-select-pass");
+      render();
+    });
+  });
+  $("#addPassBtn").onclick = () => {
+    const p = {
+      id: "pass-" + Math.random().toString(36).slice(2, 8),
+      name: "New pass",
+      nick: nextNick(),
+      fromRules: [],
+      subjectRules: [],
+      betweenJoin: "and",
+      fields: { subject: false, from: false, to: false, cc: false, date: false, body: true, attachmentMetadata: false, attachmentContent: false },
+      agentIDs: [effectiveAgentID()],
+    };
+    passes.push(p);
+    state.selectedPassID = p.id;
+    render();
+  };
+  if (selected) wirePassEditor(selected);
+}
+
+function passEditorHTML(p) {
+  const used = usedNicks(p.id);
+  const nickOpts = NICKS.map((n) =>
+    `<option value="${n}" ${p.nick === n ? "selected" : ""} ${used.has(n) ? "disabled" : ""}>${n}</option>`
+  ).join("");
+
+  return `
+    <div class="identity-grid">
+      <div>
+        <label class="label" for="edName">Full name</label>
+        <input class="field" id="edName" value="${escapeHtml(p.name)}" placeholder="e.g. LinkedIn pass">
+      </div>
+      <div>
+        <label class="label" for="edNick">Chip</label>
+        <select id="edNick">${nickOpts}</select>
+      </div>
+    </div>
+
+    <div class="rule-block">
+      <span class="label">From <span style="font-weight:500;color:var(--muted)">(any rule matches)</span></span>
+      <div class="rule-tags">${ruleTagsHTML(p.fromRules, "from")}</div>
+      ${ruleAddHTML("from")}
+    </div>
+
+    <div class="between-card">
+      <span class="t">Combine From + Subject</span>
+      ${miniSeg("betweenJoin", p.betweenJoin, ["and", "or"])}
+    </div>
+
+    <div class="rule-block">
+      <span class="label">Subject <span style="font-weight:500;color:var(--muted)">(any rule matches)</span></span>
+      <div class="rule-tags">${ruleTagsHTML(p.subjectRules, "subject")}</div>
+      ${ruleAddHTML("subject")}
+    </div>
+
+    <div>
+      <label class="label">Green-light these fields on match</label>
+      <div class="chip-row" id="edFields">
+        ${FIELD_META.map((m) => `
+          <button type="button" class="chip green ${p.fields[m.key] ? "on" : ""}" data-field="${m.key}">${m.icon} ${escapeHtml(m.label)}</button>
+        `).join("")}
+      </div>
+    </div>
+
+    <div>
+      <label class="label">Agents</label>
+      ${AGENTS.map((a) => `
+        <button type="button" class="check ${p.agentIDs.includes(a.id) ? "on" : ""}" data-agent="${a.id}">
+          <span class="box"></span><span class="t">${escapeHtml(a.name)}</span>
+        </button>
+      `).join("")}
+    </div>
+
+    <p class="caption">${escapeHtml(rulesLabel(p))}</p>
+
+    <div class="editor-actions">
+      <button type="button" class="btn danger" id="edDelete">Delete</button>
+      <button type="button" class="btn primary" id="edSave">Save</button>
+    </div>`;
+}
+
+function wirePassEditor(p) {
+  $$("[data-join]").forEach((seg) => {
+    seg.querySelectorAll("button").forEach((btn) => {
+      btn.onclick = () => {
+        const key = seg.getAttribute("data-join");
+        p[key] = btn.getAttribute("data-val");
+        render();
+      };
+    });
+  });
+
+  $$("[data-rm-rule]").forEach((btn) => {
+    btn.onclick = () => {
+      const [kind, idx] = btn.getAttribute("data-rm-rule").split("|");
+      const list = kind === "from" ? p.fromRules : p.subjectRules;
+      list.splice(Number(idx), 1);
+      render();
+    };
+  });
+
+  ["from", "subject"].forEach((kind) => {
+    const input = $(`[data-input-for="${kind}"]`);
+    const mode = $(`[data-mode-for="${kind}"]`);
+    input.onkeydown = (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const v = input.value.trim();
+      if (!v) return;
+      const list = kind === "from" ? p.fromRules : p.subjectRules;
+      list.push({ value: v, mode: mode.value });
+      input.value = "";
+      render();
+    };
+  });
+
+  $$("#edFields [data-field]").forEach((b) => {
+    b.onclick = () => {
+      const k = b.getAttribute("data-field");
+      p.fields[k] = !p.fields[k];
+      b.classList.toggle("on", p.fields[k]);
+    };
+  });
+
+  $$("[data-agent]").forEach((b) => {
+    b.onclick = () => {
+      const id = b.getAttribute("data-agent");
+      if (p.agentIDs.includes(id)) p.agentIDs = p.agentIDs.filter((x) => x !== id);
+      else p.agentIDs.push(id);
+      b.classList.toggle("on", p.agentIDs.includes(id));
+    };
+  });
+
+  $("#edSave").onclick = () => {
+    p.name = $("#edName").value.trim() || "Untitled pass";
+    p.nick = $("#edNick").value;
+    if (!p.agentIDs.length) {
+      alert("Pick at least one agent.");
+      return;
+    }
+    render();
+  };
+
+  $("#edDelete").onclick = () => {
+    // drop enablements
+    for (const k of Object.keys(enablements)) enablements[k].delete(p.id);
+    passes = passes.filter((x) => x.id !== p.id);
+    state.selectedPassID = passes[0]?.id || null;
+    render();
+  };
+}
+
+function renderAccess() {
+  const asset = state.selectedAsset;
+  const [accountID, ...rest] = asset.split("|");
+  const placement = rest.join("|");
+  const fields = baseAllows[asset] || HEADERS_ONLY;
+  $("#paneAccess").innerHTML = `
+    <div class="card">
+      <div class="card-head">Assets</div>
+      <div class="card-body">
+        ${ACCOUNTS.map((a) => `
+          <button type="button" class="check emph ${asset === placeKey(a.id, "") ? "on" : ""}" data-asset="${placeKey(a.id, "")}">
+            <span class="box"></span><span class="t">${escapeHtml(a.label)}</span>
+          </button>
+          ${a.mailboxes.map((mb) => `
+            <div class="indent">
+              <button type="button" class="check ${asset === placeKey(a.id, mb) ? "on" : ""}" data-asset="${placeKey(a.id, mb)}">
+                <span class="box"></span><span class="t">${escapeHtml(mb)}</span>
+              </button>
+            </div>`).join("")}
+        `).join("")}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">Fields</div>
+      <div class="card-body">
+        <div class="chip-row">
+          ${FIELD_META.map((m) => `
+            <button type="button" class="chip ${fields[m.key] ? "on" : ""}" disabled>${m.icon} ${escapeHtml(m.label)}</button>
+          `).join("")}
+        </div>
+        <div class="sub caption">Fields apply only to this allow. Passes can green-light more fields on match.</div>
+        ${accessPreview(fields, accountID, placement)}
+      </div>
+    </div>`;
+  $$("#paneAccess [data-asset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.selectedAsset = btn.getAttribute("data-asset");
+      render();
+    });
+  });
+}
+
+function accessPreview(baseFields, accountID, placement) {
+  const sample = {
+    from: "jobs-noreply@linkedin.com",
+    subject: "Your weekly job recommendations",
+    body: "Hi — 12 new roles match your profile this week.",
+  };
+  const effective = upgradeFields(baseFields, sample, accountID, placement || "");
+  const bodyViaPass = !baseFields.body && effective?.body;
+  return `
+    <div class="preview">
+      <h4>Preview</h4>
+      <p class="hint" style="margin:0">Sample under this placement’s caps${bodyViaPass ? " · pass may green-light body" : " · leak guard active"}.</p>
+      <div class="mail">
+        ${["subject", "from", "to", "cc", "date"].map((k) => {
+          const labels = { subject: sample.subject, from: sample.from, to: "you@example.com", cc: "—", date: "Today 09:14" };
+          if (!effective?.[k]) {
+            return `<div class="row"><span class="k">${k}</span><div class="withheld" style="min-height:22px;flex:1;margin:0">🔒</div></div>`;
+          }
+          return `<div class="row"><span class="k">${k[0].toUpperCase() + k.slice(1)}</span><span class="v">${escapeHtml(labels[k])}</span></div>`;
+        }).join("")}
+        ${
+          effective?.body
+            ? `<div class="body-ok">${escapeHtml(sample.body)}${bodyViaPass ? `\n\n↗ via pass ✓ A` : ""}</div>
+               ${bodyViaPass ? `<p class="ok-note">PASS — LinkedIn pass (✓ A) green-lit body.</p>` : ""}`
+            : `<div class="withheld">🔒</div>
+               <p class="lock-note">Locked. Grant does not allow the agent to read this field.</p>`
+        }
+      </div>
+    </div>`;
+}
+
+function renderPrivacy() {
+  $("#panePrivacy").innerHTML = `
+    ${masterRow("Scope")}
+    <div class="card">
+      <div class="card-head">Built-in detectors <span class="info">i</span></div>
+      <div class="card-body"><p class="hint">Unchanged — passes are not redaction.</p></div>
+    </div>
+    <div class="card">
+      <div class="card-head">Custom filters <span class="info">i</span></div>
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06)"><div style="font-weight:650">John Smith</div><button type="button" class="link">Edit</button></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0"><div style="font-weight:650">Redacted Nashipai</div><button type="button" class="link">Edit</button></div>
+        <button type="button" class="add-btn">Add filter…</button>
+      </div>
+    </div>`;
+}
+
+function matchOne(hay, rule) {
+  const h = String(hay || "").toLowerCase();
+  const n = String(rule.value || "").toLowerCase();
+  if (!n) return false;
+  if (rule.mode === "starts") return h.startsWith(n);
+  if (rule.mode === "ends") return h.endsWith(n) || (h.includes("@") && h.split("@").pop() === n);
+  if (rule.mode === "exact") return h === n;
+  return h.includes(n); // contains
+}
+
+function matchGroup(hay, rules) {
+  if (!rules.length) return null; // absent
+  return rules.some((r) => matchOne(hay, r)); // any rule matches
+}
+
+function passMatches(p, msg) {
+  const fromHit = matchGroup(msg.from, p.fromRules);
+  const subHit = matchGroup(msg.subject, p.subjectRules);
+  if (fromHit === null && subHit === null) return true;
+  if (fromHit === null) return !!subHit;
+  if (subHit === null) return !!fromHit;
+  return p.betweenJoin === "or" ? fromHit || subHit : fromHit && subHit;
+}
+
+function covers(base, overlay) {
+  return FIELD_META.every((m) => !overlay[m.key] || base[m.key]);
+}
+
+function union(a, b) {
+  const out = { ...a };
+  for (const m of FIELD_META) out[m.key] = !!(a[m.key] || b[m.key]);
+  return out;
+}
+
+function upgradeFields(base, msg, accountID, placement) {
+  if (!base) return null;
+  let effective = { ...base };
+  for (const p of enabledPasses(accountID, placement)) {
+    if (!passMatches(p, msg)) continue;
+    if (covers(effective, p.fields)) continue;
+    effective = union(effective, p.fields);
+  }
+  return effective;
+}
+
+function evaluateDetailed() {
+  const msg = {
+    from: $("#msgFrom").value,
+    subject: $("#msgSubject").value,
+    body: $("#msgBody").value,
+  };
+  const placementKey = $("#msgPlacement").value;
+  const [accountID, ...rest] = placementKey.split("|");
+  const placement = rest.join("|");
+  const mode = $("#baseFields").value;
+  const base = mode === "none" ? null : mode === "full" ? { ...FULL, attachmentContent: false } : { ...HEADERS_ONLY };
+  const trace = [`agent=${effectiveAgentID()}`, `placement=${placementKey}`];
+
+  if (!base) {
+    return {
+      kind: "deny",
+      effective: null,
+      trace: trace.concat(["GrantGate → nil", "passes skipped (no visibility alone)"]),
+      note: "Denied. Passes never unlock mail without a base allow.",
+    };
+  }
+
+  trace.push("base: " + FIELD_META.filter((m) => base[m.key]).map((m) => m.short).join(""));
+  let effective = { ...base };
+  let upgraded = false;
+  let redundant = false;
+  const attached = enabledPasses(accountID, placement);
+
+  if (!attached.length) {
+    trace.push("· no pass chips on this placement");
+  }
+
+  for (const p of attached) {
+    const match = passMatches(p, msg);
+    if (!match) {
+      trace.push(`· ✓ ${p.nick} ${p.name}: matchers miss → ignore`);
+      continue;
+    }
+    if (covers(effective, p.fields)) {
+      redundant = true;
+      trace.push(`· ✓ ${p.nick} ${p.name}: MATCH but redundant`);
+      continue;
+    }
+    effective = union(effective, p.fields);
+    upgraded = true;
+    trace.push(`· ✓ ${p.nick} ${p.name}: MATCH → green-light`);
+  }
+
+  return {
+    kind: !upgraded && redundant ? "skip" : upgraded ? "upgrade" : "base",
+    effective,
+    trace,
+    note: upgraded
+      ? "PASS — green-lit fields on top of the base grant."
+      : redundant
+        ? "Matched, but base grant already included those fields (pass redundant)."
+        : "No enabled pass matched — no green light.",
+  };
+}
+
+function renderEval() {
+  const r = evaluateDetailed();
+  const f = r.effective;
+  let mail = "";
+  if (!f) {
+    mail = `<div class="withheld">🔒</div><p class="lock-note">${escapeHtml(r.note)}</p>`;
+  } else {
+    mail = `
+      <div class="row"><span class="k">From</span>${f.from ? `<span class="v">${escapeHtml($("#msgFrom").value)}</span>` : `<div class="withheld" style="min-height:22px;flex:1;margin:0">🔒</div>`}</div>
+      <div class="row"><span class="k">Subject</span>${f.subject ? `<span class="v">${escapeHtml($("#msgSubject").value)}</span>` : `<div class="withheld" style="min-height:22px;flex:1;margin:0">🔒</div>`}</div>
+      ${
+        f.body
+          ? `<div class="body-ok">${escapeHtml($("#msgBody").value)}</div>
+             <p class="${r.kind === "upgrade" ? "ok-note" : r.kind === "skip" ? "amber-note" : "caption"}">${escapeHtml(r.note)}</p>`
+          : `<div class="withheld">🔒</div><p class="lock-note">Locked. Grant does not allow the agent to read this field.</p>
+             <p class="caption">${escapeHtml(r.note)}</p>`
+      }`;
+  }
+  const status =
+    r.kind === "upgrade"
+      ? `<div class="pass-status">${passIcon("lg")} PASS — conditional green light fired</div>`
+      : r.kind === "skip"
+        ? `<div class="pass-status warn">Matched, but already covered — pass skipped</div>`
+        : r.kind === "deny"
+          ? `<div class="pass-status deny">No base allow — passes cannot open this</div>`
+          : `<div class="pass-status muted">No pass matched</div>`;
+
+  $("#evalPreview").innerHTML = `
+    <h4>Preview</h4>
+    ${status}
+    <p class="hint" style="margin:0">Same withheld hatch as Access when body stays off.</p>
+    <div class="mail">${mail}</div>
+    <pre class="trace">${escapeHtml(r.trace.join("\n"))}</pre>
+  `;
+}
+
+function isAgentTab(tab) {
+  return tab === "scope" || tab === "access";
+}
+
+function isSharedPick() {
+  return state.chrome === "shared-pick" && state.agentID === "__shared__";
+}
+
+function effectiveAgentID() {
+  return state.agentID === "__shared__" ? state.lastAgentID : state.agentID;
+}
+
+function ensureTabFitsChrome() {
+  if (state.chrome === "mode") {
+    if (state.mode === "agent" && !isAgentTab(state.tab)) state.tab = "scope";
+    if (state.mode === "mailbox" && isAgentTab(state.tab)) state.tab = "passes";
+  } else if (state.chrome === "shared-pick") {
+    if (isSharedPick() && isAgentTab(state.tab)) state.tab = "passes";
+    if (!isSharedPick() && !isAgentTab(state.tab)) state.tab = "scope";
+  }
+}
+
+function renderChromePicker() {
+  $$("#chromePicker [data-chrome]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.chrome === state.chrome);
+  });
+  const hints = {
+    clusters: "A: all four tabs visible; clusters label ownership; top row swaps.",
+    mode: "B: pick This agent or Mailbox first; only that pair of tabs shows.",
+    "shared-pick": "C: Shared sits in the agent picker → Passes + Privacy under that pick.",
+  };
+  $("#chromeHint").textContent = hints[state.chrome] || "";
+}
+
+function renderTabs() {
+  const el = $("#tabs");
+  if (state.chrome === "shared-pick") {
+    el.className = "seg";
+    if (isSharedPick()) {
+      el.innerHTML = `
+        <button type="button" data-tab="passes">Passes</button>
+        <button type="button" data-tab="privacy">Privacy</button>`;
+    } else {
+      el.innerHTML = `
+        <button type="button" data-tab="scope">Scope</button>
+        <button type="button" data-tab="access">Access</button>`;
+    }
+  } else if (state.chrome === "clusters") {
+    el.className = "tab-clusters";
+    el.innerHTML = `
+      <div class="tab-cluster">
+        <span class="cluster-lbl">This agent</span>
+        <div class="seg">
+          <button type="button" data-tab="scope">Scope</button>
+          <button type="button" data-tab="access">Access</button>
+        </div>
+      </div>
+      <div class="tab-cluster-divider" aria-hidden="true"></div>
+      <div class="tab-cluster">
+        <span class="cluster-lbl">Mailbox</span>
+        <div class="seg">
+          <button type="button" data-tab="passes">Passes</button>
+          <button type="button" data-tab="privacy">Privacy</button>
+        </div>
+      </div>`;
+  } else {
+    el.className = "tab-clusters";
+    const tabs =
+      state.mode === "agent"
+        ? `<button type="button" data-tab="scope">Scope</button>
+           <button type="button" data-tab="access">Access</button>`
+        : `<button type="button" data-tab="passes">Passes</button>
+           <button type="button" data-tab="privacy">Privacy</button>`;
+    el.innerHTML = `
+      <div class="tab-cluster">
+        <span class="cluster-lbl">Desk</span>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-mode="agent" class="${state.mode === "agent" ? "on" : ""}">This agent</button>
+          <button type="button" data-mode="mailbox" class="${state.mode === "mailbox" ? "on" : ""}">Mailbox</button>
+        </div>
+      </div>
+      <div class="tab-cluster-divider" aria-hidden="true"></div>
+      <div class="tab-cluster">
+        <span class="cluster-lbl">${state.mode === "agent" ? "Tabs" : "Shared"}</span>
+        <div class="seg">${tabs}</div>
+      </div>`;
+  }
+  $$("#tabs [data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === state.tab));
+}
+
+function agentGlyphHTML(id) {
+  // Same marks as MailGent Assets.xcassets (CursorMark / GrokMark).
+  const cursorMark = "../../../MailGent/Assets.xcassets/CursorMark.imageset/CUBE_2D_LIGHT.svg";
+  const grokMark = "../../../MailGent/Assets.xcassets/GrokMark.imageset/GrokMark.png";
+  if (id === "cursor") {
+    return `<span class="glyph cursor" aria-hidden="true"><img class="mark" src="${cursorMark}" alt=""></span>`;
+  }
+  if (id === "grok") {
+    return `<span class="glyph grok" aria-hidden="true"><img class="mark" src="${grokMark}" alt="" style="border-radius:3.5px"></span>`;
+  }
+  if (id === "claude") {
+    return `<span class="glyph fallback" aria-hidden="true">C</span>`;
+  }
+  if (id === "__shared__") {
+    return `<span class="glyph shared" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a2.2 2.2 0 1 1 0 4.4A2.2 2.2 0 0 1 8 2Zm-4.5 9.2c0-1.7 2-2.7 4.5-2.7s4.5 1 4.5 2.7V13H3.5v-1.8Z"/></svg></span>`;
+  }
+  return `<span class="glyph fallback" aria-hidden="true">?</span>`;
+}
+
+function agentPickButton(id, label, selected, disabled) {
+  return `<button type="button" data-agent-pick="${id}" class="${selected ? "on" : ""}" ${disabled ? "disabled" : ""}>${agentGlyphHTML(id)}<span>${escapeHtml(label)}</span></button>`;
+}
+
+function renderContextRow() {
+  const row = $("#contextRow");
+
+  if (state.chrome === "shared-pick") {
+    row.classList.toggle("shared", isSharedPick());
+    const meta = isSharedPick()
+      ? "Mailbox-wide · passes + privacy"
+      : (() => {
+          const a = AGENTS.find((x) => x.id === state.agentID);
+          return `${escapeHtml(a.name)} · ${escapeHtml(a.trust)}`;
+        })();
+    const disabled = state.editing;
+    row.innerHTML = `
+      <span class="lbl">Agent</span>
+      <div class="agent-pick" id="agentSeg">
+        <div class="seg">
+          ${AGENTS.map((ag) =>
+            agentPickButton(ag.id, ag.name, ag.id === state.agentID, disabled)
+          ).join("")}
+        </div>
+        <div class="agent-pick-sep" aria-hidden="true"></div>
+        <div class="seg">
+          ${agentPickButton("__shared__", "Shared", state.agentID === "__shared__", disabled)}
+        </div>
+      </div>
+      <span class="meta">${meta}</span>
+    `;
+    return;
+  }
+
+  const showAgent =
+    state.chrome === "mode" ? state.mode === "agent" : isAgentTab(state.tab);
+
+  if (showAgent) {
+    row.classList.remove("shared");
+    const a = AGENTS.find((x) => x.id === effectiveAgentID());
+    const disabled = state.editing;
+    row.innerHTML = `
+      <span class="lbl">Agent</span>
+      <div class="agent-pick" id="agentSeg">
+        <div class="seg">
+          ${AGENTS.map((ag) =>
+            agentPickButton(ag.id, ag.name, ag.id === effectiveAgentID(), disabled)
+          ).join("")}
+        </div>
+      </div>
+      <span class="meta">${escapeHtml(a.name)} · ${escapeHtml(a.trust)}</span>
+    `;
+    return;
+  }
+
+  row.classList.add("shared");
+  const passesCap = `<strong>Shared</strong> · agents chosen per pass`;
+  const privacyCap = `<strong>Applies to all agents</strong> · leak guard policy`;
+  const bothCap = `<strong>Mailbox-wide</strong> · passes + privacy apply to every agent`;
+  let text = bothCap;
+  if (state.tab === "passes") text = passesCap;
+  else if (state.tab === "privacy") text = privacyCap;
+  row.innerHTML = `<span class="shared-caption">${text}</span>`;
+}
+
+function renderEditControls() {
+  $("#editControls").innerHTML = state.editing
+    ? `<button type="button" class="btn-edit ghost" data-cancel>Cancel</button>
+       <button type="button" class="btn-edit primary" data-save>Save</button>`
+    : `<button type="button" class="btn-edit" data-begin>Edit</button>`;
+  $("[data-begin]")?.addEventListener("click", () => { state.editing = true; render(); });
+  $("[data-cancel]")?.addEventListener("click", () => { state.editing = false; state.openMenuKey = null; render(); });
+  $("[data-save]")?.addEventListener("click", () => { state.editing = false; state.openMenuKey = null; render(); });
+}
+
+function renderPlacementSelect() {
+  const sel = $("#msgPlacement");
+  const cur = sel.value;
+  let opts = "";
+  for (const acct of ACCOUNTS) {
+    for (const mb of acct.mailboxes) {
+      opts += `<option value="${placeKey(acct.id, mb)}">${escapeHtml(acct.label)} · ${escapeHtml(mb)}</option>`;
+    }
+  }
+  sel.innerHTML = opts;
+  if (cur) sel.value = cur;
+  else sel.value = "g1|INBOX";
+}
+
+function renderScenarios() {
+  const list = [
+    { label: "LinkedIn → PASS ✓A", from: "jobs-noreply@linkedin.com", subject: "Your weekly job recommendations", body: "Hi — 12 new roles.", placement: "g1|INBOX", base: "headers" },
+    { label: "Already has body", from: "jobs-noreply@linkedin.com", subject: "Your weekly job recommendations", body: "Body already granted — pass redundant.", placement: "g1|INBOX", base: "full" },
+    { label: "Invoice ✓B", from: "billing@acme.com", subject: "Invoice #4412 — March hosting", body: "Amount due $120.", placement: "b1|INBOX", base: "headers" },
+    { label: "No match", from: "friend@example.com", subject: "Dinner Friday?", body: "7pm?", placement: "g1|INBOX", base: "headers" },
+    { label: "Denied", from: "jobs-noreply@linkedin.com", subject: "Your weekly job recommendations", body: "Should stay locked.", placement: "g1|INBOX", base: "none" },
+  ];
+  window.__scenarios = list;
+  $("#scenarios").innerHTML = list
+    .map((s, i) => `<button type="button" class="scenario" data-scenario="${i}">${escapeHtml(s.label)}</button>`)
+    .join("");
+}
+
+function render() {
+  ensureTabFitsChrome();
+  renderChromePicker();
+  renderContextRow();
+  renderTabs();
+  renderEditControls();
+  $("#paneScope").hidden = state.tab !== "scope";
+  $("#panePasses").hidden = state.tab !== "passes";
+  $("#paneAccess").hidden = state.tab !== "access";
+  $("#panePrivacy").hidden = state.tab !== "privacy";
+  if (state.tab === "scope") renderScope();
+  if (state.tab === "passes") renderPasses();
+  if (state.tab === "access") renderAccess();
+  if (state.tab === "privacy") renderPrivacy();
+  renderPlacementSelect();
+  renderEval();
+}
+
+renderScenarios();
+render();
+
+document.addEventListener("click", () => {
+  if (state.openMenuKey) {
+    state.openMenuKey = null;
+    if (state.tab === "scope") renderScope();
+  }
+});
+
+$("#chromePicker").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-chrome]");
+  if (!btn) return;
+  const next = btn.dataset.chrome;
+  if (state.chrome === "shared-pick" && state.agentID === "__shared__") {
+    state.agentID = state.lastAgentID;
+  }
+  state.chrome = next;
+  if (state.chrome === "mode") {
+    state.mode = isAgentTab(state.tab) ? "agent" : "mailbox";
+  }
+  if (state.chrome === "shared-pick" && !isAgentTab(state.tab)) {
+    state.agentID = "__shared__";
+  }
+  state.openMenuKey = null;
+  render();
+});
+
+$("#contextRow").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-agent-pick]");
+  if (!btn || state.editing || btn.disabled) return;
+  const id = btn.getAttribute("data-agent-pick");
+  if (id === "__shared__") {
+    if (state.agentID !== "__shared__") state.lastAgentID = state.agentID;
+    state.agentID = "__shared__";
+    state.tab = "passes";
+  } else {
+    state.agentID = id;
+    state.lastAgentID = id;
+    if (state.chrome === "shared-pick" && !isAgentTab(state.tab)) state.tab = "scope";
+  }
+  render();
+});
+$("#tabs").addEventListener("click", (e) => {
+  const modeBtn = e.target.closest("[data-mode]");
+  if (modeBtn) {
+    state.mode = modeBtn.dataset.mode;
+    state.tab = state.mode === "agent" ? "scope" : "passes";
+    state.openMenuKey = null;
+    render();
+    return;
+  }
+  const btn = e.target.closest("[data-tab]");
+  if (!btn) return;
+  state.tab = btn.dataset.tab;
+  if (state.chrome === "mode") {
+    state.mode = isAgentTab(state.tab) ? "agent" : "mailbox";
+  }
+  state.openMenuKey = null;
+  render();
+});
+["msgFrom", "msgSubject", "msgBody", "msgPlacement", "baseFields"].forEach((id) => {
+  $(`#${id}`).addEventListener("input", renderEval);
+  $(`#${id}`).addEventListener("change", renderEval);
+});
+$("#scenarios").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-scenario]");
+  if (!btn) return;
+  const s = window.__scenarios[Number(btn.dataset.scenario)];
+  $("#msgFrom").value = s.from;
+  $("#msgSubject").value = s.subject;
+  $("#msgBody").value = s.body;
+  $("#msgPlacement").value = s.placement;
+  $("#baseFields").value = s.base;
+  renderEval();
+});
+</script>
+</body>
+</html>

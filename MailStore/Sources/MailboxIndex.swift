@@ -769,6 +769,30 @@ public struct IndexedMessage: Equatable, Sendable {
     public let subject: String
     public let body: String
     public let isPartial: Bool
+
+    public init(
+        id: String,
+        accountID: String,
+        placement: String,
+        from: String,
+        to: String,
+        cc: String,
+        date: String,
+        subject: String,
+        body: String,
+        isPartial: Bool
+    ) {
+        self.id = id
+        self.accountID = accountID
+        self.placement = placement
+        self.from = from
+        self.to = to
+        self.cc = cc
+        self.date = date
+        self.subject = subject
+        self.body = body
+        self.isPartial = isPartial
+    }
 }
 
 public enum MailboxIndexError: Error, Equatable {

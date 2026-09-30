@@ -352,6 +352,13 @@ public final class GrantGate: @unchecked Sendable {
         return grants.filter { $0.agentID == agentID }
     }
 
+    /// All grants across agents (for union persistence).
+    public func allGrants() -> [Grant] {
+        lock.lock()
+        defer { lock.unlock() }
+        return grants
+    }
+
     /// Replaces all grants for `agentID` (used for restore-from-disk). Other agents untouched.
     public func replaceAll(agentID: String, with newGrants: [Grant]) {
         lock.lock()

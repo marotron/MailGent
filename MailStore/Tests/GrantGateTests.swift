@@ -72,6 +72,69 @@ struct GrantGateTests {
         #expect(env.grants.list(agentID: env.agent.id) == snapshot)
     }
 
+    @Test func emptySaveKeepsNonEmptyGrantFile() {
+        #expect(
+            GrantPersistPolicy.shouldKeepExistingFile(
+                diskGrantCount: 4,
+                diskReadable: true,
+                nextGrantCount: 0,
+                allowsEmptyOverwrite: false
+            )
+        )
+        #expect(
+            !GrantPersistPolicy.shouldKeepExistingFile(
+                diskGrantCount: 4,
+                diskReadable: true,
+                nextGrantCount: 0,
+                allowsEmptyOverwrite: true
+            )
+        )
+        #expect(
+            GrantPersistPolicy.shouldKeepExistingFile(
+                diskGrantCount: nil,
+                diskReadable: false,
+                nextGrantCount: 0,
+                allowsEmptyOverwrite: false
+            )
+        )
+        #expect(
+            !GrantPersistPolicy.shouldKeepExistingFile(
+                diskGrantCount: nil,
+                diskReadable: true,
+                nextGrantCount: 0,
+                allowsEmptyOverwrite: false
+            )
+        )
+    }
+
+    @Test func persistKeepsGrantsForUnpairedAgentIDs() {
+        let oldAgent = "old-agent"
+        let current = "current-agent"
+        let disk = [
+            Grant(agentID: oldAgent, accountID: "acc", placement: "INBOX"),
+            Grant(agentID: current, accountID: "acc", placement: "Sent")
+        ]
+        let memory = [
+            Grant(agentID: current, accountID: "acc", placement: "Sent")
+        ]
+        let merged = GrantPersistPolicy.mergedGrants(
+            memory: memory,
+            disk: disk,
+            pairedAgentIDs: [current],
+            dropAgentIDs: []
+        )
+        #expect(merged.count == 2)
+        #expect(merged.contains { $0.agentID == oldAgent && $0.placement == "INBOX" })
+
+        let dropped = GrantPersistPolicy.mergedGrants(
+            memory: [],
+            disk: disk,
+            pairedAgentIDs: [],
+            dropAgentIDs: [oldAgent, current]
+        )
+        #expect(dropped.isEmpty)
+    }
+
     @Test func grantSnapshotRoundTripsThroughJSON() throws {
         let agentID = "agent-1"
         let snapshot = GrantSnapshot(grants: [
@@ -233,6 +296,24 @@ struct GrantGateTests {
         )
         #expect(message.cc == "")
         #expect(!message.to.isEmpty)
+    }
+
+    @Test func grantsForAgentADoNotAllowAgentB() throws {
+        let grants = GrantGate()
+        try grants.allow(agentID: "agent-a", accountID: "acc-a")
+        try grants.allow(agentID: "agent-a", accountID: "acc-a", placement: "INBOX")
+
+        #expect(grants.allows(agentID: "agent-a", accountID: "acc-a", placement: "INBOX"))
+        #expect(!grants.allows(agentID: "agent-b", accountID: "acc-a", placement: "INBOX"))
+        #expect(grants.list(agentID: "agent-b").isEmpty)
+        #expect(grants.allGrants().allSatisfy { $0.agentID == "agent-a" })
+    }
+
+    @Test func allGrantsReturnsUnionAcrossAgents() throws {
+        let grants = GrantGate()
+        try grants.allow(agentID: "a", accountID: "acc-a")
+        try grants.allow(agentID: "b", accountID: "acc-b")
+        #expect(Set(grants.allGrants().map(\.agentID)) == ["a", "b"])
     }
 }
 

@@ -138,6 +138,8 @@ public struct ReadMessage: Equatable, Sendable {
     public let attachments: [MailAttachment]
     /// False when the active grant omitted attachment names.
     public let attachmentMetadataGranted: Bool
+    /// Leak-guard access metadata for MCP JSON and audit (nil when scan skipped).
+    public let leakGuardAccess: ReadMessageAccess?
 
     init(
         _ message: IndexedMessage,
@@ -145,7 +147,8 @@ public struct ReadMessage: Equatable, Sendable {
         htmlBody: String? = nil,
         rawBody: String = "",
         attachments: [MailAttachment] = [],
-        cc: String? = nil
+        cc: String? = nil,
+        leakGuardAccess: ReadMessageAccess? = nil
     ) {
         self.id = message.id
         self.accountID = message.accountID
@@ -162,6 +165,7 @@ public struct ReadMessage: Equatable, Sendable {
         self.isPartial = message.isPartial
         self.attachments = attachments
         self.attachmentMetadataGranted = true
+        self.leakGuardAccess = leakGuardAccess
     }
 
     /// Omits body/html/raw under agent field caps (`.notGranted`).
@@ -185,7 +189,68 @@ public struct ReadMessage: Equatable, Sendable {
             rawBody: fields.body ? rawBody : "",
             isPartial: isPartial,
             attachments: fields.attachmentMetadata ? attachments : [],
-            attachmentMetadataGranted: fields.attachmentMetadata
+            attachmentMetadataGranted: fields.attachmentMetadata,
+            leakGuardAccess: leakGuardAccess
+        )
+    }
+
+    func withLeakGuardAccess(_ access: ReadMessageAccess) -> ReadMessage {
+        ReadMessage(
+            id: id,
+            accountID: accountID,
+            placement: placement,
+            from: from,
+            to: to,
+            cc: cc,
+            date: date,
+            subject: subject,
+            body: body,
+            htmlBody: htmlBody,
+            rawBody: rawBody,
+            isPartial: isPartial,
+            attachments: attachments,
+            attachmentMetadataGranted: attachmentMetadataGranted,
+            leakGuardAccess: access
+        )
+    }
+
+    func withSanitizedSubject(_ text: String) -> ReadMessage {
+        ReadMessage(
+            id: id,
+            accountID: accountID,
+            placement: placement,
+            from: from,
+            to: to,
+            cc: cc,
+            date: date,
+            subject: text,
+            body: body,
+            htmlBody: htmlBody,
+            rawBody: rawBody,
+            isPartial: isPartial,
+            attachments: attachments,
+            attachmentMetadataGranted: attachmentMetadataGranted,
+            leakGuardAccess: leakGuardAccess
+        )
+    }
+
+    func withSanitizedBody(_ body: ReadBody) -> ReadMessage {
+        ReadMessage(
+            id: id,
+            accountID: accountID,
+            placement: placement,
+            from: from,
+            to: to,
+            cc: cc,
+            date: date,
+            subject: subject,
+            body: body,
+            htmlBody: htmlBody,
+            rawBody: rawBody,
+            isPartial: isPartial,
+            attachments: attachments,
+            attachmentMetadataGranted: attachmentMetadataGranted,
+            leakGuardAccess: leakGuardAccess
         )
     }
 
@@ -203,7 +268,8 @@ public struct ReadMessage: Equatable, Sendable {
         rawBody: String,
         isPartial: Bool,
         attachments: [MailAttachment],
-        attachmentMetadataGranted: Bool
+        attachmentMetadataGranted: Bool,
+        leakGuardAccess: ReadMessageAccess?
     ) {
         self.id = id
         self.accountID = accountID
@@ -219,6 +285,7 @@ public struct ReadMessage: Equatable, Sendable {
         self.isPartial = isPartial
         self.attachments = attachments
         self.attachmentMetadataGranted = attachmentMetadataGranted
+        self.leakGuardAccess = leakGuardAccess
     }
 
     /// HTML for Pretty when it is a complete alternative; nil when it is a closed prefix of plain.

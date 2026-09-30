@@ -1,3 +1,4 @@
+import MailStore
 import Testing
 @testable import MailGent
 
@@ -105,5 +106,67 @@ struct AccessLogFormatTests {
         #expect(!AccessLogFormat.isLargeStore(count: 999, bytes: 1_048_575))
         #expect(AccessLogFormat.isLargeStore(count: 1_000, bytes: 0))
         #expect(AccessLogFormat.isLargeStore(count: 1, bytes: 1_048_576))
+    }
+
+    @Test func isEmptySuccessForZeroResultLookups() {
+        let searchEmpty = AuditEntry(
+            kind: .search,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"count":0,"items":[]}"#
+        )
+        let searchHit = AuditEntry(
+            kind: .search,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"count":5,"items":[{}]}"#
+        )
+        let listEmpty = AuditEntry(
+            kind: .list,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"count":0,"items":[]}"#
+        )
+        let newEmpty = AuditEntry(
+            kind: .listNew,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"count":0,"items":[]}"#
+        )
+        let placementsEmpty = AuditEntry(
+            kind: .listPlacements,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"placements":[]}"#
+        )
+        let placementsHit = AuditEntry(
+            kind: .listPlacements,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"placements":["acct/INBOX"]}"#,
+            placements: [AuditPlacementRef(accountID: "acct", placement: "INBOX")]
+        )
+        let getOk = AuditEntry(
+            kind: .get,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"id":"1"}"#
+        )
+        let searchError = AuditEntry(
+            kind: .search,
+            agentID: "a",
+            agentName: "Grok Bot",
+            responseSummary: #"{"count":0}"#,
+            outcome: .error("boom")
+        )
+
+        #expect(AccessLogFormat.isEmptySuccess(searchEmpty))
+        #expect(!AccessLogFormat.isEmptySuccess(searchHit))
+        #expect(AccessLogFormat.isEmptySuccess(listEmpty))
+        #expect(AccessLogFormat.isEmptySuccess(newEmpty))
+        #expect(AccessLogFormat.isEmptySuccess(placementsEmpty))
+        #expect(!AccessLogFormat.isEmptySuccess(placementsHit))
+        #expect(!AccessLogFormat.isEmptySuccess(getOk))
+        #expect(!AccessLogFormat.isEmptySuccess(searchError))
     }
 }
