@@ -192,7 +192,7 @@ public struct AgentReadAPI {
                 body: "",
                 isPartial: message.isPartial
             )
-            guard let fields = effectiveFields(for: probe, agentID: agent.id) else {
+            guard let grant = effectiveGrant(for: probe, agentID: agent.id) else {
                 record(
                     kind: .get,
                     agent: agent,
@@ -203,6 +203,7 @@ public struct AgentReadAPI {
                 )
                 throw PairingError.unauthorized
             }
+            let fields = grant.fields
             let granted = message.applying(fields)
             let (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
             let access = ReadMessageAccess(subject: subjectField, body: bodyField)
@@ -219,7 +220,8 @@ public struct AgentReadAPI {
                         agentMessage,
                         fields: fields,
                         subjectSanitized: subjectField,
-                        bodySanitized: bodyField
+                        bodySanitized: bodyField,
+                        appliedRules: grant.applied
                     )
                 ]
             )
@@ -429,10 +431,18 @@ public struct AgentReadAPI {
         )
     }
 
-    /// Base grant fields, then rule upgrades. nil → no access (rules never open the gate).
+    /// Scope base fields, then Pass/Block overlays. nil → message not Scope-allowed (rules never open the gate).
     private func effectiveFields(for message: IndexedMessage, agentID: String) -> GrantFields? {
+        effectiveGrant(for: message, agentID: agentID)?.fields
+    }
+
+    /// Effective fields plus effectful applied rules for audit.
+    private func effectiveGrant(
+        for message: IndexedMessage,
+        agentID: String
+    ) -> (fields: GrantFields, applied: [AppliedGrantRule])? {
         guard let base = grants.effectiveFields(for: message, agentID: agentID) else { return nil }
-        return RuleEngine.upgrade(
+        return RuleEngine.applyOverlaysWithApplied(
             base: base,
             message: message,
             agentID: agentID,
@@ -471,12 +481,14 @@ public struct AgentReadAPI {
 
     private func messageRefs(_ items: [IndexedMessage], agentID: String) -> [AuditMessageRef] {
         items.prefix(AuditLog.messageRefCap).map { item in
-            let fields = effectiveFields(for: item, agentID: agentID) ?? .headersOnly
+            let grant = effectiveGrant(for: item, agentID: agentID)
+            let fields = grant?.fields ?? .headersOnly
             let subjectSanitized = subjectField(for: item, fields: fields)
             return AuditMessageRef(
                 item,
                 fields: fields,
-                subjectSanitized: subjectSanitized
+                subjectSanitized: subjectSanitized,
+                appliedRules: grant?.applied
             )
         }
     }

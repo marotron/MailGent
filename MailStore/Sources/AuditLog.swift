@@ -191,6 +191,8 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let leakDetections: [AuditLeakDetection]?
     public let fields: GrantFields
     public let attachments: [MailAttachment]
+    /// Effectful Pass/Block applications for this message (audit-only).
+    public let appliedRules: [AppliedGrantRule]?
 
     public init(
         accountID: String,
@@ -210,7 +212,8 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         stealth: Bool? = nil,
         leakDetections: [AuditLeakDetection]? = nil,
         fields: GrantFields = .headersOnly,
-        attachments: [MailAttachment] = []
+        attachments: [MailAttachment] = [],
+        appliedRules: [AppliedGrantRule]? = nil
     ) {
         self.accountID = accountID
         self.placement = placement
@@ -230,9 +233,47 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.leakDetections = leakDetections
         self.fields = fields
         self.attachments = attachments
+        self.appliedRules = appliedRules.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     public var rowID: String { "\(accountID)/\(placement)/\(id)" }
+
+    public var passApplicationCount: Int {
+        (appliedRules ?? []).filter { $0.polarity == .pass }.count
+    }
+
+    public var blockApplicationCount: Int {
+        (appliedRules ?? []).filter { $0.polarity == .block }.count
+    }
+
+    /// Union of field deltas from effectful Pass applications.
+    public var passRevealedFields: GrantFields {
+        (appliedRules ?? [])
+            .filter { $0.polarity == .pass }
+            .reduce(GrantFields.none) { $0.unioning($1.fields) }
+    }
+
+    /// Union of field deltas from effectful Block applications.
+    public var blockWithheldFields: GrantFields {
+        (appliedRules ?? [])
+            .filter { $0.polarity == .block }
+            .reduce(GrantFields.none) { $0.unioning($1.fields) }
+    }
+
+    /// Mark for a field touched by an applied rule. Block wins when both touched it.
+    public func appliedRuleMark(
+        for keyPath: KeyPath<GrantFields, Bool>
+    ) -> AppliedGrantRule? {
+        let rules = appliedRules ?? []
+        if let block = rules.first(where: {
+            $0.polarity == .block && $0.fields[keyPath: keyPath]
+        }) {
+            return block
+        }
+        return rules.first(where: {
+            $0.polarity == .pass && $0.fields[keyPath: keyPath]
+        })
+    }
 
     /// Count of leak-guard parts for list badges. Prefers recorded hits; falls back for older logs.
     public var leakDetectionCount: Int {
@@ -636,7 +677,7 @@ extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, cc, date
         case bodySnippet, subjectAccess, bodyAccess, subjectOriginal, bodyOriginal
-        case sanitizedRules, stealth, leakDetections, fields, attachments
+        case sanitizedRules, stealth, leakDetections, fields, attachments, appliedRules
     }
 
     public init(from decoder: Decoder) throws {
@@ -663,6 +704,11 @@ extension AuditMessageRef: Codable {
         )
         fields = try container.decodeIfPresent(GrantFields.self, forKey: .fields) ?? .headersOnly
         attachments = try container.decodeIfPresent([MailAttachment].self, forKey: .attachments) ?? []
+        let decodedRules = try container.decodeIfPresent(
+            [AppliedGrantRule].self,
+            forKey: .appliedRules
+        )
+        appliedRules = decodedRules.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -685,6 +731,7 @@ extension AuditMessageRef: Codable {
         try container.encodeIfPresent(leakDetections, forKey: .leakDetections)
         try container.encode(fields, forKey: .fields)
         try container.encode(attachments, forKey: .attachments)
+        try container.encodeIfPresent(appliedRules, forKey: .appliedRules)
     }
 }
 
@@ -694,7 +741,8 @@ extension AuditMessageRef {
     public init(
         _ message: IndexedMessage,
         fields: GrantFields = .headersOnly,
-        subjectSanitized: SanitizedField? = nil
+        subjectSanitized: SanitizedField? = nil,
+        appliedRules: [AppliedGrantRule]? = nil
     ) {
         let access: AuditBodyAccess
         let snippet: String
@@ -726,7 +774,8 @@ extension AuditMessageRef {
             bodyAccess: access,
             subjectOriginal: subjectOriginal,
             leakDetections: AuditLeakDetection.from(subject: subjectSanitized, body: nil),
-            fields: fields
+            fields: fields,
+            appliedRules: appliedRules
         )
     }
 
@@ -734,7 +783,8 @@ extension AuditMessageRef {
         _ message: ReadMessage,
         fields: GrantFields = .headersOnly,
         subjectSanitized: SanitizedField? = nil,
-        bodySanitized: SanitizedField? = nil
+        bodySanitized: SanitizedField? = nil,
+        appliedRules: [AppliedGrantRule]? = nil
     ) {
         let bodyAuditAccess: AuditBodyAccess
         let snippet: String
@@ -792,7 +842,8 @@ extension AuditMessageRef {
                 body: bodySanitized
             ),
             fields: fields,
-            attachments: message.attachments
+            attachments: message.attachments,
+            appliedRules: appliedRules
         )
     }
 }

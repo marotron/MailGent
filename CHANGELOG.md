@@ -11,10 +11,19 @@ Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called o
 ### Added
 
 - **Rules** — Pass and Block polarity with optional When date windows on already-allowed messages (From/Subject match, AND/OR join, per-agent enablement on Scope placements). Persisted in `rules.json`; Grant Desk Rules tab + Access preview shows via-rule field changes.
+- Access Log list chips for effectful Pass/Block applications (green ✓ / red ✗; count only when that polarity hit more than once).
+- Access Log message preview tints field chips green/red for Pass-revealed / Block-withheld fields, and marks those sections with the Grant Desk–style rule nick (✓/✗ + letter).
+- Grant Desk Access asset list uses compact Pass/Block count badges (circular ✓/✗ + number) and a wider left pane.
+
+### Fixed
+
+- From rule matchers (`ENDS` / `EXACT` / …) now compare against the mailbox address inside `Name <addr@host>`, so domain Passes like `ENDS @ovoenergy.com` fire on real Apple Mail From lines.
+- Detached windows no longer flash-close when opened from the menu bar (MenuBarExtra teardown was treated as a traffic-light close while the open click was still the current event).
 
 ### Changed
 
 - Replaces Passes (`passes.json` / Pass types) with Rules (`rules.json` / `GrantRule`). No in-app migration from `passes.json`.
+- Rule field application is explicitly a Pass/Block overwrite on the Scope base (`applyOverlays`); UI copy clarifies mailbox allow vs field grant.
 
 ## [0.4.0] - 2026-09-29
 

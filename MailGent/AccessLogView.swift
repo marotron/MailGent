@@ -291,6 +291,12 @@ private struct AccessLogRow: View {
             if leakHitCount > 0 {
                 AccessLogLeakHitBadge(count: leakHitCount, compact: true)
             }
+            if passHitCount > 0 {
+                AccessLogRuleHitBadge(polarity: .pass, count: passHitCount)
+            }
+            if blockHitCount > 0 {
+                AccessLogRuleHitBadge(polarity: .block, count: blockHitCount)
+            }
             Text(timeLabel)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -302,6 +308,14 @@ private struct AccessLogRow: View {
 
     private var leakHitCount: Int {
         AccessLogFormat.leakDetectionCount(for: entry)
+    }
+
+    private var passHitCount: Int {
+        AccessLogFormat.passApplicationCount(for: entry)
+    }
+
+    private var blockHitCount: Int {
+        AccessLogFormat.blockApplicationCount(for: entry)
     }
 
     private var requestValue: String {
@@ -344,6 +358,16 @@ private struct AccessLogRow: View {
         var text = "\(entry.kind.badgeTitle) \(entry.agentName) \(requestValue) \(responseShort) \(status)"
         if leakHitCount > 0 {
             text += ". Leak guard \(leakHitCount) detection\(leakHitCount == 1 ? "" : "s")"
+        }
+        if passHitCount > 0 {
+            text += passHitCount == 1
+                ? ". Pass applied"
+                : ". Pass applied, \(passHitCount) hits"
+        }
+        if blockHitCount > 0 {
+            text += blockHitCount == 1
+                ? ". Block applied"
+                : ". Block applied, \(blockHitCount) hits"
         }
         return text
     }
@@ -699,7 +723,9 @@ private struct CollapsibleAuditMessage: View {
                             if !expanded {
                                 GrantFieldBadgeRow(
                                     fields: ref.fields,
-                                    labelMode: .icon
+                                    labelMode: .icon,
+                                    passRevealed: ref.passRevealedFields,
+                                    blockWithheld: ref.blockWithheldFields
                                 )
                                 .fixedSize(horizontal: true, vertical: false)
                                 if ref.leakDetectionCount > 0 {
@@ -714,7 +740,9 @@ private struct CollapsibleAuditMessage: View {
                             HStack(alignment: .center, spacing: 6) {
                                 GrantFieldBadgeRow(
                                     fields: ref.fields,
-                                    labelMode: .short
+                                    labelMode: .short,
+                                    passRevealed: ref.passRevealedFields,
+                                    blockWithheld: ref.blockWithheldFields
                                 )
                                 .fixedSize(horizontal: true, vertical: false)
                                 if ref.leakDetectionCount > 0 {
@@ -1102,6 +1130,14 @@ enum AccessLogFormat {
         return 0
     }
 
+    static func passApplicationCount(for entry: AuditEntry) -> Int {
+        displayMessages(for: entry).reduce(0) { $0 + $1.passApplicationCount }
+    }
+
+    static func blockApplicationCount(for entry: AuditEntry) -> Int {
+        displayMessages(for: entry).reduce(0) { $0 + $1.blockApplicationCount }
+    }
+
     static func messageRef(from responseSummary: String) -> AuditMessageRef? {
         guard let obj = jsonObject(responseSummary),
               let id = obj["id"] as? String,
@@ -1200,7 +1236,8 @@ enum AccessLogFormat {
             stealth: mergedStealth,
             leakDetections: ref.leakDetections,
             fields: ref.fields,
-            attachments: ref.attachments
+            attachments: ref.attachments,
+            appliedRules: ref.appliedRules
         )
     }
 

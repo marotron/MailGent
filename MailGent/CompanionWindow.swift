@@ -113,7 +113,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     private var isRecentPresent: Bool {
         guard let presentedAt else { return false }
-        return Date().timeIntervalSince(presentedAt) < 1.2
+        // MenuBarExtra teardown can land ~0.3–1.5s after the open click.
+        return Date().timeIntervalSince(presentedAt) < 2.0
     }
 
     private func wantsVisible(_ window: NSWindow) -> Bool {
@@ -251,10 +252,13 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // MenuBarExtra teardown synthesizes close/orderOut on whoever became key —
-        // often after the old ~1.2s "recent present" window. Only honor a real
-        // traffic-light click or ⌘W; keep intended windows up otherwise.
-        guard isUserInitiatedClose else {
+        // Opening click is still `currentEvent` while MenuBarExtra tears down —
+        // treating that mouseUp as a real close flash-dismisses the new window and
+        // thrash-reinstalls hosting views (memory climb). Ignore until present ages.
+        if isRecentPresent { return false }
+        // After that, only traffic-light / ⌘W may order out; synthetic close/orderOut
+        // from the status item must keep intended windows up.
+        guard isUserInitiatedClose(for: sender) else {
             if wantsVisible(sender) {
                 sender.orderFrontRegardless()
                 sender.makeKeyAndOrderFront(nil)
@@ -271,12 +275,16 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         return false
     }
 
-    /// Close button / ⌘W produce mouse or Cmd-key events. Synthetic teardown does not.
-    private var isUserInitiatedClose: Bool {
+    /// Traffic-light close or ⌘W. Menu-item mouseUp must not count as a close.
+    private func isUserInitiatedClose(for window: NSWindow) -> Bool {
         guard let event = NSApp.currentEvent else { return false }
         switch event.type {
         case .leftMouseDown, .leftMouseUp:
-            return true
+            guard let closeButton = window.standardWindowButton(.closeButton),
+                  let closeSuperview = closeButton.superview
+            else { return false }
+            let pointInTitle = closeSuperview.convert(event.locationInWindow, from: nil)
+            return closeButton.frame.insetBy(dx: -6, dy: -6).contains(pointInTitle)
         case .keyDown:
             let key = event.charactersIgnoringModifiers?.lowercased()
             return event.modifierFlags.contains(.command) && key == "w"

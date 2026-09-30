@@ -1058,6 +1058,8 @@ struct GrantFieldChip: View {
             }
             Text(title)
                 .font(.caption)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
         .padding(.horizontal, 8)
@@ -1074,6 +1076,64 @@ struct GrantFieldChip: View {
                 )
         )
         .strikethrough(strikethroughWhenOff && !isOn, color: Color.secondary.opacity(0.45))
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// Horizontal chip row that wraps to extra lines instead of compressing children.
+struct GrantChipFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(proposal: proposal, subviews: subviews).size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let frames = arrange(proposal: proposal, subviews: subviews).frames
+        for index in subviews.indices {
+            subviews[index].place(
+                at: CGPoint(
+                    x: bounds.minX + frames[index].minX,
+                    y: bounds.minY + frames[index].minY
+                ),
+                proposal: ProposedViewSize(frames[index].size)
+            )
+        }
+    }
+
+    private func arrange(
+        proposal: ProposedViewSize,
+        subviews: Subviews
+    ) -> (size: CGSize, frames: [CGRect]) {
+        let maxWidth = proposal.width ?? .infinity
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            usedWidth = max(usedWidth, x - spacing)
+        }
+
+        return (
+            CGSize(width: usedWidth, height: y + rowHeight),
+            frames
+        )
     }
 }
 
@@ -1119,11 +1179,22 @@ struct GrantFieldBadgeRow: View {
         case letter
     }
 
+    private enum Tint {
+        case pass
+        case block
+        case granted
+        case off
+    }
+
     let fields: GrantFields
     var interactive: Bool = false
     /// When false, omit greyed-out (disabled) field chips.
     var showOff: Bool = true
     var labelMode: LabelMode = .letter
+    /// Fields newly revealed by an effectful Pass (Access Log tint).
+    var passRevealed: GrantFields = .none
+    /// Fields newly withheld by an effectful Block (Access Log tint).
+    var blockWithheld: GrantFields = .none
     var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
 
     private struct Item: Identifiable {
@@ -1150,50 +1221,95 @@ struct GrantFieldBadgeRow: View {
         HStack(spacing: 2) {
             ForEach(Self.items) { item in
                 let on = fields[keyPath: item.keyPath]
-                if showOff || on {
+                let tint = tint(for: item.keyPath, on: on)
+                if showOff || on || tint == .pass || tint == .block {
                     if interactive, let onToggle {
                         Button {
                             onToggle(item.keyPath)
                         } label: {
-                            compactBadge(item, on: on)
+                            compactBadge(item, on: on, tint: tint)
                         }
                         .buttonStyle(.plain)
-                        .help(item.title)
-                        .accessibilityLabel(item.title)
+                        .help(helpText(item, tint: tint))
+                        .accessibilityLabel(accessibilityLabel(item, tint: tint))
                     } else {
-                        compactBadge(item, on: on)
-                            .help(item.title)
-                            .accessibilityLabel(item.title)
+                        compactBadge(item, on: on, tint: tint)
+                            .help(helpText(item, tint: tint))
+                            .accessibilityLabel(accessibilityLabel(item, tint: tint))
                     }
                 }
             }
         }
     }
 
-    private func compactBadge(_ item: Item, on: Bool) -> some View {
-        HStack(spacing: 2) {
+    private func tint(for keyPath: WritableKeyPath<GrantFields, Bool>, on: Bool) -> Tint {
+        if blockWithheld[keyPath: keyPath] { return .block }
+        if passRevealed[keyPath: keyPath] { return .pass }
+        return on ? .granted : .off
+    }
+
+    private func compactBadge(_ item: Item, on: Bool, tint: Tint) -> some View {
+        let ink = ink(for: tint)
+        let weight: Font.Weight = (tint == .pass || tint == .block || on) ? .medium : .regular
+        return HStack(spacing: 2) {
             Image(systemName: item.systemImage)
-                .font(.system(size: 8, weight: on ? .medium : .regular))
+                .font(.system(size: 8, weight: weight))
             if let text = labelText(item) {
                 Text(text)
-                    .font(.system(size: 8, weight: on ? .medium : .regular))
-                    .strikethrough(!on, color: Color.secondary.opacity(0.45))
+                    .font(.system(size: 8, weight: weight))
+                    .strikethrough(!on, color: ink.opacity(tint == .off ? 0.45 : 0.55))
             }
         }
-        .foregroundStyle(on ? Color.accentColor : Color.secondary.opacity(0.55))
+        .foregroundStyle(ink)
         .padding(.horizontal, labelMode == .icon ? 5 : 4)
         .frame(height: 14)
         .background(
             Capsule()
-                .fill(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+                .fill(fill(for: tint))
         )
         .overlay(
             Capsule()
-                .strokeBorder(
-                    on ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.2),
-                    lineWidth: 0.5
-                )
+                .strokeBorder(stroke(for: tint), lineWidth: 0.5)
         )
+    }
+
+    private func ink(for tint: Tint) -> Color {
+        switch tint {
+        case .pass: RuleMarkStyle.passGreen
+        case .block: RuleMarkStyle.blockRed
+        case .granted: Color.accentColor
+        case .off: Color.secondary.opacity(0.55)
+        }
+    }
+
+    private func fill(for tint: Tint) -> Color {
+        switch tint {
+        case .pass: RuleMarkStyle.passGreen.opacity(0.12)
+        case .block: RuleMarkStyle.blockRed.opacity(0.12)
+        case .granted: Color.accentColor.opacity(0.12)
+        case .off: Color.secondary.opacity(0.08)
+        }
+    }
+
+    private func stroke(for tint: Tint) -> Color {
+        switch tint {
+        case .pass: RuleMarkStyle.passBorder
+        case .block: RuleMarkStyle.blockBorder
+        case .granted: Color.accentColor.opacity(0.35)
+        case .off: Color.secondary.opacity(0.2)
+        }
+    }
+
+    private func helpText(_ item: Item, tint: Tint) -> String {
+        switch tint {
+        case .pass: "\(item.title) — revealed by Pass"
+        case .block: "\(item.title) — withheld by Block"
+        case .granted, .off: item.title
+        }
+    }
+
+    private func accessibilityLabel(_ item: Item, tint: Tint) -> String {
+        helpText(item, tint: tint)
     }
 
     private func labelText(_ item: Item) -> String? {
@@ -1225,31 +1341,42 @@ struct MessageAccessCard: View {
         VStack(alignment: .leading, spacing: 8) {
             SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
             if showsFieldBadges {
-                GrantFieldBadgeRow(fields: ref.fields)
+                GrantFieldBadgeRow(
+                    fields: ref.fields,
+                    passRevealed: ref.passRevealedFields,
+                    blockWithheld: ref.blockWithheldFields
+                )
             }
             subjectPreview
             if ref.fields.from {
-                AddressLine(label: "From", raw: ref.from)
+                AddressLine(label: "From", raw: ref.from) {
+                    ruleMarkView(for: \.from)
+                }
             } else {
-                previewRow("From", ref.from, false)
+                previewRow("From", ref.from, false, mark: ruleMark(for: \.from))
             }
             if ref.fields.to {
-                AddressLine(label: "To", raw: ref.to)
+                AddressLine(label: "To", raw: ref.to) {
+                    ruleMarkView(for: \.to)
+                }
             } else {
-                previewRow("To", ref.to, false)
+                previewRow("To", ref.to, false, mark: ruleMark(for: \.to))
             }
             if ref.fields.cc {
-                AddressLine(label: "Cc", raw: ref.cc)
+                AddressLine(label: "Cc", raw: ref.cc) {
+                    ruleMarkView(for: \.cc)
+                }
             } else {
-                previewRow("Cc", ref.cc, false)
+                previewRow("Cc", ref.cc, false, mark: ruleMark(for: \.cc))
             }
             previewRow(
                 "Date & Time",
                 AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
-                ref.fields.date
+                ref.fields.date,
+                mark: ruleMark(for: \.date)
             )
             Divider()
-            labeledSection("Body", viaPassNick: bodyViaPassNick) {
+            labeledSection("Body", mark: bodyRuleMark) {
                 bodyPreview
             }
             Divider()
@@ -1257,7 +1384,7 @@ struct MessageAccessCard: View {
                 attachmentColumn(
                     "Attachment Info",
                     granted: ref.fields.attachmentMetadata,
-                    viaPassNick: attachmentInfoViaPassNick
+                    mark: attachmentInfoRuleMark
                 ) {
                     if ref.attachments.isEmpty {
                         attachmentTile(detail: "none in this response")
@@ -1270,7 +1397,7 @@ struct MessageAccessCard: View {
                 attachmentColumn(
                     "Attachment Content",
                     granted: ref.fields.attachmentContent,
-                    viaPassNick: attachmentContentViaPassNick
+                    mark: attachmentContentRuleMark
                 ) {
                     attachmentTile(detail: attachmentContentDetail)
                 }
@@ -1283,6 +1410,38 @@ struct MessageAccessCard: View {
         }
     }
 
+    private var bodyRuleMark: AppliedGrantRule? {
+        if let nick = bodyViaPassNick {
+            return AppliedGrantRule(id: "preview", nick: nick, polarity: .pass)
+        }
+        return ruleMark(for: \.body)
+    }
+
+    private var attachmentInfoRuleMark: AppliedGrantRule? {
+        if let nick = attachmentInfoViaPassNick {
+            return AppliedGrantRule(id: "preview", nick: nick, polarity: .pass)
+        }
+        return ruleMark(for: \.attachmentMetadata)
+    }
+
+    private var attachmentContentRuleMark: AppliedGrantRule? {
+        if let nick = attachmentContentViaPassNick {
+            return AppliedGrantRule(id: "preview", nick: nick, polarity: .pass)
+        }
+        return ruleMark(for: \.attachmentContent)
+    }
+
+    private func ruleMark(for keyPath: KeyPath<GrantFields, Bool>) -> AppliedGrantRule? {
+        ref.appliedRuleMark(for: keyPath)
+    }
+
+    @ViewBuilder
+    private func ruleMarkView(for keyPath: KeyPath<GrantFields, Bool>) -> some View {
+        if let mark = ruleMark(for: keyPath) {
+            RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
+        }
+    }
+
     @ViewBuilder
     private var subjectPreview: some View {
         leakGuardRow(
@@ -1291,7 +1450,8 @@ struct MessageAccessCard: View {
             fieldGranted: ref.fields.subject,
             access: effectiveSubjectAccess,
             original: ref.subjectOriginal,
-            deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject
+            deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject,
+            mark: ruleMark(for: \.subject)
         )
     }
 
@@ -1370,7 +1530,8 @@ struct MessageAccessCard: View {
         fieldGranted: Bool,
         access: AuditBodyAccess,
         original: String?,
-        deniedPlaceholder: String
+        deniedPlaceholder: String,
+        mark: AppliedGrantRule? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
@@ -1397,6 +1558,9 @@ struct MessageAccessCard: View {
                     WithheldLabel(original: original, rules: ref.sanitizedRules)
                 }
             }
+            if let mark {
+                RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
+            }
         }
         .font(.caption)
     }
@@ -1419,28 +1583,34 @@ struct MessageAccessCard: View {
 
     private func labeledSection<Content: View>(
         _ title: String,
-        viaPassNick: String?,
+        mark: AppliedGrantRule?,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(title, viaPassNick: viaPassNick)
+            sectionTitle(title, mark: mark)
             content()
         }
     }
 
-    private func sectionTitle(_ title: String, viaPassNick: String?) -> some View {
+    private func sectionTitle(_ title: String, mark: AppliedGrantRule?) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
-            if let viaPassNick {
-                PassRevealChip(nick: viaPassNick)
+            if let mark {
+                RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
             }
         }
     }
 
-    private func previewRow(_ label: String, _ value: String, _ granted: Bool, empty: String = " ") -> some View {
+    private func previewRow(
+        _ label: String,
+        _ value: String,
+        _ granted: Bool,
+        empty: String = " ",
+        mark: AppliedGrantRule? = nil
+    ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
                 .fontWeight(.light)
@@ -1452,6 +1622,9 @@ struct MessageAccessCard: View {
             } else {
                 HatchDeniedLabel(placeholder: value.isEmpty ? empty : value)
             }
+            if let mark {
+                RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
+            }
         }
         .font(.caption)
     }
@@ -1459,11 +1632,11 @@ struct MessageAccessCard: View {
     private func attachmentColumn<Content: View>(
         _ title: String,
         granted: Bool,
-        viaPassNick: String? = nil,
+        mark: AppliedGrantRule? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(title, viaPassNick: viaPassNick)
+            sectionTitle(title, mark: mark)
             if granted {
                 content()
             } else {
@@ -1497,23 +1670,40 @@ struct MessageAccessCard: View {
     }
 }
 
-/// Compact mark for a field revealed by a matching Pass in Access preview.
-struct PassRevealChip: View {
-    let nick: String
+/// Shared Pass / Block mark colors (Access tab badges, Rules nick chips, Access Log).
+enum RuleMarkStyle {
+    static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
+    static let passBorder = Color(red: 143 / 255, green: 209 / 255, blue: 160 / 255)
+    static let blockRed = Color(red: 215 / 255, green: 0 / 255, blue: 21 / 255)
+    static let blockBorder = Color(red: 240 / 255, green: 180 / 255, blue: 187 / 255)
+}
 
-    /// Same green as the former PASS banner / Scope pass chips.
-    private static let passGreen = Color(red: 36 / 255, green: 138 / 255, blue: 61 / 255)
+/// Compact mark for a field revealed by Pass or withheld by Block (Access preview / Access Log).
+struct RuleFieldMarkChip: View {
+    let nick: String
+    var polarity: RulePolarity = .pass
 
     var body: some View {
         HStack(spacing: 2) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: polarity == .pass ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .font(.system(size: 9, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
             Text(nick)
                 .font(.caption.weight(.bold))
         }
-        .foregroundStyle(Self.passGreen)
-        .accessibilityLabel("Via pass \(nick)")
+        .foregroundStyle(polarity == .pass ? RuleMarkStyle.passGreen : RuleMarkStyle.blockRed)
+        .accessibilityLabel(
+            polarity == .pass ? "Via pass \(nick)" : "Withheld by block \(nick)"
+        )
+    }
+}
+
+/// Compact mark for a field revealed by a matching Pass in Access preview.
+struct PassRevealChip: View {
+    let nick: String
+
+    var body: some View {
+        RuleFieldMarkChip(nick: nick, polarity: .pass)
     }
 }
 
@@ -1599,6 +1789,53 @@ struct HatchPattern: View {
                 with: .color(HatchDeniedStyle.fill)
             )
         }
+    }
+}
+
+// MARK: - Rule hit access log visuals
+
+struct AccessLogRuleHitBadge: View {
+    let polarity: RulePolarity
+    let count: Int
+
+    private var color: Color {
+        polarity == .pass ? RuleMarkStyle.passGreen : RuleMarkStyle.blockRed
+    }
+
+    private var symbolName: String {
+        polarity == .pass ? "checkmark" : "xmark"
+    }
+
+    private var accessibilityText: String {
+        let label = polarity == .pass ? "Pass applied" : "Block applied"
+        if count > 1 {
+            return "\(label), \(count) hits"
+        }
+        return label
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: symbolName)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 4)
+                .frame(height: 14)
+                .background(Capsule().fill(color.opacity(0.12)))
+                .overlay {
+                    Capsule().strokeBorder(color.opacity(0.45), lineWidth: 0.5)
+                }
+
+            if count > 1 {
+                Text("\(count)")
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(color)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+        .help(accessibilityText)
+        .layoutPriority(1)
     }
 }
 

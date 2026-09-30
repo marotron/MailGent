@@ -169,4 +169,90 @@ struct AccessLogFormatTests {
         #expect(!AccessLogFormat.isEmptySuccess(getOk))
         #expect(!AccessLogFormat.isEmptySuccess(searchError))
     }
+
+    @Test func passAndBlockApplicationCountsSumDisplayMessages() {
+        let entry = AuditEntry(
+            kind: .list,
+            agentID: "a",
+            agentName: "Cursor",
+            messages: [
+                AuditMessageRef(
+                    accountID: "acc",
+                    placement: "INBOX",
+                    id: "1",
+                    subject: "A",
+                    from: "a@example.com",
+                    date: "2024-01-01T00:00:00Z",
+                    appliedRules: [
+                        AppliedGrantRule(
+                            id: "p1",
+                            nick: "A",
+                            polarity: .pass,
+                            fields: GrantFields(envelope: false, body: true)
+                        ),
+                        AppliedGrantRule(
+                            id: "b1",
+                            nick: "B",
+                            polarity: .block,
+                            fields: GrantFields(envelope: false, body: true)
+                        )
+                    ]
+                ),
+                AuditMessageRef(
+                    accountID: "acc",
+                    placement: "INBOX",
+                    id: "2",
+                    subject: "B",
+                    from: "b@example.com",
+                    date: "2024-01-02T00:00:00Z",
+                    appliedRules: [
+                        AppliedGrantRule(
+                            id: "p2",
+                            nick: "C",
+                            polarity: .pass,
+                            fields: GrantFields(envelope: false, body: true)
+                        ),
+                        AppliedGrantRule(
+                            id: "p3",
+                            nick: "D",
+                            polarity: .pass,
+                            fields: GrantFields(
+                                subject: false,
+                                from: false,
+                                to: false,
+                                cc: false,
+                                date: false,
+                                body: false,
+                                attachmentMetadata: true
+                            )
+                        )
+                    ]
+                )
+            ]
+        )
+
+        #expect(AccessLogFormat.passApplicationCount(for: entry) == 3)
+        #expect(AccessLogFormat.blockApplicationCount(for: entry) == 1)
+    }
+
+    @Test func passAndBlockApplicationCountsZeroWhenNoAppliedRules() {
+        let entry = AuditEntry(
+            kind: .search,
+            agentID: "a",
+            agentName: "Cursor",
+            messages: [
+                AuditMessageRef(
+                    accountID: "acc",
+                    placement: "INBOX",
+                    id: "1",
+                    subject: "A",
+                    from: "a@example.com",
+                    date: "2024-01-01T00:00:00Z"
+                )
+            ]
+        )
+
+        #expect(AccessLogFormat.passApplicationCount(for: entry) == 0)
+        #expect(AccessLogFormat.blockApplicationCount(for: entry) == 0)
+    }
 }
