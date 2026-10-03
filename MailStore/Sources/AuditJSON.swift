@@ -149,6 +149,32 @@ enum AuditJSON {
         return payload
     }
 
+    static func attachmentResult(
+        _ result: AttachmentAccessResult,
+        pathForAudit: Bool = false
+    ) -> [String: Any] {
+        var payload: [String: Any] = [
+            "accountID": result.accountID,
+            "placement": result.placement,
+            "id": result.id,
+            "filename": result.filename,
+            "isPartial": result.isPartial,
+            "attachmentContentAccess": result.attachmentContentAccess.rawValue
+        ]
+        if let byteCount = result.byteCount {
+            payload["byteCount"] = byteCount
+        }
+        if let path = result.path {
+            payload["path"] = pathForAudit
+                ? URL(fileURLWithPath: path).lastPathComponent
+                : path
+        }
+        if let note = result.note {
+            payload["note"] = note
+        }
+        return payload
+    }
+
     static func version(_ version: DraftVersion) -> [String: Any] {
         [
             "draftID": version.draftID,
@@ -180,6 +206,7 @@ extension AuditKind {
         case "list_new", "listNew": self = .listNew
         case "list_placements", "listPlacements": self = .listPlacements
         case "get": self = .get
+        case "get_attachment": self = .getAttachment
         case "create_draft": self = .createDraft
         case "update_draft": self = .updateDraft
         case "status": self = .status

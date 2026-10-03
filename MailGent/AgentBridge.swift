@@ -103,8 +103,8 @@ final class AgentBridge {
 
     static func isAgentRequest(_ kind: AuditKind) -> Bool {
         switch kind {
-        case .search, .list, .listNew, .listPlacements, .get, .createDraft, .updateDraft, .updateIndex, .status,
-            .setSource:
+        case .search, .list, .listNew, .listPlacements, .get, .getAttachment, .createDraft, .updateDraft,
+            .updateIndex, .status, .setSource:
             return true
         case .pair, .revoke:
             return false

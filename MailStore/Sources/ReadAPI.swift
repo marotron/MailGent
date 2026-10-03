@@ -66,6 +66,20 @@ public struct ReadAPI {
         )
     }
 
+    public func attachmentData(
+        accountID: String,
+        placement: String,
+        id: String,
+        filename: String
+    ) throws -> Data {
+        try index.store.attachmentData(
+            accountID: accountID,
+            mailbox: placement,
+            messageID: id,
+            filename: filename
+        )
+    }
+
     /// Arrivals from the last ingest pass (`update`'s `newCount`), newest-first.
     /// Trash/Junk copies and identity-only reindexes are omitted.
     public func listNew(

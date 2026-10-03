@@ -110,7 +110,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.5.1"
+                        "version": "0.6.0"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -139,7 +139,7 @@ public struct LoopbackMCPServer {
                         host.audit?.updateLast(
                             kind: kind,
                             requestSummary: AuditJSON.json(arguments),
-                            responseSummary: text
+                            responseSummary: Self.auditResponseSummary(kind: kind, toolText: text)
                         )
                     }
                     let envelope: [String: Any] = [
@@ -228,6 +228,23 @@ public struct LoopbackMCPServer {
                 id: messageID
             )
             return try jsonString(AuditJSON.messageDetail(message))
+        case "get_attachment":
+            guard
+                let accountID = arguments["accountID"] as? String,
+                let placement = arguments["placement"] as? String,
+                let messageID = arguments["id"] as? String,
+                let filename = arguments["filename"] as? String
+            else {
+                throw CallError.badArguments
+            }
+            let result = try gateway.getAttachment(
+                credential: credential,
+                accountID: accountID,
+                placement: placement,
+                id: messageID,
+                filename: filename
+            )
+            return try jsonString(AuditJSON.attachmentResult(result))
         case "create_draft":
             let started = Date()
             let body = arguments["body"] as? String ?? ""
@@ -380,6 +397,19 @@ public struct LoopbackMCPServer {
         }
     }
 
+    /// Access Log must never store attachment file bytes; for `get_attachment`, keep path basename only.
+    private static func auditResponseSummary(kind: AuditKind, toolText: String) -> String {
+        guard kind == .getAttachment,
+              let data = toolText.data(using: .utf8),
+              var obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let path = obj["path"] as? String
+        else {
+            return toolText
+        }
+        obj["path"] = URL(fileURLWithPath: path).lastPathComponent
+        return AuditJSON.json(obj)
+    }
+
     private static func intArgument(_ value: Any?) -> Int? {
         switch value {
         case let n as Int:
@@ -461,7 +491,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "get",
                 "description":
-                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant or leak_guard. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty.",
+                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant or leak_guard. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty. When attachments are listed and content is granted, use get_attachment to fetch file bytes.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -470,6 +500,21 @@ public struct LoopbackMCPServer {
                         "id": ["type": "string"]
                     ],
                     "required": ["accountID", "placement", "id"]
+                ]
+            ],
+            [
+                "name": "get_attachment",
+                "description":
+                    "Fetch one attachment’s bytes for a granted message (use filenames from get). Writes a unique local temp file and returns its path — not base64. Requires the message in Scope and fields.attachmentContent. Rejects files over 25 MiB (too_large). Partial/undownloaded parts return not_available. attachmentContentAccess: granted, not_granted, not_available, or too_large.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "accountID": ["type": "string"],
+                        "placement": ["type": "string"],
+                        "id": ["type": "string"],
+                        "filename": ["type": "string", "description": "Attachment filename from get"]
+                    ],
+                    "required": ["accountID", "placement", "id", "filename"]
                 ]
             ],
             [
