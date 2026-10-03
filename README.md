@@ -1,6 +1,6 @@
 # MailGent
 
-**0.6.0 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
+**0.7.0 alpha** — macOS menu-bar companion beside Apple Mail. Not a daily client. No built-in AI. External agents talk to MailGent over MCP.
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
@@ -14,6 +14,7 @@ This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local
 - Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments
 - Outbound leak guard: on-device subject/body scan before agents receive mail (opt in per placement; built-in + custom rules)
 - Append-only access log (sanitized/withheld field overlays)
+- Open in Apple Mail from Companion Read and Access Log previews (`message://` Message-ID handoff)
 - MailGent-owned draft ledger (in-memory; not written into Mail.app)
 
 Default source is **fixture mail**. Live Mail needs a readable `~/Library/Mail` (Full Disk Access, or Choose Mail Folder…).
@@ -25,7 +26,6 @@ Do not advertise these as shipped:
 - Gmail/Yahoo OAuth
 - Send / move / trash
 - Approval queue
-- Open in Apple Mail (stub)
 - Keychain pairing
 - Persisted drafts
 

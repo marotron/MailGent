@@ -62,7 +62,8 @@ public struct ReadAPI {
             htmlBody: mail.htmlBody,
             rawBody: mail.rawBody,
             attachments: mail.attachments,
-            cc: mail.cc
+            cc: mail.cc,
+            internetMessageID: mail.internetMessageID
         )
     }
 
@@ -143,6 +144,8 @@ public struct ReadMessage: Equatable, Sendable {
     public let cc: String
     public let date: String
     public let subject: String
+    /// RFC 5322 Message-ID when loaded from MIME; empty when index-only or absent.
+    public let internetMessageID: String
     public let body: ReadBody
     /// Decoded HTML when present; Pretty prefers this over plain text.
     public let htmlBody: String?
@@ -162,6 +165,7 @@ public struct ReadMessage: Equatable, Sendable {
         rawBody: String = "",
         attachments: [MailAttachment] = [],
         cc: String? = nil,
+        internetMessageID: String = "",
         leakGuardAccess: ReadMessageAccess? = nil
     ) {
         self.id = message.id
@@ -172,6 +176,7 @@ public struct ReadMessage: Equatable, Sendable {
         self.cc = cc ?? message.cc
         self.date = message.date
         self.subject = message.subject
+        self.internetMessageID = internetMessageID
         let text = prettyBody ?? message.body
         self.body = text.isEmpty ? .notAvailable : .text(text)
         self.htmlBody = htmlBody
@@ -198,6 +203,7 @@ public struct ReadMessage: Equatable, Sendable {
             cc: fields.cc ? cc : "",
             date: fields.date ? date : "",
             subject: fields.subject ? subject : "",
+            internetMessageID: internetMessageID,
             body: fields.body ? body : .notGranted,
             htmlBody: fields.body ? htmlBody : nil,
             rawBody: fields.body ? rawBody : "",
@@ -218,6 +224,7 @@ public struct ReadMessage: Equatable, Sendable {
             cc: cc,
             date: date,
             subject: subject,
+            internetMessageID: internetMessageID,
             body: body,
             htmlBody: htmlBody,
             rawBody: rawBody,
@@ -238,6 +245,7 @@ public struct ReadMessage: Equatable, Sendable {
             cc: cc,
             date: date,
             subject: text,
+            internetMessageID: internetMessageID,
             body: body,
             htmlBody: htmlBody,
             rawBody: rawBody,
@@ -258,6 +266,7 @@ public struct ReadMessage: Equatable, Sendable {
             cc: cc,
             date: date,
             subject: subject,
+            internetMessageID: internetMessageID,
             body: body,
             htmlBody: htmlBody,
             rawBody: rawBody,
@@ -277,6 +286,7 @@ public struct ReadMessage: Equatable, Sendable {
         cc: String,
         date: String,
         subject: String,
+        internetMessageID: String,
         body: ReadBody,
         htmlBody: String?,
         rawBody: String,
@@ -293,6 +303,7 @@ public struct ReadMessage: Equatable, Sendable {
         self.cc = cc
         self.date = date
         self.subject = subject
+        self.internetMessageID = internetMessageID
         self.body = body
         self.htmlBody = htmlBody
         self.rawBody = rawBody

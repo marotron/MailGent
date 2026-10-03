@@ -528,7 +528,10 @@ private struct AccessLogDetail: View {
                     ref: ref,
                     omitsBody: omitsBody,
                     attachmentContentDetail: AccessLogFormat.attachmentContentDetail(for: entry),
-                    startsExpanded: displayMessages.count == 1
+                    startsExpanded: displayMessages.count == 1,
+                    mailHandoffTitle: entry.kind == .getAttachment
+                        ? "Open message in Apple Mail"
+                        : "Open in Apple Mail"
                 )
             }
         }
@@ -687,6 +690,7 @@ private struct CollapsibleAuditMessage: View {
     let ref: AuditMessageRef
     let omitsBody: Bool
     let attachmentContentDetail: String
+    let mailHandoffTitle: String
 
     @State private var expanded: Bool
 
@@ -695,12 +699,14 @@ private struct CollapsibleAuditMessage: View {
         ref: AuditMessageRef,
         omitsBody: Bool,
         attachmentContentDetail: String = "none in this response",
-        startsExpanded: Bool = false
+        startsExpanded: Bool = false,
+        mailHandoffTitle: String = "Open in Apple Mail"
     ) {
         self.session = session
         self.ref = ref
         self.omitsBody = omitsBody
         self.attachmentContentDetail = attachmentContentDetail
+        self.mailHandoffTitle = mailHandoffTitle
         _expanded = State(initialValue: startsExpanded)
     }
 
@@ -788,6 +794,12 @@ private struct CollapsibleAuditMessage: View {
                     }
                     .buttonStyle(.plain)
                     .help("Open in Companion Read")
+
+                    OpenInMailButton(
+                        session: session,
+                        locator: (ref.accountID, ref.placement, ref.id),
+                        title: mailHandoffTitle
+                    )
 
                     if AccessLogFormat.showsSanitizedLegend(for: [ref]) {
                         SanitizedFieldsLegend()

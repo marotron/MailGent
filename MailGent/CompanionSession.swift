@@ -219,7 +219,37 @@ final class CompanionSession {
     }
 
     func openInMail() {
-        handoffNote = "Apple Mail handoff needs a Message-ID this index does not store yet."
+        guard let detail else {
+            handoffNote = "Select a message before opening it in Apple Mail."
+            return
+        }
+        openInMail(internetMessageID: detail.internetMessageID)
+    }
+
+    /// Loads MIME Message-ID for an audit/list ref, then hands off to Apple Mail.
+    func openInMail(accountID: String, placement: String, id: String) {
+        handoffNote = nil
+        Task {
+            do {
+                let message = try await worker.readMessage(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id
+                )
+                openInMail(internetMessageID: message.internetMessageID)
+            } catch {
+                handoffNote = "Message not available for Apple Mail handoff."
+            }
+        }
+    }
+
+    private func openInMail(internetMessageID: String) {
+        guard let url = AppleMailHandoff.messageURL(internetMessageID: internetMessageID) else {
+            handoffNote = "This message has no Message-ID Apple Mail can open."
+            return
+        }
+        handoffNote = nil
+        NSWorkspace.shared.open(url)
     }
 
     func openAttachment(_ attachment: MailAttachment, of message: ReadMessage) {

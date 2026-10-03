@@ -52,6 +52,7 @@ public struct MailStore: Sendable {
             cc: parsed.cc,
             date: parsed.date,
             subject: parsed.subject,
+            internetMessageID: parsed.internetMessageID,
             body: parsed.body,
             htmlBody: parsed.htmlBody,
             rawBody: parsed.rawBody,
@@ -123,6 +124,8 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let cc: String
     public let date: String
     public let subject: String
+    /// RFC 5322 `Message-ID` header (empty when absent). Used for Apple Mail `message://` handoff.
+    public let internetMessageID: String
     /// Decoded plain text (text/plain preferred; QP/base64 applied). Empty when HTML-only.
     public let body: String
     /// Decoded HTML body when a text/html part exists.
@@ -132,6 +135,28 @@ public struct MailMessage: Equatable, Sendable, Identifiable {
     public let isPartial: Bool
     public let isDraft: Bool
     public let attachments: [MailAttachment]
+}
+
+/// Builds Apple Mail `message://` deep links from an RFC 5322 Message-ID.
+public enum AppleMailHandoff {
+    /// Percent-encoded `message://%3C…%3E` URL, or nil when the id is empty.
+    public static func messageURL(internetMessageID: String) -> URL? {
+        let trimmed = internetMessageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let bracketed: String
+        if trimmed.hasPrefix("<"), trimmed.hasSuffix(">") {
+            bracketed = trimmed
+        } else {
+            bracketed = "<\(trimmed)>"
+        }
+        // `<` / `>` / `@` are not valid URL host characters; encode the id by hand.
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: ".-_")
+        guard let encoded = bracketed.addingPercentEncoding(withAllowedCharacters: allowed) else {
+            return nil
+        }
+        return URL(string: "message://\(encoded)")
+    }
 }
 
 public struct MailAttachment: Equatable, Hashable, Sendable, Codable {
@@ -215,6 +240,8 @@ private struct ParsedRFC822 {
     var cc: String
     var date: String
     var subject: String
+    /// RFC 5322 Message-ID header value (may include angle brackets).
+    var internetMessageID: String
     var body: String
     var htmlBody: String?
     var rawBody: String
@@ -636,6 +663,7 @@ extension MailStore {
             cc: decodeRFC2047(headers["cc"] ?? ""),
             date: headers["date"] ?? "",
             subject: decodeRFC2047(headers["subject"] ?? ""),
+            internetMessageID: headers["message-id"] ?? "",
             body: body,
             htmlBody: decoded.html,
             rawBody: rawBody,
