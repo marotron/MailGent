@@ -1,8 +1,52 @@
 import Foundation
 
+/// Result of `get_attachment`: local temp path when content is granted and available.
+public struct AttachmentAccessResult: Equatable, Sendable {
+    public enum Access: String, Equatable, Sendable {
+        case granted
+        case notGranted = "not_granted"
+        case notAvailable = "not_available"
+        case tooLarge = "too_large"
+    }
+
+    public let accountID: String
+    public let placement: String
+    public let id: String
+    public let filename: String
+    public let byteCount: Int?
+    public let path: String?
+    public let isPartial: Bool
+    public let attachmentContentAccess: Access
+    public let note: String?
+
+    public init(
+        accountID: String,
+        placement: String,
+        id: String,
+        filename: String,
+        byteCount: Int? = nil,
+        path: String? = nil,
+        isPartial: Bool,
+        attachmentContentAccess: Access,
+        note: String? = nil
+    ) {
+        self.accountID = accountID
+        self.placement = placement
+        self.id = id
+        self.filename = filename
+        self.byteCount = byteCount
+        self.path = path
+        self.isPartial = isPartial
+        self.attachmentContentAccess = attachmentContentAccess
+        self.note = note
+    }
+}
+
 /// ReadAPI surface for paired agents. Every call requires proof of possession.
 /// Results are deny-filtered through GrantGate (no grants → empty / not_available).
 public struct AgentReadAPI {
+    /// Hard reject for attachment bytes delivered via temp file.
+    public static let attachmentByteLimit = 25 * 1024 * 1024
     public let read: ReadAPI
     public let pairing: Pairing
     public let grants: GrantGate
@@ -241,6 +285,163 @@ public struct AgentReadAPI {
         }
     }
 
+    public func getAttachment(
+        credential: String?,
+        accountID: String,
+        placement: String,
+        id: String,
+        filename: String
+    ) throws -> AttachmentAccessResult {
+        let started = Date()
+        let agent = try authenticate(credential)
+        let path = "\(accountID)/\(placement)/\(id)"
+        let request = AuditJSON.request([
+            "accountID": accountID,
+            "placement": placement,
+            "id": id,
+            "filename": filename
+        ])
+        do {
+            let message = try read.get(accountID: accountID, placement: placement, id: id)
+            let probe = IndexedMessage(
+                id: message.id,
+                accountID: message.accountID,
+                placement: message.placement,
+                from: message.from,
+                to: message.to,
+                cc: message.cc,
+                date: message.date,
+                subject: message.subject,
+                body: "",
+                isPartial: message.isPartial
+            )
+            guard let grant = effectiveGrant(for: probe, agentID: agent.id) else {
+                record(
+                    kind: .getAttachment,
+                    agent: agent,
+                    started: started,
+                    detail: path,
+                    requestSummary: request,
+                    outcome: .error("unauthorized")
+                )
+                throw PairingError.unauthorized
+            }
+            let fields = grant.fields
+            let resolvedName = message.attachments.first {
+                $0.filename.lowercased() == filename.lowercased()
+            }?.filename ?? filename
+
+            let result: AttachmentAccessResult
+            if !fields.attachmentContent {
+                result = AttachmentAccessResult(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id,
+                    filename: resolvedName,
+                    byteCount: message.attachments.first {
+                        $0.filename.lowercased() == filename.lowercased()
+                    }?.byteCount,
+                    isPartial: message.isPartial,
+                    attachmentContentAccess: .notGranted,
+                    note: "Attachment content omitted: the active grant does not allow attachment content. Ask the user to enable Attachment Content on the grant."
+                )
+            } else if let meta = message.attachments.first(where: {
+                $0.filename.lowercased() == filename.lowercased()
+            }) {
+                if meta.byteCount > Self.attachmentByteLimit {
+                    result = AttachmentAccessResult(
+                        accountID: accountID,
+                        placement: placement,
+                        id: id,
+                        filename: meta.filename,
+                        byteCount: meta.byteCount,
+                        isPartial: message.isPartial,
+                        attachmentContentAccess: .tooLarge,
+                        note: "Attachment exceeds the \(Self.attachmentByteLimit)-byte size limit."
+                    )
+                } else {
+                    result = try loadAttachmentResult(
+                        accountID: accountID,
+                        placement: placement,
+                        id: id,
+                        filename: meta.filename,
+                        knownByteCount: meta.byteCount,
+                        isPartial: message.isPartial
+                    )
+                }
+            } else {
+                let note: String
+                if message.attachments.isEmpty {
+                    note = message.isPartial
+                        ? "Attachment not available. Message is partial; Apple Mail may not have downloaded this part."
+                        : "Attachment not available for this message."
+                } else {
+                    note = "No attachment named \"\(filename)\" on this message."
+                }
+                result = AttachmentAccessResult(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id,
+                    filename: filename,
+                    isPartial: message.isPartial,
+                    attachmentContentAccess: .notAvailable,
+                    note: note
+                )
+            }
+
+            let auditAttachments: [MailAttachment]
+            if let byteCount = result.byteCount {
+                auditAttachments = [MailAttachment(filename: result.filename, byteCount: byteCount)]
+            } else if result.attachmentContentAccess != .notAvailable {
+                auditAttachments = [MailAttachment(filename: result.filename, byteCount: 0)]
+            } else {
+                auditAttachments = message.attachments.filter {
+                    $0.filename.lowercased() == filename.lowercased()
+                }
+            }
+
+            record(
+                kind: .getAttachment,
+                agent: agent,
+                started: started,
+                detail: "\(path)/\(result.filename)",
+                requestSummary: request,
+                responseSummary: AuditJSON.json(
+                    AuditJSON.attachmentResult(result, pathForAudit: true)
+                ),
+                messages: [
+                    AuditMessageRef(
+                        accountID: message.accountID,
+                        placement: message.placement,
+                        id: message.id,
+                        subject: fields.subject ? message.subject : "",
+                        from: fields.from ? message.from : "",
+                        date: fields.date ? message.date : "",
+                        to: fields.to ? message.to : "",
+                        cc: fields.cc ? message.cc : "",
+                        bodyAccess: fields.body ? .notAvailable : .notGranted,
+                        fields: fields,
+                        attachments: auditAttachments,
+                        appliedRules: grant.applied
+                    )
+                ]
+            )
+            return result
+        } catch let error as PairingError where error == .unauthorized {
+            throw error
+        } catch {
+            record(
+                kind: .getAttachment,
+                agent: agent,
+                started: started,
+                detail: path,
+                requestSummary: request,
+                outcome: .error(String(describing: error))
+            )
+            throw error
+        }
+    }
+
     public func listPlacements(credential: String?) throws -> [Placement] {
         let started = Date()
         let agent = try authenticate(credential)
@@ -323,6 +524,81 @@ public struct AgentReadAPI {
             )
             throw error
         }
+    }
+
+    private func loadAttachmentResult(
+        accountID: String,
+        placement: String,
+        id: String,
+        filename: String,
+        knownByteCount: Int,
+        isPartial: Bool
+    ) throws -> AttachmentAccessResult {
+        let data: Data
+        do {
+            data = try read.attachmentData(
+                accountID: accountID,
+                placement: placement,
+                id: id,
+                filename: filename
+            )
+        } catch MailStoreError.attachmentNotFound, MailStoreError.unreadable {
+            return AttachmentAccessResult(
+                accountID: accountID,
+                placement: placement,
+                id: id,
+                filename: filename,
+                byteCount: knownByteCount,
+                isPartial: isPartial,
+                attachmentContentAccess: .notAvailable,
+                note: isPartial
+                    ? "Attachment bytes are not on disk. Message is partial; Apple Mail may not have downloaded this part."
+                    : "Attachment bytes are not available on disk."
+            )
+        }
+        if data.count > Self.attachmentByteLimit {
+            return AttachmentAccessResult(
+                accountID: accountID,
+                placement: placement,
+                id: id,
+                filename: filename,
+                byteCount: data.count,
+                isPartial: isPartial,
+                attachmentContentAccess: .tooLarge,
+                note: "Attachment exceeds the \(Self.attachmentByteLimit)-byte size limit."
+            )
+        }
+        let fileURL = try Self.writeAttachmentTempFile(filename: filename, data: data)
+        return AttachmentAccessResult(
+            accountID: accountID,
+            placement: placement,
+            id: id,
+            filename: filename,
+            byteCount: data.count,
+            path: fileURL.path,
+            isPartial: isPartial,
+            attachmentContentAccess: .granted
+        )
+    }
+
+    private static func writeAttachmentTempFile(filename: String, data: Data) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-agent-attachments", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let dest = root.appendingPathComponent(safeAttachmentFilename(filename))
+        try data.write(to: dest, options: .atomic)
+        return dest
+    }
+
+    private static func safeAttachmentFilename(_ filename: String) -> String {
+        let base = (filename as NSString).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = base
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "\0", with: "_")
+        return cleaned.isEmpty ? "attachment" : cleaned
     }
 
     private func filterPage(

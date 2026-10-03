@@ -527,6 +527,7 @@ private struct AccessLogDetail: View {
                     session: session,
                     ref: ref,
                     omitsBody: omitsBody,
+                    attachmentContentDetail: AccessLogFormat.attachmentContentDetail(for: entry),
                     startsExpanded: displayMessages.count == 1
                 )
             }
@@ -685,6 +686,7 @@ private struct CollapsibleAuditMessage: View {
     let session: CompanionSession
     let ref: AuditMessageRef
     let omitsBody: Bool
+    let attachmentContentDetail: String
 
     @State private var expanded: Bool
 
@@ -692,11 +694,13 @@ private struct CollapsibleAuditMessage: View {
         session: CompanionSession,
         ref: AuditMessageRef,
         omitsBody: Bool,
+        attachmentContentDetail: String = "none in this response",
         startsExpanded: Bool = false
     ) {
         self.session = session
         self.ref = ref
         self.omitsBody = omitsBody
+        self.attachmentContentDetail = attachmentContentDetail
         _expanded = State(initialValue: startsExpanded)
     }
 
@@ -776,7 +780,8 @@ private struct CollapsibleAuditMessage: View {
                             session: session,
                             ref: ref,
                             omitsBody: omitsBody,
-                            showsFieldBadges: false
+                            showsFieldBadges: false,
+                            attachmentContentDetail: attachmentContentDetail
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
@@ -787,7 +792,9 @@ private struct CollapsibleAuditMessage: View {
                     if AccessLogFormat.showsSanitizedLegend(for: [ref]) {
                         SanitizedFieldsLegend()
                     }
-                    LockedFieldsLegend()
+                    if AccessLogFormat.hasLockedFields(ref) {
+                        LockedFieldsLegend()
+                    }
                 }
                 .padding(.leading, 18)
             }
@@ -877,6 +884,8 @@ enum AccessLogFormat {
         case "chars": "Characters"
         case "bodyAccess": "Body"
         case "subjectAccess": "Subject access"
+        case "attachmentContentAccess": "Attachment content"
+        case "attachmentAccess": "Attachment info"
         case "subjectAccessReason": "Subject reason"
         case "bodyAccessReason": "Body reason"
         case "sanitizedRules": "Sanitized rules"
@@ -1014,6 +1023,12 @@ enum AccessLogFormat {
         if let bodyAccess = obj["bodyAccess"] as? String {
             return "bodyAccess=\(bodyAccess)"
         }
+        if let attachmentAccess = obj["attachmentContentAccess"] as? String {
+            if let filename = obj["filename"] as? String, !filename.isEmpty {
+                return "attachmentContentAccess=\(attachmentAccess) \(filename)"
+            }
+            return "attachmentContentAccess=\(attachmentAccess)"
+        }
         if let draftID = obj["draftID"] as? String {
             if let label = obj["label"] as? String, !label.isEmpty {
                 return "draftID=\(draftID) \(label)"
@@ -1087,17 +1102,59 @@ enum AccessLogFormat {
 
     static func displayMessages(for entry: AuditEntry) -> [AuditMessageRef] {
         switch entry.kind {
-        case .get:
+        case .get, .getAttachment:
             if entry.messages.isEmpty {
                 if let ref = messageRef(from: entry.responseSummary) {
                     return [ref]
                 }
                 return []
             }
-            return entry.messages.map { enrichGetRef($0, from: entry.responseSummary) }
+            return entry.messages.map { ref in
+                let enriched = enrichGetRef(ref, from: entry.responseSummary)
+                guard entry.kind == .getAttachment else { return enriched }
+                return enrichAttachmentRef(enriched, from: entry.responseSummary)
+            }
         default:
             return entry.messages
         }
+    }
+
+    /// Tile copy for Attachment Content. `get_attachment` uses response access; `get` stays "none in this response".
+    static func attachmentContentDetail(for entry: AuditEntry) -> String {
+        guard entry.kind == .getAttachment,
+              let obj = jsonObject(entry.responseSummary),
+              let access = obj["attachmentContentAccess"] as? String
+        else {
+            return "none in this response"
+        }
+        let filename = obj["filename"] as? String
+        let size: String? = {
+            guard let bytes = intValue(obj["byteCount"]) else { return nil }
+            let name = filename ?? "attachment"
+            return MailAttachment(filename: name, byteCount: bytes).sizeLabel
+        }()
+        switch access {
+        case "granted":
+            let name = filename ?? "attachment"
+            if let size { return "\(name) · \(size)" }
+            if let path = obj["path"] as? String, !path.isEmpty { return "\(name) · \(path)" }
+            return name
+        case "not_granted":
+            return "not granted"
+        case "not_available":
+            return "not available"
+        case "too_large":
+            if let name = filename, let size { return "\(name) · \(size) · too large" }
+            return "too large"
+        default:
+            return access
+        }
+    }
+
+    static func hasLockedFields(_ ref: AuditMessageRef) -> Bool {
+        let f = ref.fields
+        return !f.subject || !f.from || !f.to || !f.cc || !f.date
+            || !f.body || !f.attachmentMetadata || !f.attachmentContent
     }
 
     static func showsSanitizedLegend(for refs: [AuditMessageRef]) -> Bool {
@@ -1241,6 +1298,58 @@ enum AccessLogFormat {
         )
     }
 
+    /// Align Access Log field chips with `get_attachment` response access (and keep filename metadata).
+    static func enrichAttachmentRef(_ ref: AuditMessageRef, from responseSummary: String) -> AuditMessageRef {
+        guard let obj = jsonObject(responseSummary),
+              let access = obj["attachmentContentAccess"] as? String
+        else { return ref }
+
+        var fields = ref.fields
+        switch access {
+        case "granted", "not_available", "too_large":
+            fields.attachmentMetadata = true
+            fields.attachmentContent = true
+        case "not_granted":
+            fields.attachmentContent = false
+            if obj["filename"] as? String != nil {
+                fields.attachmentMetadata = true
+            }
+        default:
+            break
+        }
+
+        let attachments: [MailAttachment]
+        if !ref.attachments.isEmpty {
+            attachments = ref.attachments
+        } else {
+            attachments = parseAttachments(from: obj)
+        }
+
+        guard fields != ref.fields || attachments != ref.attachments else { return ref }
+
+        return AuditMessageRef(
+            accountID: ref.accountID,
+            placement: ref.placement,
+            id: ref.id,
+            subject: ref.subject,
+            from: ref.from,
+            date: ref.date,
+            to: ref.to,
+            cc: ref.cc,
+            bodySnippet: ref.bodySnippet,
+            subjectAccess: ref.subjectAccess,
+            bodyAccess: ref.bodyAccess,
+            subjectOriginal: ref.subjectOriginal,
+            bodyOriginal: ref.bodyOriginal,
+            sanitizedRules: ref.sanitizedRules,
+            stealth: ref.stealth,
+            leakDetections: ref.leakDetections,
+            fields: fields,
+            attachments: attachments,
+            appliedRules: ref.appliedRules
+        )
+    }
+
     /// Older stealth audits stored original as bodySnippet. Prefer agent text from response JSON.
     private static func recoverStealthBodies(
         ref: AuditMessageRef,
@@ -1336,25 +1445,35 @@ enum AccessLogFormat {
     }
 
     private static func inferredGrantFields(from obj: [String: Any]) -> GrantFields {
-        GrantFields(
+        let attachmentContent = obj["attachmentContentAccess"] as? String == "granted"
+        let attachmentMetadata =
+            obj["attachmentAccess"] as? String == "granted"
+            || attachmentContent
+            || obj["filename"] as? String != nil
+        return GrantFields(
             subject: obj["subjectAccess"] as? String != AuditBodyAccess.notGranted.rawValue,
             from: (obj["from"] as? String)?.isEmpty == false,
             to: (obj["to"] as? String)?.isEmpty == false,
             cc: (obj["cc"] as? String)?.isEmpty == false,
             date: (obj["date"] as? String)?.isEmpty == false,
             body: obj["bodyAccess"] as? String != AuditBodyAccess.notGranted.rawValue,
-            attachmentMetadata: obj["attachmentAccess"] as? String == "granted",
-            attachmentContent: false
+            attachmentMetadata: attachmentMetadata,
+            attachmentContent: attachmentContent
         )
     }
 
     private static func parseAttachments(from obj: [String: Any]) -> [MailAttachment] {
-        guard let items = obj["attachments"] as? [[String: Any]] else { return [] }
-        return items.compactMap { item in
-            guard let filename = item["filename"] as? String else { return nil }
-            let byteCount = intValue(item["byteCount"]) ?? 0
-            return MailAttachment(filename: filename, byteCount: byteCount)
+        if let items = obj["attachments"] as? [[String: Any]] {
+            return items.compactMap { item in
+                guard let filename = item["filename"] as? String else { return nil }
+                let byteCount = intValue(item["byteCount"]) ?? 0
+                return MailAttachment(filename: filename, byteCount: byteCount)
+            }
         }
+        if let filename = obj["filename"] as? String {
+            return [MailAttachment(filename: filename, byteCount: intValue(obj["byteCount"]) ?? 0)]
+        }
+        return []
     }
 }
 

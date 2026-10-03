@@ -535,12 +535,75 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"list\""))
         #expect(response.body.contains("\"name\":\"list_new\""))
         #expect(response.body.contains("\"name\":\"get\""))
+        #expect(response.body.contains("\"name\":\"get_attachment\""))
         #expect(response.body.contains("\"name\":\"list_placements\""))
         #expect(!response.body.contains("\"name\":\"listNew\""))
         #expect(!response.body.contains("\"name\":\"listPlacements\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
+    }
+
+    @Test func authenticatedGetAttachmentReturnsPathJSON() async throws {
+        let env = try AttachmentLoopbackFixture(attachmentContent: true)
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get_attachment",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1",
+                        "filename": "statement.pdf"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["attachmentContentAccess"] as? String == "granted")
+        let path = try #require(payload["path"] as? String)
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == env.pdfBytes)
+        let attach = try #require(env.audit.entries().last { $0.kind == .getAttachment })
+        let auditJSON = jsonObject(attach.responseSummary)
+        #expect(auditJSON["path"] as? String == "statement.pdf")
+        #expect(attach.messages.first?.fields.attachmentContent == true)
+    }
+
+    @Test func getAttachmentDeniedContentReturnsNotGrantedWithoutIsError() async throws {
+        let env = try AttachmentLoopbackFixture(attachmentContent: false)
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "get_attachment",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1",
+                        "filename": "statement.pdf"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["attachmentContentAccess"] as? String == "not_granted")
+        #expect(payload["path"] == nil)
     }
 
     @Test func setSourceDeniedWhenSettingOff() async throws {
@@ -829,6 +892,83 @@ private struct LoopbackFixture {
             audit: audit
         )
         server = LoopbackMCPServer(gateway: gateway, sourceController: sourceController)
+    }
+
+    func remove() {
+        root.remove()
+        try? FileManager.default.removeItem(at: db)
+    }
+}
+
+private struct AttachmentLoopbackFixture {
+    let root: FixtureTree
+    let db: URL
+    let credential = "secret-token"
+    let pdfBytes = Data("%PDF-1.4\nattachment-bytes".utf8)
+    let audit: AuditLog
+    let server: LoopbackMCPServer
+
+    init(attachmentContent: Bool) throws {
+        root = try FixtureTree()
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let pdfB64 = pdfBytes.base64EncodedString()
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Statement
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="MIX"
+
+            --MIX
+            Content-Type: text/plain; charset=utf-8
+
+            See statement.
+
+            --MIX
+            Content-Type: application/pdf; name="statement.pdf"
+            Content-Disposition: attachment; filename="statement.pdf"
+            Content-Transfer-Encoding: base64
+
+            \(pdfB64)
+            --MIX--
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-mcp-attach-\(UUID().uuidString).sqlite")
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        audit = AuditLog()
+        let pairing = Pairing(audit: audit)
+        let agent = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: credential
+        )
+        let grants = GrantGate()
+        try grants.allow(
+            agentID: agent.id,
+            accountID: accountID,
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: attachmentContent
+            )
+        )
+        let gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            audit: audit
+        )
+        server = LoopbackMCPServer(gateway: gateway)
     }
 
     func remove() {

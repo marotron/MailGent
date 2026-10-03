@@ -415,6 +415,116 @@ struct AgentReadAPITests {
         #expect(get.messages[0].blockWithheldFields.body == true)
         #expect(get.messages[0].appliedRuleMark(for: \.body)?.polarity == .block)
     }
+
+    @Test func getAttachmentDeniedWhenContentNotGranted() throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: false
+            )
+        )
+        defer { env.remove() }
+
+        let result = try env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "statement.pdf"
+        )
+        #expect(result.attachmentContentAccess == .notGranted)
+        #expect(result.path == nil)
+        #expect(result.filename == "statement.pdf")
+    }
+
+    @Test func getAttachmentWritesTempFileWhenContentGranted() throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: true
+            )
+        )
+        defer { env.remove() }
+
+        let result = try env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "Statement.PDF"
+        )
+        #expect(result.attachmentContentAccess == .granted)
+        let path = try #require(result.path)
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == env.pdfBytes)
+        #expect(result.byteCount == env.pdfBytes.count)
+        #expect(result.filename == "statement.pdf")
+    }
+
+    @Test func getAttachmentUnauthorizedWithoutScope() throws {
+        let env = try AttachmentReadFixture(fields: nil)
+        defer { env.remove() }
+
+        #expect(throws: PairingError.unauthorized) {
+            try env.gateway.getAttachment(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1",
+                filename: "statement.pdf"
+            )
+        }
+    }
+
+    @Test func getAttachmentUnknownFilenameIsNotAvailable() throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: true
+            )
+        )
+        defer { env.remove() }
+
+        let result = try env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "missing.zip"
+        )
+        #expect(result.attachmentContentAccess == .notAvailable)
+        #expect(result.path == nil)
+    }
+
+    @Test func getAttachmentRejectsOversizedMetadata() throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: true
+            ),
+            oversizedMetadata: true
+        )
+        defer { env.remove() }
+
+        let result = try env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "huge.bin"
+        )
+        #expect(result.attachmentContentAccess == .tooLarge)
+        #expect(result.path == nil)
+        #expect((result.byteCount ?? 0) > AgentReadAPI.attachmentByteLimit)
+    }
 }
 
 private struct AgentReadFixture {
@@ -566,4 +676,102 @@ private func leakGuardJSON(_ text: String) -> [String: Any] {
           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return [:] }
     return obj
+}
+
+private struct AttachmentReadFixture {
+    let root: FixtureTree
+    let db: URL
+    let credential = "secret-token"
+    let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+    let pdfBytes = Data("%PDF-1.4\nattachment-bytes".utf8)
+    let gateway: AgentReadAPI
+
+    init(fields: GrantFields?, oversizedMetadata: Bool = false) throws {
+        root = try FixtureTree()
+        if oversizedMetadata {
+            let overLimit = AgentReadAPI.attachmentByteLimit + 1
+            try root.writeEmlx(
+                named: "1.partial.emlx",
+                rfc822: """
+                From: Alice <alice@example.com>
+                To: Bob <bob@example.com>
+                Subject: Big file
+                Date: Mon, 1 Jan 2024 00:00:00 +0000
+                MIME-Version: 1.0
+                Content-Type: multipart/mixed; boundary="MIX"
+
+                --MIX
+                Content-Type: text/plain; charset=utf-8
+
+                See attached.
+
+                --MIX
+                Content-Type: application/octet-stream; name="huge.bin"
+                Content-Disposition: attachment; filename="huge.bin"
+                X-Apple-Content-Length: \(overLimit)
+                Content-Transfer-Encoding: base64
+
+
+                --MIX--
+                """,
+                account: accountID,
+                mailbox: "INBOX.mbox"
+            )
+        } else {
+            let pdfB64 = pdfBytes.base64EncodedString()
+            try root.writeEmlx(
+                named: "1.emlx",
+                rfc822: """
+                From: Alice <alice@example.com>
+                To: Bob <bob@example.com>
+                Subject: Statement
+                Date: Mon, 1 Jan 2024 00:00:00 +0000
+                MIME-Version: 1.0
+                Content-Type: multipart/mixed; boundary="MIX"
+
+                --MIX
+                Content-Type: text/plain; charset=utf-8
+
+                See statement.
+
+                --MIX
+                Content-Type: application/pdf; name="statement.pdf"
+                Content-Disposition: attachment; filename="statement.pdf"
+                Content-Transfer-Encoding: base64
+
+                \(pdfB64)
+                --MIX--
+                """,
+                account: accountID,
+                mailbox: "INBOX.mbox"
+            )
+        }
+
+        db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-attach-\(UUID().uuidString).sqlite")
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        let pairing = Pairing()
+        let agent = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: credential
+        )
+        let grants = GrantGate()
+        if let fields {
+            try grants.allow(agentID: agent.id, accountID: accountID, fields: fields)
+        }
+        gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            rules: RuleStore()
+        )
+    }
+
+    func remove() {
+        root.remove()
+        try? FileManager.default.removeItem(at: db)
+    }
 }

@@ -1,0 +1,1451 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE v8: Access Log modes + attach file card.
+     Hard refresh if chrome looks wrong (old cache).
+     ?entry=attach|get|status|search  ?state=granted|denied|missing|huge
+     ?req=formatted|json  ?reqJson=pretty|raw
+     ?res=formatted|json  ?resJson=pretty|raw
+     Toggle chrome: [Formatted] + JSON [Pretty|Raw] — no JSON button; Pretty/Raw selects JSON.
+     Request/Response modes stay independent. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Access Log modes proto v8</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #c9d1df;
+      --canvas: #e8ebf0;
+      --paper: #ffffff;
+      --blue: #2a4fc7;
+      --blue-soft: #eef2ff;
+      --green: #248a3d;
+      --red: #d70015;
+      --orange: #c93400;
+      --teal: #0a7a8a;
+      --shadow: 0 1px 2px #15203308, 0 12px 32px #1520330c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 20px 140px;
+      font: 13px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(900px 400px at 15% -5%, #dfe6ff 0%, transparent 55%), var(--canvas);
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; cursor: pointer; }
+
+    .intro { max-width: 1080px; margin: 0 auto 16px; display: flex; justify-content: space-between; gap: 16px; align-items: end; }
+    .intro h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+    .intro p { margin: 6px 0 0; color: var(--muted); max-width: 720px; }
+    .badge {
+      font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--blue); background: var(--blue-soft); border: 1px solid #b4c2f5;
+      padding: 6px 10px; border-radius: 999px; flex: 0 0 auto;
+    }
+
+    .desk {
+      max-width: 1080px; margin: 0 auto; background: var(--paper);
+      border: 1px solid #e1e6ef; border-radius: 12px; box-shadow: var(--shadow);
+      overflow: hidden; min-height: 560px; display: flex; flex-direction: column;
+    }
+    .filters {
+      display: flex; gap: 10px; align-items: center; padding: 10px 12px;
+      border-bottom: 1px solid #e1e6ef; background: #fafbfc; color: var(--muted); font-size: 12px;
+    }
+    .pill { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 10px; color: var(--ink); }
+    .split { display: grid; grid-template-columns: 340px 1fr; flex: 1; min-height: 520px; }
+    @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+    .list { border-right: 1px solid #e1e6ef; background: #fbfcfd; }
+    .row {
+      display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+      border-bottom: 1px solid #eef1f6; width: 100%; text-align: left;
+      background: transparent; border-left: 0; border-right: 0; border-top: 0;
+    }
+    .row:hover { background: #f3f5f8; }
+    .row.on { background: #e8ebf0; }
+    .ok {
+      width: 14px; height: 14px; border-radius: 50%; background: var(--green); color: #fff;
+      display: grid; place-items: center; font-size: 9px; font-weight: 800; flex: 0 0 auto;
+    }
+    .kind {
+      display: inline-flex; align-items: center; gap: 3px; color: var(--blue);
+      background: var(--blue-soft); border: 0.5px solid #b4c2f5; border-radius: 999px;
+      padding: 1px 6px; font: 600 9px/1.2 ui-monospace, Menlo, monospace; flex: 0 0 auto;
+    }
+    .agent {
+      width: 16px; height: 16px; border-radius: 4px; background: #1a1a1a; color: #fff;
+      display: grid; place-items: center; font-size: 9px; font-weight: 700; flex: 0 0 auto;
+    }
+    .agent.lg { width: 18px; height: 18px; }
+    .req, .resp {
+      min-width: 0; color: var(--muted); font-size: 12px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .req { flex: 1 1 auto; }
+    .resp { flex: 0 1 42%; }
+    .arrow { color: #b0b8c6; font-size: 11px; font-weight: 700; flex: 0 0 auto; }
+    .time { color: #9aa3b2; font-size: 11px; flex: 0 0 auto; margin-left: 4px; }
+
+    .detail { padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+    .head { display: flex; align-items: center; gap: 8px; }
+    .head .name { color: var(--muted); font-size: 13px; }
+    .head .spacer { flex: 1; }
+    .outcome {
+      display: inline-flex; align-items: center; gap: 6px;
+      font: 600 11px/1 ui-monospace, Menlo, monospace; color: var(--green);
+    }
+    .timing { color: var(--muted); font-size: 12px; }
+
+    .field-title {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      font-size: 12px; font-weight: 650; margin-bottom: 6px; color: var(--muted);
+    }
+    .field-title > span { font-weight: 650; }
+    .mode-controls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .json-group {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .json-group.on .json-group-label { color: var(--blue); }
+    .json-group-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: #9aa3b2;
+    }
+
+    .seg {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 7px;
+      overflow: hidden; background: #f4f6f9; padding: 1px; gap: 1px;
+    }
+    .seg button {
+      border: 0; background: transparent; color: var(--ink);
+      font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px;
+    }
+    .seg button.on { background: #fff; box-shadow: 0 0 0 0.5px #c9d1df, 0 1px 2px #15203314; }
+    .seg.sub button { font-size: 10px; padding: 2px 8px; }
+
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      padding: 8px 10px;
+    }
+    .intent {
+      margin: 0 0 8px;
+      font: 12px/1.4 "SF Pro Text", -apple-system, sans-serif;
+      color: var(--muted);
+    }
+    .intent:last-child { margin-bottom: 0; }
+    .pair {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      font: 13px/1.45 ui-monospace, Menlo, monospace;
+      padding: 2px 0;
+    }
+    .pair .k { color: var(--muted); white-space: nowrap; }
+    .pair .v { color: var(--ink); word-break: break-word; }
+
+    .note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .caption {
+      margin: 8px 0 0;
+      font-size: 10px;
+      color: var(--teal);
+      line-height: 1.35;
+    }
+    .err {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: var(--orange);
+    }
+
+    /* Match Access Log HatchDeniedStyle / not-available / orange outcome */
+    .file-card {
+      border: 1px solid rgba(0,0,0,.14);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      background: var(--paper);
+    }
+    .file-card.state-granted { border-color: rgba(0,0,0,.14); }
+    /* Non-granted option: not-available dashed hatch on the whole card, per-state color */
+    .file-card.state-denied {
+      border: 1.5px dashed rgba(215, 0, 21, 0.42);
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          rgba(215, 0, 21, 0.28),
+          rgba(215, 0, 21, 0.28) 1px,
+          rgba(215, 0, 21, 0.06) 1px,
+          rgba(215, 0, 21, 0.06) 5px
+        );
+    }
+    .file-card.state-missing {
+      border: 1.5px dashed #9aa3b2;
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          #eef1f6,
+          #eef1f6 1px,
+          #f7f8fb 1px,
+          #f7f8fb 6px
+        );
+    }
+    .file-card.state-huge {
+      border: 1.5px dashed rgba(201, 52, 0, 0.45);
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          rgba(201, 52, 0, 0.22),
+          rgba(201, 52, 0, 0.22) 1px,
+          rgba(255, 245, 239, 0.92) 1px,
+          rgba(255, 245, 239, 0.92) 5px
+        );
+    }
+
+    /* Granted only: document-type glyph */
+    .file-icon {
+      width: 40px; height: 48px; flex: 0 0 auto;
+      border-radius: 6px;
+      background: linear-gradient(180deg, #f7f8fb 0%, #e8ebf2 100%);
+      border: 1px solid #c9d1df;
+      display: grid; place-items: center;
+      position: relative;
+      color: var(--red);
+      font: 700 11px/1 ui-monospace, Menlo, monospace;
+    }
+    .file-icon.type::before {
+      content: "";
+      position: absolute; top: 0; right: 0;
+      border-width: 0 10px 10px 0;
+      border-style: solid;
+      border-color: #dfe3ec #fff;
+    }
+
+    /* Non-granted: status glyph on paper so it stays readable on the hatched card */
+    .status-icon {
+      width: 40px; height: 40px; flex: 0 0 auto;
+      border-radius: 10px;
+      display: grid; place-items: center;
+      font: 800 16px/1 "SF Pro Text", -apple-system, sans-serif;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+    }
+    .status-icon .lock-ic { width: 14px; height: 16px; }
+    .status-icon.denied {
+      color: rgba(215, 0, 21, 0.72);
+      border: 1px solid rgba(215, 0, 21, 0.35);
+    }
+    .status-icon.missing {
+      color: #5f6d86;
+      border: 1.5px dashed #9aa3b2;
+      font-style: normal;
+    }
+    .status-icon.huge {
+      color: var(--orange);
+      border: 1px solid #f0c2a8;
+    }
+
+    .file-meta {
+      flex: 1; min-width: 0;
+      display: flex; flex-direction: column; justify-content: center;
+      gap: 3px;
+    }
+    .file-name {
+      font-size: 14px; font-weight: 650; letter-spacing: -0.01em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.25;
+    }
+    .file-card.state-missing .file-name,
+    .file-card.state-denied .file-name,
+    .file-card.state-huge .file-name {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .file-sub {
+      color: var(--muted); font-size: 12px;
+      display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline;
+      min-width: 0; line-height: 1.35;
+    }
+    .file-sub .meta-bit { color: var(--muted); white-space: nowrap; }
+    .file-sub .dot { color: #b0b8c6; }
+
+    /* Brief state copy — colored italic text, not pill badges (non-granted only) */
+    .state-copy {
+      font: 550 italic 12px/1.35 "SF Pro Text", -apple-system, sans-serif;
+      letter-spacing: -0.01em;
+    }
+    .state-copy.denied { color: rgba(215, 0, 21, 0.78); }
+    .state-copy.missing { color: #5f6d86; }
+    .state-copy.huge { color: var(--orange); }
+
+    /* RuleFieldMarkChip / PassRevealChip — under type · size, left-aligned with meta */
+    .file-rule {
+      display: flex; align-items: center; justify-content: flex-start;
+      margin-top: 1px;
+    }
+    .rule-mark {
+      display: inline-flex; align-items: center; gap: 2px;
+      flex: 0 0 auto;
+      font: 700 11px/1 "SF Pro Text", -apple-system, sans-serif;
+      color: var(--green);
+    }
+    .rule-mark.block { color: var(--red); }
+    .rule-mark .rm-ic {
+      width: 11px; height: 11px; flex: 0 0 auto;
+    }
+
+    /* HatchDeniedLabel + HatchLockIcon (lock.fill) */
+    .hatch-chip {
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      min-width: 88px; height: 20px; padding: 0 8px; border-radius: 4px;
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          rgba(215, 0, 21, 0.28),
+          rgba(215, 0, 21, 0.28) 1px,
+          rgba(215, 0, 21, 0.06) 1px,
+          rgba(215, 0, 21, 0.06) 5px
+        );
+      color: rgba(215, 0, 21, 0.72);
+      font: 600 10px/1 "SF Pro Text", -apple-system, sans-serif;
+      flex: 0 0 auto;
+    }
+    .hatch-chip .lock-ic {
+      width: 9px; height: 11px;
+      color: rgba(215, 0, 21, 0.52);
+      flex: 0 0 auto;
+    }
+
+    .locked-legend {
+      display: flex; align-items: center; gap: 4px;
+      margin-top: 8px;
+      color: rgba(215, 0, 21, 0.72);
+      font-size: 10px; font-weight: 600;
+    }
+    .locked-legend .lock-ic {
+      width: 9px; height: 11px;
+      color: rgba(215, 0, 21, 0.52);
+      flex: 0 0 auto;
+    }
+
+    .preview-btn {
+      flex: 0 0 auto;
+      align-self: center;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .preview-btn:not(:disabled):hover { border-color: var(--blue); color: var(--blue); }
+
+    .msg-card {
+      border: 1px solid rgba(0,0,0,.14);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .msg-open-wrap {
+      display: block; width: 100%; text-align: left;
+      border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer;
+    }
+    .msg-open-wrap:hover .msg-card { border-color: #b4c2f5; }
+    .chip {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 999px;
+      padding: 2px 8px; font-size: 11px; color: var(--muted); margin-bottom: 8px;
+    }
+    .line { display: flex; gap: 6px; font-size: 12px; margin: 3px 0; }
+    .line .lab { color: var(--muted); font-weight: 300; min-width: 72px; }
+    .body-box {
+      background: rgba(0,0,0,.06); border-radius: 8px; padding: 10px; min-height: 72px;
+      font-size: 12px; margin-top: 6px; white-space: pre-wrap;
+    }
+    .body-omitted, .content-omitted {
+      background: rgba(10, 122, 138, 0.08);
+      border-radius: 8px; padding: 8px; margin-top: 4px;
+    }
+    .body-omitted .t1, .content-omitted .t1 {
+      font-size: 12px; font-weight: 600; color: rgba(10, 122, 138, 0.85);
+    }
+    .body-omitted .t2, .content-omitted .t2 {
+      font-size: 10px; color: #9aa3b2; margin-top: 2px;
+    }
+    .content-omitted {
+      min-height: 32px; margin-top: 0;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .attach-tile.hatch {
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          rgba(215, 0, 21, 0.28),
+          rgba(215, 0, 21, 0.28) 1px,
+          rgba(215, 0, 21, 0.06) 1px,
+          rgba(215, 0, 21, 0.06) 5px
+        );
+      color: rgba(215, 0, 21, 0.72);
+      justify-content: center;
+    }
+    .attach-tile.hatch .lock-ic {
+      width: 10px; height: 12px; color: rgba(215, 0, 21, 0.52);
+    }
+
+    .msg-list-chrome {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 650; margin-bottom: 4px;
+    }
+    .msg-list-chrome .ic { color: var(--muted); font-size: 14px; }
+    .kind-chrome {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 650; margin-bottom: 8px;
+    }
+    .kind-chrome .ic { color: var(--muted); font-size: 14px; }
+    .attach-for {
+      font-size: 12px; color: var(--muted); margin: -2px 0 8px;
+      display: flex; align-items: baseline; gap: 6px; min-width: 0;
+    }
+    .attach-for .for-lab { flex: 0 0 auto; }
+    .subject-link {
+      border: 0; background: transparent; padding: 0;
+      color: var(--blue); font: 650 12px/1.3 "SF Pro Text", -apple-system, sans-serif;
+      text-align: left; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0; max-width: 100%;
+    }
+    .subject-link:hover { text-decoration: underline; }
+    .headers-only {
+      font-size: 10px; color: rgba(10, 122, 138, 0.85); margin: 0 0 10px;
+    }
+    .collapsible {
+      display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
+    }
+    .collapse-btn {
+      display: flex; align-items: flex-start; gap: 8px;
+      width: 100%; text-align: left; border: 0; background: transparent;
+      padding: 2px 0; color: inherit;
+    }
+    .collapse-btn:hover { opacity: 0.92; }
+    .chev {
+      width: 10px; flex: 0 0 auto; margin-top: 2px;
+      color: var(--muted); font-size: 10px; font-weight: 700;
+      transition: transform .12s ease;
+    }
+    .collapsible.open .chev { transform: rotate(90deg); }
+    .collapse-main { flex: 1; min-width: 0; }
+    .collapse-title {
+      font-size: 12px; font-weight: 650; line-height: 1.25;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .collapse-meta-row {
+      display: flex; align-items: center; gap: 6px; margin-top: 4px;
+      min-width: 0;
+    }
+    .collapse-meta {
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .field-badges {
+      display: inline-flex; gap: 2px; flex: 0 0 auto;
+    }
+    .field-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 14px; min-width: 14px; padding: 0 5px; border-radius: 999px;
+      font-size: 8px; border: 0.5px solid;
+    }
+    .field-badge.on {
+      color: var(--blue); background: rgba(42, 79, 199, 0.12);
+      border-color: rgba(42, 79, 199, 0.35);
+    }
+    .field-badge.off {
+      color: rgba(95, 109, 134, 0.55); background: rgba(0,0,0,.05);
+      border-color: rgba(0,0,0,.12);
+    }
+    .collapse-expand { display: none; padding-left: 18px; }
+    .collapsible.open .collapse-expand { display: block; }
+    .collapsible.open .field-badges.collapsed-only { display: none; }
+    .attach-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .attach-tile {
+      display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.05);
+      border-radius: 6px; padding: 6px; min-height: 32px; font-size: 12px; color: var(--muted);
+    }
+    .section-lab {
+      display: flex; justify-content: space-between; color: var(--muted);
+      font-size: 12px; margin: 8px 0 4px;
+    }
+
+    .raw {
+      margin: 0;
+      font: 12px/1.45 ui-monospace, Menlo, monospace;
+      white-space: pre-wrap;
+      color: var(--ink);
+    }
+    .raw.colored { color: var(--ink); }
+    .jx-key { color: #0b57d0; }
+    .jx-str { color: #0a7a3e; }
+    .jx-num { color: #a50e0e; }
+    .jx-bool { color: #8a3ffc; }
+    .jx-null { color: #5f6d86; font-style: italic; }
+    .jx-punc { color: #5f6d86; }
+    .pane[hidden] { display: none !important; }
+
+    .bar {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 20;
+      width: min(820px, calc(100vw - 24px)); padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 8px;
+      background: rgba(255,255,255,.94); backdrop-filter: blur(10px);
+      border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+    }
+    .bar-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .bar label {
+      font-size: 10px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--muted); min-width: 52px;
+    }
+    .bar button {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 5px 10px; font-size: 12px; font-weight: 600;
+    }
+    .bar button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .bar .q { flex: 1; font-size: 11px; color: var(--muted); min-width: 160px; }
+  </style>
+</head>
+<body>
+  <div class="intro">
+    <div>
+      <h1>Access Log · modes <span style="color:var(--muted);font-size:14px;font-weight:600">v8</span></h1>
+      <p>
+        Mode chrome: <strong>Formatted</strong> group + <strong>JSON · Pretty | Raw</strong> group
+        (no separate JSON button — Pretty/Raw selects JSON; per Request / Response).
+        Request Formatted = intent + data. Attach Response Formatted = file card; search = expandable list.
+      </p>
+    </div>
+    <div class="badge">Prototype</div>
+  </div>
+
+  <div class="desk" id="desk"></div>
+
+  <div class="bar">
+    <div class="bar-row">
+      <label>Entry</label>
+      <button type="button" data-entry="attach">get_attachment</button>
+      <button type="button" data-entry="get">get</button>
+      <button type="button" data-entry="search">search</button>
+      <button type="button" data-entry="status">status</button>
+      <span class="q" id="entryQ"></span>
+    </div>
+    <div class="bar-row" id="stateRow">
+      <label>Attach</label>
+      <button type="button" data-state="granted">Granted + partial</button>
+      <button type="button" data-state="pass">Via Pass</button>
+      <button type="button" data-state="denied">Not granted</button>
+      <button type="button" data-state="missing">Not available</button>
+      <button type="button" data-state="huge">Too large</button>
+    </div>
+  </div>
+
+  <script>
+    const FILE = "statement.pdf";
+    const SIZE = "96 KB";
+    const ACCOUNT = "19DAAEEB-B0A9-4C37-820B-A55EC8B979CB";
+    const VIEWS = ["formatted", "json"];
+    const JSON_STYLES = ["pretty", "raw"];
+
+    /** Shared parent message for get / get_attachment (AuditMessageRef shape). */
+    const PARENT_MSG = {
+      id: "389104",
+      accountID: ACCOUNT,
+      placement: "INBOX",
+      subject: "Your final bill has arrived",
+      from: "OVO Energy <no-reply@ovoenergy.com>",
+      to: "myredbike2007@yahoo.com",
+      dateLabel: "30 Sep 2026 at 13:05",
+      accountLabel: "Yahoo",
+      fields: {
+        subject: true, from: true, to: true, cc: false, date: true,
+        body: true, att: true, file: true
+      }
+    };
+
+    const ATTACH_RESP = {
+      granted: {
+        accountID: ACCOUNT,
+        placement: "INBOX",
+        id: "389104",
+        filename: FILE,
+        byteCount: 95723,
+        path: FILE,
+        isPartial: true,
+        attachmentContentAccess: "granted"
+      },
+      pass: {
+        accountID: ACCOUNT,
+        placement: "INBOX",
+        id: "389104",
+        filename: FILE,
+        byteCount: 95723,
+        path: FILE,
+        isPartial: false,
+        attachmentContentAccess: "granted",
+        // Same shape as AuditMessageRef.appliedRules → RuleFieldMarkChip
+        appliedRules: [
+          { id: "rule-pass-1", nick: "Invoices", polarity: "pass", fields: { attachmentContent: true } }
+        ]
+      },
+      denied: {
+        accountID: ACCOUNT,
+        placement: "INBOX",
+        id: "389104",
+        filename: FILE,
+        byteCount: 95723,
+        isPartial: true,
+        attachmentContentAccess: "not_granted",
+        note: "Attachment content omitted: the active grant does not allow attachment content."
+      },
+      missing: {
+        accountID: ACCOUNT,
+        placement: "INBOX",
+        id: "389104",
+        filename: FILE,
+        isPartial: true,
+        attachmentContentAccess: "not_available",
+        note: "Attachment not available. Message is partial; Apple Mail may not have downloaded this part."
+      },
+      huge: {
+        accountID: ACCOUNT,
+        placement: "INBOX",
+        id: "389104",
+        filename: FILE,
+        byteCount: 28_000_000,
+        isPartial: false,
+        attachmentContentAccess: "too_large",
+        note: "Attachment exceeds the 26214400-byte size limit."
+      }
+    };
+
+    const ENTRIES = {
+      attach: {
+        id: "attach",
+        kindLabel: "📎 attach",
+        kind: "get_attachment",
+        listReq: "19DAAEEB…/INBOX/389104/" + FILE,
+        time: "13:24",
+        timing: "1 Oct 2026 at 13:24:02 → 13:24:02 · 18 ms",
+        intent: "Fetch one attachment’s file bytes.",
+        request: {
+          accountID: ACCOUNT,
+          placement: "INBOX",
+          id: "389104",
+          filename: FILE
+        },
+        blurb: "Response Formatted = Attachment chrome + subject link to message + file card (app structure)."
+      },
+      get: {
+        id: "get",
+        kindLabel: "✉ get",
+        kind: "get",
+        listReq: "…/INBOX/389104",
+        listResp: "bodyAccess=granted",
+        time: "13:21",
+        timing: "1 Oct 2026 at 13:21:44 → 13:21:44 · 42 ms",
+        intent: "Fetch one message.",
+        request: {
+          accountID: ACCOUNT,
+          placement: "INBOX",
+          id: "389104"
+        },
+        response: {
+          ...PARENT_MSG,
+          date: "2026-09-30T12:05:11Z",
+          isPartial: true,
+          bodyAccess: "granted",
+          body: "Hi Marcin,\n\nYour final bill is ready. Open the PDF for the full statement.\n\nThanks,\nOVO",
+          attachmentAccess: "granted",
+          attachments: [{ filename: FILE, byteCount: 95723 }]
+        },
+        blurb: "Response Formatted = Message chrome + collapsible subject → MessageAccessCard (app structure)."
+      },
+      search: {
+        id: "search",
+        kindLabel: "search",
+        kind: "search",
+        listReq: "query=OVO",
+        listResp: "10 messages",
+        time: "13:20",
+        timing: "30 Sep 2026 at 20:29:55 → 20:29:55 · 31 ms",
+        intent: "Search messages.",
+        request: {
+          query: "OVO",
+          limit: 10
+        },
+        response: {
+          total: 10,
+          messages: [
+            {
+              id: "389104",
+              accountID: ACCOUNT,
+              placement: "INBOX",
+              subject: "Your final bill has arrived",
+              from: "OVO Energy <no-reply@ovoenergy.com>",
+              dateLabel: "30 Sep 2026 at 13:05",
+              // Grant badges (expand only). Agent search JSON has no to/cc/body/attachments.
+              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: true, file: false }
+            },
+            {
+              id: "388901",
+              accountID: ACCOUNT,
+              placement: "INBOX",
+              subject: "Bill reminder",
+              from: "OVO Energy <no-reply@ovoenergy.com>",
+              dateLabel: "22 Sep 2026 at 10:11",
+              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: false, file: false }
+            },
+            {
+              id: "387200",
+              accountID: ACCOUNT,
+              placement: "INBOX",
+              subject: "Your OVO Energy statement is ready",
+              from: "OVO Energy <no-reply@ovoenergy.com>",
+              dateLabel: "15 Sep 2026 at 09:02",
+              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: true, file: false }
+            },
+            {
+              id: "386010",
+              accountID: ACCOUNT,
+              placement: "INBOX",
+              subject: "Price update for your home",
+              from: "OVO Energy <no-reply@ovoenergy.com>",
+              dateLabel: "2 Sep 2026 at 14:40",
+              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: false, file: false }
+            }
+          ]
+        },
+        blurb: "Search list = summary only; expand → preview shell with Not included for to/cc/body/attachments."
+      },
+      status: {
+        id: "status",
+        kindLabel: "status",
+        kind: "status",
+        listReq: "status",
+        listResp: "indexed=32345",
+        time: "13:22",
+        timing: "1 Oct 2026 at 13:22:03 → 13:22:03 · 4 ms",
+        intent: "Read MailGent status.",
+        request: {},
+        response: {
+          indexed: 32345,
+          source: "apple_mail",
+          pairing: "paired"
+        },
+        blurb: "Response Formatted = labeled pairs (no message / file card)."
+      }
+    };
+
+    const REQUEST_KEYS = {
+      accountID: "Account",
+      placement: "Placement",
+      id: "Id",
+      filename: "Filename",
+      query: "Query",
+      limit: "Limit",
+      source: "Source",
+      cursor: "Cursor"
+    };
+
+    function params() {
+      const u = new URL(location.href);
+      // Migrate old ?req=raw / ?res=raw peer tabs → JSON · Raw
+      let req = u.searchParams.get("req") || "formatted";
+      let res = u.searchParams.get("res") || "formatted";
+      let reqJson = u.searchParams.get("reqJson") || "pretty";
+      let resJson = u.searchParams.get("resJson") || "pretty";
+      if (req === "raw") { req = "json"; reqJson = "raw"; }
+      if (res === "raw") { res = "json"; resJson = "raw"; }
+      if (req === "pretty") { req = "json"; reqJson = "pretty"; }
+      if (res === "pretty") { res = "json"; resJson = "pretty"; }
+      return {
+        entry: u.searchParams.get("entry") || "attach",
+        state: u.searchParams.get("state") || "granted",
+        req, res, reqJson, resJson
+      };
+    }
+
+    function setParams(patch, resetModes) {
+      const u = new URL(location.href);
+      const next = { ...params(), ...patch };
+      if (resetModes) {
+        next.req = "formatted";
+        next.res = "formatted";
+        next.reqJson = "pretty";
+        next.resJson = "pretty";
+      }
+      for (const [k, v] of Object.entries(next)) u.searchParams.set(k, v);
+      history.replaceState(null, "", u);
+      render();
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+      );
+    }
+
+    function sortedObject(value) {
+      if (Array.isArray(value)) return value.map(sortedObject);
+      if (value && typeof value === "object") {
+        return Object.keys(value).sort().reduce((acc, key) => {
+          acc[key] = sortedObject(value[key]);
+          return acc;
+        }, {});
+      }
+      return value;
+    }
+
+    function prettyJSON(obj) {
+      return JSON.stringify(sortedObject(obj), null, 2);
+    }
+
+    function compactJSON(obj) {
+      return JSON.stringify(obj);
+    }
+
+    /** Lightweight JSON syntax coloring for Pretty mode only. */
+    function colorizeJSON(text) {
+      let out = "";
+      let i = 0;
+      while (i < text.length) {
+        const ch = text[i];
+        if (ch === '"') {
+          let j = i + 1;
+          let escaped = false;
+          while (j < text.length) {
+            const c = text[j];
+            if (escaped) { escaped = false; j++; continue; }
+            if (c === "\\") { escaped = true; j++; continue; }
+            if (c === '"') { j++; break; }
+            j++;
+          }
+          const chunk = text.slice(i, j);
+          const after = text.slice(j).match(/^\s*:/);
+          out += `<span class="${after ? "jx-key" : "jx-str"}">${esc(chunk)}</span>`;
+          i = j;
+          continue;
+        }
+        if (/[0-9\-]/.test(ch)) {
+          const m = text.slice(i).match(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+          if (m) {
+            out += `<span class="jx-num">${esc(m[0])}</span>`;
+            i += m[0].length;
+            continue;
+          }
+        }
+        if (text.startsWith("true", i) || text.startsWith("false", i)) {
+          const lit = text.startsWith("true", i) ? "true" : "false";
+          out += `<span class="jx-bool">${lit}</span>`;
+          i += lit.length;
+          continue;
+        }
+        if (text.startsWith("null", i)) {
+          out += `<span class="jx-null">null</span>`;
+          i += 4;
+          continue;
+        }
+        if ("{}[],:".includes(ch)) {
+          out += `<span class="jx-punc">${esc(ch)}</span>`;
+          i++;
+          continue;
+        }
+        out += esc(ch);
+        i++;
+      }
+      return out;
+    }
+
+    function sizeLabel(bytes) {
+      if (bytes == null) return null;
+      if (bytes >= 1_000_000) return (bytes / 1_000_000).toFixed(0) + " MB";
+      if (bytes >= 1000) return Math.round(bytes / 1024) + " KB";
+      return bytes + " B";
+    }
+
+    function stateCopy(state) {
+      switch (state) {
+        case "denied":
+          return { cls: "denied", text: "Not allowed by the current grant." };
+        case "missing":
+          return { cls: "missing", text: "Not available in Mail." };
+        case "huge":
+          return { cls: "huge", text: "Too large to deliver." };
+        default:
+          return { cls: "missing", text: String(state) };
+      }
+    }
+
+    function stateCopyHtml(state) {
+      const s = stateCopy(state);
+      return `<span class="state-copy ${s.cls}">${esc(s.text)}</span>`;
+    }
+
+    /** Pass / Block nick chip — mirrors CompanionBits.RuleFieldMarkChip. */
+    function ruleMarkHtml(rule) {
+      if (!rule || !rule.nick) return "";
+      const isPass = rule.polarity !== "block";
+      const icon = isPass
+        ? `<svg class="rm-ic" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="currentColor"/><path d="M3.4 6.1 5.1 7.8 8.6 4.2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        : `<svg class="rm-ic" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="currentColor"/><path d="M4 4l4 4M8 4l-4 4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+      return `<span class="rule-mark ${isPass ? "pass" : "block"}" title="${isPass ? "Via pass" : "Withheld by block"} ${esc(rule.nick)}">${icon}${esc(rule.nick)}</span>`;
+    }
+
+    function passMarkForAttachment(r) {
+      const rules = r.appliedRules || [];
+      return rules.find(x => x.polarity === "pass" && x.fields && x.fields.attachmentContent) || null;
+    }
+
+    function humanListRespAttach(state) {
+      switch (state) {
+        case "granted": return `${FILE} · ${SIZE}`;
+        case "pass": return `${FILE} · ${SIZE} · via Pass`;
+        case "denied": return `not granted · ${FILE}`;
+        case "missing": return `not available · ${FILE}`;
+        case "huge": return `too large · ${FILE} · 27 MB`;
+        default: return FILE;
+      }
+    }
+
+    function pairsHtml(rows) {
+      if (!rows.length) return "";
+      return rows.map(([k, v]) =>
+        `<div class="pair"><span class="k">${esc(k)}:</span><span class="v">${esc(v)}</span></div>`
+      ).join("");
+    }
+
+    function objectPairs(obj, keyMap) {
+      return Object.entries(obj).map(([k, v]) => {
+        const label = (keyMap && keyMap[k]) || k;
+        return [label, typeof v === "object" ? JSON.stringify(v) : String(v)];
+      });
+    }
+
+    function modeControlsHtml(side, view, jsonStyle) {
+      // Two groups: [Formatted] + JSON [Pretty | Raw]. No redundant JSON button —
+      // picking Pretty/Raw selects JSON mode.
+      const prettyOn = view === "json" && jsonStyle === "pretty";
+      const rawOn = view === "json" && jsonStyle === "raw";
+      return `
+        <div class="mode-controls">
+          <div class="seg" data-side="${side}" data-kind="view">
+            <button type="button" data-view="formatted" class="${view === "formatted" ? "on" : ""}">Formatted</button>
+          </div>
+          <div class="json-group ${view === "json" ? "on" : ""}">
+            <span class="json-group-label">JSON</span>
+            <div class="seg sub" data-side="${side}" data-kind="jsonStyle">
+              <button type="button" data-json-style="pretty" class="${prettyOn ? "on" : ""}">Pretty</button>
+              <button type="button" data-json-style="raw" class="${rawOn ? "on" : ""}">Raw</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function requestFormatted(entry) {
+      const rows = objectPairs(entry.request, REQUEST_KEYS);
+      const data = rows.length ? `<div>${pairsHtml(rows)}</div>` : "";
+      return `
+        <div class="box">
+          <p class="intent">${esc(entry.intent)}</p>
+          ${data}
+        </div>`;
+    }
+
+    /** SF Symbol–like lock.fill used by HatchLockIcon in Access Log. */
+    function lockIcon() {
+      return `<svg class="lock-ic" viewBox="0 0 12 14" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M6 0a3.5 3.5 0 0 0-3.5 3.5V5H2a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 2 14h8a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 10 5H9.5V3.5A3.5 3.5 0 0 0 6 0Zm2.2 5H3.8V3.5a2.2 2.2 0 1 1 4.4 0V5Z"/>
+      </svg>`;
+    }
+
+    function fileCard(state) {
+      const r = ATTACH_RESP[state];
+      const size = sizeLabel(r.byteCount);
+      const isGranted = state === "granted" || state === "pass";
+      const canPreview = isGranted;
+      const cardState =
+        state === "denied" ? "denied" :
+        state === "missing" ? "missing" :
+        state === "huge" ? "huge" : "granted";
+      const passMark = isGranted ? passMarkForAttachment(r) : null;
+
+      const partial = r.isPartial
+        ? (isGranted
+          ? "Mail marks this message as a partial download. This file was still delivered."
+          : state === "missing"
+            ? "Mail marks this message as a partial download — attachment bytes may not be on disk."
+            : "Mail marks this message as a partial download.")
+        : "";
+
+      // Granted: type icon + type · size (no “delivered” copy).
+      // Via Pass: RuleFieldMarkChip under type · size, left-aligned with meta (beside icon).
+      // Others: status icon + name; line 2 = brief colored explanation.
+      let leading;
+      let line2;
+      if (isGranted) {
+        leading = `<div class="file-icon type" title="PDF">PDF</div>`;
+        line2 = `<span class="meta-bit">PDF document</span>
+          ${size ? `<span class="dot">·</span><span class="meta-bit">${esc(size)}</span>` : ""}`;
+      } else if (state === "denied") {
+        leading = `<div class="status-icon denied" title="Not granted">${lockIcon()}</div>`;
+        line2 = stateCopyHtml("denied");
+      } else if (state === "missing") {
+        leading = `<div class="status-icon missing" title="Not available">✕</div>`;
+        line2 = stateCopyHtml("missing");
+      } else {
+        leading = `<div class="status-icon huge" title="Too large">!</div>`;
+        line2 = stateCopyHtml("huge");
+      }
+
+      const preview = canPreview
+        ? `<button type="button" class="preview-btn" id="previewBtn">Preview</button>`
+        : "";
+
+      const lockedLegend = state === "denied"
+        ? `<div class="locked-legend">${lockIcon()} Locked. Grant does not allow attachment content.</div>`
+        : "";
+
+      const passRow = passMark
+        ? `<div class="file-rule">${ruleMarkHtml(passMark)}</div>`
+        : "";
+
+      return `
+        <div class="file-card state-${cardState}">
+          ${leading}
+          <div class="file-meta">
+            <div class="file-name">${esc(r.filename)}</div>
+            <div class="file-sub">${line2}</div>
+            ${passRow}
+          </div>
+          ${preview}
+        </div>
+        ${lockedLegend}
+        <p class="err" id="previewMsg" hidden></p>
+        ${r.note ? `<p class="note">${esc(r.note)}</p>` : ""}
+        ${partial ? `<p class="caption">${esc(partial)}</p>` : ""}
+        <p class="caption">Context: ${esc(r.placement)} · id ${esc(r.id)} · account ${esc(r.accountID.slice(0, 8))}…</p>
+      `;
+    }
+
+    const FIELD_ICONS = [
+      ["subject", "≡", "Subject"],
+      ["from", "✉", "From"],
+      ["to", "⇩", "To"],
+      ["cc", "👥", "Cc"],
+      ["date", "📅", "Date"],
+      ["body", "▤", "Body"],
+      ["att", "📎", "Attachment names"],
+      ["file", "📄", "Attachment content"]
+    ];
+
+    function fieldBadgesHtml(fields, extraClass) {
+      const pills = FIELD_ICONS.map(([key, icon, title]) => {
+        const on = !!(fields && fields[key]);
+        return `<span class="field-badge ${on ? "on" : "off"}" title="${esc(title)}">${icon}</span>`;
+      }).join("");
+      return `<span class="field-badges ${extraClass || ""}">${pills}</span>`;
+    }
+
+    function omittedTile(title, detail) {
+      return `<div class="content-omitted">
+          <div class="t1">${esc(title)}</div>
+          <div class="t2">${esc(detail)}</div>
+        </div>`;
+    }
+
+    function messageAccessCard(m, opts = {}) {
+      const {
+        omitsBody = false,
+        // search/list agent JSON: summary headers only (no to/cc/body/attachments)
+        searchSummaryOnly = false,
+        omitsAttachmentContent = true
+      } = opts;
+      const fields = m.fields || {};
+      const contentGranted = fields.file !== false;
+      const infoGranted = fields.att !== false;
+
+      let attInfo;
+      if (searchSummaryOnly) {
+        attInfo = omittedTile(
+          "Not included",
+          "Search and list do not include attachment names — use get."
+        );
+      } else if (!infoGranted) {
+        attInfo = `<div class="attach-tile hatch">${lockIcon()}</div>`;
+      } else if (m.attachments && m.attachments.length) {
+        attInfo = m.attachments.map(a =>
+          `<div class="attach-tile"><span>📎</span><span>${esc(a.filename)} · ${esc(sizeLabel(a.byteCount))}</span></div>`
+        ).join("");
+      } else {
+        attInfo = `<div class="attach-tile"><span>📎</span><span>none in this response</span></div>`;
+      }
+
+      const bodyBlock = omitsBody
+        ? omittedTile("Not included", "Search and list return headers only. Use get for body.")
+        : `<div class="body-box">${esc(m.body || "")}</div>`;
+
+      let attContent;
+      if (!contentGranted) {
+        attContent = `<div class="attach-tile hatch" title="Not granted">${lockIcon()}</div>`;
+      } else if (omitsAttachmentContent || searchSummaryOnly) {
+        attContent = omittedTile(
+          "Not included",
+          searchSummaryOnly
+            ? "Search and list do not include file bytes — use get_attachment."
+            : "get returns attachment names only — use get_attachment for file bytes."
+        );
+      } else {
+        attContent = `<div class="attach-tile"><span>📎</span><span>none in this response</span></div>`;
+      }
+
+      // Truth-first lines for search summary vs full get card.
+      const toLine = searchSummaryOnly
+        ? `<div class="line"><span class="lab">To:</span> <span class="state-copy missing">Not included in search</span></div>`
+        : `<div class="line"><span class="lab">To:</span> ${esc(m.to || "")}</div>`;
+      const ccLine = searchSummaryOnly
+        ? ""
+        : `<div class="line"><span class="lab">Cc:</span> ${esc(m.cc || "")}</div>`;
+
+      return `
+        <div class="msg-card">
+          <div class="chip">Yahoo · ${esc(m.placement || "INBOX")}</div>
+          <div class="line"><strong>${esc(m.subject)}</strong></div>
+          <div class="line"><span class="lab">From:</span> ${esc(m.from)}</div>
+          ${toLine}
+          ${ccLine}
+          <div class="line"><span class="lab">Date:</span> ${esc(m.dateLabel || m.date || "")}</div>
+          <div class="line"><span class="lab">Id:</span> <span class="meta-bit">${esc(m.id || "")}</span></div>
+          <div class="section-lab"><span>Body</span></div>
+          ${bodyBlock}
+          <div class="attach-cols">
+            <div>
+              <div class="section-lab"><span>Attachment Info</span></div>
+              ${attInfo}
+            </div>
+            <div>
+              <div class="section-lab"><span>Attachment Content</span></div>
+              ${attContent}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function kindChrome(label, icon) {
+      return `
+        <div class="kind-chrome">
+          <span class="ic">${icon}</span>
+          <span>${esc(label)}</span>
+        </div>`;
+    }
+
+    function subjectLinkHtml(subject, title) {
+      const label = subject && subject.trim() ? subject : "(no subject)";
+      return `<button type="button" class="subject-link" data-open-message title="${esc(title || "Open in Companion Read")}">${esc(label)}</button>`;
+    }
+
+    /** App CollapsibleAuditMessage shell — subject + meta + badges + expanded body. */
+    function collapsibleMessage(opts) {
+      const {
+        subject, meta, fields, bodyHtml,
+        open = true, collapseId = "0", showBadges = true
+      } = opts;
+      const badges = showBadges && fields ? fieldBadgesHtml(fields) : "";
+      const badgesCollapsed = showBadges && fields ? fieldBadgesHtml(fields, "collapsed-only") : "";
+      return `
+        <div class="collapsible ${open ? "open" : ""}" data-collapse="${collapseId}">
+          <button type="button" class="collapse-btn" data-toggle-collapse="${collapseId}">
+            <span class="chev">›</span>
+            <div class="collapse-main">
+              <div class="collapse-title">${esc(subject)}</div>
+              <div class="collapse-meta-row">
+                <span class="collapse-meta">${esc(meta)}</span>
+                ${badgesCollapsed}
+              </div>
+            </div>
+          </button>
+          <div class="collapse-expand">
+            ${badges ? `${badges}<div style="height:6px"></div>` : ""}
+            ${bodyHtml}
+          </div>
+        </div>`;
+    }
+
+    function messageCard(resp) {
+      const meta = `${resp.dateLabel || "30 Sep 2026 at 13:05"} · ${resp.accountLabel || "Yahoo"}`;
+      const fields = resp.fields || PARENT_MSG.fields;
+      const card = `
+        <button type="button" class="msg-open-wrap" data-open-message title="Open in Companion Read">
+          ${messageAccessCard({ ...resp, dateLabel: resp.dateLabel || "30 Sep 2026 at 13:05" }, { omitsBody: false })}
+        </button>
+        <p class="caption">Truth-first: plain body only — HTML was never sent to the agent.</p>`;
+      return `
+        ${kindChrome("Message", "✉")}
+        ${collapsibleMessage({
+          subject: resp.subject || PARENT_MSG.subject,
+          meta,
+          fields,
+          bodyHtml: card,
+          open: true,
+          collapseId: "get-0"
+        })}
+      `;
+    }
+
+    function attachFieldsForState(state) {
+      const base = { ...PARENT_MSG.fields };
+      if (state === "denied") base.file = false;
+      else base.file = true;
+      return base;
+    }
+
+    function attachFormatted(state) {
+      const meta = `${PARENT_MSG.dateLabel} · ${PARENT_MSG.accountLabel}`;
+      const fields = attachFieldsForState(state);
+      // Keep app response shell: kind chrome + “for [subject link]” + file card.
+      return `
+        ${kindChrome("Attachment", "📎")}
+        <div class="attach-for">
+          <span class="for-lab">for</span>
+          ${subjectLinkHtml(PARENT_MSG.subject, "Open message in Companion Read")}
+        </div>
+        <div class="collapse-meta-row" style="margin:0 0 8px">
+          <span class="collapse-meta">${esc(meta)}</span>
+          ${fieldBadgesHtml(fields)}
+        </div>
+        ${fileCard(state)}
+        <p class="caption" id="openMsgHint" hidden></p>
+      `;
+    }
+
+    function searchFormatted(resp) {
+      const count = resp.messages.length;
+      const total = resp.total != null ? resp.total : count;
+      // Collapsed list = agent search summary only (subject · from · date · id).
+      // To/cc/body/attachments appear only after expand, marked Not included.
+      const rows = resp.messages.map((m, i) => {
+        const meta = `${m.dateLabel} · ${m.from} · id ${m.id}`;
+        return `
+          <div class="collapsible" data-collapse="${i}">
+            <button type="button" class="collapse-btn" data-toggle-collapse="${i}">
+              <span class="chev">›</span>
+              <div class="collapse-main">
+                <div class="collapse-title">${esc(m.subject)}</div>
+                <div class="collapse-meta-row">
+                  <span class="collapse-meta">${esc(meta)}</span>
+                </div>
+              </div>
+            </button>
+            <div class="collapse-expand">
+              ${fieldBadgesHtml(m.fields)}
+              <div style="height:6px"></div>
+              ${messageAccessCard(m, {
+                omitsBody: true,
+                searchSummaryOnly: true,
+                omitsAttachmentContent: true
+              })}
+            </div>
+          </div>`;
+      }).join("");
+
+      return `
+        <div class="msg-list-chrome">
+          <span class="ic">☰</span>
+          <span>Message list · ${count}${total !== count ? ` of ${total}` : ""}</span>
+        </div>
+        <p class="headers-only">Search summary only (subject, from, date, id). Expand a row for the preview shell — to/cc/body/attachments were not returned.</p>
+        ${rows}
+      `;
+    }
+
+    function statusFormatted(resp) {
+      return `<div class="box">${pairsHtml(objectPairs(resp, {
+        indexed: "Indexed",
+        source: "Source",
+        pairing: "Pairing"
+      }))}</div>`;
+    }
+
+    function responsePayload(entry, state) {
+      if (entry.id === "attach") return ATTACH_RESP[state];
+      return entry.response;
+    }
+
+    function responseFormatted(entry, state) {
+      if (entry.id === "attach") return attachFormatted(state);
+      if (entry.id === "get") return messageCard(entry.response);
+      if (entry.id === "search") return searchFormatted(entry.response);
+      return statusFormatted(entry.response);
+    }
+
+    function modePane(view, jsonStyle, formattedHtml, obj) {
+      if (view === "formatted") return formattedHtml;
+      if (jsonStyle === "raw") {
+        return `<div class="box"><pre class="raw">${esc(compactJSON(obj))}</pre></div>`;
+      }
+      return `<div class="box"><pre class="raw colored">${colorizeJSON(prettyJSON(obj))}</pre></div>`;
+    }
+
+    function fieldBlock(title, side, view, jsonStyle, formattedHtml, obj) {
+      return `
+        <div>
+          <div class="field-title">
+            <span>${title}</span>
+            ${modeControlsHtml(side, view, jsonStyle)}
+          </div>
+          ${modePane(view, jsonStyle, formattedHtml, obj)}
+        </div>`;
+    }
+
+    function listRow(entry, state, selected) {
+      const resp = entry.id === "attach" ? humanListRespAttach(state) : entry.listResp;
+      return `
+        <button type="button" class="row ${selected ? "on" : ""}" data-pick="${entry.id}">
+          <div class="ok">✓</div>
+          <span class="kind">${entry.kindLabel}</span>
+          <span class="agent">1</span>
+          <span class="req">${esc(entry.listReq)}</span>
+          <span class="arrow">→</span>
+          <span class="resp">${esc(resp)}</span>
+          <span class="time">${esc(entry.time)}</span>
+        </button>`;
+    }
+
+    function renderDetail(entry, state, modes) {
+      const reqObj = entry.request;
+      const resObj = responsePayload(entry, state);
+      return `
+        <div class="head">
+          <span class="agent lg">1</span>
+          <span class="name">Cursor</span>
+          <span class="kind">${entry.kindLabel}</span>
+          <span class="spacer"></span>
+          <span class="outcome"><span class="ok" style="width:12px;height:12px;font-size:8px">✓</span> ok</span>
+        </div>
+        <div class="timing">${esc(entry.timing)}</div>
+        ${fieldBlock("Request", "req", modes.req, modes.reqJson, requestFormatted(entry), reqObj)}
+        ${fieldBlock("Response", "res", modes.res, modes.resJson, responseFormatted(entry, state), resObj)}
+      `;
+    }
+
+    function wirePreview() {
+      const btn = document.getElementById("previewBtn");
+      const msg = document.getElementById("previewMsg");
+      if (!btn || !msg) return;
+      btn.onclick = () => {
+        msg.hidden = false;
+        msg.textContent = "Preview would re-export from mailbox → Quick Look / default app (temp path is not kept in the audit log).";
+      };
+    }
+
+    function render() {
+      let { entry: entryId, state, req, res, reqJson, resJson } = params();
+      if (!ENTRIES[entryId]) entryId = "attach";
+      if (!ATTACH_RESP[state]) state = "granted";
+      if (!VIEWS.includes(req)) req = "formatted";
+      if (!VIEWS.includes(res)) res = "formatted";
+      if (!JSON_STYLES.includes(reqJson)) reqJson = "pretty";
+      if (!JSON_STYLES.includes(resJson)) resJson = "pretty";
+
+      const entry = ENTRIES[entryId];
+      document.getElementById("entryQ").textContent = entry.blurb;
+      document.getElementById("stateRow").style.display = entryId === "attach" ? "flex" : "none";
+
+      document.querySelectorAll("[data-entry]").forEach(b => b.classList.toggle("on", b.dataset.entry === entryId));
+      document.querySelectorAll("[data-state]").forEach(b => b.classList.toggle("on", b.dataset.state === state));
+
+      const order = ["attach", "get", "search", "status"];
+      document.getElementById("desk").innerHTML = `
+        <div class="filters">
+          <span class="pill">All agents</span>
+          <span class="pill">All types</span>
+          <span class="pill">Today</span>
+          <span style="margin-left:auto">4 · 12 KB</span>
+        </div>
+        <div class="split">
+          <div class="list">
+            ${order.map(id => listRow(ENTRIES[id], state, id === entryId)).join("")}
+          </div>
+          <div class="detail">${renderDetail(entry, state, { req, res, reqJson, resJson })}</div>
+        </div>
+      `;
+
+      wirePreview();
+    }
+
+    document.querySelector(".bar").addEventListener("click", (e) => {
+      const t = e.target.closest("button");
+      if (!t) return;
+      if (t.dataset.entry) setParams({ entry: t.dataset.entry }, true);
+      if (t.dataset.state) setParams({ state: t.dataset.state }, false);
+    });
+
+    document.getElementById("desk").addEventListener("click", (e) => {
+      const pick = e.target.closest("[data-pick]");
+      if (pick) {
+        setParams({ entry: pick.dataset.pick }, true);
+        return;
+      }
+      const collapseBtn = e.target.closest("[data-toggle-collapse]");
+      if (collapseBtn) {
+        const id = collapseBtn.dataset.toggleCollapse;
+        const row = document.querySelector(`.collapsible[data-collapse="${id}"]`);
+        if (row) row.classList.toggle("open");
+        return;
+      }
+
+      const openMsg = e.target.closest("[data-open-message]");
+      if (openMsg) {
+        e.preventDefault();
+        const hint = document.getElementById("openMsgHint")
+          || (() => {
+            const p = document.createElement("p");
+            p.className = "caption";
+            p.id = "openMsgHint";
+            openMsg.closest(".collapse-expand, .detail")?.appendChild(p);
+            return p;
+          })();
+        if (hint) {
+          hint.hidden = false;
+          hint.textContent = "Would open this message in Companion Read (same as tapping the Access Log card today).";
+        }
+        return;
+      }
+
+      const viewBtn = e.target.closest("[data-view]");
+      if (viewBtn) {
+        const side = viewBtn.closest("[data-side]")?.dataset.side;
+        const view = viewBtn.dataset.view;
+        if (side === "req") setParams({ req: view }, false);
+        if (side === "res") setParams({ res: view }, false);
+        return;
+      }
+
+      const styleBtn = e.target.closest("[data-json-style]");
+      if (styleBtn) {
+        const side = styleBtn.closest("[data-side]")?.dataset.side;
+        const style = styleBtn.dataset.jsonStyle;
+        if (side === "req") setParams({ req: "json", reqJson: style }, false);
+        if (side === "res") setParams({ res: "json", resJson: style }, false);
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

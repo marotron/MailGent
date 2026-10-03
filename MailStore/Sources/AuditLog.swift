@@ -7,6 +7,7 @@ public enum AuditKind: String, Codable, Equatable, Hashable, Sendable {
     case listNew
     case listPlacements
     case get
+    case getAttachment = "get_attachment"
     case createDraft
     case updateDraft
     case updateIndex

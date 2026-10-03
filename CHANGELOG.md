@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.6.0] - 2026-10-03
+
+### Added
+
+- MCP `get_attachment` — when Scope allows the message and grant fields include Attachment Content, writes attachment bytes to a unique local temp file and returns its `path` (25 MiB hard cap; partial/undownloaded → `not_available`). Access Log shows an `attach` row with metadata only (no file bytes).
+
+### Fixed
+
+- Access Log `attach` rows show `attachmentContentAccess` in the list and the delivered filename (or not granted / not available / too large) in Attachment Content, instead of always “none in this response”. Locked legend only appears when a field is actually locked.
+
 ## [0.5.1] - 2026-09-30
 
 ### Added
