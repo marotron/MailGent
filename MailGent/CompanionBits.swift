@@ -500,13 +500,44 @@ private struct LinkAwareBodyText: NSViewRepresentable {
     }
 }
 
+/// Bordered icon+label control for non-destructive handoffs (see `docs/ui-inventory.md` → SecondaryAction).
+struct SecondaryActionButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .labelStyle(.titleAndIcon)
+                .symbolRenderingMode(.hierarchical)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .help(title)
+    }
+}
+
 struct OpenInMailButton: View {
     var session: CompanionSession
+    /// When set, loads Message-ID for this locator (Access Log / list). Otherwise uses Companion Read detail.
+    var locator: (accountID: String, placement: String, id: String)? = nil
+    /// Use `Open message in Apple Mail` when the focused entity is an attachment (parent handoff).
+    var title: String = "Open in Apple Mail"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button("Open in Apple Mail") {
-                session.openInMail()
+            SecondaryActionButton(title: title, systemImage: "envelope") {
+                if let locator {
+                    session.openInMail(
+                        accountID: locator.accountID,
+                        placement: locator.placement,
+                        id: locator.id
+                    )
+                } else {
+                    session.openInMail()
+                }
             }
             if let handoffNote = session.handoffNote {
                 Text(handoffNote)

@@ -83,8 +83,46 @@ struct MailStoreTests {
         #expect(message.cc == "Carol <carol@example.com>")
         #expect(message.subject == "Hello")
         #expect(message.body == "Hi there")
+        #expect(message.internetMessageID == "")
         #expect(message.isPartial == false)
         #expect(message.isDraft == false)
+    }
+
+    @Test func parsesInternetMessageIDHeader() throws {
+        let root = try FixtureTree()
+        defer { root.remove() }
+
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Hello
+            Message-ID: <hello.42@example.com>
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Hi there
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+
+        let store = MailStore(root: root.mail)
+        let message = try store.message(accountID: accountID, mailbox: "INBOX", id: "1")
+        #expect(message.internetMessageID == "<hello.42@example.com>")
+    }
+
+    @Test func buildsAppleMailMessageURL() {
+        let withBrackets = AppleMailHandoff.messageURL(internetMessageID: "<hello.42@example.com>")
+        #expect(withBrackets?.absoluteString == "message://%3Chello.42%40example.com%3E")
+
+        let bare = AppleMailHandoff.messageURL(internetMessageID: "hello.42@example.com")
+        #expect(bare?.absoluteString == "message://%3Chello.42%40example.com%3E")
+
+        #expect(AppleMailHandoff.messageURL(internetMessageID: "  ") == nil)
+        #expect(AppleMailHandoff.messageURL(internetMessageID: "") == nil)
     }
 
     @Test func decodesRFC2047EncodedSubjectAndFrom() throws {

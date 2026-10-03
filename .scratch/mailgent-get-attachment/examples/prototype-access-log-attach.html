@@ -1,5 +1,15 @@
 <!doctype html>
-<!-- THROWAWAY PROTOTYPE v8: Access Log modes + attach file card.
+<!-- THROWAWAY PROTOTYPE v24: Access Log modes + truth-first agent response + SecondaryAction.
+     See docs/ui-inventory.md — Preview / Open in Apple Mail share one button type.
+     Formatted Response = what the agent actually received (omissions stay omissions).
+     Search = list of summary cards (count/items fields only — no full-message shell).
+     Search Preview = Companion Read (message), not file bytes — still enabled.
+     Search actions trail right in the chip-row inside each card.
+     Attach: plain “for [subject]” (not a link); Open message in Apple Mail trails right;
+             Preview always trails on the file card (blocked when not granted).
+     get: flat MessageAccessCard (no collapsible chevron);
+         Attachment Content uses FileCard missing/denied chrome (not teal tile).
+     Additionally: Preview + Open in Apple Mail on every message-bearing call.
      Hard refresh if chrome looks wrong (old cache).
      ?entry=attach|get|status|search  ?state=granted|denied|missing|huge
      ?req=formatted|json  ?reqJson=pretty|raw
@@ -10,7 +20,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MailGent · Access Log modes proto v8</title>
+  <title>MailGent · Access Log modes proto v24</title>
   <style>
     :root {
       color-scheme: light;
@@ -128,11 +138,17 @@
     .seg.sub button { font-size: 10px; padding: 2px 8px; }
 
     .box {
-      border: 1px solid var(--line);
-      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,.14);
+      border-radius: 10px;
       background: var(--paper);
-      padding: 8px 10px;
+      padding: 10px;
     }
+    /* Request Formatted — same labeled-line chrome as .search-card-body */
+    .request-card .subj {
+      font-size: 13px; font-weight: 650; letter-spacing: -0.01em;
+      margin: 0 0 6px; line-height: 1.3;
+    }
+    .request-card .line:last-child { margin-bottom: 0; }
     .intent {
       margin: 0 0 8px;
       font: 12px/1.4 "SF Pro Text", -apple-system, sans-serif;
@@ -277,7 +293,12 @@
       display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline;
       min-width: 0; line-height: 1.35;
     }
-    .file-sub .meta-bit { color: var(--muted); white-space: nowrap; }
+    .meta-bit {
+      font: 12px/1.35 ui-monospace, Menlo, monospace;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .file-sub .meta-bit { white-space: nowrap; word-break: normal; }
     .file-sub .dot { color: #b0b8c6; }
 
     /* Brief state copy — colored italic text, not pill badges (non-granted only) */
@@ -339,24 +360,96 @@
       flex: 0 0 auto;
     }
 
-    .preview-btn {
+    /* docs/ui-inventory.md → SecondaryAction (Preview, Open in Apple Mail, …) */
+    .secondary-action {
+      display: inline-flex; align-items: center; gap: 6px;
       flex: 0 0 auto;
-      align-self: center;
       border: 1px solid var(--line);
       background: #fff;
       border-radius: 8px;
-      padding: 5px 10px;
+      padding: 5px 12px;
       font-size: 12px;
       font-weight: 600;
       color: var(--ink);
+      line-height: 1.2;
     }
-    .preview-btn:not(:disabled):hover { border-color: var(--blue); color: var(--blue); }
+    .secondary-action .sa-ic {
+      width: 13px; height: 13px; flex: 0 0 auto;
+      color: var(--muted);
+    }
+    .secondary-action:not(:disabled):hover {
+      border-color: var(--blue); color: var(--blue);
+    }
+    .secondary-action:not(:disabled):hover .sa-ic { color: var(--blue); }
+    .secondary-action:active { background: #f3f5f8; }
+    .secondary-action.is-blocked,
+    .secondary-action:disabled {
+      opacity: 0.45; color: var(--muted);
+    }
+    /* Blocked stays clickable — reveals fail-closed reason (HTML disabled swallows clicks). */
+    .secondary-action.is-blocked { cursor: pointer; }
+    .secondary-action:disabled { cursor: not-allowed; }
+    .secondary-action.is-blocked:hover {
+      border-color: var(--blue); color: var(--blue);
+    }
+    .secondary-action.is-blocked:hover .sa-ic { color: var(--blue); }
+    .file-card .secondary-action { align-self: center; }
+    .secondary-action-row {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+      margin-top: 8px;
+    }
+    .secondary-action-row .sa-buttons {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    .secondary-action-note {
+      margin: 0; font-size: 11px; color: var(--muted); max-width: 36em;
+    }
 
-    .msg-card {
+    .msg-card, .search-card {
       border: 1px solid rgba(0,0,0,.14);
       border-radius: 10px;
       padding: 10px;
+      background: #fff;
     }
+    .search-list {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .search-item {
+      display: flex; flex-direction: column; align-items: stretch; gap: 0;
+    }
+    .search-card .subj {
+      font-size: 13px; font-weight: 650; letter-spacing: -0.01em;
+      margin: 0 0 6px; line-height: 1.3;
+    }
+    .msg-card .chip-row,
+    .search-card .chip-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .msg-card .chip-row-left,
+    .search-card .chip-row-left {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      min-width: 0; flex: 1 1 auto;
+    }
+    .msg-card .chip-row .sa-buttons,
+    .search-card .chip-row .sa-buttons {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin-left: auto; flex: 0 0 auto;
+    }
+    .msg-card .chip,
+    .search-card .chip { margin-bottom: 0; }
+    .search-card .chip.partial {
+      color: var(--orange); border-color: #f0c2a8; background: #fff7f2;
+    }
+    .msg-card-body,
+    .search-card .search-card-body {
+      display: block; width: 100%; text-align: left;
+      border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer;
+    }
+    .msg-card .secondary-action-note,
+    .search-card .secondary-action-note { margin-top: 6px; }
+    .msg-card:has(.msg-card-body:hover),
+    .search-card:has(.search-card-body:hover) { border-color: #b4c2f5; }
     .msg-open-wrap {
       display: block; width: 100%; text-align: left;
       border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer;
@@ -407,6 +500,9 @@
       font-size: 13px; font-weight: 650; margin-bottom: 4px;
     }
     .msg-list-chrome .ic { color: var(--muted); font-size: 14px; }
+    .msg-list-chrome .more {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+    }
     .kind-chrome {
       display: flex; align-items: center; gap: 8px;
       font-size: 13px; font-weight: 650; margin-bottom: 8px;
@@ -414,17 +510,19 @@
     .kind-chrome .ic { color: var(--muted); font-size: 14px; }
     .attach-for {
       font-size: 12px; color: var(--muted); margin: -2px 0 8px;
-      display: flex; align-items: baseline; gap: 6px; min-width: 0;
+      display: flex; align-items: center; gap: 6px; min-width: 0;
     }
     .attach-for .for-lab { flex: 0 0 auto; }
-    .subject-link {
-      border: 0; background: transparent; padding: 0;
-      color: var(--blue); font: 650 12px/1.3 "SF Pro Text", -apple-system, sans-serif;
-      text-align: left; cursor: pointer;
+    .attach-for .attach-subject {
+      flex: 1 1 auto; min-width: 0;
+      color: var(--ink); font: 650 12px/1.3 "SF Pro Text", -apple-system, sans-serif;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      min-width: 0; max-width: 100%;
     }
-    .subject-link:hover { text-decoration: underline; }
+    .attach-for .sa-buttons {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin-left: auto; flex: 0 0 auto;
+    }
+    .attach-shell .secondary-action-note { margin: -2px 0 8px; }
     .headers-only {
       font-size: 10px; color: rgba(10, 122, 138, 0.85); margin: 0 0 10px;
     }
@@ -476,7 +574,13 @@
     .collapse-expand { display: none; padding-left: 18px; }
     .collapsible.open .collapse-expand { display: block; }
     .collapsible.open .field-badges.collapsed-only { display: none; }
+
     .attach-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .attach-cols .file-card {
+      padding: 10px; gap: 10px;
+    }
+    .attach-cols .file-name { font-size: 13px; }
+    .attach-cols .status-icon { width: 36px; height: 36px; font-size: 14px; }
     .attach-tile {
       display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.05);
       border-radius: 6px; padding: 6px; min-height: 32px; font-size: 12px; color: var(--muted);
@@ -524,11 +628,16 @@
 <body>
   <div class="intro">
     <div>
-      <h1>Access Log · modes <span style="color:var(--muted);font-size:14px;font-weight:600">v8</span></h1>
+      <h1>Access Log · modes <span style="color:var(--muted);font-size:14px;font-weight:600">v17</span></h1>
       <p>
         Mode chrome: <strong>Formatted</strong> group + <strong>JSON · Pretty | Raw</strong> group
         (no separate JSON button — Pretty/Raw selects JSON; per Request / Response).
-        Request Formatted = intent + data. Attach Response Formatted = file card; search = expandable list.
+        Request Formatted uses the same labeled-line card chrome as search hit bodies (intent title + Query:/Limit:…).
+        Formatted Response stays <strong>truth-first</strong> — only what the agent received.
+        Search = list of summary cards (<code>count</code>/<code>items</code> fields only — no full email).
+        Additionally every message-bearing call adds <strong>Preview</strong> + <strong>Open in Apple Mail</strong>
+        (shared SecondaryAction chrome — <code>docs/ui-inventory.md</code>).
+        Attach: Open <em>message</em> in Apple Mail trails on the “for” row; Preview trails on the file card.
       </p>
     </div>
     <div class="badge">Prototype</div>
@@ -559,6 +668,12 @@
     const FILE = "statement.pdf";
     const SIZE = "96 KB";
     const ACCOUNT = "19DAAEEB-B0A9-4C37-820B-A55EC8B979CB";
+    const ACCOUNT_GMAIL = "583C19B4-6BF0-4896-8824-9632DEEF5E47";
+    /** Formatted-mode account labels (mirrors CompanionSession.accountLabel). */
+    const ACCOUNT_LABELS = {
+      [ACCOUNT]: "Yahoo",
+      [ACCOUNT_GMAIL]: "Gmail"
+    };
     const VIEWS = ["formatted", "json"];
     const JSON_STYLES = ["pretty", "raw"];
 
@@ -649,7 +764,7 @@
           id: "389104",
           filename: FILE
         },
-        blurb: "Response Formatted = Attachment chrome + subject link to message + file card (app structure)."
+        blurb: "Truth = file delivery result to the agent. Open message in Apple Mail on the for-row; Preview on the file card."
       },
       get: {
         id: "get",
@@ -674,64 +789,56 @@
           attachmentAccess: "granted",
           attachments: [{ filename: FILE, byteCount: 95723 }]
         },
-        blurb: "Response Formatted = Message chrome + collapsible subject → MessageAccessCard (app structure)."
+        blurb: "Truth = message fields the agent got (body + attachment names; no file bytes). Additionally: Preview + Open in Apple Mail."
       },
       search: {
         id: "search",
         kindLabel: "search",
         kind: "search",
-        listReq: "query=OVO",
-        listResp: "10 messages",
+        listReq: "query=Electrician",
+        listResp: "count=3",
         time: "13:20",
-        timing: "30 Sep 2026 at 20:29:55 → 20:29:55 · 31 ms",
+        timing: "3 Oct 2026 at 21:40:12 → 21:40:12 · 31 ms",
         intent: "Search messages.",
         request: {
-          query: "OVO",
-          limit: 10
+          query: "Electrician",
+          limit: 100
         },
+        // Real agent search JSON shape — summary hits only (no to/cc/body/attachments).
         response: {
-          total: 10,
-          messages: [
+          count: 3,
+          items: [
             {
-              id: "389104",
-              accountID: ACCOUNT,
-              placement: "INBOX",
-              subject: "Your final bill has arrived",
-              from: "OVO Energy <no-reply@ovoenergy.com>",
-              dateLabel: "30 Sep 2026 at 13:05",
-              // Grant badges (expand only). Agent search JSON has no to/cc/body/attachments.
-              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: true, file: false }
+              accountID: ACCOUNT_GMAIL,
+              date: "Sat, 03 Oct 2026 03:10:24 +0000",
+              from: "\"CV-Library\" <Admin@careers.cv-library.co.uk>",
+              id: "389326",
+              isPartial: true,
+              placement: "[Gmail]/Spam",
+              subject: "3 new Electrician jobs in Eh6 5ab"
             },
             {
-              id: "388901",
-              accountID: ACCOUNT,
-              placement: "INBOX",
-              subject: "Bill reminder",
-              from: "OVO Energy <no-reply@ovoenergy.com>",
-              dateLabel: "22 Sep 2026 at 10:11",
-              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: false, file: false }
+              accountID: ACCOUNT_GMAIL,
+              date: "Fri, 02 Oct 2026 10:29:17 +0000",
+              from: "\"CV-Library\" <Admin@careers.cv-library.co.uk>",
+              id: "389255",
+              isPartial: true,
+              placement: "[Gmail]/Spam",
+              subject: "2 new Electrician jobs in Eh6 5ab"
             },
             {
-              id: "387200",
-              accountID: ACCOUNT,
-              placement: "INBOX",
-              subject: "Your OVO Energy statement is ready",
-              from: "OVO Energy <no-reply@ovoenergy.com>",
-              dateLabel: "15 Sep 2026 at 09:02",
-              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: true, file: false }
-            },
-            {
-              id: "386010",
-              accountID: ACCOUNT,
-              placement: "INBOX",
-              subject: "Price update for your home",
-              from: "OVO Energy <no-reply@ovoenergy.com>",
-              dateLabel: "2 Sep 2026 at 14:40",
-              fields: { subject: true, from: true, to: true, cc: false, date: true, body: true, att: false, file: false }
+              accountID: ACCOUNT_GMAIL,
+              date: "Fri, 02 Oct 2026 10:15:08 +0000",
+              from: "no-reply@elastic.co",
+              id: "389241",
+              isPartial: false,
+              placement: "[Gmail]/All Mail",
+              subject: "Marek, Thank you from Elastic"
             }
-          ]
+          ],
+          nextCursor: "100"
         },
-        blurb: "Search list = summary only; expand → preview shell with Not included for to/cc/body/attachments."
+        blurb: "Truth = search items only (subject · from · date · id · placement · isPartial). Cards, not full emails. Additionally: Preview (blocked) + Open in Apple Mail."
       },
       status: {
         id: "status",
@@ -748,7 +855,7 @@
           source: "apple_mail",
           pairing: "paired"
         },
-        blurb: "Response Formatted = labeled pairs (no message / file card)."
+        blurb: "Truth = status fields the agent got (labeled-line card). No message entity → no Preview / Open in Apple Mail."
       }
     };
 
@@ -957,13 +1064,44 @@
         </div>`;
     }
 
+    function accountLabel(accountID) {
+      if (!accountID) return "";
+      return ACCOUNT_LABELS[accountID] || null;
+    }
+
+    function shortID(value, n = 8) {
+      const s = String(value || "");
+      return s.length > n ? `${s.slice(0, n)}…` : s;
+    }
+
+    /** Formatted display for request/response scalar fields (Account → label, Id → meta). */
+    function formattedFieldValue(key, value) {
+      if (value == null || value === "") return "";
+      if (key === "accountID") {
+        const label = accountLabel(value);
+        const short = shortID(value);
+        if (label) {
+          return `<span title="${esc(value)}">${esc(label)} · <span class="meta-bit">${esc(short)}</span></span>`;
+        }
+        return `<span class="meta-bit" title="${esc(value)}">${esc(short)}</span>`;
+      }
+      if (key === "id") {
+        return `<span class="meta-bit">${esc(String(value))}</span>`;
+      }
+      if (typeof value === "object") return esc(JSON.stringify(value));
+      return esc(String(value));
+    }
+
     function requestFormatted(entry) {
-      const rows = objectPairs(entry.request, REQUEST_KEYS);
-      const data = rows.length ? `<div>${pairsHtml(rows)}</div>` : "";
+      const req = entry.request || {};
+      const lines = Object.entries(req).map(([key, value]) => {
+        const label = REQUEST_KEYS[key] || key;
+        return `<div class="line"><span class="lab">${esc(label)}:</span> ${formattedFieldValue(key, value)}</div>`;
+      }).join("");
       return `
-        <div class="box">
-          <p class="intent">${esc(entry.intent)}</p>
-          ${data}
+        <div class="box request-card">
+          <div class="subj">${esc(entry.intent)}</div>
+          ${lines}
         </div>`;
     }
 
@@ -974,11 +1112,92 @@
       </svg>`;
     }
 
+    /** docs/ui-inventory.md → SecondaryAction icons (SF Symbol-like). */
+    function actionIcon(name) {
+      if (name === "eye") {
+        return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M8 3.2C4.4 3.2 1.5 5.6.4 8c1.1 2.4 4 4.8 7.6 4.8S14.5 10.4 15.6 8C14.5 5.6 11.6 3.2 8 3.2Zm0 8a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Zm0-1.8a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Z"/>
+        </svg>`;
+      }
+      if (name === "envelope") {
+        return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M1.5 3.5A1.5 1.5 0 0 1 3 2h10a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5v-9Zm1.3.6 5 3.4a.4.4 0 0 0 .4 0l5-3.4H2.8Zm10.4 1.6-4.6 3.1a1.6 1.6 0 0 1-1.8 0L2.2 5.7v6.8c0 .2.1.3.3.3h10.6c.2 0 .3-.1.3-.3V5.7Z"/>
+        </svg>`;
+      }
+      return "";
+    }
+
+    /** Shared SecondaryAction button — docs/ui-inventory.md
+     *  blocked = fail-closed on click (data-preview-blocked).
+     *  muted = optional dimmed look; default follows blocked. Pass muted:false to keep full chrome. */
+    function secondaryActionHtml(opts) {
+      const {
+        label, icon, attrs = "", id = "", title = label,
+        blocked = false, muted = blocked
+      } = opts;
+      const idAttr = id ? ` id="${esc(id)}"` : "";
+      const cls = muted ? "secondary-action is-blocked" : "secondary-action";
+      const blockedAttr = blocked ? ` aria-disabled="true" data-preview-blocked` : "";
+      return `<button type="button" class="${cls}"${idAttr} title="${esc(title)}" ${attrs}${blockedAttr}>${actionIcon(icon)}<span>${esc(label)}</span></button>`;
+    }
+
+    function secondaryActionRowHtml(buttonHtml, noteId) {
+      const id = noteId || "secondaryActionHint";
+      return `
+        <div class="secondary-action-row">
+          <div class="sa-buttons">${buttonHtml}</div>
+          <p class="secondary-action-note" id="${esc(id)}" hidden></p>
+        </div>`;
+    }
+
+    /**
+     * Preview + Open in Apple Mail button pair (no wrapper).
+     * previewKind: "file" (re-export bytes) | "message" (Companion Read).
+     * File Preview blocked when this response had no attachment content.
+     * Message Preview stays enabled for search/list hits (Access Log re-fetch).
+     */
+    function handoffButtonsInnerHtml(opts = {}) {
+      const {
+        parentMessage = false,
+        canPreview = true,
+        previewEnabled = true,
+        previewId = "",
+        previewReason = "",
+        previewKind = "file"
+      } = opts;
+      const mailLabel = parentMessage ? "Open message in Apple Mail" : "Open in Apple Mail";
+      const previewAttr = previewKind === "message" ? "data-preview-message" : "data-preview-file";
+      const buttons = [];
+      if (canPreview) {
+        const reason = previewReason || "Not available from this agent response";
+        buttons.push(secondaryActionHtml({
+          label: "Preview",
+          icon: "eye",
+          id: previewId,
+          title: previewEnabled
+            ? (previewKind === "message" ? "Preview in Companion Read" : "Preview")
+            : reason,
+          attrs: previewAttr,
+          blocked: !previewEnabled
+        }));
+      }
+      buttons.push(secondaryActionHtml({
+        label: mailLabel,
+        icon: "envelope",
+        attrs: parentMessage ? "data-open-mail data-parent-message" : "data-open-mail"
+      }));
+      return buttons.join("");
+    }
+
+    /** Handoff row under a truth-first entity card. */
+    function handoffActionsHtml(opts = {}) {
+      return secondaryActionRowHtml(handoffButtonsInnerHtml(opts), opts.noteId || "handoffHint");
+    }
+
     function fileCard(state) {
       const r = ATTACH_RESP[state];
       const size = sizeLabel(r.byteCount);
       const isGranted = state === "granted" || state === "pass";
-      const canPreview = isGranted;
       const cardState =
         state === "denied" ? "denied" :
         state === "missing" ? "missing" :
@@ -1013,9 +1232,24 @@
         line2 = stateCopyHtml("huge");
       }
 
-      const preview = canPreview
-        ? `<button type="button" class="preview-btn" id="previewBtn">Preview</button>`
+      // EntityTrailingAction — Preview always looks clickable; fail-closed on click when
+      // agent did not get bytes (reason under the card). Do not mute the chrome.
+      const previewBlockedReason =
+        state === "denied" ? "Attachment content is not granted — Preview stays closed."
+        : state === "missing" ? "Attachment is not available in Mail — nothing to preview."
+        : state === "huge" ? "Attachment is too large to deliver — Preview stays closed."
         : "";
+      const preview = secondaryActionHtml({
+        label: "Preview",
+        icon: "eye",
+        id: "previewBtn",
+        title: isGranted ? "Preview" : previewBlockedReason,
+        attrs: isGranted
+          ? `data-preview-file data-preview-note="previewMsg"`
+          : `data-preview-file data-preview-note="previewMsg" data-preview-reason="${esc(previewBlockedReason)}"`,
+        blocked: !isGranted,
+        muted: false
+      });
 
       const lockedLegend = state === "denied"
         ? `<div class="locked-legend">${lockIcon()} Locked. Grant does not allow attachment content.</div>`
@@ -1036,10 +1270,10 @@
           ${preview}
         </div>
         ${lockedLegend}
-        <p class="err" id="previewMsg" hidden></p>
+        <p class="secondary-action-note" id="previewMsg" hidden></p>
         ${r.note ? `<p class="note">${esc(r.note)}</p>` : ""}
         ${partial ? `<p class="caption">${esc(partial)}</p>` : ""}
-        <p class="caption">Context: ${esc(r.placement)} · id ${esc(r.id)} · account ${esc(r.accountID.slice(0, 8))}…</p>
+        <p class="caption">Truth: agent received this file result (${esc(r.attachmentContentAccess || state)}). Context: ${esc(r.placement)} · id ${esc(r.id)} · account ${esc(r.accountID.slice(0, 8))}…</p>
       `;
     }
 
@@ -1069,16 +1303,46 @@
         </div>`;
     }
 
+    /**
+     * FileCard-shaped outcome for Attachment Content inside get (no nested Preview —
+     * chip-row Preview is the handoff). Same chrome as attach missing / denied / huge.
+     */
+    function attachmentContentOutcomeCard(opts = {}) {
+      const {
+        filename = "(attachment)",
+        state = "missing", // missing | denied | huge
+        line = ""
+      } = opts;
+      const icon =
+        state === "denied" ? `<div class="status-icon denied" title="Not granted">${lockIcon()}</div>`
+        : state === "huge" ? `<div class="status-icon huge" title="Too large">!</div>`
+        : `<div class="status-icon missing" title="Not included">✕</div>`;
+      const copyClass =
+        state === "denied" ? "denied" : state === "huge" ? "huge" : "missing";
+      return `
+        <div class="file-card state-${esc(state)}">
+          ${icon}
+          <div class="file-meta">
+            <div class="file-name">${esc(filename)}</div>
+            <div class="file-sub"><span class="state-copy ${copyClass}">${esc(line)}</span></div>
+          </div>
+        </div>`;
+    }
+
     function messageAccessCard(m, opts = {}) {
       const {
         omitsBody = false,
         // search/list agent JSON: summary headers only (no to/cc/body/attachments)
         searchSummaryOnly = false,
-        omitsAttachmentContent = true
+        omitsAttachmentContent = true,
+        actionsHtml = "",
+        noteId = ""
       } = opts;
       const fields = m.fields || {};
       const contentGranted = fields.file !== false;
       const infoGranted = fields.att !== false;
+      const accountName = m.accountLabel || accountLabel(m.accountID) || "Account";
+      const named = Array.isArray(m.attachments) ? m.attachments : [];
 
       let attInfo;
       if (searchSummaryOnly) {
@@ -1088,8 +1352,8 @@
         );
       } else if (!infoGranted) {
         attInfo = `<div class="attach-tile hatch">${lockIcon()}</div>`;
-      } else if (m.attachments && m.attachments.length) {
-        attInfo = m.attachments.map(a =>
+      } else if (named.length) {
+        attInfo = named.map(a =>
           `<div class="attach-tile"><span>📎</span><span>${esc(a.filename)} · ${esc(sizeLabel(a.byteCount))}</span></div>`
         ).join("");
       } else {
@@ -1102,14 +1366,34 @@
 
       let attContent;
       if (!contentGranted) {
-        attContent = `<div class="attach-tile hatch" title="Not granted">${lockIcon()}</div>`;
+        // Denied: same FileCard chrome as attach Not granted.
+        attContent = (named.length ? named : [{ filename: FILE }]).map(a =>
+          attachmentContentOutcomeCard({
+            filename: a.filename,
+            state: "denied",
+            line: "Not allowed by the current grant."
+          })
+        ).join("");
       } else if (omitsAttachmentContent || searchSummaryOnly) {
-        attContent = omittedTile(
-          "Not included",
-          searchSummaryOnly
-            ? "Search and list do not include file bytes — use get_attachment."
-            : "get returns attachment names only — use get_attachment for file bytes."
-        );
+        // Truth: get/search did not deliver file bytes — FileCard missing chrome.
+        const line = searchSummaryOnly
+          ? "Not included in search — use get_attachment."
+          : "Not included in get — use get_attachment.";
+        if (named.length) {
+          attContent = named.map(a =>
+            attachmentContentOutcomeCard({
+              filename: a.filename,
+              state: "missing",
+              line
+            })
+          ).join("");
+        } else {
+          attContent = attachmentContentOutcomeCard({
+            filename: searchSummaryOnly ? "(not in search)" : "(none named)",
+            state: "missing",
+            line
+          });
+        }
       } else {
         attContent = `<div class="attach-tile"><span>📎</span><span>none in this response</span></div>`;
       }
@@ -1121,28 +1405,39 @@
       const ccLine = searchSummaryOnly
         ? ""
         : `<div class="line"><span class="lab">Cc:</span> ${esc(m.cc || "")}</div>`;
+      const note = noteId
+        ? `<p class="secondary-action-note" id="${esc(noteId)}" hidden></p>`
+        : "";
 
       return `
         <div class="msg-card">
-          <div class="chip">Yahoo · ${esc(m.placement || "INBOX")}</div>
-          <div class="line"><strong>${esc(m.subject)}</strong></div>
-          <div class="line"><span class="lab">From:</span> ${esc(m.from)}</div>
-          ${toLine}
-          ${ccLine}
-          <div class="line"><span class="lab">Date:</span> ${esc(m.dateLabel || m.date || "")}</div>
-          <div class="line"><span class="lab">Id:</span> <span class="meta-bit">${esc(m.id || "")}</span></div>
-          <div class="section-lab"><span>Body</span></div>
-          ${bodyBlock}
-          <div class="attach-cols">
-            <div>
-              <div class="section-lab"><span>Attachment Info</span></div>
-              ${attInfo}
+          <div class="chip-row">
+            <div class="chip-row-left">
+              <div class="chip">${esc(accountName)} · ${esc(m.placement || "INBOX")}</div>
             </div>
-            <div>
-              <div class="section-lab"><span>Attachment Content</span></div>
-              ${attContent}
-            </div>
+            ${actionsHtml}
           </div>
+          <button type="button" class="msg-card-body" data-open-message title="Open in Companion Read">
+            <div class="line"><strong>${esc(m.subject)}</strong></div>
+            <div class="line"><span class="lab">From:</span> ${esc(m.from)}</div>
+            ${toLine}
+            ${ccLine}
+            <div class="line"><span class="lab">Date:</span> ${esc(m.dateLabel || m.date || "")}</div>
+            <div class="line"><span class="lab">Id:</span> ${formattedFieldValue("id", m.id)}</div>
+            <div class="section-lab"><span>Body</span></div>
+            ${bodyBlock}
+            <div class="attach-cols">
+              <div>
+                <div class="section-lab"><span>Attachment Info</span></div>
+                ${attInfo}
+              </div>
+              <div>
+                <div class="section-lab"><span>Attachment Content</span></div>
+                ${attContent}
+              </div>
+            </div>
+          </button>
+          ${note}
         </div>`;
     }
 
@@ -1154,57 +1449,54 @@
         </div>`;
     }
 
-    function subjectLinkHtml(subject, title) {
-      const label = subject && subject.trim() ? subject : "(no subject)";
-      return `<button type="button" class="subject-link" data-open-message title="${esc(title || "Open in Companion Read")}">${esc(label)}</button>`;
-    }
-
-    /** App CollapsibleAuditMessage shell — subject + meta + badges + expanded body. */
-    function collapsibleMessage(opts) {
-      const {
-        subject, meta, fields, bodyHtml,
-        open = true, collapseId = "0", showBadges = true
-      } = opts;
-      const badges = showBadges && fields ? fieldBadgesHtml(fields) : "";
-      const badgesCollapsed = showBadges && fields ? fieldBadgesHtml(fields, "collapsed-only") : "";
-      return `
-        <div class="collapsible ${open ? "open" : ""}" data-collapse="${collapseId}">
-          <button type="button" class="collapse-btn" data-toggle-collapse="${collapseId}">
-            <span class="chev">›</span>
-            <div class="collapse-main">
-              <div class="collapse-title">${esc(subject)}</div>
-              <div class="collapse-meta-row">
-                <span class="collapse-meta">${esc(meta)}</span>
-                ${badgesCollapsed}
-              </div>
-            </div>
-          </button>
-          <div class="collapse-expand">
-            ${badges ? `${badges}<div style="height:6px"></div>` : ""}
-            ${bodyHtml}
-          </div>
-        </div>`;
+    /**
+     * SecondaryActionRow + openMessageInMail / openParentMessageInMail.
+     * Attachment focus uses “Open message in Apple Mail” (parent email, not the file).
+     * Prefer handoffActionsHtml when Preview belongs in the same row.
+     */
+    function openInMailButtonHtml(noteId, opts = {}) {
+      return handoffActionsHtml({
+        noteId: noteId || "openMailHint",
+        parentMessage: !!(opts && opts.parentMessage),
+        canPreview: false
+      });
     }
 
     function messageCard(resp) {
       const meta = `${resp.dateLabel || "30 Sep 2026 at 13:05"} · ${resp.accountLabel || "Yahoo"}`;
       const fields = resp.fields || PARENT_MSG.fields;
-      const card = `
-        <button type="button" class="msg-open-wrap" data-open-message title="Open in Companion Read">
-          ${messageAccessCard({ ...resp, dateLabel: resp.dateLabel || "30 Sep 2026 at 13:05" }, { omitsBody: false })}
-        </button>
-        <p class="caption">Truth-first: plain body only — HTML was never sent to the agent.</p>`;
+      const hasNamedAttachments = Array.isArray(resp.attachments) && resp.attachments.length > 0;
+      const fileGranted = fields.file !== false;
+      // Preview is an Access Log affordance (re-export from mailbox). Agent still only got names.
+      const previewEnabled = hasNamedAttachments && fileGranted;
+      const previewReason = !hasNamedAttachments
+        ? "This get response had no attachment names."
+        : (!fileGranted
+          ? "Attachment content is not granted — Preview stays closed."
+          : "");
+      const actionsHtml = `<div class="sa-buttons">${handoffButtonsInnerHtml({
+        canPreview: true,
+        previewEnabled,
+        previewId: "previewBtn-get",
+        previewReason,
+        parentMessage: false
+      })}</div>`;
+      // Single get response: no collapsible — card is already the full truth payload.
       return `
         ${kindChrome("Message", "✉")}
-        ${collapsibleMessage({
-          subject: resp.subject || PARENT_MSG.subject,
-          meta,
-          fields,
-          bodyHtml: card,
-          open: true,
-          collapseId: "get-0"
-        })}
-      `;
+        <div class="collapse-meta-row" style="margin:0 0 8px">
+          <span class="collapse-meta">${esc(meta)}</span>
+          ${fieldBadgesHtml(fields)}
+        </div>
+        ${messageAccessCard(
+          { ...resp, dateLabel: resp.dateLabel || "30 Sep 2026 at 13:05" },
+          {
+            omitsBody: false,
+            actionsHtml,
+            noteId: "openMailHint-get"
+          }
+        )}
+        <p class="caption">Truth-first: plain body + attachment names only — file bytes were never sent to the agent. Preview re-exports from the mailbox for you.</p>`;
     }
 
     function attachFieldsForState(state) {
@@ -1217,68 +1509,98 @@
     function attachFormatted(state) {
       const meta = `${PARENT_MSG.dateLabel} · ${PARENT_MSG.accountLabel}`;
       const fields = attachFieldsForState(state);
-      // Keep app response shell: kind chrome + “for [subject link]” + file card.
+      const mailBtn = secondaryActionHtml({
+        label: "Open message in Apple Mail",
+        icon: "envelope",
+        attrs: "data-open-mail data-parent-message"
+      });
+      // Kind chrome + “for [subject]” with parent handoff trailing right + file card (Preview on card).
       return `
-        ${kindChrome("Attachment", "📎")}
-        <div class="attach-for">
-          <span class="for-lab">for</span>
-          ${subjectLinkHtml(PARENT_MSG.subject, "Open message in Companion Read")}
+        <div class="attach-shell">
+          ${kindChrome("Attachment", "📎")}
+          <div class="attach-for">
+            <span class="for-lab">for</span>
+            <span class="attach-subject">${esc(PARENT_MSG.subject || "(no subject)")}</span>
+            <div class="sa-buttons">${mailBtn}</div>
+          </div>
+          <p class="secondary-action-note" id="openMailHint-attach" hidden></p>
+          <div class="collapse-meta-row" style="margin:0 0 8px">
+            <span class="collapse-meta">${esc(meta)}</span>
+            ${fieldBadgesHtml(fields)}
+          </div>
+          ${fileCard(state)}
+          <p class="caption" id="openMsgHint" hidden></p>
         </div>
-        <div class="collapse-meta-row" style="margin:0 0 8px">
-          <span class="collapse-meta">${esc(meta)}</span>
-          ${fieldBadgesHtml(fields)}
-        </div>
-        ${fileCard(state)}
-        <p class="caption" id="openMsgHint" hidden></p>
       `;
     }
 
+    /** One search/list hit card — only fields present in the agent JSON item. */
+    function searchResultCard(item, opts = {}) {
+      const { noteId = "openMailHint-search", actionsHtml = "" } = opts;
+      const chips = [
+        `<span class="chip">${esc(item.placement || "")}</span>`,
+        item.isPartial ? `<span class="chip partial">partial</span>` : ""
+      ].filter(Boolean).join("");
+      return `
+        <div class="search-card">
+          <div class="chip-row">
+            <div class="chip-row-left">${chips}</div>
+            ${actionsHtml}
+          </div>
+          <button type="button" class="search-card-body" data-open-message title="Open in Companion Read">
+            <div class="subj">${esc(item.subject || "(no subject)")}</div>
+            <div class="line"><span class="lab">From:</span> ${esc(item.from || "")}</div>
+            <div class="line"><span class="lab">Date:</span> ${esc(item.date || "")}</div>
+            <div class="line"><span class="lab">Id:</span> ${formattedFieldValue("id", item.id)}</div>
+            <div class="line"><span class="lab">Account:</span> ${formattedFieldValue("accountID", item.accountID)}</div>
+          </button>
+          <p class="secondary-action-note" id="${esc(noteId)}" hidden></p>
+        </div>`;
+    }
+
     function searchFormatted(resp) {
-      const count = resp.messages.length;
-      const total = resp.total != null ? resp.total : count;
-      // Collapsed list = agent search summary only (subject · from · date · id).
-      // To/cc/body/attachments appear only after expand, marked Not included.
-      const rows = resp.messages.map((m, i) => {
-        const meta = `${m.dateLabel} · ${m.from} · id ${m.id}`;
+      const items = Array.isArray(resp.items) ? resp.items : (resp.messages || []);
+      const count = resp.count != null ? resp.count : items.length;
+      const more = resp.nextCursor
+        ? `<span class="more" title="Pass nextCursor as cursor to fetch the next page.">more</span>`
+        : "";
+      // Truth: agent got summary hits only — cards with item fields; actions trail in chip-row.
+      const rows = items.map((item, i) => {
+        const noteId = `openMailHint-search-${i}`;
+        const actionsHtml = `<div class="sa-buttons">${handoffButtonsInnerHtml({
+          canPreview: true,
+          previewEnabled: true,
+          previewKind: "message",
+          parentMessage: false
+        })}</div>`;
         return `
-          <div class="collapsible" data-collapse="${i}">
-            <button type="button" class="collapse-btn" data-toggle-collapse="${i}">
-              <span class="chev">›</span>
-              <div class="collapse-main">
-                <div class="collapse-title">${esc(m.subject)}</div>
-                <div class="collapse-meta-row">
-                  <span class="collapse-meta">${esc(meta)}</span>
-                </div>
-              </div>
-            </button>
-            <div class="collapse-expand">
-              ${fieldBadgesHtml(m.fields)}
-              <div style="height:6px"></div>
-              ${messageAccessCard(m, {
-                omitsBody: true,
-                searchSummaryOnly: true,
-                omitsAttachmentContent: true
-              })}
-            </div>
+          <div class="search-item">
+            ${searchResultCard(item, { noteId, actionsHtml })}
           </div>`;
       }).join("");
 
       return `
         <div class="msg-list-chrome">
           <span class="ic">☰</span>
-          <span>Message list · ${count}${total !== count ? ` of ${total}` : ""}</span>
+          <span>Message list · ${count}</span>
+          ${more}
         </div>
-        <p class="headers-only">Search summary only (subject, from, date, id). Expand a row for the preview shell — to/cc/body/attachments were not returned.</p>
-        ${rows}
+        <p class="headers-only">Headers only. Search does not include body — use get. Cards show only fields from the agent response.</p>
+        <div class="search-list">${rows}</div>
       `;
     }
 
     function statusFormatted(resp) {
-      return `<div class="box">${pairsHtml(objectPairs(resp, {
-        indexed: "Indexed",
-        source: "Source",
-        pairing: "Pairing"
-      }))}</div>`;
+      const keyMap = { indexed: "Indexed", source: "Source", pairing: "Pairing" };
+      const lines = Object.entries(resp || {}).map(([key, value]) => {
+        const label = keyMap[key] || key;
+        return `<div class="line"><span class="lab">${esc(label)}:</span> ${formattedFieldValue(key, value)}</div>`;
+      }).join("");
+      return `
+        <div class="box request-card">
+          <div class="subj">Status</div>
+          ${lines}
+        </div>`;
     }
 
     function responsePayload(entry, state) {
@@ -1343,16 +1665,6 @@
       `;
     }
 
-    function wirePreview() {
-      const btn = document.getElementById("previewBtn");
-      const msg = document.getElementById("previewMsg");
-      if (!btn || !msg) return;
-      btn.onclick = () => {
-        msg.hidden = false;
-        msg.textContent = "Preview would re-export from mailbox → Quick Look / default app (temp path is not kept in the audit log).";
-      };
-    }
-
     function render() {
       let { entry: entryId, state, req, res, reqJson, resJson } = params();
       if (!ENTRIES[entryId]) entryId = "attach";
@@ -1384,8 +1696,6 @@
           <div class="detail">${renderDetail(entry, state, { req, res, reqJson, resJson })}</div>
         </div>
       `;
-
-      wirePreview();
     }
 
     document.querySelector(".bar").addEventListener("click", (e) => {
@@ -1406,6 +1716,58 @@
         const id = collapseBtn.dataset.toggleCollapse;
         const row = document.querySelector(`.collapsible[data-collapse="${id}"]`);
         if (row) row.classList.toggle("open");
+        return;
+      }
+
+      const previewMsgBtn = e.target.closest("[data-preview-message]");
+      if (previewMsgBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const note = previewMsgBtn.closest(".search-card, .msg-card, .secondary-action-row")?.querySelector(".secondary-action-note");
+        if (note) {
+          note.hidden = false;
+          note.textContent = "Preview → open this message in Companion Read (re-fetch from mailbox; search only returned headers to the agent).";
+        }
+        return;
+      }
+
+      const previewBtn = e.target.closest("[data-preview-file]");
+      if (previewBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const noteId = previewBtn.getAttribute("data-preview-note");
+        const note = (noteId && document.getElementById(noteId))
+          || previewBtn.closest(".file-card")?.parentElement?.querySelector("#previewMsg")
+          || previewBtn.closest(".secondary-action-row, .search-card, .msg-card")?.querySelector(".secondary-action-note")
+          || document.getElementById("previewMsg");
+        if (previewBtn.hasAttribute("data-preview-blocked") || previewBtn.classList.contains("is-blocked")) {
+          if (note) {
+            note.hidden = false;
+            note.textContent = previewBtn.getAttribute("data-preview-reason")
+              || previewBtn.getAttribute("title")
+              || "Preview stays closed — this agent response did not include file bytes.";
+          }
+          return;
+        }
+        if (note) {
+          note.hidden = false;
+          note.textContent = "Preview → re-export from mailbox → system viewer / Quick Look (temp path is not kept in the audit log).";
+        }
+        return;
+      }
+
+      const openMail = e.target.closest("[data-open-mail]");
+      if (openMail) {
+        e.preventDefault();
+        e.stopPropagation();
+        const note = openMail.closest(".secondary-action-row, .search-card, .msg-card, .attach-shell")?.querySelector(".secondary-action-note");
+        if (note) {
+          note.hidden = false;
+          const parent = openMail.hasAttribute("data-parent-message");
+          note.textContent = parent
+            ? "Would open the parent email in Apple Mail via message://… (not the attachment file). Fail closed if Message-ID is missing."
+            : "Would open message://… in Apple Mail (Message-ID handoff). Fail closed if the header is missing.";
+        }
         return;
       }
 

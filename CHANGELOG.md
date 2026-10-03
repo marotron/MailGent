@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.7.0] - 2026-10-03
+
+### Added
+
+- Open in Apple Mail — Companion Read and Access Log message preview open the selected message via `message://` using its RFC Message-ID (fail closed when the header is missing).
+- Shared secondary-action chrome (icon + label) for handoffs; Access Log `attach` rows label the handoff **Open message in Apple Mail** so it is clear the parent email opens, not the file.
+
 ## [0.6.0] - 2026-10-03
 
 ### Added

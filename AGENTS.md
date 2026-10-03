@@ -8,6 +8,10 @@ Issues live as markdown under `.scratch/<feature>/`. See `docs/agents/issue-trac
 
 Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
 
+### UI element inventory
+
+Reusable control types, icons, and placement rules: `docs/ui-inventory.md`. Update that file when adding or renaming a shared control; keep HTML prototypes in lockstep.
+
 ### App icon / logo
 
 Candidate-first. Sketch in `.scratch/app-icon/candidates/`; do not write `AppIcon` until the user ships a named candidate. See `docs/agents/app-icon.md`.
