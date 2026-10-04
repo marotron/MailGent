@@ -29,7 +29,11 @@ public enum MailSourceError: Error, Equatable, CustomStringConvertible {
         case .unavailable:
             return "That mail source is not available. Grant Full Disk Access in MailGent Settings → Access, or pick another source."
         case .unknownSource:
+            #if DEBUG
             return "Unknown source. Use fixture or liveMail."
+            #else
+            return "Unknown source. Use liveMail."
+            #endif
         case .notAvailable:
             return "Mail source control is not bound."
         }
@@ -42,12 +46,37 @@ public protocol MailSourceControlling: Sendable {
 }
 
 extension MailSourceID {
+    /// Companion default for this build. Fixture only in Debug; Release always starts on live Mail.
+    public static var defaultSource: MailSourceID {
+        #if DEBUG
+        .fixture
+        #else
+        .liveMail
+        #endif
+    }
+
+    /// Whether this build exposes the planted fixture tree at all.
+    public static var includesFixture: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
     /// Ordered sources the UI/agent may land on. Append future sources here.
+    ///
+    /// Release builds never offer fixture (no plant, no default, no MCP switch-in).
     public static func available(liveMailAccessible: Bool) -> [MailSourceID] {
+        #if DEBUG
         if liveMailAccessible {
             return [.fixture, .liveMail]
         }
         return [.fixture]
+        #else
+        _ = liveMailAccessible
+        return [.liveMail]
+        #endif
     }
 
     /// Next entry in `sources`, wrapping. If `self` is missing, first available.

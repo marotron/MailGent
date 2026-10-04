@@ -110,7 +110,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.8.0"
+                        "version": "0.8.1"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -558,21 +558,35 @@ public struct LoopbackMCPServer {
                     "properties": [:] as [String: Any]
                 ]
             ],
-            [
-                "name": "set_source",
-                "description":
-                    "Switch the companion mail source (fixture or liveMail). Denied unless enabled in MailGent Settings → General.",
-                "inputSchema": [
-                    "type": "object",
-                    "properties": [
-                        "source": [
-                            "type": "string",
-                            "description": "fixture or liveMail",
-                            "enum": ["fixture", "liveMail"]
-                        ]
-                    ],
-                    "required": ["source"]
-                ]
+            setSourceToolDescriptor
+        ]
+    }
+
+    private static var setSourceToolDescriptor: [String: Any] {
+        #if DEBUG
+        let sourceDescription = "fixture or liveMail"
+        let sourceEnum = ["fixture", "liveMail"]
+        let toolDescription =
+            "Switch the companion mail source (fixture or liveMail). Denied unless enabled in MailGent Settings → General."
+        #else
+        let sourceDescription = "liveMail"
+        let sourceEnum = ["liveMail"]
+        let toolDescription =
+            "Switch the companion mail source (liveMail). Fixture is Debug-only. Denied unless enabled in MailGent Settings → General."
+        #endif
+        return [
+            "name": "set_source",
+            "description": toolDescription,
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "source": [
+                        "type": "string",
+                        "description": sourceDescription,
+                        "enum": sourceEnum
+                    ]
+                ],
+                "required": ["source"]
             ]
         ]
     }

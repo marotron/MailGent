@@ -65,9 +65,7 @@ struct MailGentSettingsView: View {
         Form {
             Section("Agents") {
                 Toggle("Allow agents to change mail source", isOn: $agentMayChangeSource)
-                Text(
-                    "Off by default. When on, a paired agent may call MCP set_source to switch fixture ↔ live Mail."
-                )
+                Text(agentMayChangeSourceHelp)
                 .foregroundStyle(.secondary)
                 .font(.callout)
                 TextField("Loopback MCP port", value: $loopbackPort, format: .number.grouping(.never))
@@ -113,5 +111,13 @@ struct MailGentSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(8)
+    }
+
+    private var agentMayChangeSourceHelp: String {
+        #if DEBUG
+        "Off by default. When on, a paired agent may call MCP set_source to switch fixture ↔ live Mail."
+        #else
+        "Off by default. When on, a paired agent may call MCP set_source (live Mail only in Release builds)."
+        #endif
     }
 }

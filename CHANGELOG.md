@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.8.1] - 2026-10-04
+
+### Fixed
+
+- Release builds no longer plant or default to fixture mail — live Mail only. Fixture source remains available in Debug builds for local development.
+
 ## [0.8.0] - 2026-10-04
 
 ### Added
