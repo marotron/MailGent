@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.8.2] - 2026-10-04
+
+### Changed
+
+- Pass Desk rule tags: tighter vertical alignment for the mode chip and value, slightly roomier corner radius on each rule row.
+
 ## [0.8.1] - 2026-10-04
 
 ### Fixed
