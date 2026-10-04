@@ -373,30 +373,65 @@ private struct AccessLogRow: View {
     }
 }
 
+/// Access Log Request/Response JSON pane — compact mono; Pretty is syntax-colored.
+private struct AccessLogJSONText: View {
+    let raw: String
+    let style: AccessLogJSONStyle
+
+    var body: some View {
+        Group {
+            switch style {
+            case .pretty:
+                Text(AccessLogFormat.highlightedPrettyJSON(raw))
+            case .raw:
+                Text(AccessLogFormat.compactJSON(raw))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.primary)
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 private struct AccessLogDetail: View {
     @Bindable var session: CompanionSession
     let entry: AuditEntry
 
-    @State private var requestRaw = false
-    @State private var responseRaw = false
+    @State private var requestView: AccessLogSideView = .formatted
+    @State private var requestJSONStyle: AccessLogJSONStyle = .pretty
+    @State private var responseView: AccessLogSideView = .formatted
+    @State private var responseJSONStyle: AccessLogJSONStyle = .pretty
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 header
-                togglableField("Request", raw: requestLine, showRaw: $requestRaw) {
-                    payloadView(requestLine)
+                modeField(
+                    "Request",
+                    raw: requestLine,
+                    view: $requestView,
+                    jsonStyle: $requestJSONStyle
+                ) {
+                    formattedRequest
                 }
-                togglableField("Response", raw: responseRawText, showRaw: $responseRaw) {
-                    prettyResponse
+                modeField(
+                    "Response",
+                    raw: responseRawText,
+                    view: $responseView,
+                    jsonStyle: $responseJSONStyle
+                ) {
+                    formattedResponse
                 }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onChange(of: entry.id) { _, _ in
-            requestRaw = false
-            responseRaw = false
+            requestView = .formatted
+            requestJSONStyle = .pretty
+            responseView = .formatted
+            responseJSONStyle = .pretty
         }
     }
 
@@ -437,26 +472,24 @@ private struct AccessLogDetail: View {
         }
     }
 
-    private func togglableField<Pretty: View>(
+    private func modeField<Formatted: View>(
         _ title: String,
         raw: String,
-        showRaw: Binding<Bool>,
-        @ViewBuilder pretty: () -> Pretty
+        view: Binding<AccessLogSideView>,
+        jsonStyle: Binding<AccessLogJSONStyle>,
+        @ViewBuilder formatted: () -> Formatted
     ) -> some View {
-        let hideEmptyPretty = AccessLogFormat.jsonPairs(raw)?.isEmpty == true
         return VStack(alignment: .leading, spacing: 6) {
-            RawPrettyHeader(title: title, showRaw: showRaw)
-            if showRaw.wrappedValue {
+            AccessLogModeHeader(title: title, view: view, jsonStyle: jsonStyle)
+            switch view.wrappedValue {
+            case .formatted:
                 payloadBox {
-                    Text(raw)
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
+                    formatted()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            } else if !hideEmptyPretty {
+            case .json:
                 payloadBox {
-                    pretty()
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    AccessLogJSONText(raw: raw, style: jsonStyle.wrappedValue)
                 }
             }
         }
@@ -473,13 +506,52 @@ private struct AccessLogDetail: View {
     }
 
     @ViewBuilder
-    private var prettyResponse: some View {
-        if isMessageResponse {
-            prettyMessageList
-        } else if !entry.placements.isEmpty {
-            prettyPlacements
-        } else {
-            payloadView(responseLine)
+    private var formattedRequest: some View {
+        let pairs = AccessLogFormat.jsonPairs(requestLine) ?? AccessLogFormat.pairs(requestLine)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(AccessLogFormat.requestIntent(for: entry.kind))
+                .font(.caption.weight(.semibold))
+            if !pairs.isEmpty {
+                ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(AccessLogFormat.prettyKey(pair.0)):")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Text(
+                            AccessLogFormat.displayValue(
+                                pair.0,
+                                pair.1,
+                                accountLabel: session.accountLabel
+                            )
+                        )
+                        .font(.caption)
+                        .textSelection(.enabled)
+                    }
+                }
+            } else if requestLine != "—" {
+                Text(requestLine)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var formattedResponse: some View {
+        switch entry.kind {
+        case .get:
+            formattedGetResponse
+        case .search, .list, .listNew:
+            formattedSearchListResponse
+        case .getAttachment:
+            formattedAttachmentResponse
+        default:
+            if !entry.placements.isEmpty {
+                prettyPlacements
+            } else {
+                payloadView(responseLine)
+            }
         }
     }
 
@@ -496,74 +568,165 @@ private struct AccessLogDetail: View {
         }
     }
 
-    private var prettyMessageList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if showsMessageListChrome {
-                HStack(spacing: 8) {
-                    Image(systemName: "list.bullet.rectangle")
-                        .foregroundStyle(.secondary)
-                    Text("Message list · \(entry.messages.count)")
-                        .font(.callout.weight(.semibold))
-                    if let total = messageListTotal, total != entry.messages.count {
-                        Text("of \(total)")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    if hasMorePages {
-                        Text("more")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .help("Pass nextCursor as cursor to fetch the next page.")
-                    }
-                }
-                if let note = headersOnlyNote {
-                    Text(note)
-                        .font(.system(size: 10))
-                        .foregroundStyle(HeadersOnlyStyle.text)
-                }
-            }
-            ForEach(displayMessages, id: \.rowID) { ref in
-                CollapsibleAuditMessage(
+    private var formattedGetResponse: some View {
+        let refs = displayMessages
+        return VStack(alignment: .leading, spacing: 10) {
+            kindChrome(title: "Message", systemImage: "envelope")
+            if let ref = refs.first {
+                messageMetaRow(ref)
+                MessageAccessCard(
                     session: session,
                     ref: ref,
-                    omitsBody: omitsBody,
-                    attachmentContentDetail: AccessLogFormat.attachmentContentDetail(for: entry),
-                    startsExpanded: displayMessages.count == 1,
-                    mailHandoffTitle: entry.kind == .getAttachment
-                        ? "Open message in Apple Mail"
-                        : "Open in Apple Mail"
+                    omitsBody: false,
+                    showsFieldBadges: false,
+                    attachmentContentCards: AccessLogFormat.getAttachmentContentCards(for: ref),
+                    showsChipRowActions: true,
+                    onChipRowPreview: {
+                        session.openRead(
+                            accountID: ref.accountID,
+                            placement: ref.placement,
+                            id: ref.id
+                        )
+                        DetachedWindowHost.shared.showCompanion(session: session)
+                    }
                 )
+
+                if AccessLogFormat.showsSanitizedLegend(for: [ref]) {
+                    SanitizedFieldsLegend()
+                }
+                if AccessLogFormat.hasLockedFields(ref) {
+                    LockedFieldsLegend()
+                }
+            } else {
+                payloadView(responseLine)
             }
         }
         .id(entry.id)
     }
 
-    private var showsMessageListChrome: Bool {
-        switch entry.kind {
-        case .search, .list, .listNew: true
-        default: false
+    private var formattedSearchListResponse: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "list.bullet.rectangle")
+                    .foregroundStyle(.secondary)
+                Text("Message list · \(displayMessages.count)")
+                    .font(.callout.weight(.semibold))
+                if let total = messageListTotal, total != displayMessages.count {
+                    Text("of \(total)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                if hasMorePages {
+                    Text("more")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .help("Pass nextCursor as cursor to fetch the next page.")
+                }
+            }
+            if let note = headersOnlyNote {
+                Text(note)
+                    .font(.system(size: 10))
+                    .foregroundStyle(HeadersOnlyStyle.text)
+            }
+            ForEach(displayMessages, id: \.rowID) { ref in
+                SearchResultCard(session: session, ref: ref)
+            }
         }
+        .id(entry.id)
+    }
+
+    private var formattedAttachmentResponse: some View {
+        let refs = displayMessages
+        let model = AccessLogFormat.attachmentContent(for: entry)
+        return VStack(alignment: .leading, spacing: 10) {
+            kindChrome(title: "Attachment", systemImage: "paperclip")
+            if let ref = refs.first {
+                HStack(alignment: .center, spacing: 8) {
+                    Text("for")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(ref.fields.subject
+                         ? (ref.subject.isEmpty ? "(no subject)" : ref.subject)
+                         : ref.id)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    OpenInMailButton(
+                        session: session,
+                        locator: (ref.accountID, ref.placement, ref.id),
+                        title: "Open message in Apple Mail"
+                    )
+                }
+                messageMetaRow(ref)
+            }
+            if let model {
+                FileCard(model: model, showsPreview: true) {
+                    if let ref = refs.first {
+                        session.openAttachment(
+                            accountID: ref.accountID,
+                            placement: ref.placement,
+                            id: ref.id,
+                            filename: model.filename
+                        )
+                    }
+                }
+            } else {
+                payloadView(responseLine)
+            }
+        }
+        .id(entry.id)
+    }
+
+    private func kindChrome(title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.callout.weight(.semibold))
+        }
+    }
+
+    private func messageMetaRow(_ ref: AuditMessageRef) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(collapsedMeta(for: ref))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            GrantFieldBadgeRow(
+                fields: ref.fields,
+                labelMode: .short,
+                passRevealed: ref.passRevealedFields,
+                blockWithheld: ref.blockWithheldFields
+            )
+            .fixedSize(horizontal: true, vertical: false)
+            if ref.leakDetectionCount > 0 {
+                AccessLogLeakHitBadge(count: ref.leakDetectionCount)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func collapsedMeta(for ref: AuditMessageRef) -> String {
+        var parts: [String] = []
+        if ref.fields.date, let date = AccessLogFormat.compactMailDate(ref.date) {
+            parts.append(date)
+        }
+        parts.append(session.accountLabel(ref.accountID))
+        return parts.joined(separator: " · ")
     }
 
     private var hasMorePages: Bool {
         AccessLogFormat.jsonString(entry.responseSummary, key: "nextCursor") != nil
     }
 
-    private var omitsBody: Bool {
-        switch entry.kind {
-        case .search, .list, .listNew: true
-        default: false
-        }
-    }
-
     private var headersOnlyNote: String? {
         switch entry.kind {
         case .search:
-            return "Headers only. Search does not include body — use get."
+            return "Headers only. Search does not include body — use get. Cards show only fields from the agent response."
         case .list:
-            return "Headers only. List does not include body — use get."
+            return "Headers only. List does not include body — use get. Cards show only fields from the agent response."
         case .listNew:
-            return "Headers only. New messages do not include body — use get."
+            return "Headers only. New messages do not include body — use get. Cards show only fields from the agent response."
         default:
             return nil
         }
@@ -620,17 +783,6 @@ private struct AccessLogDetail: View {
 
     private var displayMessages: [AuditMessageRef] {
         AccessLogFormat.displayMessages(for: entry)
-    }
-
-    private var isMessageResponse: Bool {
-        if !displayMessages.isEmpty { return true }
-        switch entry.kind {
-        case .search, .list, .listNew:
-            if case .ok = entry.outcome { return true }
-            return false
-        default:
-            return false
-        }
     }
 
     private var messageListTotal: Int? {
@@ -774,26 +926,14 @@ private struct CollapsibleAuditMessage: View {
                     if !ref.displayLeakDetections.isEmpty {
                         LeakGuardDetectionsList(detections: ref.displayLeakDetections)
                     }
-                    Button {
-                        session.openRead(
-                            accountID: ref.accountID,
-                            placement: ref.placement,
-                            id: ref.id
-                        )
-                        DetachedWindowHost.shared.showCompanion(session: session)
-                    } label: {
-                        MessageAccessCard(
-                            session: session,
-                            ref: ref,
-                            omitsBody: omitsBody,
-                            showsFieldBadges: false,
-                            attachmentContentDetail: attachmentContentDetail
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Open in Companion Read")
+                    MessageAccessCard(
+                        session: session,
+                        ref: ref,
+                        omitsBody: omitsBody,
+                        showsFieldBadges: false,
+                        attachmentContentDetail: attachmentContentDetail
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     OpenInMailButton(
                         session: session,
@@ -887,7 +1027,7 @@ enum AccessLogFormat {
 
     static func prettyKey(_ key: String) -> String {
         switch key {
-        case "q": "Query"
+        case "q", "query": "Query"
         case "limit": "Limit"
         case "cursor": "Cursor"
         case "accountID", "account": "Account"
@@ -966,6 +1106,157 @@ enum AccessLogFormat {
               let rendered = String(data: pretty, encoding: .utf8)
         else { return text }
         return rendered
+    }
+
+    /// Pretty-printed JSON with Access Log syntax colors (keys / strings / numbers / …).
+    static func highlightedPrettyJSON(_ text: String) -> AttributedString {
+        highlightedJSON(prettyJSON(text))
+    }
+
+    /// Lightweight JSON syntax coloring for Pretty mode (matches prototype `colorizeJSON`).
+    static func highlightedJSON(_ text: String) -> AttributedString {
+        var output = AttributedString()
+        var i = text.startIndex
+        while i < text.endIndex {
+            let ch = text[i]
+            if ch == "\"" {
+                var j = text.index(after: i)
+                var escaped = false
+                while j < text.endIndex {
+                    let c = text[j]
+                    if escaped {
+                        escaped = false
+                        j = text.index(after: j)
+                        continue
+                    }
+                    if c == "\\" {
+                        escaped = true
+                        j = text.index(after: j)
+                        continue
+                    }
+                    if c == "\"" {
+                        j = text.index(after: j)
+                        break
+                    }
+                    j = text.index(after: j)
+                }
+                let chunk = text[i..<j]
+                let after = text[j...].drop(while: { $0.isWhitespace })
+                let isKey = after.first == ":"
+                appendJSONRun(String(chunk), kind: isKey ? .key : .string, to: &output)
+                i = j
+                continue
+            }
+            if let numberEnd = jsonNumberEndIndex(from: i, in: text) {
+                appendJSONRun(String(text[i..<numberEnd]), kind: .number, to: &output)
+                i = numberEnd
+                continue
+            }
+            if text[i...].hasPrefix("true") || text[i...].hasPrefix("false") {
+                let lit = text[i...].hasPrefix("true") ? "true" : "false"
+                let end = text.index(i, offsetBy: lit.count)
+                if isJSONLiteralBoundary(before: i, after: end, in: text) {
+                    appendJSONRun(lit, kind: .bool, to: &output)
+                    i = end
+                    continue
+                }
+            }
+            if text[i...].hasPrefix("null") {
+                let end = text.index(i, offsetBy: 4)
+                if isJSONLiteralBoundary(before: i, after: end, in: text) {
+                    appendJSONRun("null", kind: .null, to: &output)
+                    i = end
+                    continue
+                }
+            }
+            if "{}[],:".contains(ch) {
+                appendJSONRun(String(ch), kind: .punctuation, to: &output)
+                i = text.index(after: i)
+                continue
+            }
+            appendJSONRun(String(ch), kind: .plain, to: &output)
+            i = text.index(after: i)
+        }
+        return output
+    }
+
+    private enum JSONHighlightKind {
+        case key, string, number, bool, null, punctuation, plain
+    }
+
+    private static let jsonFont = Font.system(size: 11, design: .monospaced)
+
+    private static func appendJSONRun(
+        _ text: String,
+        kind: JSONHighlightKind,
+        to output: inout AttributedString
+    ) {
+        var run = AttributedString(text)
+        run.font = jsonFont
+        run.foregroundColor = jsonColor(for: kind)
+        if kind == .null {
+            run.inlinePresentationIntent = .emphasized
+        }
+        output.append(run)
+    }
+
+    private static func jsonColor(for kind: JSONHighlightKind) -> Color {
+        // Prototype `.jx-*` palette (Access Log Pretty JSON).
+        switch kind {
+        case .key: Color(red: 0.043, green: 0.341, blue: 0.816) // #0b57d0
+        case .string: Color(red: 0.039, green: 0.478, blue: 0.243) // #0a7a3e
+        case .number: Color(red: 0.647, green: 0.055, blue: 0.055) // #a50e0e
+        case .bool: Color(red: 0.541, green: 0.247, blue: 0.988) // #8a3ffc
+        case .null, .punctuation: Color(red: 0.373, green: 0.427, blue: 0.525) // #5f6d86
+        case .plain: Color.primary
+        }
+    }
+
+    private static func isJSONLiteralBoundary(before: String.Index, after: String.Index, in text: String) -> Bool {
+        let beforeOK: Bool = {
+            guard before > text.startIndex else { return true }
+            let prev = text[text.index(before: before)]
+            return !prev.isLetter && !prev.isNumber && prev != "_"
+        }()
+        let afterOK: Bool = {
+            guard after < text.endIndex else { return true }
+            let next = text[after]
+            return !next.isLetter && !next.isNumber && next != "_"
+        }()
+        return beforeOK && afterOK
+    }
+
+    /// End index of a JSON number starting at `start`, or nil if not a number.
+    private static func jsonNumberEndIndex(from start: String.Index, in text: String) -> String.Index? {
+        guard start < text.endIndex else { return nil }
+        var j = start
+        if text[j] == "-" {
+            j = text.index(after: j)
+        }
+        guard j < text.endIndex, text[j].isNumber else { return nil }
+        while j < text.endIndex, text[j].isNumber {
+            j = text.index(after: j)
+        }
+        if j < text.endIndex, text[j] == "." {
+            let afterDot = text.index(after: j)
+            guard afterDot < text.endIndex, text[afterDot].isNumber else { return j }
+            j = afterDot
+            while j < text.endIndex, text[j].isNumber {
+                j = text.index(after: j)
+            }
+        }
+        if j < text.endIndex, text[j] == "e" || text[j] == "E" {
+            var k = text.index(after: j)
+            if k < text.endIndex, text[k] == "+" || text[k] == "-" {
+                k = text.index(after: k)
+            }
+            guard k < text.endIndex, text[k].isNumber else { return j }
+            j = k
+            while j < text.endIndex, text[j].isNumber {
+                j = text.index(after: j)
+            }
+        }
+        return j
     }
 
     static func jsonObject(_ text: String) -> [String: Any]? {
@@ -1131,36 +1422,214 @@ enum AccessLogFormat {
         }
     }
 
+    /// File-card state for Access Log Formatted Response (`get_attachment` / get Attachment Content).
+    enum AttachmentCardState: Equatable, Sendable {
+        case granted
+        case denied
+        case missing
+        case huge
+    }
+
+    /// Structured attachment outcome feeding `FileCard` (and string helpers).
+    struct AttachmentCardModel: Equatable, Sendable {
+        var state: AttachmentCardState
+        var filename: String
+        var byteCount: Int? = nil
+        var isPartial: Bool = false
+        var note: String? = nil
+        var passNick: String? = nil
+        /// Short Formatted line under the filename (overrides default state copy).
+        var stateLineOverride: String? = nil
+
+        var sizeLabel: String? {
+            guard let byteCount else { return nil }
+            return MailAttachment(filename: filename, byteCount: byteCount).sizeLabel
+        }
+
+        var typeBadge: String {
+            let ext = URL(fileURLWithPath: filename).pathExtension.uppercased()
+            return ext.isEmpty ? "FILE" : String(ext.prefix(4))
+        }
+
+        var typeDescription: String {
+            let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
+            switch ext {
+            case "pdf": return "PDF document"
+            case "png", "jpg", "jpeg", "gif", "webp", "heic": return "Image"
+            case "txt", "md", "csv": return "Text"
+            case "zip", "gz", "tar": return "Archive"
+            case "": return "Attachment"
+            default: return "\(ext.uppercased()) file"
+            }
+        }
+
+        var stateLine: String {
+            if let stateLineOverride, !stateLineOverride.isEmpty { return stateLineOverride }
+            switch state {
+            case .granted: return ""
+            case .denied: return "Not allowed by the current grant."
+            case .missing: return "Not available in Mail."
+            case .huge: return "Too large to deliver."
+            }
+        }
+
+        var previewBlockedReason: String? {
+            switch state {
+            case .granted: return nil
+            case .denied: return "Attachment content is not granted — Preview stays closed."
+            case .missing: return "Attachment is not available in Mail — nothing to preview."
+            case .huge: return "Attachment is too large to deliver — Preview stays closed."
+            }
+        }
+
+        /// Backward-compatible tile / list string.
+        var detailString: String {
+            switch state {
+            case .granted:
+                if let sizeLabel { return "\(filename) · \(sizeLabel)" }
+                return filename
+            case .denied:
+                return "not granted"
+            case .missing:
+                return "not available"
+            case .huge:
+                if let sizeLabel { return "\(filename) · \(sizeLabel) · too large" }
+                return "too large"
+            }
+        }
+    }
+
     /// Tile copy for Attachment Content. `get_attachment` uses response access; `get` stays "none in this response".
     static func attachmentContentDetail(for entry: AuditEntry) -> String {
+        attachmentContent(for: entry)?.detailString ?? "none in this response"
+    }
+
+    static func attachmentContent(for entry: AuditEntry) -> AttachmentCardModel? {
         guard entry.kind == .getAttachment,
               let obj = jsonObject(entry.responseSummary),
               let access = obj["attachmentContentAccess"] as? String
-        else {
-            return "none in this response"
-        }
-        let filename = obj["filename"] as? String
-        let size: String? = {
-            guard let bytes = intValue(obj["byteCount"]) else { return nil }
-            let name = filename ?? "attachment"
-            return MailAttachment(filename: name, byteCount: bytes).sizeLabel
-        }()
+        else { return nil }
+
+        let filename = (obj["filename"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "attachment"
+        let byteCount = intValue(obj["byteCount"])
+        let isPartial = obj["isPartial"] as? Bool ?? false
+        let note = obj["note"] as? String
+        let passNick = attachmentPassNick(from: entry)
+
         switch access {
         case "granted":
-            let name = filename ?? "attachment"
-            if let size { return "\(name) · \(size)" }
-            if let path = obj["path"] as? String, !path.isEmpty { return "\(name) · \(path)" }
-            return name
+            return AttachmentCardModel(
+                state: .granted,
+                filename: filename,
+                byteCount: byteCount,
+                isPartial: isPartial,
+                note: note,
+                passNick: passNick
+            )
         case "not_granted":
-            return "not granted"
+            return AttachmentCardModel(
+                state: .denied,
+                filename: filename,
+                byteCount: byteCount,
+                isPartial: isPartial,
+                note: note
+            )
         case "not_available":
-            return "not available"
+            return AttachmentCardModel(
+                state: .missing,
+                filename: filename,
+                byteCount: byteCount,
+                isPartial: isPartial,
+                note: note
+            )
         case "too_large":
-            if let name = filename, let size { return "\(name) · \(size) · too large" }
-            return "too large"
+            return AttachmentCardModel(
+                state: .huge,
+                filename: filename,
+                byteCount: byteCount,
+                isPartial: isPartial,
+                note: note
+            )
         default:
-            return access
+            return AttachmentCardModel(
+                state: .missing,
+                filename: filename,
+                byteCount: byteCount,
+                isPartial: isPartial,
+                note: note ?? access
+            )
         }
+    }
+
+    /// FileCard-shaped Attachment Content inside a `get` Formatted card (no nested Preview).
+    static func getAttachmentContentCards(for ref: AuditMessageRef) -> [AttachmentCardModel] {
+        let named = ref.attachments
+        if !ref.fields.attachmentContent {
+            if named.isEmpty {
+                return [
+                    AttachmentCardModel(state: .denied, filename: "(attachment)")
+                ]
+            }
+            return named.map {
+                AttachmentCardModel(state: .denied, filename: $0.filename, byteCount: $0.byteCount)
+            }
+        }
+        let omitted = "Not included in get — use get_attachment."
+        if named.isEmpty {
+            return [
+                AttachmentCardModel(
+                    state: .missing,
+                    filename: "(none named)",
+                    stateLineOverride: omitted
+                )
+            ]
+        }
+        return named.map {
+            AttachmentCardModel(
+                state: .missing,
+                filename: $0.filename,
+                byteCount: $0.byteCount,
+                stateLineOverride: omitted
+            )
+        }
+    }
+
+    private static func attachmentPassNick(from entry: AuditEntry) -> String? {
+        for ref in displayMessages(for: entry) {
+            if let mark = ref.appliedRuleMark(for: \.attachmentContent), mark.polarity == .pass {
+                return mark.nick
+            }
+        }
+        return nil
+    }
+
+    static func requestIntent(for kind: AuditKind) -> String {
+        switch kind {
+        case .get: "Fetch one message."
+        case .getAttachment: "Fetch one attachment’s file bytes."
+        case .search: "Search messages."
+        case .list: "List messages."
+        case .listNew: "List new messages."
+        case .listPlacements: "List placements."
+        case .status: "Read MailGent status."
+        case .updateIndex: "Update the mail index."
+        case .setSource: "Set the mail source."
+        case .createDraft: "Create a draft."
+        case .updateDraft: "Update a draft."
+        case .pair: "Pair an agent."
+        case .revoke: "Revoke a pairing."
+        }
+    }
+
+    static func compactJSON(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              JSONSerialization.isValidJSONObject(obj),
+              let compact = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+              let rendered = String(data: compact, encoding: .utf8)
+        else { return text }
+        return rendered
     }
 
     static func hasLockedFields(_ ref: AuditMessageRef) -> Bool {
@@ -1242,7 +1711,8 @@ enum AccessLogFormat {
             sanitizedRules: rules,
             stealth: stealth ? true : nil,
             fields: fields,
-            attachments: attachments
+            attachments: attachments,
+            isPartial: obj["isPartial"] as? Bool ?? false
         )
     }
 
@@ -1306,7 +1776,8 @@ enum AccessLogFormat {
             leakDetections: ref.leakDetections,
             fields: ref.fields,
             attachments: ref.attachments,
-            appliedRules: ref.appliedRules
+            appliedRules: ref.appliedRules,
+            isPartial: ref.isPartial || (obj["isPartial"] as? Bool ?? false)
         )
     }
 
@@ -1358,7 +1829,8 @@ enum AccessLogFormat {
             leakDetections: ref.leakDetections,
             fields: fields,
             attachments: attachments,
-            appliedRules: ref.appliedRules
+            appliedRules: ref.appliedRules,
+            isPartial: ref.isPartial || (obj["isPartial"] as? Bool ?? false)
         )
     }
 

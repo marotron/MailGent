@@ -6,6 +6,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.8.0] - 2026-10-04
+
+### Added
+
+- Access Log Formatted Response preview — `get` shows a flat `MessageAccessCard` with Preview + Open in Apple Mail; `search` / `list` / `listNew` use `SearchResultCard` hits; `get_attachment` uses an attach-for row + `FileCard` with fail-closed Preview for denied / missing / too-large.
+- Access Log Request/Response mode chrome: Formatted (default) plus JSON Pretty / Raw (picking Pretty or Raw selects JSON).
+
+### Changed
+
+- Access Log Formatted Response stays truth-first (only fields/bytes the agent received); Preview and Open in Apple Mail are Access Log affordances on top. Companion Read MIME Pretty/Raw and attachment rows are unchanged.
+- Access Log message/search cards no longer open Companion Read on body tap — only the Preview button does (`get` / search / list open Companion Read; `get_attachment` Preview re-exports the file).
+- Access Log secondary actions (Preview, Open in Apple Mail) are icon-only and expand to icon + label on hover.
+- Access Log Request/Response mode chrome only raises the active choice (Formatted, or JSON Pretty/Raw).
+- Open in Apple Mail uses the SF Symbol `arrow.up.right.square` (hierarchical), matching Preview’s `eye`.
+
 ## [0.7.0] - 2026-10-03
 
 ### Added

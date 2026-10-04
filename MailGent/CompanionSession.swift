@@ -274,6 +274,30 @@ final class CompanionSession {
         }
     }
 
+    /// Access Log Preview: load message + attachment by filename from an audit entry, then re-export.
+    func openAttachment(
+        accountID: String,
+        placement: String,
+        id: String,
+        filename: String
+    ) {
+        Task {
+            do {
+                let message = try await worker.readMessage(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id
+                )
+                let attachment = message.attachments.first {
+                    $0.filename.caseInsensitiveCompare(filename) == .orderedSame
+                } ?? MailAttachment(filename: filename, byteCount: 0)
+                openAttachment(attachment, of: message)
+            } catch {
+                status = "Could not open \(filename)"
+            }
+        }
+    }
+
     func openHome() {
         page = .home
         query = ""
