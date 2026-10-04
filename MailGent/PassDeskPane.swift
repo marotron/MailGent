@@ -788,6 +788,7 @@ private struct FlowRuleTags: View {
                         Text(rule.value)
                             .font(.caption.weight(.semibold))
                             .multilineTextAlignment(.leading)
+                            .padding(.vertical, 3)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if isEditing {
@@ -799,16 +800,16 @@ private struct FlowRuleTags: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
-                            .padding(.top, 3)
+                            .padding(.top, 5)
                         }
                     }
-                    .padding(.leading, 3)
+                    .padding(.leading, 4)
                     .padding(.trailing, 6)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         Color.accentColor.opacity(0.1),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: 12)
                     )
                 }
             }
