@@ -11,7 +11,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 ## Principles
 
 1. **One job per control** — label names the object acted on (`Preview` = this file; `Open in Apple Mail` = this message).
-2. **Same chrome for the same job** — bordered secondary actions share one visual recipe (icon + label).
+2. **Same chrome for the same job** — bordered secondary actions share one visual recipe (icon-only; expand to icon + label on hover).
 3. **Placement follows object, not screen** — actions that act *on* the visible entity trail inside its card; actions that open a *related* surface sit in the handoff row directly under that card.
 4. **Fail closed copy** — missing handoff data shows a caption under the button; do not fake success.
 
@@ -24,11 +24,11 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | Field | Value |
 |---|---|
 | **Job** | Non-destructive handoff / open / preview |
-| **Chrome** | White fill, 1px `--line` border, 8px radius, 12px semibold label, leading SF Symbol (~11–12pt), height ~29px, padding 5×10–12 |
-| **Hover** | Border + label → accent blue (or light grey wash — pick one per surface and keep it) |
+| **Chrome** | Height-locked to Access Log `Formatted` (small segmented metrics); track + raised face; icon-only by default |
+| **Hover** | Expands to icon + regular-weight small-control label; border/icon → accent blue |
 | **Swift** | `SecondaryActionButton` in `CompanionBits.swift` |
 | **HTML** | `.secondary-action` (+ optional `.secondary-action-row`) |
-| **Icons** | Always leading; see [Action catalogue](#action-catalogue) |
+| **Icons** | Always shown; label appears on hover / focus; see [Action catalogue](#action-catalogue) |
 
 **Do not** invent a one-off bordered button (`.preview-btn`, `.open-in-mail`, …). Use this type.
 
@@ -58,7 +58,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | **States** | `granted` / `denied` / `missing` / `huge` (hatch + status icon when not granted) |
 | **Trailing** | `Preview` always — same clickable chrome for all states; denied / missing / huge fail-closed on click (reason under card), not dimmed |
 | **For-row** | Plain “for [subject]” (not a link) · parent message handoff trails right — **not** “open the attachment in Mail” |
-| **Swift** | Proto-ahead in Access Log attach layout; Companion uses `MessageAttachmentRow` for Read |
+| **Swift** | `FileCard` in `CompanionBits.swift`; Companion Read uses `MessageAttachmentRow` |
 | **HTML** | `.file-card` in `prototype-access-log-attach.html` |
 
 ### `MessageAccessCard`
@@ -66,7 +66,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | Field | Value |
 |---|---|
 | **Job** | Truth-first message shell (headers, body, attachment info/content) |
-| **Tap** | Opens Companion Read (Access Log) |
+| **Tap** | None — Preview button only opens Companion Read / attachment preview |
 | **Chip row** | Source chip left · Preview + `Open in Apple Mail` trailing right |
 | **Attachment Content** | When bytes were not in the agent response → `FileCard` missing/denied chrome (name + state line). No nested Preview (chip-row owns it) |
 | **Swift** | `MessageAccessCard` |
@@ -80,7 +80,8 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | **Fields only** | `subject`, `from`, `date`, `id`, `placement`, `isPartial`, `accountID` — never to/cc/body/attachments |
 | **Chrome** | Same card border as message card; placement (+ partial) chips; labeled lines |
 | **Chip row** | Chips left · Preview (message → Companion Read) + `Open in Apple Mail` trailing right on the same row |
-| **Swift** | Proto-ahead (Access Log still uses collapsible + omitted body today) |
+| **Tap** | None — body is not clickable; Preview button only |
+| **Swift** | `SearchResultCard` in `CompanionBits.swift` |
 | **HTML** | `.search-card` in `prototype-access-log-attach.html` |
 
 ### `CollapsibleAuditMessage`
@@ -111,10 +112,10 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 
 | Action ID | Label | Icon (SF Symbol) | Placement | When |
 |---|---|---|---|---|
-| `previewFile` | Preview | `eye` | Entity trailing on `FileCard`; also `get` chip-row when names + file grant | Always on file card with full chrome; granted runs preview; denied / missing / huge fail-closed explain on click |
-| `previewMessage` | Preview | `eye` | Trailing right on `SearchResultCard` chip-row | Search/list hits — opens Companion Read (re-fetch). Not file bytes; agent still only got headers |
-| `openMessageInMail` | Open in Apple Mail | `envelope` | Trailing right on message/search chip-row (Companion Read: under body) | Message in focus (`get`, search card, Companion Read) |
-| `openParentMessageInMail` | Open message in Apple Mail | `envelope` | Trailing right on `attach-for` (“for [subject]”) | Attachment in focus (`get_attachment`) — opens **parent email**, not the file |
+| `previewFile` | Preview | `eye` | Entity trailing on `FileCard` (`get_attachment`) | Always on file card with full chrome; granted runs preview; denied / missing / huge fail-closed explain on click |
+| `previewMessage` | Preview | `eye` | Trailing right on `MessageAccessCard` / `SearchResultCard` chip-row | Message focus (`get`, search/list) — opens Companion Read (re-fetch). Not file bytes |
+| `openMessageInMail` | Open in Apple Mail | `OpenInMailGlyph` (`arrow.up.right.square`) | Trailing right on message/search chip-row (Companion Read: under body) | Message in focus (`get`, search card, Companion Read) |
+| `openParentMessageInMail` | Open message in Apple Mail | `OpenInMailGlyph` (`arrow.up.right.square`) | Trailing right on `attach-for` (“for [subject]”) | Attachment in focus (`get_attachment`) — opens **parent email**, not the file |
 | `openAttachmentSystem` | (row / Preview) | `paperclip` / `eye` | Companion Read attachment row; Access Log Preview | Re-export bytes → `NSWorkspace.open` / Quick Look |
 
 ### Attachment entry — decided solution
@@ -136,7 +137,7 @@ get
   meta + grant field badges
   MessageAccessCard            ← truth: fields/body/names agent got (no collapsible)
     chip-row: [account · placement]   [Preview] [Open in Apple Mail]
-                                      ↑ trailing right; Preview when names + file grant
+                                      ↑ trailing right; Preview = Companion Read (message)
 
 search / list
   KindChrome "Message list · N" (+ more if nextCursor)
@@ -170,6 +171,13 @@ SecondaryActionRow
 
 | Date | Change |
 |---|---|
+| 2026-10-04 | Access Log `get` chip-row Preview opens Companion Read (same as search); file Preview stays on `get_attachment` FileCard. |
+| 2026-10-04 | Open in Apple Mail icon → `OpenInMailGlyph` (`arrow.up.right.square` external-link). |
+| 2026-10-04 | Access Log mode chrome: only the active view (Formatted or JSON Pretty/Raw) shows raised selected face. |
+| 2026-10-04 | `SecondaryAction` is icon-only; hover/focus expands to icon + label. |
+| 2026-10-04 | Message/search card body is not clickable; Preview button only opens Companion Read. FileCard missing status icon uses solid border. |
+| 2026-10-03 | `SecondaryAction` chrome = Formatted segment (track + raised face). |
+| 2026-10-03 | Swift: `FileCard` + `SearchResultCard` + Access Log Formatted / JSON Pretty|Raw mode chrome. |
 | 2026-10-03 | get Attachment Content uses FileCard missing/denied chrome (not teal “Not included” tile). |
 | 2026-10-03 | Attach Preview keeps full SecondaryAction chrome for denied / missing / huge (fail-closed on click, not dimmed). |
 | 2026-10-03 | Attach blocked Preview stays clickable (pointer + hover); reason shows under file card. |

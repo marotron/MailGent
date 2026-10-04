@@ -9,6 +9,15 @@ struct AccessLogFormatTests {
         #expect(AccessLogFormat.jsonPairs("{\n}")?.isEmpty == true)
     }
 
+    @Test func highlightedPrettyJSONPreservesTextAndSplitsColorRuns() {
+        let json = #"{"ok":true,"n":1,"s":"hi","z":null}"#
+        let pretty = AccessLogFormat.prettyJSON(json)
+        let highlighted = AccessLogFormat.highlightedPrettyJSON(json)
+        #expect(String(highlighted.characters) == pretty)
+        let coloredRunCount = highlighted.runs.filter { $0.foregroundColor != nil }.count
+        #expect(coloredRunCount >= 4)
+    }
+
     @Test func statusJSONPrettyPairsAreKeyValues() {
         let json = """
         {"agentMayChangeSource":false,"indexedCount":18970,"lastIngestAt":"2026-08-22T22:37:13Z","newestMessageDate":"Sat, 22 Aug 2026 22:10:15 +0000","source":"liveMail"}
@@ -254,5 +263,105 @@ struct AccessLogFormatTests {
 
         #expect(AccessLogFormat.passApplicationCount(for: entry) == 0)
         #expect(AccessLogFormat.blockApplicationCount(for: entry) == 0)
+    }
+
+    @Test func attachmentContentMapsAccessStates() {
+        func entry(_ responseSummary: String) -> AuditEntry {
+            AuditEntry(
+                kind: .getAttachment,
+                agentID: "a",
+                agentName: "Cursor",
+                responseSummary: responseSummary
+            )
+        }
+
+        let granted = AccessLogFormat.attachmentContent(
+            for: entry(
+                #"{"accountID":"acc","attachmentContentAccess":"granted","byteCount":95723,"filename":"statement.pdf","id":"1","placement":"INBOX"}"#
+            )
+        )
+        #expect(granted?.state == .granted)
+        #expect(granted?.filename == "statement.pdf")
+        #expect(granted?.detailString.contains("statement.pdf") == true)
+
+        let denied = AccessLogFormat.attachmentContent(
+            for: entry(
+                #"{"accountID":"acc","attachmentContentAccess":"not_granted","filename":"statement.pdf","id":"1","placement":"INBOX"}"#
+            )
+        )
+        #expect(denied?.state == .denied)
+        #expect(denied?.detailString == "not granted")
+        #expect(denied?.previewBlockedReason != nil)
+
+        let missing = AccessLogFormat.attachmentContent(
+            for: entry(
+                #"{"accountID":"acc","attachmentContentAccess":"not_available","filename":"statement.pdf","id":"1","placement":"INBOX"}"#
+            )
+        )
+        #expect(missing?.state == .missing)
+        #expect(missing?.detailString == "not available")
+
+        let huge = AccessLogFormat.attachmentContent(
+            for: entry(
+                #"{"accountID":"acc","attachmentContentAccess":"too_large","byteCount":28000000,"filename":"statement.pdf","id":"1","placement":"INBOX"}"#
+            )
+        )
+        #expect(huge?.state == .huge)
+        #expect(huge?.detailString.contains("too large") == true)
+
+        #expect(
+            AccessLogFormat.attachmentContentDetail(
+                for: entry(
+                    #"{"attachmentContentAccess":"granted","byteCount":10,"filename":"statement.pdf"}"#
+                )
+            ).contains("statement.pdf")
+        )
+        #expect(
+            AccessLogFormat.attachmentContent(
+                for: AuditEntry(kind: .get, agentID: "a", agentName: "Cursor")
+            ) == nil
+        )
+    }
+
+    @Test func getAttachmentContentCardsUseMissingOrDeniedChrome() {
+        let denied = AuditMessageRef(
+            accountID: "acc",
+            placement: "INBOX",
+            id: "1",
+            subject: "Bill",
+            from: "a@example.com",
+            date: "2024-01-01T00:00:00Z",
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: false
+            ),
+            attachments: [MailAttachment(filename: "a.pdf", byteCount: 10)]
+        )
+        let deniedCards = AccessLogFormat.getAttachmentContentCards(for: denied)
+        #expect(deniedCards.count == 1)
+        #expect(deniedCards[0].state == .denied)
+        #expect(deniedCards[0].filename == "a.pdf")
+
+        let omitted = AuditMessageRef(
+            accountID: "acc",
+            placement: "INBOX",
+            id: "1",
+            subject: "Bill",
+            from: "a@example.com",
+            date: "2024-01-01T00:00:00Z",
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: true
+            ),
+            attachments: [MailAttachment(filename: "a.pdf", byteCount: 10)]
+        )
+        let omittedCards = AccessLogFormat.getAttachmentContentCards(for: omitted)
+        #expect(omittedCards.count == 1)
+        #expect(omittedCards[0].state == .missing)
+        #expect(omittedCards[0].stateLine.contains("get_attachment"))
     }
 }

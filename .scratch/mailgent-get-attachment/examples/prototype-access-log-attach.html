@@ -119,6 +119,12 @@
     .mode-controls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .json-group {
       display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 4px; border-radius: 6px;
+      border: 1px solid transparent;
+    }
+    .json-group.on {
+      background: color-mix(in srgb, var(--blue) 12%, transparent);
+      border-color: color-mix(in srgb, var(--blue) 35%, transparent);
     }
     .json-group.on .json-group-label { color: var(--blue); }
     .json-group-label {
@@ -131,10 +137,13 @@
       overflow: hidden; background: #f4f6f9; padding: 1px; gap: 1px;
     }
     .seg button {
-      border: 0; background: transparent; color: var(--ink);
-      font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px;
+      border: 0; background: transparent; color: #7a8494;
+      font-size: 11px; font-weight: 400; padding: 3px 9px; border-radius: 6px;
     }
-    .seg button.on { background: #fff; box-shadow: 0 0 0 0.5px #c9d1df, 0 1px 2px #15203314; }
+    .seg button.on {
+      background: #fff; color: var(--ink); font-weight: 600;
+      box-shadow: 0 0 0 0.5px #c9d1df, 0 1px 2px #15203314;
+    }
     .seg.sub button { font-size: 10px; padding: 2px 8px; }
 
     .box {
@@ -186,13 +195,25 @@
     /* Match Access Log HatchDeniedStyle / not-available / orange outcome */
     .file-card {
       border: 1px solid rgba(0,0,0,.14);
-      border-radius: 10px;
-      padding: 12px;
+      border-radius: 6px;
+      padding: 8px;
       display: flex;
-      gap: 12px;
+      gap: 10px;
       align-items: center;
       background: var(--paper);
     }
+    .file-card.state-denied,
+    .file-card.state-missing,
+    .file-card.state-huge {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+    }
+    .file-card .file-top {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .file-card .file-top .file-meta { flex: 1; min-width: 0; }
+    .file-card .state-copy { width: 100%; }
     .file-card.state-granted { border-color: rgba(0,0,0,.14); }
     /* Non-granted option: not-available dashed hatch on the whole card, per-state color */
     .file-card.state-denied {
@@ -231,7 +252,7 @@
 
     /* Granted only: document-type glyph */
     .file-icon {
-      width: 40px; height: 48px; flex: 0 0 auto;
+      width: 32px; height: 38px; flex: 0 0 auto;
       border-radius: 6px;
       background: linear-gradient(180deg, #f7f8fb 0%, #e8ebf2 100%);
       border: 1px solid #c9d1df;
@@ -250,21 +271,21 @@
 
     /* Non-granted: status glyph on paper so it stays readable on the hatched card */
     .status-icon {
-      width: 40px; height: 40px; flex: 0 0 auto;
-      border-radius: 10px;
+      width: 18px; height: 18px; flex: 0 0 auto;
+      border-radius: 4px;
       display: grid; place-items: center;
-      font: 800 16px/1 "SF Pro Text", -apple-system, sans-serif;
-      background: rgba(255, 255, 255, 0.88);
+      font: 800 10px/1 "SF Pro Text", -apple-system, sans-serif;
+      background: #fff;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
     }
-    .status-icon .lock-ic { width: 14px; height: 16px; }
+    .status-icon .lock-ic { width: 10px; height: 11px; }
     .status-icon.denied {
       color: rgba(215, 0, 21, 0.72);
       border: 1px solid rgba(215, 0, 21, 0.35);
     }
     .status-icon.missing {
       color: #5f6d86;
-      border: 1.5px dashed #9aa3b2;
+      border: 1px solid #9aa3b2;
       font-style: normal;
     }
     .status-icon.huge {
@@ -278,7 +299,7 @@
       gap: 3px;
     }
     .file-name {
-      font-size: 14px; font-weight: 650; letter-spacing: -0.01em;
+      font-size: 12px; font-weight: 600; letter-spacing: -0.01em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       line-height: 1.25;
     }
@@ -289,12 +310,12 @@
       font-weight: 600;
     }
     .file-sub {
-      color: var(--muted); font-size: 12px;
+      color: var(--muted); font-size: 11px;
       display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline;
       min-width: 0; line-height: 1.35;
     }
     .meta-bit {
-      font: 12px/1.35 ui-monospace, Menlo, monospace;
+      font: 11px/1.35 "SF Pro Text", -apple-system, sans-serif;
       color: var(--muted);
       word-break: break-all;
     }
@@ -303,7 +324,7 @@
 
     /* Brief state copy — colored italic text, not pill badges (non-granted only) */
     .state-copy {
-      font: 550 italic 12px/1.35 "SF Pro Text", -apple-system, sans-serif;
+      font: italic 11px/1.35 "SF Pro Text", -apple-system, sans-serif;
       letter-spacing: -0.01em;
     }
     .state-copy.denied { color: rgba(215, 0, 21, 0.78); }
@@ -360,28 +381,59 @@
       flex: 0 0 auto;
     }
 
-    /* docs/ui-inventory.md → SecondaryAction (Preview, Open in Apple Mail, …) */
+    /* docs/ui-inventory.md → SecondaryAction — same chrome as .seg button.on (Formatted) */
     .secondary-action {
-      display: inline-flex; align-items: center; gap: 6px;
+      display: inline-flex; align-items: center;
       flex: 0 0 auto;
       border: 1px solid var(--line);
-      background: #fff;
-      border-radius: 8px;
-      padding: 5px 12px;
-      font-size: 12px;
-      font-weight: 600;
+      background: #f4f6f9;
+      border-radius: 7px;
+      padding: 1px;
+      font-size: 11px;
+      font-weight: 400;
       color: var(--ink);
       line-height: 1.2;
+      box-shadow: none;
+      transition: border-color 0.28s ease, color 0.28s ease;
+    }
+    .secondary-action .sa-face {
+      display: inline-flex; align-items: center; gap: 0;
+      background: #fff;
+      border-radius: 6px;
+      min-width: 19px; min-height: 19px;
+      padding: 3px 4px;
+      justify-content: center;
+      box-shadow: 0 0 0 0.5px #c9d1df, 0 1px 2px #15203314;
+      transition: padding 0.32s cubic-bezier(0.22, 1, 0.36, 1), gap 0.32s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .secondary-action .sa-ic {
       width: 13px; height: 13px; flex: 0 0 auto;
       color: var(--muted);
     }
-    .secondary-action:not(:disabled):hover {
+    .secondary-action .sa-label {
+      max-width: 0;
+      opacity: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      transition:
+        max-width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.22s ease 0.04s;
+    }
+    .secondary-action:not(:disabled):hover,
+    .secondary-action:not(:disabled):focus-visible {
       border-color: var(--blue); color: var(--blue);
     }
-    .secondary-action:not(:disabled):hover .sa-ic { color: var(--blue); }
-    .secondary-action:active { background: #f3f5f8; }
+    .secondary-action:not(:disabled):hover .sa-ic,
+    .secondary-action:not(:disabled):focus-visible .sa-ic { color: var(--blue); }
+    .secondary-action:not(:disabled):hover .sa-face,
+    .secondary-action:not(:disabled):focus-visible .sa-face {
+      gap: 6px; padding: 3px 9px;
+    }
+    .secondary-action:not(:disabled):hover .sa-label,
+    .secondary-action:not(:disabled):focus-visible .sa-label {
+      max-width: 16em; opacity: 1;
+    }
+    .secondary-action:active .sa-face { box-shadow: 0 0 0 0.5px #c9d1df; background: #f8f9fb; }
     .secondary-action.is-blocked,
     .secondary-action:disabled {
       opacity: 0.45; color: var(--muted);
@@ -389,10 +441,20 @@
     /* Blocked stays clickable — reveals fail-closed reason (HTML disabled swallows clicks). */
     .secondary-action.is-blocked { cursor: pointer; }
     .secondary-action:disabled { cursor: not-allowed; }
-    .secondary-action.is-blocked:hover {
+    .secondary-action.is-blocked:hover,
+    .secondary-action.is-blocked:focus-visible {
       border-color: var(--blue); color: var(--blue);
     }
-    .secondary-action.is-blocked:hover .sa-ic { color: var(--blue); }
+    .secondary-action.is-blocked:hover .sa-ic,
+    .secondary-action.is-blocked:focus-visible .sa-ic { color: var(--blue); }
+    .secondary-action.is-blocked:hover .sa-face,
+    .secondary-action.is-blocked:focus-visible .sa-face {
+      gap: 6px; padding: 3px 9px;
+    }
+    .secondary-action.is-blocked:hover .sa-label,
+    .secondary-action.is-blocked:focus-visible .sa-label {
+      max-width: 16em; opacity: 1;
+    }
     .file-card .secondary-action { align-self: center; }
     .secondary-action-row {
       display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
@@ -444,17 +506,10 @@
     .msg-card-body,
     .search-card .search-card-body {
       display: block; width: 100%; text-align: left;
-      border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer;
+      border: 0; background: transparent; padding: 0; color: inherit;
     }
     .msg-card .secondary-action-note,
     .search-card .secondary-action-note { margin-top: 6px; }
-    .msg-card:has(.msg-card-body:hover),
-    .search-card:has(.search-card-body:hover) { border-color: #b4c2f5; }
-    .msg-open-wrap {
-      display: block; width: 100%; text-align: left;
-      border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer;
-    }
-    .msg-open-wrap:hover .msg-card { border-color: #b4c2f5; }
     .chip {
       display: inline-flex; border: 1px solid var(--line); border-radius: 999px;
       padding: 2px 8px; font-size: 11px; color: var(--muted); margin-bottom: 8px;
@@ -577,10 +632,10 @@
 
     .attach-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
     .attach-cols .file-card {
-      padding: 10px; gap: 10px;
+      padding: 8px; gap: 4px;
     }
-    .attach-cols .file-name { font-size: 13px; }
-    .attach-cols .status-icon { width: 36px; height: 36px; font-size: 14px; }
+    .attach-cols .file-name { font-size: 12px; }
+    .attach-cols .status-icon { width: 18px; height: 18px; font-size: 10px; }
     .attach-tile {
       display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.05);
       border-radius: 6px; padding: 6px; min-height: 32px; font-size: 12px; color: var(--muted);
@@ -1119,9 +1174,10 @@
           <path fill="currentColor" d="M8 3.2C4.4 3.2 1.5 5.6.4 8c1.1 2.4 4 4.8 7.6 4.8S14.5 10.4 15.6 8C14.5 5.6 11.6 3.2 8 3.2Zm0 8a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Zm0-1.8a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Z"/>
         </svg>`;
       }
-      if (name === "envelope") {
-        return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path fill="currentColor" d="M1.5 3.5A1.5 1.5 0 0 1 3 2h10a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5v-9Zm1.3.6 5 3.4a.4.4 0 0 0 .4 0l5-3.4H2.8Zm10.4 1.6-4.6 3.1a1.6 1.6 0 0 1-1.8 0L2.2 5.7v6.8c0 .2.1.3.3.3h10.6c.2 0 .3-.1.3-.3V5.7Z"/>
+      // External-link (Swift `OpenInMailGlyph` → SF Symbol arrow.up.right.square).
+      if (name === "openInMail" || name === "openInNew" || name === "envelope") {
+        return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="currentColor">
+          <path d="M6.2 3.2H3.6A1.6 1.6 0 0 0 2 4.8v7.6A1.6 1.6 0 0 0 3.6 14h7.6a1.6 1.6 0 0 0 1.6-1.6v-2.6H11.6v2.4H3.8V5h2.4V3.2Zm3.2 0V4.8H12l-5.2 5.2 1.2 1.2L13.2 6v2.6H14.8V3.2H9.4Z"/>
         </svg>`;
       }
       return "";
@@ -1138,7 +1194,7 @@
       const idAttr = id ? ` id="${esc(id)}"` : "";
       const cls = muted ? "secondary-action is-blocked" : "secondary-action";
       const blockedAttr = blocked ? ` aria-disabled="true" data-preview-blocked` : "";
-      return `<button type="button" class="${cls}"${idAttr} title="${esc(title)}" ${attrs}${blockedAttr}>${actionIcon(icon)}<span>${esc(label)}</span></button>`;
+      return `<button type="button" class="${cls}"${idAttr} title="${esc(title)}" aria-label="${esc(label)}" ${attrs}${blockedAttr}><span class="sa-face">${actionIcon(icon)}<span class="sa-label">${esc(label)}</span></span></button>`;
     }
 
     function secondaryActionRowHtml(buttonHtml, noteId) {
@@ -1183,7 +1239,7 @@
       }
       buttons.push(secondaryActionHtml({
         label: mailLabel,
-        icon: "envelope",
+        icon: "openInMail",
         attrs: parentMessage ? "data-open-mail data-parent-message" : "data-open-mail"
       }));
       return buttons.join("");
@@ -1259,15 +1315,27 @@
         ? `<div class="file-rule">${ruleMarkHtml(passMark)}</div>`
         : "";
 
-      return `
-        <div class="file-card state-${cardState}">
-          ${leading}
+      const cardInner = isGranted
+        ? `${leading}
           <div class="file-meta">
             <div class="file-name">${esc(r.filename)}</div>
             <div class="file-sub">${line2}</div>
             ${passRow}
           </div>
-          ${preview}
+          ${preview}`
+        : `<div class="file-top">
+            ${leading}
+            <div class="file-meta">
+              <div class="file-name">${esc(r.filename)}</div>
+            </div>
+            ${preview}
+          </div>
+          ${line2}
+          ${passRow}`;
+
+      return `
+        <div class="file-card state-${cardState}">
+          ${cardInner}
         </div>
         ${lockedLegend}
         <p class="secondary-action-note" id="previewMsg" hidden></p>
@@ -1321,11 +1389,13 @@
         state === "denied" ? "denied" : state === "huge" ? "huge" : "missing";
       return `
         <div class="file-card state-${esc(state)}">
-          ${icon}
-          <div class="file-meta">
-            <div class="file-name">${esc(filename)}</div>
-            <div class="file-sub"><span class="state-copy ${copyClass}">${esc(line)}</span></div>
+          <div class="file-top">
+            ${icon}
+            <div class="file-meta">
+              <div class="file-name">${esc(filename)}</div>
+            </div>
           </div>
+          <span class="state-copy ${copyClass}">${esc(line)}</span>
         </div>`;
     }
 
@@ -1417,7 +1487,7 @@
             </div>
             ${actionsHtml}
           </div>
-          <button type="button" class="msg-card-body" data-open-message title="Open in Companion Read">
+          <div class="msg-card-body">
             <div class="line"><strong>${esc(m.subject)}</strong></div>
             <div class="line"><span class="lab">From:</span> ${esc(m.from)}</div>
             ${toLine}
@@ -1436,7 +1506,7 @@
                 ${attContent}
               </div>
             </div>
-          </button>
+          </div>
           ${note}
         </div>`;
     }
@@ -1465,20 +1535,12 @@
     function messageCard(resp) {
       const meta = `${resp.dateLabel || "30 Sep 2026 at 13:05"} · ${resp.accountLabel || "Yahoo"}`;
       const fields = resp.fields || PARENT_MSG.fields;
-      const hasNamedAttachments = Array.isArray(resp.attachments) && resp.attachments.length > 0;
-      const fileGranted = fields.file !== false;
-      // Preview is an Access Log affordance (re-export from mailbox). Agent still only got names.
-      const previewEnabled = hasNamedAttachments && fileGranted;
-      const previewReason = !hasNamedAttachments
-        ? "This get response had no attachment names."
-        : (!fileGranted
-          ? "Attachment content is not granted — Preview stays closed."
-          : "");
+      // Preview = Companion Read (message), same as search — not file bytes.
       const actionsHtml = `<div class="sa-buttons">${handoffButtonsInnerHtml({
         canPreview: true,
-        previewEnabled,
+        previewEnabled: true,
         previewId: "previewBtn-get",
-        previewReason,
+        previewKind: "message",
         parentMessage: false
       })}</div>`;
       // Single get response: no collapsible — card is already the full truth payload.
@@ -1496,7 +1558,7 @@
             noteId: "openMailHint-get"
           }
         )}
-        <p class="caption">Truth-first: plain body + attachment names only — file bytes were never sent to the agent. Preview re-exports from the mailbox for you.</p>`;
+        <p class="caption">Truth-first: plain body + attachment names only — file bytes were never sent to the agent. Preview opens Companion Read (re-fetch); file Preview is on get_attachment FileCard.</p>`;
     }
 
     function attachFieldsForState(state) {
@@ -1511,7 +1573,7 @@
       const fields = attachFieldsForState(state);
       const mailBtn = secondaryActionHtml({
         label: "Open message in Apple Mail",
-        icon: "envelope",
+        icon: "openInMail",
         attrs: "data-open-mail data-parent-message"
       });
       // Kind chrome + “for [subject]” with parent handoff trailing right + file card (Preview on card).
@@ -1547,13 +1609,13 @@
             <div class="chip-row-left">${chips}</div>
             ${actionsHtml}
           </div>
-          <button type="button" class="search-card-body" data-open-message title="Open in Companion Read">
+          <div class="search-card-body">
             <div class="subj">${esc(item.subject || "(no subject)")}</div>
             <div class="line"><span class="lab">From:</span> ${esc(item.from || "")}</div>
             <div class="line"><span class="lab">Date:</span> ${esc(item.date || "")}</div>
             <div class="line"><span class="lab">Id:</span> ${formattedFieldValue("id", item.id)}</div>
             <div class="line"><span class="lab">Account:</span> ${formattedFieldValue("accountID", item.accountID)}</div>
-          </button>
+          </div>
           <p class="secondary-action-note" id="${esc(noteId)}" hidden></p>
         </div>`;
     }
@@ -1767,24 +1829,6 @@
           note.textContent = parent
             ? "Would open the parent email in Apple Mail via message://… (not the attachment file). Fail closed if Message-ID is missing."
             : "Would open message://… in Apple Mail (Message-ID handoff). Fail closed if the header is missing.";
-        }
-        return;
-      }
-
-      const openMsg = e.target.closest("[data-open-message]");
-      if (openMsg) {
-        e.preventDefault();
-        const hint = document.getElementById("openMsgHint")
-          || (() => {
-            const p = document.createElement("p");
-            p.className = "caption";
-            p.id = "openMsgHint";
-            openMsg.closest(".collapse-expand, .detail")?.appendChild(p);
-            return p;
-          })();
-        if (hint) {
-          hint.hidden = false;
-          hint.textContent = "Would open this message in Companion Read (same as tapping the Access Log card today).";
         }
         return;
       }

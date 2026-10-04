@@ -501,22 +501,170 @@ private struct LinkAwareBodyText: NSViewRepresentable {
 }
 
 /// Bordered icon+label control for non-destructive handoffs (see `docs/ui-inventory.md` → SecondaryAction).
+/// Height-locked to Access Log `Formatted` (small segmented); leading SF Symbol + regular label.
+@MainActor
+enum SecondaryActionMetrics {
+    /// Same outer height as Access Log mode chrome (small segmented metrics).
+    static let controlHeight: CGFloat = {
+        let control = NSSegmentedControl(
+            labels: ["Formatted"],
+            trackingMode: .selectOne,
+            target: nil,
+            action: nil
+        )
+        control.controlSize = .small
+        control.segmentStyle = .rounded
+        control.sizeToFit()
+        return control.fittingSize.height
+    }()
+
+    static let labelFont = Font(
+        NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
+    )
+
+    static let expandAnimation = Animation.spring(response: 0.34, dampingFraction: 0.86)
+}
+
 struct SecondaryActionButton: View {
     let title: String
-    let systemImage: String
     let action: () -> Void
+    private let icon: AnyView
+
+    @State private var isHovered = false
+
+    static var controlHeight: CGFloat { SecondaryActionMetrics.controlHeight }
+
+    init(title: String, systemImage: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+        self.icon = AnyView(SecondaryActionSystemGlyph(systemImage: systemImage))
+    }
+
+    init(title: String, action: @escaping () -> Void, @ViewBuilder icon: () -> some View) {
+        self.title = title
+        self.action = action
+        self.icon = AnyView(icon())
+    }
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 12, weight: .semibold))
-                .labelStyle(.titleAndIcon)
-                .symbolRenderingMode(.hierarchical)
+            HStack(spacing: 0) {
+                icon
+                    .frame(width: 12, height: 11)
+                Text(title)
+                    .font(SecondaryActionMetrics.labelFont)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: true)
+                    .padding(.leading, isHovered ? 4 : 0)
+                    .opacity(isHovered ? 1 : 0)
+                    .frame(maxWidth: isHovered ? 280 : 0, alignment: .leading)
+                    .clipped()
+            }
+            .padding(.horizontal, isHovered ? 5 : 4)
+            .padding(.vertical, 2)
+            .frame(minWidth: SecondaryActionMetrics.controlHeight - 2, maxHeight: .infinity)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
+        .buttonStyle(SecondaryActionButtonStyle())
+        .frame(height: SecondaryActionMetrics.controlHeight)
+        .fixedSize(horizontal: true, vertical: true)
+        .onHover { hovering in
+            withAnimation(SecondaryActionMetrics.expandAnimation) {
+                isHovered = hovering
+            }
+        }
         .help(title)
+        .accessibilityLabel(title)
     }
+}
+
+/// Single SF Symbol glyph for secondary actions (Preview, etc.).
+struct SecondaryActionSystemGlyph: View {
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 10, weight: .regular))
+            .symbolRenderingMode(.hierarchical)
+    }
+}
+
+private struct SecondaryActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(nsColor: .controlColor))
+                    .shadow(
+                        color: Color.black.opacity(configuration.isPressed ? 0.04 : 0.10),
+                        radius: configuration.isPressed ? 0 : 1,
+                        y: configuration.isPressed ? 0 : 0.5
+                    )
+            }
+            .padding(1)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(
+                                Color.secondary.opacity(configuration.isPressed ? 0.42 : 0.32),
+                                lineWidth: 1
+                            )
+                    }
+            }
+            .opacity(configuration.isPressed ? 0.92 : 1)
+    }
+}
+
+#Preview("SecondaryAction vs Formatted") {
+    struct Host: View {
+        @State private var view: AccessLogSideView = .formatted
+        @State private var jsonStyle: AccessLogJSONStyle = .pretty
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Secondary actions — icon only; hover expands label")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    SecondaryActionButton(title: "Preview", systemImage: "eye") {}
+                    SecondaryActionButton(title: "Open in Apple Mail") {
+                        // no-op preview
+                    } icon: {
+                        OpenInMailGlyph()
+                    }
+                }
+
+                Divider()
+
+                Text("Mode chrome (img2)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                AccessLogModeHeader(title: "Response", view: $view, jsonStyle: $jsonStyle)
+
+                Divider()
+
+                Text("Side by side (hover Preview)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .center, spacing: 8) {
+                    SecondaryActionButton(title: "Preview", systemImage: "eye") {}
+                    Picker("Formatted", selection: .constant(true)) {
+                        Text("Formatted").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .fixedSize()
+                }
+            }
+            .padding(20)
+            .frame(width: 520, alignment: .leading)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+
+    return Host()
 }
 
 struct OpenInMailButton: View {
@@ -525,10 +673,12 @@ struct OpenInMailButton: View {
     var locator: (accountID: String, placement: String, id: String)? = nil
     /// Use `Open message in Apple Mail` when the focused entity is an attachment (parent handoff).
     var title: String = "Open in Apple Mail"
+    /// When false, fail-closed copy is left to the surrounding card (chip-row local note).
+    var showsHandoffNote: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SecondaryActionButton(title: title, systemImage: "envelope") {
+            SecondaryActionButton(title: title) {
                 if let locator {
                     session.openInMail(
                         accountID: locator.accountID,
@@ -538,8 +688,10 @@ struct OpenInMailButton: View {
                 } else {
                     session.openInMail()
                 }
+            } icon: {
+                OpenInMailGlyph()
             }
-            if let handoffNote = session.handoffNote {
+            if showsHandoffNote, let handoffNote = session.handoffNote {
                 Text(handoffNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -936,6 +1088,11 @@ extension AuditKind {
 struct AuditKindBadge: View {
     let kind: AuditKind
     var compact: Bool = false
+    @Environment(\.backgroundProminence) private var backgroundProminence
+
+    private var onProminentBackground: Bool {
+        backgroundProminence == .increased
+    }
 
     var body: some View {
         HStack(spacing: compact ? 2 : 4) {
@@ -948,12 +1105,18 @@ struct AuditKindBadge: View {
                         : .caption.weight(.semibold).monospaced()
                 )
         }
-        .foregroundStyle(Color.accentColor)
+        .foregroundStyle(onProminentBackground ? Color.white : Color.accentColor)
         .padding(.horizontal, compact ? 5 : 7)
         .padding(.vertical, compact ? 1 : 3)
-        .background(Color.accentColor.opacity(0.12), in: Capsule())
+        .background(
+            (onProminentBackground ? Color.white.opacity(0.22) : Color.accentColor.opacity(0.12)),
+            in: Capsule()
+        )
         .overlay {
-            Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5)
+            Capsule().strokeBorder(
+                onProminentBackground ? Color.white.opacity(0.75) : Color.accentColor.opacity(0.35),
+                lineWidth: 0.5
+            )
         }
         .accessibilityLabel(kind.badgeTitle)
     }
@@ -1074,6 +1237,135 @@ struct RawPrettyHeader: View {
             Spacer(minLength: 8)
             BodyFormatPicker(showRaw: $showRaw)
         }
+    }
+}
+
+/// Access Log Request/Response chrome: `[Formatted]` + `JSON` `[Pretty|Raw]`.
+/// Picking Pretty/Raw selects JSON — there is no separate JSON button.
+enum AccessLogSideView: Equatable {
+    case formatted
+    case json
+}
+
+enum AccessLogJSONStyle: Equatable {
+    case pretty
+    case raw
+}
+
+struct AccessLogModeHeader: View {
+    let title: String
+    @Binding var view: AccessLogSideView
+    @Binding var jsonStyle: AccessLogJSONStyle
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                AccessLogModeSegmentTrack {
+                    AccessLogModeSegmentButton(
+                        title: "Formatted",
+                        isOn: view == .formatted
+                    ) {
+                        view = .formatted
+                    }
+                }
+
+                HStack(spacing: 4) {
+                    Text("JSON")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(view == .json ? Color.accentColor : Color.secondary.opacity(0.85))
+                    AccessLogModeSegmentTrack {
+                        AccessLogModeSegmentButton(
+                            title: "Pretty",
+                            isOn: view == .json && jsonStyle == .pretty,
+                            compact: true
+                        ) {
+                            jsonStyle = .pretty
+                            view = .json
+                        }
+                        AccessLogModeSegmentButton(
+                            title: "Raw",
+                            isOn: view == .json && jsonStyle == .raw,
+                            compact: true
+                        ) {
+                            jsonStyle = .raw
+                            view = .json
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(view == .json ? Color.accentColor.opacity(0.12) : Color.clear)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(
+                            view == .json ? Color.accentColor.opacity(0.35) : Color.clear,
+                            lineWidth: 1
+                        )
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Raised-face track shared by Formatted and JSON Pretty/Raw mode chrome.
+private struct AccessLogModeSegmentTrack<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 1) {
+            content()
+        }
+        .padding(1)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.secondary.opacity(0.32), lineWidth: 1)
+                }
+        }
+    }
+}
+
+private struct AccessLogModeSegmentButton: View {
+    let title: String
+    let isOn: Bool
+    var compact: Bool = false
+    let action: () -> Void
+
+    private static let labelFont = Font(
+        NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
+    )
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(compact ? .system(size: 10, weight: isOn ? .semibold : .regular) : Self.labelFont)
+                .fontWeight(isOn ? .semibold : .regular)
+                .foregroundStyle(isOn ? Color.primary : Color.secondary)
+                .padding(.horizontal, compact ? 8 : 9)
+                .padding(.vertical, compact ? 2 : 3)
+                .frame(minHeight: SecondaryActionButton.controlHeight - 2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background {
+            if isOn {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(nsColor: .controlColor))
+                    .shadow(color: Color.black.opacity(0.10), radius: 1, y: 0.5)
+            }
+        }
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityLabel(title)
     }
 }
 
@@ -1359,20 +1651,412 @@ enum HeadersOnlyStyle {
     static let fill = Color(.systemTeal).opacity(0.08)
 }
 
+enum FileCardStyle {
+    static let missingStripe = Color(red: 0.60, green: 0.64, blue: 0.70).opacity(0.55)
+    static let missingFill = Color(red: 0.93, green: 0.95, blue: 0.97)
+    static let hugeStripe = Color.orange.opacity(0.35)
+    static let hugeFill = Color.orange.opacity(0.08)
+    static let hugeInk = Color.orange
+}
+
+/// Delivered attachment result (`get_attachment`) — see `docs/ui-inventory.md` → FileCard.
+struct FileCard: View {
+    let model: AccessLogFormat.AttachmentCardModel
+    var showsPreview: Bool = true
+    /// Attach Formatted shows the locked legend under denied cards; get nested content does not.
+    var showsLockedLegend: Bool = true
+    var onPreview: (() -> Void)? = nil
+
+    @State private var previewNote: String?
+
+    /// Match Attachment Info `attachmentTile` radius when side-by-side in get Formatted.
+    private static let cardRadius: CGFloat = 6
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            cardChrome
+            if showsLockedLegend, model.state == .denied {
+                LockedFieldsLegend()
+            }
+            if let previewNote {
+                Text(previewNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let note = model.note, !note.isEmpty {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if model.isPartial {
+                Text(partialCaption)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cardChrome: some View {
+        Group {
+            if model.state == .granted {
+                grantedRow
+            } else {
+                blockedStack
+            }
+        }
+        .padding(8)
+        .background { cardBackground }
+        .overlay { cardBorder }
+        .clipShape(RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous))
+    }
+
+    private var grantedRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            leadingGlyph
+            VStack(alignment: .leading, spacing: 2) {
+                filenameLabel
+                subLine
+                if let passNick = model.passNick {
+                    RuleFieldMarkChip(nick: passNick, polarity: .pass)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            previewControl
+        }
+    }
+
+    /// Non-granted: compact glyph + name on one row; state copy spans the full card width.
+    private var blockedStack: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 8) {
+                leadingGlyph
+                filenameLabel
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                previewControl
+            }
+            Text(model.stateLine)
+                .font(.caption.italic())
+                .foregroundStyle(stateCopyColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            if let passNick = model.passNick {
+                RuleFieldMarkChip(nick: passNick, polarity: .pass)
+            }
+        }
+    }
+
+    private var filenameLabel: some View {
+        Text(model.filename)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .foregroundStyle(model.state == .granted ? Color.primary : Color.secondary)
+    }
+
+    @ViewBuilder
+    private var previewControl: some View {
+        if showsPreview {
+            SecondaryActionButton(title: "Preview", systemImage: "eye") {
+                if let reason = model.previewBlockedReason {
+                    previewNote = reason
+                } else {
+                    previewNote = nil
+                    onPreview?()
+                }
+            }
+        }
+    }
+
+    private var partialCaption: String {
+        switch model.state {
+        case .granted:
+            return "Mail marks this message as a partial download. This file was still delivered."
+        case .missing:
+            return "Mail marks this message as a partial download — attachment bytes may not be on disk."
+        default:
+            return "Mail marks this message as a partial download."
+        }
+    }
+
+    @ViewBuilder
+    private var subLine: some View {
+        HStack(spacing: 6) {
+            Text(model.typeDescription)
+                .foregroundStyle(.secondary)
+            if let size = model.sizeLabel {
+                Text("·").foregroundStyle(.tertiary)
+                Text(size)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption)
+    }
+
+    private var stateCopyColor: Color {
+        switch model.state {
+        case .granted: .secondary
+        case .denied: HatchDeniedStyle.legend
+        case .missing: Color(red: 0.37, green: 0.43, blue: 0.53)
+        case .huge: FileCardStyle.hugeInk
+        }
+    }
+
+    @ViewBuilder
+    private var leadingGlyph: some View {
+        switch model.state {
+        case .granted:
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.97, green: 0.97, blue: 0.98),
+                                Color(red: 0.91, green: 0.92, blue: 0.95)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                Text(model.typeBadge)
+                    .font(.system(size: 9, weight: .bold).monospaced())
+                    .foregroundStyle(HatchDeniedStyle.legend)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                // Dog-ear (top-trailing) — drawn after the label so it does not steal layout.
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Path { path in
+                            path.move(to: CGPoint(x: 0, y: 0))
+                            path.addLine(to: CGPoint(x: 8, y: 0))
+                            path.addLine(to: CGPoint(x: 8, y: 8))
+                            path.closeSubpath()
+                        }
+                        .fill(Color(nsColor: .textBackgroundColor))
+                        .frame(width: 8, height: 8)
+                        .overlay(alignment: .bottomLeading) {
+                            Path { path in
+                                path.move(to: CGPoint(x: 0, y: 0))
+                                path.addLine(to: CGPoint(x: 8, y: 8))
+                            }
+                            .stroke(Color(red: 0.79, green: 0.82, blue: 0.87), lineWidth: 1)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(width: 28, height: 34)
+            .overlay {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color(red: 0.79, green: 0.82, blue: 0.87), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        case .denied:
+            statusIcon {
+                HatchLockIcon()
+            }
+            .foregroundStyle(HatchDeniedStyle.legend)
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(HatchDeniedStyle.stripe, lineWidth: 1)
+            }
+            case .missing:
+            statusIcon {
+                Text("✕")
+                    .font(.system(size: 10, weight: .heavy))
+            }
+            .foregroundStyle(Color(red: 0.37, green: 0.43, blue: 0.53))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(FileCardStyle.missingStripe, lineWidth: 1)
+            }
+        case .huge:
+            statusIcon {
+                Text("!")
+                    .font(.system(size: 10, weight: .heavy))
+            }
+            .foregroundStyle(FileCardStyle.hugeInk)
+            .overlay {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.45), lineWidth: 1)
+            }
+        }
+    }
+
+    private func statusIcon<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(width: 18, height: 18)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var cardBackground: some View {
+        switch model.state {
+        case .granted:
+            Color(nsColor: .textBackgroundColor)
+        case .denied:
+            HatchPattern()
+        case .missing:
+            Canvas { context, size in
+                let spacing: CGFloat = 6
+                var path = Path()
+                let extent = size.width + size.height
+                var x: CGFloat = -size.height
+                while x < extent {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                    x += spacing
+                }
+                context.stroke(path, with: .color(FileCardStyle.missingStripe.opacity(0.35)), lineWidth: 1)
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(FileCardStyle.missingFill))
+            }
+        case .huge:
+            Canvas { context, size in
+                let spacing: CGFloat = 5
+                var path = Path()
+                let extent = size.width + size.height
+                var x: CGFloat = -size.height
+                while x < extent {
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x + size.height, y: size.height))
+                    x += spacing
+                }
+                context.stroke(path, with: .color(FileCardStyle.hugeStripe), lineWidth: 1)
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(FileCardStyle.hugeFill))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cardBorder: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
+        switch model.state {
+        case .granted:
+            shape.strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+        case .denied:
+            shape.strokeBorder(HatchDeniedStyle.stripe, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+        case .missing:
+            shape.strokeBorder(FileCardStyle.missingStripe, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+        case .huge:
+            shape.strokeBorder(Color.orange.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+        }
+    }
+}
+
+/// One search/list hit as returned to the agent — see `docs/ui-inventory.md` → SearchResultCard.
+struct SearchResultCard: View {
+    let session: CompanionSession
+    let ref: AuditMessageRef
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text(ref.placement)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    if ref.isPartial {
+                        PartialBadge()
+                    }
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 6) {
+                    SecondaryActionButton(title: "Preview", systemImage: "eye") {
+                        session.openRead(
+                            accountID: ref.accountID,
+                            placement: ref.placement,
+                            id: ref.id
+                        )
+                        DetachedWindowHost.shared.showCompanion(session: session)
+                    }
+                    OpenInMailButton(
+                        session: session,
+                        locator: (ref.accountID, ref.placement, ref.id)
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(ref.fields.subject
+                     ? (ref.subject.isEmpty ? "(no subject)" : ref.subject)
+                     : ref.id)
+                    .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                labeled("From", ref.fields.from ? ref.from : "")
+                labeled("Date", AccessLogFormat.compactMailDate(ref.date) ?? ref.date)
+                labeled("Id", ref.id, mono: true)
+                labeled("Account", session.accountLabel(ref.accountID))
+            }
+        }
+        .padding(10)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+        }
+    }
+
+    private func labeled(_ label: String, _ value: String, mono: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\(label):")
+                .fontWeight(.light)
+                .foregroundStyle(.secondary)
+            Text(value.isEmpty ? " " : value)
+                .font(mono ? .caption.monospaced() : .caption)
+                .foregroundStyle(value.isEmpty ? .secondary : .primary)
+                .textSelection(.enabled)
+        }
+        .font(.caption)
+    }
+}
+
 struct MessageAccessCard: View {
     let session: CompanionSession
     let ref: AuditMessageRef
     var omitsBody: Bool = false
     var showsFieldBadges: Bool = true
     var attachmentContentDetail: String = "none in this response"
+    /// When set, Attachment Content uses FileCard chrome (no nested Preview).
+    var attachmentContentCards: [AccessLogFormat.AttachmentCardModel]? = nil
+    /// Access Log get: Source chip left · Preview + Open in Apple Mail right.
+    var showsChipRowActions: Bool = false
+    var chipRowPreviewEnabled: Bool = true
+    var chipRowPreviewBlockedReason: String? = nil
+    var onChipRowPreview: (() -> Void)? = nil
+    var mailHandoffTitle: String = "Open in Apple Mail"
     /// Pass nick when a field is visible only via a matching Pass (Access preview).
     var bodyViaPassNick: String? = nil
     var attachmentInfoViaPassNick: String? = nil
     var attachmentContentViaPassNick: String? = nil
 
+    @State private var chipRowNote: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
+            if showsChipRowActions {
+                chipRow
+            } else {
+                SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
+            }
+            cardFields
+            if let chipRowNote {
+                Text(chipRowNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var cardFields: some View {
+        VStack(alignment: .leading, spacing: 8) {
             if showsFieldBadges {
                 GrantFieldBadgeRow(
                     fields: ref.fields,
@@ -1429,17 +2113,44 @@ struct MessageAccessCard: View {
                 }
                 attachmentColumn(
                     "Attachment Content",
-                    granted: ref.fields.attachmentContent,
+                    granted: attachmentContentCards != nil || ref.fields.attachmentContent,
                     mark: attachmentContentRuleMark
                 ) {
-                    attachmentTile(detail: attachmentContentDetail)
+                    if let cards = attachmentContentCards, !cards.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
+                                FileCard(model: card, showsPreview: false, showsLockedLegend: false)
+                            }
+                        }
+                    } else {
+                        attachmentTile(detail: attachmentContentDetail)
+                    }
                 }
             }
         }
-        .padding(10)
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+    }
+
+    private var chipRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            SourceChip(session: session, accountID: ref.accountID, placement: ref.placement)
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                SecondaryActionButton(title: "Preview", systemImage: "eye") {
+                    if chipRowPreviewEnabled {
+                        chipRowNote = nil
+                        onChipRowPreview?()
+                    } else {
+                        chipRowNote = chipRowPreviewBlockedReason
+                            ?? "Not available from this agent response"
+                    }
+                }
+                OpenInMailButton(
+                    session: session,
+                    locator: (ref.accountID, ref.placement, ref.id),
+                    title: mailHandoffTitle,
+                    showsHandoffNote: false
+                )
+            }
         }
     }
 
@@ -1830,6 +2541,11 @@ struct HatchPattern: View {
 struct AccessLogRuleHitBadge: View {
     let polarity: RulePolarity
     let count: Int
+    @Environment(\.backgroundProminence) private var backgroundProminence
+
+    private var onProminentBackground: Bool {
+        backgroundProminence == .increased
+    }
 
     private var color: Color {
         polarity == .pass ? RuleMarkStyle.passGreen : RuleMarkStyle.blockRed
@@ -1848,21 +2564,29 @@ struct AccessLogRuleHitBadge: View {
     }
 
     var body: some View {
+        let ink = onProminentBackground ? Color.white : color
         HStack(spacing: 3) {
             Image(systemName: symbolName)
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(color)
+                .foregroundStyle(ink)
                 .padding(.horizontal, 4)
                 .frame(height: 14)
-                .background(Capsule().fill(color.opacity(0.12)))
+                .background(
+                    Capsule().fill(
+                        onProminentBackground ? Color.white.opacity(0.22) : color.opacity(0.12)
+                    )
+                )
                 .overlay {
-                    Capsule().strokeBorder(color.opacity(0.45), lineWidth: 0.5)
+                    Capsule().strokeBorder(
+                        onProminentBackground ? Color.white.opacity(0.75) : color.opacity(0.45),
+                        lineWidth: 0.5
+                    )
                 }
 
             if count > 1 {
                 Text("\(count)")
                     .font(.caption2.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(color)
+                    .foregroundStyle(ink)
             }
         }
         .accessibilityElement(children: .combine)
@@ -1878,8 +2602,14 @@ struct AccessLogLeakHitBadge: View {
     let count: Int
     /// Collapsed / list: shield chip + count. Expanded: `{shield} leak` chip + count.
     var compact: Bool = false
+    @Environment(\.backgroundProminence) private var backgroundProminence
+
+    private var onProminentBackground: Bool {
+        backgroundProminence == .increased
+    }
 
     var body: some View {
+        let ink = onProminentBackground ? Color.white : WithheldStyle.text
         HStack(spacing: 3) {
             HStack(spacing: compact ? 0 : 3) {
                 ZStack {
@@ -1897,17 +2627,24 @@ struct AccessLogLeakHitBadge: View {
                         .font(.system(size: 9, weight: .semibold))
                 }
             }
-            .foregroundStyle(WithheldStyle.text)
+            .foregroundStyle(ink)
             .padding(.horizontal, compact ? 4 : 5)
             .frame(height: 14)
-            .background(Capsule().fill(WithheldStyle.fill))
+            .background(
+                Capsule().fill(
+                    onProminentBackground ? Color.white.opacity(0.22) : WithheldStyle.fill
+                )
+            )
             .overlay {
-                Capsule().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+                Capsule().strokeBorder(
+                    onProminentBackground ? Color.white.opacity(0.75) : WithheldStyle.border,
+                    lineWidth: 0.5
+                )
             }
 
             Text("\(count)")
                 .font(.caption2.weight(.semibold).monospacedDigit())
-                .foregroundStyle(WithheldStyle.text)
+                .foregroundStyle(ink)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(

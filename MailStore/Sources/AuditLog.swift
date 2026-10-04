@@ -194,6 +194,8 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let attachments: [MailAttachment]
     /// Effectful Pass/Block applications for this message (audit-only).
     public let appliedRules: [AppliedGrantRule]?
+    /// From agent list/get payloads (`isPartial`); false when older logs omit it.
+    public let isPartial: Bool
 
     public init(
         accountID: String,
@@ -214,7 +216,8 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         leakDetections: [AuditLeakDetection]? = nil,
         fields: GrantFields = .headersOnly,
         attachments: [MailAttachment] = [],
-        appliedRules: [AppliedGrantRule]? = nil
+        appliedRules: [AppliedGrantRule]? = nil,
+        isPartial: Bool = false
     ) {
         self.accountID = accountID
         self.placement = placement
@@ -235,6 +238,7 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.fields = fields
         self.attachments = attachments
         self.appliedRules = appliedRules.flatMap { $0.isEmpty ? nil : $0 }
+        self.isPartial = isPartial
     }
 
     public var rowID: String { "\(accountID)/\(placement)/\(id)" }
@@ -678,7 +682,7 @@ extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, cc, date
         case bodySnippet, subjectAccess, bodyAccess, subjectOriginal, bodyOriginal
-        case sanitizedRules, stealth, leakDetections, fields, attachments, appliedRules
+        case sanitizedRules, stealth, leakDetections, fields, attachments, appliedRules, isPartial
     }
 
     public init(from decoder: Decoder) throws {
@@ -710,6 +714,7 @@ extension AuditMessageRef: Codable {
             forKey: .appliedRules
         )
         appliedRules = decodedRules.flatMap { $0.isEmpty ? nil : $0 }
+        isPartial = try container.decodeIfPresent(Bool.self, forKey: .isPartial) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -733,6 +738,7 @@ extension AuditMessageRef: Codable {
         try container.encode(fields, forKey: .fields)
         try container.encode(attachments, forKey: .attachments)
         try container.encodeIfPresent(appliedRules, forKey: .appliedRules)
+        try container.encode(isPartial, forKey: .isPartial)
     }
 }
 
@@ -776,7 +782,8 @@ extension AuditMessageRef {
             subjectOriginal: subjectOriginal,
             leakDetections: AuditLeakDetection.from(subject: subjectSanitized, body: nil),
             fields: fields,
-            appliedRules: appliedRules
+            appliedRules: appliedRules,
+            isPartial: message.isPartial
         )
     }
 
@@ -844,7 +851,8 @@ extension AuditMessageRef {
             ),
             fields: fields,
             attachments: message.attachments,
-            appliedRules: appliedRules
+            appliedRules: appliedRules,
+            isPartial: message.isPartial
         )
     }
 }
