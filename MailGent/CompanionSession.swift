@@ -51,7 +51,7 @@ struct DetectedAccount: Equatable, Identifiable, Sendable {
 final class CompanionSession {
     let access = MailAccessSession()
     var page: CompanionPage = .home
-    var source: CompanionMailSource = .fixture
+    var source: CompanionMailSource = MailSourceID.defaultSource
     var query = ""
     var selectedPlacement: Placement?
     var items: [IndexedMessage] = []
@@ -365,7 +365,7 @@ final class CompanionSession {
 
     private enum StorePrepResult: Sendable {
         case ready(MailStore)
-        case denied(message: String, fallback: CompanionMailSource)
+        case denied(message: String)
         case failed(message: String)
     }
 
@@ -399,14 +399,18 @@ final class CompanionSession {
                 try Task.checkCancellation()
                 switch source {
                 case .fixture:
+                    #if DEBUG
                     try? FileManager.default.removeItem(at: fixtureRoot)
                     try FileManager.default.createDirectory(at: fixtureRoot, withIntermediateDirectories: true)
                     let mail = fixtureRoot.appendingPathComponent("Mail", isDirectory: true)
                     try CompanionFixture.plant(at: mail)
                     return .ready(MailStore(root: mail))
+                    #else
+                    return .failed(message: "Fixture mail is only available in development builds")
+                    #endif
                 case .liveMail:
                     guard mailAccessGranted else {
-                        return .denied(message: "Grant access to Mail first", fallback: .fixture)
+                        return .denied(message: "Grant access to Mail first")
                     }
                     guard let root = MailLibraryProbe.resolvedMailRoot() else {
                         return .failed(message: "Mail folder is not readable")
@@ -435,8 +439,7 @@ final class CompanionSession {
         switch prepResult {
         case let .ready(preparedStore):
             store = preparedStore
-        case let .denied(message, fallback):
-            self.source = fallback
+        case let .denied(message):
             clearIndexState(status: message)
             isIndexing = false
             return
@@ -538,6 +541,7 @@ final class CompanionSession {
         ingestCurrentTask = "Checking for new messages…"
         MailGentLog.trace("incremental ingest scheduled source=\(source.rawValue)")
 
+        #if DEBUG
         if source == .fixture {
             let mail = fixtureRoot.appendingPathComponent("Mail", isDirectory: true)
             let wave = arrivalWave
@@ -552,6 +556,7 @@ final class CompanionSession {
                 return
             }
         }
+        #endif
 
         do {
             _ = try await runIncrementalIngestCore()
@@ -631,7 +636,7 @@ final class CompanionSession {
             snapshot: { [weak self] in
                 await MainActor.run {
                     self?.sourceSnapshot()
-                        ?? MailSourceSnapshot(source: .fixture, agentMayChangeSource: false)
+                        ?? MailSourceSnapshot(source: .defaultSource, agentMayChangeSource: false)
                 }
             },
             setSource: { [weak self] id in
@@ -653,6 +658,7 @@ final class CompanionSession {
         ingestCurrentTask = "Checking for new messages…"
         defer { isUpdating = false }
 
+        #if DEBUG
         if source == .fixture {
             let mail = fixtureRoot.appendingPathComponent("Mail", isDirectory: true)
             let wave = arrivalWave
@@ -661,6 +667,7 @@ final class CompanionSession {
             }.value
             arrivalWave += 1
         }
+        #endif
 
         return try await runIncrementalIngestCore()
     }
