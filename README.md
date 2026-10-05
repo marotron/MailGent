@@ -4,6 +4,8 @@
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
+**Interactive demo:** open [`demo.html`](demo.html) in a browser (needs `assets/` next to it) to watch one agent request walk through Scope → Fields → Rules → Leak guard.
+
 ## Screenshots
 
 <table>

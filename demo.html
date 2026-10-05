@@ -1,0 +1,702 @@
+<!doctype html>
+<!-- Public interactive demo (repo root). Source candidate: .scratch/mailgent-campaign/demo-flow-ask.html
+     Ask-first layout: Cursor on the left with Apple Mail underneath; MailGent gates on the right.
+     Gate order mirrors the code: Scope → field caps → Pass (union) → Block (subtract) → leak guard.
+     Facts mirror 0.8.2 alpha. Needs assets/mailgent-icon.png and assets/cursor-mark.svg next to it. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent — how a request travels</title>
+  <meta name="description" content="One request, step by step: your AI agent asks, MailGent checks your grant, reads only the matching mail on your Mac, filters it, hands back your slice and logs the exchange.">
+  <link rel="icon" href="assets/mailgent-icon.png">
+  <style>
+    :root {
+      --ink: #24170e; --ink-soft: #5c4636; --muted: #8a7462;
+      --paper: #fffaf3; --cream: #f6ecdf; --sand: #ecdcc6; --line: #e2cfb6;
+      --brown: #6b3f1f; --brown-deep: #2b1a0f; --amber: #c98a4b; --amber-soft: #f7e3c9;
+      --green: #2f8a4a; --red: #c2412d; --red-soft: #fbe7e3; --leak: #7a3db8; --leak-soft: #f1e6fb;
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      --ease: cubic-bezier(.4, 0, .2, 1);
+      --env-w: 110px; --env-h: 58px; --fan: 8px;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; color: var(--ink); background: var(--paper); }
+    button { font: inherit; cursor: pointer; }
+    svg.i { width: 1em; height: 1em; vertical-align: -0.15em; flex: none; }
+    .page { max-width: 1180px; margin: 0 auto; padding: 48px 24px 72px; }
+
+    /* ---------- header ---------- */
+    .hd { display: flex; align-items: center; gap: 12px; }
+    .hd img { width: 36px; height: 36px; }
+    .hd b { font-size: 17px; }
+    .hd .ver { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .hd a { margin-left: auto; font-size: 13px; color: var(--ink-soft); }
+    h1 { font-family: var(--serif); font-size: clamp(32px, 5vw, 48px); font-weight: 500; letter-spacing: -0.02em; line-height: 1.12; margin: 48px 0 0; text-align: center; }
+    h1 em { font-style: italic; color: var(--brown); }
+    .lede { max-width: 640px; margin: 16px auto 0; font-size: 17px; color: var(--ink-soft); text-align: center; }
+
+    /* ---------- stage ---------- */
+    .stage { margin-top: 36px; padding: 22px 22px 20px; border-radius: 24px; border: 1px solid var(--line);
+      background: radial-gradient(900px 400px at 50% -10%, var(--amber-soft), var(--cream) 70%); }
+    .ask { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ask .lbl { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--amber); margin-right: 4px; }
+    .pill { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 999px; padding: 7px 14px; font-size: 14px; transition: 0.15s; }
+    .pill:hover { border-color: var(--amber); }
+    .pill.on { background: var(--brown-deep); color: var(--cream); border-color: var(--brown-deep); }
+    .replay { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+    .replay:hover { color: var(--ink); }
+    .replay[disabled] { opacity: 0.35; cursor: default; }
+
+    /* Left rail: Cursor on top, Apple Mail underneath · MailGent fills the rest */
+    .lane { position: relative; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 4fr); gap: 18px; align-items: start; margin-top: 24px; }
+    .side { display: grid; gap: 14px; margin-top: 37px; } /* line slots up with the gates inside the MailGent bracket */
+    .side #stAgent .chat { min-height: 88px; }
+    .side #stMail .st-note { display: none; } /* keep the left rail compact; legend is enough */
+    @media (max-width: 980px) { .lane { grid-template-columns: 1fr; } .side { margin-top: 0; } }
+
+    .station { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; transition: box-shadow 0.25s, border-color 0.25s; }
+    .station.lit { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(201,138,75,0.25), 0 14px 36px rgba(43,26,15,0.1); }
+    .st-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; height: 22px; white-space: nowrap; }
+    .st-head .n { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--sand); color: var(--brown); font-size: 11.5px; }
+    .station.lit .st-head .n { background: var(--amber); color: var(--brown-deep); }
+    .st-sub { font-size: 12px; color: var(--muted); margin: 2px 0 0 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-head img { width: 16px; height: 16px; }
+    .st-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+    .slot { position: relative; margin-top: 10px; height: 82px; border-radius: 12px; border: 1px dashed var(--line); background: rgba(246,236,223,0.5); }
+    .slot .hint { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11.5px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; transition: opacity 0.2s; }
+    .slot.busy .hint { opacity: 0; }
+
+    /* Apple Mail stack */
+    .stack { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px; height: auto; min-height: 82px; align-content: start; }
+    .mini { height: 26px; border-radius: 6px; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--c); position: relative; transition: 0.25s; }
+    .mini::after { content: ""; position: absolute; left: 7px; right: 7px; top: 9px; height: 2px; border-radius: 2px; background: var(--sand); box-shadow: 0 5px 0 var(--sand); }
+    .mini.hit { border-color: var(--amber); background: var(--amber-soft); transform: translateY(-2px); box-shadow: 0 6px 14px rgba(201,138,75,0.25); }
+    .mini.gone { opacity: 0.35; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 10px; font-size: 11.5px; color: var(--ink-soft); }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .legend i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+
+    /* MailGent bracket with three gates */
+    .mg { position: relative; padding: 36px 14px 14px; border-radius: 20px; background: rgba(107,63,31,0.06); border: 1px dashed rgba(107,63,31,0.3); }
+    .mg-label { position: absolute; top: 10px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown); }
+    .mg-label img { width: 16px; height: 16px; }
+    .mg-label .loc { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+    .gates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    @media (max-width: 980px) { .gates { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 620px) { .gates { grid-template-columns: 1fr; } }
+
+    .chips { display: grid; gap: 5px; margin-top: 12px; }
+    .chip { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid transparent; transition: 0.15s; user-select: none; }
+    .chip:hover { background: var(--cream); }
+    .chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .chip .sw { position: relative; width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--c); background: transparent; transition: 0.15s; }
+    .chip .sw::after { content: ""; position: absolute; inset: 0; width: 3.5px; height: 7px; margin: auto; border: solid #fff; border-width: 0 1.5px 1.5px 0; box-sizing: border-box; opacity: 0; transform: translateY(-1px) rotate(45deg); }
+    .chip input:checked ~ .sw::after { opacity: 1; }
+    .chip input:checked ~ .sw { background: var(--c); }
+    .chip input:not(:checked) ~ span.t { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.25); }
+    .chip input:focus-visible ~ .sw { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+    .seg { display: grid; gap: 4px; margin-top: 12px; }
+    .seg button { text-align: left; border: 1px solid transparent; background: transparent; padding: 6px 9px; border-radius: 8px; font-size: 13px; color: var(--ink-soft); transition: 0.15s; }
+    .seg button:hover { background: var(--cream); }
+    .seg button.on { background: var(--brown-deep); color: var(--cream); border-color: var(--brown-deep); }
+    .seg button small { display: block; font-size: 11px; opacity: 0.75; }
+
+    /* Leak guard — same sw + title + full-width body as rules, leak purple */
+    .toggle { --rc: var(--leak); position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 3px 7px; margin-top: 12px; padding: 7px 8px; border-radius: 10px; border: 1px solid rgba(122,61,184,0.35); background: var(--leak-soft); cursor: pointer; user-select: none; font-size: 12px; transition: 0.15s; }
+    .toggle:hover { border-color: var(--rc); }
+    .toggle.off { background: #fff; border-color: var(--line); }
+    .toggle input { position: absolute; opacity: 0; pointer-events: none; }
+    .toggle .sw { position: relative; width: 14px; height: 14px; margin-top: 1px; border-radius: 4px; border: 1.5px solid var(--rc); transition: 0.15s; }
+    .toggle .sw::after { content: ""; position: absolute; inset: 0; width: 3.5px; height: 7px; margin: auto; border: solid #fff; border-width: 0 1.5px 1.5px 0; box-sizing: border-box; opacity: 0; transform: translateY(-1px) rotate(45deg); }
+    .toggle input:checked ~ .sw::after { opacity: 1; }
+    .toggle input:checked ~ .sw { background: var(--rc); }
+    .toggle input:focus-visible ~ .sw { outline: 2px solid var(--rc); outline-offset: 2px; }
+    .toggle .hd { display: flex; align-items: center; gap: 5px; font-weight: 700; color: var(--rc); white-space: nowrap; font-size: 12px; }
+    .toggle small { grid-column: 1 / -1; font-size: 11px; line-height: 1.3; color: var(--ink-soft); }
+    .toggle input:not(:checked) ~ .hd, .toggle input:not(:checked) ~ small { opacity: 0.45; }
+    /* Pass / Block rules — row 1: sw + title; line 2+ full card width */
+    .rules { display: grid; gap: 6px; margin-top: 12px; }
+    .rule { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 3px 7px; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--line); background: #fff; cursor: pointer; user-select: none; font-size: 12px; transition: 0.15s; }
+    .rule.pass { --rc: var(--green); } .rule.block { --rc: var(--red); }
+    .rule:hover { border-color: var(--rc); }
+    .rule input { position: absolute; opacity: 0; pointer-events: none; }
+    .rule .sw { position: relative; width: 14px; height: 14px; margin-top: 1px; border-radius: 4px; border: 1.5px solid var(--rc); transition: 0.15s; }
+    .rule .sw::after { content: ""; position: absolute; inset: 0; width: 3.5px; height: 7px; margin: auto; border: solid #fff; border-width: 0 1.5px 1.5px 0; box-sizing: border-box; opacity: 0; transform: translateY(-1px) rotate(45deg); }
+    .rule input:checked ~ .sw::after { opacity: 1; }
+    .rule input:checked ~ .sw { background: var(--rc); }
+    .rule input:focus-visible ~ .sw { outline: 2px solid var(--rc); outline-offset: 2px; }
+    .rule .hd { display: flex; align-items: center; gap: 5px; font-weight: 700; color: var(--rc); white-space: nowrap; font-size: 12px; }
+    .rule .nick { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--rc); color: #fff; font-size: 9.5px; }
+    .rule .m { grid-column: 1 / -1; color: var(--ink-soft); font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+    .rule .m code { font: 10px var(--mono); background: var(--cream); padding: 0 4px; border-radius: 3px; }
+    .rule .fx { grid-column: 1 / -1; font-size: 11px; font-weight: 600; color: var(--rc); }
+    .rule input:not(:checked) ~ .hd, .rule input:not(:checked) ~ .m, .rule input:not(:checked) ~ .fx { opacity: 0.45; }
+    .rule-note { margin: 10px 0 0; font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+    .detectors { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+    .detectors span { font: 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; background: #fff; border: 1px solid var(--line); color: var(--ink-soft); }
+    .toggle.off ~ .detectors span { opacity: 0.45; text-decoration: line-through; }
+
+    /* Agent */
+    .chat { display: grid; gap: 8px; margin-top: 12px; min-height: 120px; }
+    .bubble { padding: 8px 11px; border-radius: 12px; font-size: 13.5px; line-height: 1.4; animation: rise 0.3s var(--ease) both; }
+    .bubble.you { justify-self: end; background: var(--brown-deep); color: var(--cream); border-bottom-right-radius: 4px; max-width: 92%; }
+    .bubble.bot { justify-self: start; background: var(--cream); color: var(--ink); border-bottom-left-radius: 4px; max-width: 100%; }
+    .bubble.bot.warn { background: var(--red-soft); color: #7a2416; }
+    .bubble.empty { color: var(--muted); background: transparent; padding-left: 0; font-size: 12.5px; }
+    .thinking { display: inline-flex; gap: 4px; align-items: center; height: 14px; }
+    .thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: blink 1s infinite; }
+    .thinking i:nth-child(2) { animation-delay: 0.15s; } .thinking i:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+    /* ---------- sky: things that fly between stations ---------- */
+    .sky { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+    .dot { position: absolute; left: 0; top: 0; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 5px rgba(201,138,75,0.25); opacity: 0;
+      transition: transform 0.6s var(--ease), opacity 0.25s; }
+    .dot.show { opacity: 1; }
+    .env { position: absolute; left: 0; top: 0; width: var(--env-w); height: var(--env-h); border-radius: 9px; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--c);
+      box-shadow: 0 8px 20px rgba(43,26,15,0.14); padding: 6px 8px 5px; font-size: 10.5px; line-height: 1.25; overflow: hidden;
+      transition: transform 0.6s var(--ease), opacity 0.45s; will-change: transform; }
+    .env .top { display: flex; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+    .env .top b { color: var(--c); font-weight: 700; flex: none; }
+    .env .top span { overflow: hidden; text-overflow: ellipsis; }
+    .env .subj { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; color: var(--ink); }
+    .env .body { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+    .env .bar { display: block; height: 3px; border-radius: 2px; background: var(--sand); }
+    .env .bar.secret { height: 11px; display: flex; align-items: center; padding: 0 4px; font: 7.5px/1 var(--mono); color: var(--red); background: var(--red-soft); border: 1px solid rgba(194,65,45,0.3); width: max-content; max-width: 100%; white-space: nowrap; }
+    .env .clip { position: absolute; right: 6px; bottom: 5px; color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; gap: 2px; }
+    .env .lock { display: none; align-items: center; gap: 4px; margin-top: 4px; font-size: 9px; color: var(--muted); }
+    .env.headers .body { display: none; }
+    .env.headers .lock { display: flex; }
+    .env .held { display: none; align-items: center; gap: 4px; margin-top: 4px; font-size: 9px; color: var(--red); }
+    .env.blocked .body, .env.blocked .lock { display: none; }
+    .env.blocked .held { display: flex; }
+    .env .rb { position: absolute; top: 4px; right: 5px; display: none; align-items: center; height: 13px; padding: 0 5px; border-radius: 999px; font-size: 8.5px; font-weight: 700; color: #fff; letter-spacing: 0.02em; }
+    .env.passed .rb.pass { display: inline-flex; background: var(--green); }
+    .env.blocked .rb.block { display: inline-flex; background: var(--red); }
+    .env.passed .top, .env.blocked .top { padding-right: 30px; }
+    .env.noclip .clip { opacity: 0.4; text-decoration: line-through; }
+    .env.noclip .clip::after { content: "stays home"; font-size: 8px; }
+    .env.redacted .bar.secret { color: #fff; background: var(--leak); border-color: var(--leak); letter-spacing: 0.04em; }
+    .env.leaked .bar.secret { background: var(--red); color: #fff; border-color: var(--red); box-shadow: 0 0 0 3px rgba(194,65,45,0.25); }
+    .env.flash { animation: flash 0.5s var(--ease); }
+    @keyframes flash { 0% { box-shadow: 0 0 0 0 rgba(201,138,75,0.6), 0 8px 20px rgba(43,26,15,0.14); } 100% { box-shadow: 0 0 0 10px rgba(201,138,75,0), 0 8px 20px rgba(43,26,15,0.14); } }
+
+    /* ---------- caption + log ---------- */
+    .caption { display: flex; align-items: center; gap: 12px; margin: 22px 2px 0; min-height: 40px; font-size: 15.5px; color: var(--ink); }
+    .caption .n { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--brown-deep); color: var(--cream); font-weight: 700; font-size: 13px; transition: 0.2s; }
+    .caption .n.ok { background: var(--green); }
+    .caption .n.idle { background: var(--sand); color: var(--brown); }
+    .caption span { animation: rise 0.3s var(--ease) both; }
+    .caption b { color: var(--brown); }
+
+    .ledger { margin-top: 18px; border-radius: 14px; background: #fff; border: 1px solid var(--line); overflow: hidden; }
+    .ledger-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brown); background: var(--cream); border-bottom: 1px solid var(--line); }
+    .ledger-head .cnt { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
+    .ledger ol { list-style: none; margin: 0; padding: 4px 6px; max-height: 164px; overflow: auto; }
+    .ledger li { display: grid; grid-template-columns: 46px 70px 1fr; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; font-size: 13px; animation: rise 0.3s var(--ease) both; }
+    .ledger li:nth-child(odd) { background: rgba(246,236,223,0.45); }
+    .ledger li.empty { display: block; color: var(--muted); font-size: 12.5px; text-align: center; padding: 16px; }
+    .ledger .t { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+    .ledger .who { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+    .ledger .who img { width: 13px; height: 13px; }
+    .ledger .calls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .call { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 7px; border-radius: 6px; background: var(--cream); color: var(--ink-soft); }
+    .call b { color: var(--brown); font-weight: 600; }
+    .call.leak { background: var(--leak-soft); color: var(--leak); }
+    .call.bad { background: var(--red-soft); color: var(--red); }
+    .call.pass { background: #e3f3e7; color: var(--green); }
+    .call.block { background: var(--sand); color: var(--ink-soft); }
+    .foot { margin-top: 14px; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+    /* ---------- below the stage ---------- */
+    .legend-steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-top: 40px; }
+    @media (max-width: 980px) { .legend-steps { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 560px) { .legend-steps { grid-template-columns: 1fr 1fr; } }
+    .ls { padding: 14px; border-radius: 14px; background: var(--cream); font-size: 13.5px; color: var(--ink-soft); line-height: 1.45; }
+    .ls b { display: flex; align-items: center; gap: 8px; color: var(--ink); margin-bottom: 4px; }
+    .ls b i { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--brown-deep); color: var(--cream); font-style: normal; font-size: 12px; }
+    .ls b i.ok { background: var(--green); }
+    .ls strong { font-weight: 600; color: var(--ink); }
+    .ls em { font-style: italic; color: var(--brown); }
+
+    /* tighter spacing so four gates fit a ~1000px window */
+    @media (max-width: 1120px) {
+      :root { --env-w: 100px; --fan: 6px; }
+      .page { padding-left: 16px; padding-right: 16px; }
+      .stage { padding-left: 14px; padding-right: 14px; }
+      .lane { gap: 12px; }
+      .mg { padding-left: 10px; padding-right: 10px; }
+      .gates { gap: 8px; }
+      .gates .station { padding: 11px; }
+      .seg button { font-size: 12px; padding: 5px 7px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hd">
+    <img src="assets/mailgent-icon.png" alt="">
+    <b>MailGent</b><span class="ver">0.8.2 alpha</span>
+    <a href="https://github.com/marotron/MailGent">GitHub →</a>
+  </div>
+
+  <h1>Agent asks. <em>MailGent decides.</em><br>Your mailboxes never meet the agent.</h1>
+  <p class="lede">Your AI agent never touches your mailbox. It asks MailGent, and MailGent walks the request through four gates on your Mac before anything comes back. Ask a question below and watch the mail travel.</p>
+
+  <div class="stage" id="stage">
+    <div class="ask">
+      <span class="lbl">Ask your agent</span>
+      <div id="prompts"></div>
+      <button class="replay" id="replay" disabled>↻ Replay</button>
+    </div>
+
+    <div class="lane" id="lane">
+      <!-- Left rail: ask/receive on top, local mail underneath -->
+      <div class="side">
+        <div class="station" id="stAgent">
+          <div class="st-head"><span class="n" id="nAgent">1</span> <img src="assets/cursor-mark.svg" alt=""> Cursor</div>
+          <div class="st-sub">a separate app</div>
+          <div class="slot" id="slotAgent"><span class="hint">received</span></div>
+          <div class="chat" id="chat"><div class="bubble empty">The agent only knows what reaches this tray.</div></div>
+        </div>
+        <div class="station" id="stMail">
+          <div class="st-head"><span class="n">3</span> Apple Mail</div>
+          <div class="st-sub">all your mail · local index</div>
+          <div class="slot stack" id="slotMail"></div>
+          <div class="legend" id="legend"></div>
+          <p class="st-note">MailGent keeps a private index of what Apple Mail has already downloaded. It only reads, never changes anything.</p>
+        </div>
+      </div>
+
+      <!-- MailGent -->
+      <div class="mg">
+        <div class="mg-label"><img src="assets/mailgent-icon.png" alt="">MailGent <span class="loc">on your Mac · no cloud</span></div>
+        <div class="gates">
+          <div class="station" id="stScope">
+            <div class="st-head"><span class="n">2</span> Scope</div>
+            <div class="st-sub">which mail</div>
+            <div class="slot" id="slotScope"><span class="hint">grant check</span></div>
+            <div class="chips" id="chips"></div>
+          </div>
+          <div class="station" id="stFields">
+            <div class="st-head"><span class="n">4</span> Fields</div>
+            <div class="st-sub">how much of it</div>
+            <div class="slot" id="slotFields"><span class="hint">field caps</span></div>
+            <div class="seg" id="seg">
+              <button data-v="headers">Headers only<small>subject · sender · date</small></button>
+              <button data-v="read" class="on">Read mail<small>+ message text</small></button>
+              <button data-v="full">Full<small>+ attachments</small></button>
+            </div>
+          </div>
+          <div class="station" id="stRules">
+            <div class="st-head"><span class="n">4</span> Rules</div>
+            <div class="st-sub">exceptions</div>
+            <div class="slot" id="slotRules"><span class="hint">pass / block</span></div>
+            <div class="rules" id="rules"></div>
+            <p class="rule-note">Rules only adjust fields on mail Scope already allows. If both match, Block wins.</p>
+          </div>
+          <div class="station" id="stLeak">
+            <div class="st-head"><span class="n">4</span> Leak guard</div>
+            <div class="st-sub">what's hidden</div>
+            <div class="slot" id="slotLeak"><span class="hint">redaction</span></div>
+            <label class="toggle" id="leakLbl"><input type="checkbox" id="leak" checked><span class="sw"></span><span class="hd">Redact</span><small>secrets before anything leaves this Mac</small></label>
+            <div class="detectors"><span>api keys</span><span>tokens</span><span>passwords</span><span>+ your own</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sky" id="sky"><div class="dot" id="dot"></div></div>
+    </div>
+
+    <div class="caption"><span class="n idle" id="capN">·</span><span id="capText">Pick a question to watch one request go through MailGent.</span></div>
+
+    <div class="ledger">
+      <div class="ledger-head">Access log <span class="cnt" id="cnt">0 entries</span></div>
+      <ol id="ledger"><li class="empty">Every call lands here, exactly as the agent received it.</li></ol>
+    </div>
+    <div class="foot">Simulated mail. Nothing leaves this page. The real app connects over MCP on 127.0.0.1 and logs the full request and response.</div>
+  </div>
+
+  <div class="legend-steps">
+    <div class="ls"><b><i>1</i>Ask</b>Your agent sends a request to <strong>MailGent</strong> over a <em>local connection</em>. It never opens your mailbox itself.</div>
+    <div class="ls"><b><i>2</i>Check</b><strong>MailGent</strong> compares the request with your <em>grant</em>. Mail outside it doesn't exist for the agent.</div>
+    <div class="ls"><b><i>3</i>Read</b>Only matching mail is read, from MailGent's own index of <em>Apple Mail</em>. Apple Mail is never changed.</div>
+    <div class="ls"><b><i>4</i>Filter</b><strong>Field caps</strong> set the baseline, <em>Pass and Block</em> rules adjust it, and <strong>leak guard</strong> hides keys, tokens and passwords.</div>
+    <div class="ls"><b><i>5</i>Return</b>The agent gets <em>your slice</em> and nothing else. It can draft inside MailGent, but can't send, move or delete.</div>
+    <div class="ls"><b><i class="ok">✓</i>Log</b>The exchange is written to the <strong>Access log</strong> so you can see exactly what the agent received.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const BOX = {
+    INBOX: { label: "Inbox", c: "#2f6fd1" },
+    Bills: { label: "Bills", c: "#c98a4b" },
+    Work: { label: "Work", c: "#2f8a4a" },
+    Personal: { label: "Personal", c: "#c2412d" }
+  };
+  const MAIL = [
+    { id: "m1", box: "Bills", from: "Ovo Energy", addr: "billing@ovoenergy.example", subject: "Your October bill is ready", file: "bill.pdf" },
+    { id: "m2", box: "Bills", from: "Thames Water", addr: "noreply@thameswater.example", subject: "Payment reminder" },
+    { id: "m3", box: "Work", from: "Priya Shah", addr: "priya@acme.example", subject: "Can we move Thursday's review?" },
+    { id: "m4", box: "Work", from: "Deploy Bot", addr: "ci@acme.example", subject: "Staging credentials rotated", secret: "sk-live_8f2Kq9…" },
+    { id: "m5", box: "INBOX", from: "SkyLine Air", addr: "booking@skyline.example", subject: "Your flight to Lisbon", file: "boarding-pass.pdf" },
+    { id: "m6", box: "Personal", from: "Northbank", addr: "alerts@northbank.example", subject: "Your September statement" },
+    { id: "m7", box: "Personal", from: "Mum", addr: "mum@family.example", subject: "Sunday lunch?" }
+  ];
+  // Pass = union fields in, Block = subtract fields out. Mirrors RuleEngine.applyOverlays.
+  const RULES = [
+    { id: "A", kind: "pass", on: true, match: "Subject contains", needle: "bill", test: m => /bill/i.test(m.subject), fx: "+ reveal attachments", grant: { files: true } },
+    { id: "B", kind: "block", on: false, match: "From contains", needle: "ci@acme", test: m => m.addr.includes("ci@acme"), fx: "− withhold text, attachments", deny: { body: true, files: true } }
+  ];
+  const PROMPTS = [
+    { id: "bills", text: "What bills do I need to pay?", query: "bill OR payment", match: m => m.box === "Bills" },
+    { id: "work", text: "Any work email to reply to?", query: "from:acme.example", match: m => m.box === "Work" },
+    { id: "flight", text: "When is my flight to Lisbon?", query: "flight Lisbon", match: m => m.id === "m5" },
+    { id: "bank", text: "What's my bank balance?", query: "statement balance", match: m => m.id === "m6" }
+  ];
+  const FIELD_CAP = {
+    headers: "Headers only: subject, sender and date go through. The message text stays on your Mac.",
+    read: "Read mail: headers and message text go through. Attachments stay on your Mac.",
+    full: "Full: headers, text and attachments go through. The agent can open the files."
+  };
+
+  const state = { boxes: { INBOX: true, Bills: true, Work: true, Personal: false }, fields: "read", leak: true, active: null };
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const lane = $("lane"), sky = $("sky"), dot = $("dot");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const T = reduced ? 0 : 1;
+  let timers = [], flyers = [], entries = 0, done = false;
+
+  const CLIP = '<svg class="i" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M8.6 4.4L5.1 7.9a1.3 1.3 0 01-1.9-1.9l3.9-3.9a2.1 2.1 0 013 3L6.3 9"/></svg>';
+  const LOCK = '<svg class="i" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 014 0v1.5"/></svg>';
+  const SHIELD = '<svg class="i" viewBox="0 0 12 12" fill="currentColor"><path d="M6 1.2l4 1.5v3c0 2.6-1.8 4.3-4 5.1-2.2-.8-4-2.5-4-5.1v-3z"/></svg>';
+  const CURSOR = '<img src="assets/cursor-mark.svg" alt="">';
+
+  /* ---------- static renders ---------- */
+  function renderPrompts() {
+    $("prompts").innerHTML = PROMPTS.map(p => `<button class="pill ${state.active === p.id ? "on" : ""}" data-id="${p.id}">${p.text}</button>`).join("");
+    $("prompts").querySelectorAll("button").forEach(b => b.addEventListener("click", () => ask(b.dataset.id)));
+    $("prompts").style.display = "contents";
+  }
+  function renderStack(hits = []) {
+    $("slotMail").innerHTML = MAIL.map(m => `<div class="mini ${hits.includes(m.id) ? "hit" : ""}" data-id="${m.id}" style="--c:${BOX[m.box].c}" title="${esc(m.from)} — ${esc(m.subject)}"></div>`).join("");
+    $("legend").innerHTML = Object.entries(BOX).map(([k, b]) => `<span style="--c:${b.c}"><i></i>${b.label}</span>`).join("");
+  }
+  function renderChips() {
+    $("chips").innerHTML = Object.entries(BOX).map(([k, b]) =>
+      `<label class="chip" style="--c:${b.c}"><input type="checkbox" data-box="${k}" ${state.boxes[k] ? "checked" : ""}><span class="sw"></span><span class="t">${b.label}</span></label>`).join("");
+    $("chips").querySelectorAll("input").forEach(i => i.addEventListener("change", () => { state.boxes[i.dataset.box] = i.checked; rerun(); }));
+  }
+  function renderRules() {
+    $("rules").innerHTML = RULES.map(r =>
+      `<label class="rule ${r.kind}"><input type="checkbox" data-r="${r.id}" ${r.on ? "checked" : ""}><span class="sw"></span>
+        <span class="hd"><span class="nick">${r.id}</span>${r.kind === "pass" ? "Pass" : "Block"}</span>
+        <span class="m">${r.match} <code>${esc(r.needle)}</code></span><span class="fx">${r.fx}</span></label>`).join("");
+    $("rules").querySelectorAll("input").forEach(i => i.addEventListener("change", () => { RULES.find(r => r.id === i.dataset.r).on = i.checked; rerun(); }));
+  }
+  function envHTML(m) {
+    const b = BOX[m.box];
+    const block = RULES.find(r => r.kind === "block");
+    return `<div class="top"><b>${b.label}</b><span>${esc(m.from)}</span></div>
+      <span class="rb pass">✓ A</span><span class="rb block">✗ B</span>
+      <div class="subj">${esc(m.subject)}</div>
+      <div class="body"><i class="bar" style="width:82%"></i>${m.secret ? `<i class="bar secret">${esc(m.secret)}</i>` : `<i class="bar" style="width:58%"></i>`}</div>
+      <div class="lock">${LOCK} text not shared</div>
+      <div class="held">${LOCK} text withheld by rule ${block.id}</div>
+      ${m.file ? `<span class="clip">${CLIP}</span>` : ""}`;
+  }
+
+  /* ---------- geometry ---------- */
+  function rel(el) {
+    const a = el.getBoundingClientRect(), b = lane.getBoundingClientRect();
+    return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height };
+  }
+  function slotPos(slotEl, i, n) {
+    const css = getComputedStyle(document.documentElement);
+    const W = parseFloat(css.getPropertyValue("--env-w")), H = parseFloat(css.getPropertyValue("--env-h")), fan = parseFloat(css.getPropertyValue("--fan"));
+    const r = rel(slotEl);
+    return { x: r.x + (r.w - W - (n - 1) * fan) / 2 + i * fan, y: r.y + (r.h - H) / 2 - (n - 1) * 4 + i * 8 };
+  }
+  function moveTo(env, slotEl, i, n) {
+    const p = slotPos(slotEl, i, n);
+    env.dataset.x = p.x; env.dataset.y = p.y;
+    env.style.transform = `translate(${p.x}px, ${p.y}px)`;
+  }
+  function dropEnv(env) {
+    env.style.transform = `translate(${env.dataset.x}px, ${Number(env.dataset.y) + 90}px) rotate(8deg)`;
+    env.style.opacity = 0;
+  }
+  function dotTo(slotEl) {
+    const r = rel(slotEl);
+    dot.style.transform = `translate(${r.x + r.w / 2}px, ${r.y + r.h / 2}px)`;
+  }
+
+  /* ---------- narration ---------- */
+  function cap(n, text, cls = "") {
+    $("capN").textContent = n; $("capN").className = `n ${cls}`;
+    const s = $("capText"); s.replaceWith(s.cloneNode(false)); $("capText").innerHTML = text;
+  }
+  function lit(...ids) {
+    document.querySelectorAll(".station").forEach(s => s.classList.toggle("lit", ids.includes(s.id)));
+  }
+  /* Cursor is both step 1 (ask) and step 5 (return) — badge follows the phase. */
+  function agentN(n) { $("nAgent").textContent = n; }
+  function busy(slotId, on) { $(slotId).classList.toggle("busy", on); }
+  function flash(list) { list.forEach(e => { e.classList.remove("flash"); void e.offsetWidth; e.classList.add("flash"); }); }
+
+  function answer(p, got) {
+    const readable = got.filter(g => g.body);
+    const n = got.length;
+    if (p.id === "bills") {
+      if (!n) return "I can't see any bills. The Bills mailbox isn't shared with me.";
+      if (!readable.length) return "I can see two bills, from Ovo Energy and Thames Water, but not the amounts. I'm only allowed headers.";
+      return `You have two bills: Ovo Energy £84.20 on 12 Oct and Thames Water £42.10 due 9 Oct.${got[0].file === "ok" ? " I've opened the PDF too." : ""}`;
+    }
+    if (p.id === "work") {
+      if (!n) return "I can't see any work email. The Work mailbox isn't shared with me.";
+      if (!readable.length) return "Two work emails: Priya about Thursday's review, and Deploy Bot about staging credentials. Subjects only.";
+      const ci = got.find(g => g.m.id === "m4");
+      let s = "Priya wants to move Thursday's review to Friday 10:00. I've drafted a yes for you to check; nothing was sent.";
+      if (ci) s += ci.blocked ? " Deploy Bot's message is there too, but a rule withholds its text, so I only see the subject."
+        : ci.leaked ? " ⚠️ Deploy Bot's email also handed me the new deploy key and password in plain text."
+        : ci.redacted ? " Deploy Bot rotated the staging credentials; MailGent redacted them, so I don't have them."
+        : " Deploy Bot rotated the staging credentials; I can only see the subject.";
+      return s;
+    }
+    if (p.id === "flight") {
+      if (!n) return "I can't find a flight. Your Inbox isn't shared with me.";
+      if (!readable.length) return "There's a SkyLine Air booking to Lisbon, but I can only see the subject line.";
+      return `Flight SL214 leaves Gatwick Fri 16 Oct at 07:45, seat 14C.${got[0].file === "ok" ? " Boarding pass is ready." : " There's a boarding pass attached, but attachments aren't shared with me."}`;
+    }
+    if (!n) return "I can't see any bank email. That mailbox isn't shared with me.";
+    if (!readable.length) return "There's a September statement from Northbank, but I can only see the subject.";
+    return "Your Northbank account ending 4421 closed September at £2,315.40.";
+  }
+
+  /* ---------- the run ---------- */
+  function reset() {
+    timers.forEach(clearTimeout); timers = []; done = false;
+    flyers.forEach(f => f.remove()); flyers = [];
+    dot.classList.remove("show");
+    ["slotScope", "slotFields", "slotRules", "slotLeak", "slotAgent"].forEach(id => busy(id, false));
+    lit();
+  }
+  const later = (ms, fn) => timers.push(setTimeout(fn, ms * T));
+
+  function ask(id) {
+    reset();
+    state.active = id;
+    renderPrompts();
+    $("replay").disabled = false;
+    const p = PROMPTS.find(x => x.id === id);
+    const matched = MAIL.filter(p.match);
+    const kept = matched.filter(m => state.boxes[m.box]);
+    const withBody = state.fields !== "headers";
+    const withFiles = state.fields === "full";
+    // Scope → base field caps → Pass (union) → Block (subtract) → leak guard
+    const got = kept.map(m => {
+      const base = { body: withBody, files: withFiles };
+      const passes = RULES.filter(r => r.on && r.kind === "pass" && r.test(m));
+      const blocks = RULES.filter(r => r.on && r.kind === "block" && r.test(m));
+      const afterPass = { ...base };
+      passes.forEach(r => Object.assign(afterPass, r.grant));
+      const f = { ...afterPass };
+      blocks.forEach(r => { if (r.deny.body) f.body = false; if (r.deny.files) f.files = false; });
+      return { m, body: f.body, file: m.file ? (f.files ? "ok" : "home") : null,
+        passHit: passes.length > 0, blockHit: blocks.length > 0,
+        passed: passes.length > 0 && (afterPass.body !== base.body || afterPass.files !== base.files),
+        blocked: blocks.length > 0 && (f.body !== afterPass.body || f.files !== afterPass.files),
+        redacted: !!(f.body && m.secret && state.leak), leaked: !!(f.body && m.secret && !state.leak) };
+    });
+    const nRed = got.filter(g => g.redacted).length, nLeak = got.filter(g => g.leaked).length;
+    const nPass = got.filter(g => g.passed).length, nBlock = got.filter(g => g.blocked).length;
+    const heldSecret = got.some(g => g.blocked && g.m.secret && !g.body);
+
+    $("chat").innerHTML = `<div class="bubble you">${esc(p.text)}</div><div class="bubble bot" id="bot"><span class="thinking"><i></i><i></i><i></i></span></div>`;
+    renderStack();
+
+    // 1 · ask
+    agentN(1);
+    lit("stAgent");
+    cap(1, `Your agent asks MailGent: <b>search “${esc(p.query)}”</b>. The request travels over a local MCP connection on this Mac.`);
+    dotTo($("slotAgent")); dot.classList.add("show");
+    later(80, () => dotTo($("slotScope")));
+
+    // 2 · check
+    later(750, () => {
+      lit("stScope");
+      cap(2, `MailGent checks the request against your grant. Allowed: <b>${Object.keys(BOX).filter(k => state.boxes[k]).map(k => BOX[k].label).join(", ") || "nothing"}</b>, ${esc(state.fields === "headers" ? "headers only" : state.fields === "read" ? "headers + text" : "everything")}.`);
+    });
+
+    // 3 · read
+    later(1450, () => {
+      lit("stMail");
+      dotTo($("slotMail"));
+      cap(3, `It reads only matching mail from its local copy of Apple Mail: <b>${matched.length} message${matched.length === 1 ? "" : "s"}</b> mention${matched.length === 1 ? "s" : ""} this.`);
+    });
+    later(2000, () => {
+      dot.classList.remove("show");
+      renderStack(matched.map(m => m.id));
+      matched.forEach((m, i) => {
+        const env = document.createElement("div");
+        env.className = "env"; env.style.setProperty("--c", BOX[m.box].c); env.innerHTML = envHTML(m);
+        const r = rel($("slotMail").querySelector(`[data-id="${m.id}"]`));
+        env.style.transform = `translate(${r.x}px, ${r.y}px) scale(0.3)`; env.style.opacity = 0;
+        sky.appendChild(env); flyers.push(env); env.dataset.m = m.id;
+      });
+    });
+    later(2150, () => {
+      busy("slotScope", true);
+      flyers.forEach((env, i) => { env.style.opacity = 1; moveTo(env, $("slotScope"), i, flyers.length); });
+    });
+
+    // 4a · scope gate
+    later(2850, () => {
+      lit("stScope");
+      const dropped = matched.filter(m => !state.boxes[m.box]);
+      flyers.filter(e => dropped.some(m => m.id === e.dataset.m)).forEach(dropEnv);
+      flash(flyers.filter(e => !dropped.some(m => m.id === e.dataset.m)));
+      cap(2, dropped.length
+        ? `<b>${dropped.length} dropped.</b> ${dropped.map(m => BOX[m.box].label).filter((v, i, a) => a.indexOf(v) === i).join(", ")} isn't in the grant, so for the agent that mail doesn't exist.`
+        : `Everything that matched is inside the grant. <b>${kept.length} message${kept.length === 1 ? "" : "s"}</b> go${kept.length === 1 ? "es" : ""} on.`);
+    });
+    later(3550, () => {
+      flyers = flyers.filter(e => kept.some(m => m.id === e.dataset.m));
+      sky.querySelectorAll(".env").forEach(e => { if (!flyers.includes(e)) e.remove(); });
+      busy("slotScope", false);
+      if (!kept.length) return finish();
+      busy("slotFields", true);
+      flyers.forEach((env, i) => moveTo(env, $("slotFields"), i, flyers.length));
+    });
+
+    // 4b · field caps
+    later(4200, () => {
+      if (!kept.length) return;
+      lit("stFields");
+      flyers.forEach(e => { e.classList.toggle("headers", !withBody); e.classList.toggle("noclip", !withFiles); });
+      flash(flyers);
+      cap(4, FIELD_CAP[state.fields]);
+    });
+    later(4950, () => {
+      if (!kept.length) return;
+      busy("slotFields", false); busy("slotRules", true);
+      flyers.forEach((env, i) => moveTo(env, $("slotRules"), i, flyers.length));
+    });
+
+    // 4c · Pass / Block rules
+    later(5600, () => {
+      if (!kept.length) return;
+      lit("stRules");
+      flyers.forEach(e => {
+        const g = got.find(x => x.m.id === e.dataset.m);
+        e.classList.toggle("passed", g.passed); e.classList.toggle("blocked", g.blocked);
+        if (g.passed && g.file === "ok") e.classList.remove("noclip");
+        if (g.blocked) e.classList.add("noclip");
+      });
+      flash(flyers);
+      const hitNoEffect = got.some(g => (g.passHit && !g.passed) || (g.blockHit && !g.blocked));
+      const parts = [];
+      if (nPass) parts.push(`<b>Pass A</b> reveals attachments on ${nPass} message${nPass === 1 ? "" : "s"}`);
+      if (nBlock) parts.push(`<b>Block B</b> withholds the text of ${nBlock} message${nBlock === 1 ? "" : "s"}`);
+      cap(4, parts.length ? `Rules: ${parts.join(" · ")}. Rules only adjust fields on mail Scope already allows${nBlock ? ", and Block always wins" : ""}.`
+        : hitNoEffect ? `A rule matched but changes nothing here: the field caps already cover it, so it isn't counted.`
+        : RULES.some(r => r.on) ? `No rule matches these messages. Rules only adjust fields on mail Scope already allows.`
+        : `No rules switched on. Pass and Block rules fine-tune fields per sender or subject.`);
+    });
+    later(6350, () => {
+      if (!kept.length) return;
+      busy("slotRules", false); busy("slotLeak", true);
+      flyers.forEach((env, i) => moveTo(env, $("slotLeak"), i, flyers.length));
+    });
+
+    // 4d · leak guard
+    later(7000, () => {
+      if (!kept.length) return;
+      lit("stLeak");
+      flyers.forEach(e => {
+        const g = got.find(x => x.m.id === e.dataset.m);
+        e.classList.toggle("redacted", g.redacted); e.classList.toggle("leaked", g.leaked);
+        const bar = e.querySelector(".bar.secret");
+        if (bar) bar.textContent = g.redacted ? "REDACTED" : g.m.secret;
+      });
+      flash(flyers);
+      cap(4, nRed ? `Leak guard scans the text on your Mac and <b>redacts ${nRed} secret${nRed === 1 ? "" : "s"}</b> before anything leaves.`
+        : nLeak ? `<b>Leak guard is off.</b> A deploy key and password pass through in plain text.`
+        : heldSecret ? `Nothing to redact: the only secret was in text a rule already withheld.`
+        : !withBody ? `Nothing to scan: no message text is going through.`
+        : `Leak guard scanned the text and found nothing to hide.`);
+    });
+    later(7750, () => {
+      if (!kept.length) return;
+      busy("slotLeak", false); busy("slotAgent", true);
+      flyers.forEach((env, i) => moveTo(env, $("slotAgent"), i, flyers.length));
+    });
+
+    // 5 · return
+    later(8400, () => { if (kept.length) finish(); });
+
+    function finish() {
+      agentN(5);
+      lit("stAgent");
+      const bot = $("bot");
+      bot.textContent = answer(p, got);
+      bot.classList.toggle("warn", nLeak > 0);
+      cap(5, kept.length ? `The agent receives <b>your slice: ${kept.length} message${kept.length === 1 ? "" : "s"}</b>, and nothing else. It can draft inside MailGent, but can't send.`
+        : `The agent receives <b>nothing</b>. It knows a search happened and returned no results.`);
+      later(650, () => {
+        lit(); done = true;
+        cap("✓", `The whole exchange is written to the <b>Access log</b>, exactly as the agent received it.`, "ok");
+        log(p, kept.length, got, nRed, nLeak, nPass, nBlock);
+      });
+    }
+  }
+
+  function log(p, n, got, nRed, nLeak, nPass, nBlock) {
+    const hm = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const calls = [`<span class="call"><b>search</b> “${esc(p.query)}” → ${n}</span>`];
+    if (n) calls.push(`<span class="call"><b>get</b> ×${n}${state.fields === "headers" ? " · body not granted" : ""}</span>`);
+    const files = got.filter(g => g.file === "ok").length;
+    if (files) calls.push(`<span class="call"><b>get_attachment</b> ×${files}</span>`);
+    if (p.id === "work" && got.some(g => g.m.id === "m3" && g.body)) calls.push(`<span class="call"><b>create_draft</b> · not sent</span>`);
+    if (nPass) calls.push(`<span class="call pass">✓ pass ×${nPass}</span>`);
+    if (nBlock) calls.push(`<span class="call block">− block ×${nBlock}</span>`);
+    if (nRed) calls.push(`<span class="call leak">${SHIELD} ${nRed} redacted</span>`);
+    if (nLeak) calls.push(`<span class="call bad">⚠ ${nLeak} secret in clear</span>`);
+    const ol = $("ledger");
+    ol.querySelector(".empty")?.remove();
+    ol.insertAdjacentHTML("afterbegin", `<li><span class="t">${hm}</span><span class="who">${CURSOR}Cursor</span><span class="calls">${calls.join("")}</span></li>`);
+    entries++;
+    $("cnt").textContent = `${entries} ${entries === 1 ? "entry" : "entries"}`;
+  }
+
+  function rerun() { if (state.active) ask(state.active); }
+
+  /* ---------- controls ---------- */
+  $("seg").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    state.fields = b.dataset.v;
+    $("seg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    rerun();
+  }));
+  $("leak").addEventListener("change", e => { state.leak = e.target.checked; $("leakLbl").classList.toggle("off", !state.leak); rerun(); });
+  $("replay").addEventListener("click", rerun);
+  addEventListener("resize", () => { if (done) flyers.forEach((env, i) => moveTo(env, $("slotAgent"), i, flyers.length)); });
+
+  renderPrompts();
+  renderStack();
+  renderChips();
+  renderRules();
+})();
+</script>
+</body>
+</html>
