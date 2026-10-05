@@ -4,7 +4,7 @@
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
-**Interactive demo:** open [`demo.html`](demo.html) in a browser (needs `assets/` next to it), or the live site at [marotron.github.io/MailGent](https://marotron.github.io/MailGent/) — watch one agent request walk through Scope → Fields → Rules → Leak guard.
+**Interactive demo:** open [`demo.html`](demo.html) in a browser (needs `assets/` next to it) to watch one agent request walk through Scope → Fields → Rules → Leak guard. A GitHub Pages mirror is wired on the `gh-pages` branch ([settings](https://github.com/marotron/MailGent/settings/pages)); once GitHub finishes the Pages deploy it will be at [marotron.github.io/MailGent](https://marotron.github.io/MailGent/).
 
 ## Screenshots
 
