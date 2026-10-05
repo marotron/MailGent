@@ -4,18 +4,43 @@
 
 This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local-read, loopback MCP, grants, audit, in-memory draft ledger). Locked v1 still needs Gmail/Yahoo OAuth, mutation approvals, send/trash/hard-delete, remote agents, smart folders, and distribution.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/menu-bar.png" alt="Menu-bar status"><br><b>Menu bar</b> — access, last ingest, connected agents, last agent call.</td>
+    <td width="50%"><img src="docs/screenshots/control-center.png" alt="Control center"><br><b>Control center</b> — access health, ingest stats, one card per paired agent.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/grant-desk-scope.png" alt="Grant Desk Scope"><br><b>Grant Desk · Scope</b> — allowed placements per agent, field caps, leak guard.</td>
+    <td><img src="docs/screenshots/grant-desk-access.png" alt="Grant Desk Access"><br><b>Grant Desk · Access</b> — per-placement fields, presets, preview with leak guard applied.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/grant-desk-rules.png" alt="Pass and Block rules"><br><b>Shared · Rules</b> — Pass / Block overlays by From and Subject.</td>
+    <td><img src="docs/screenshots/grant-desk-privacy.png" alt="Leak guard detectors"><br><b>Shared · Privacy</b> — built-in detectors, custom filters, hit modes.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/access-log.png" alt="Access log"><br><b>Access Log</b> — every agent call, with leak-guard and rule hit counts.</td>
+    <td><img src="docs/screenshots/access-log-json-pretty.png" alt="Access log JSON response"><br><b>Access Log · JSON</b> — the exact response the agent received.</td>
+  </tr>
+</table>
+
+More in [`docs/screenshots/`](docs/screenshots/). Personal data in the screenshots (addresses, account IDs, search terms) is replaced with sample values.
+
 ## This release
 
 - Apple Mail `.emlx` local-read from `~/Library/Mail`
 - On-device SQLite FTS
 - Incremental ingest reports arrivals vs removals (`+44 −2277 → −2233`); Trash/Junk copies are not counted as new
 - Menu status times sit in chips; Changes shows the ingest window as `12:15–12:31 (16m)` (yesterday or the date when that window is not today); Last agent call uses clock + elapsed like Last ingest
-- One paired `machine-local` agent on loopback `http://127.0.0.1:8788/mcp` (8787 reserved for Cursor OAuth callbacks)
+- Multiple `machine-local` agents (Cursor, Grok Bot), each with its own Bearer, on loopback `http://127.0.0.1:8788/mcp` (8787 reserved for Cursor OAuth callbacks)
 - Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments
+- Rules: Pass / Block field overlays on already-allowed mail (From/Subject match, optional When date window)
 - Outbound leak guard: on-device subject/body scan before agents receive mail (opt in per placement; built-in + custom rules)
-- Append-only access log (sanitized/withheld field overlays)
+- `get_attachment`: attachment bytes as a local temp file when the grant allows Attachment Content (25 MiB cap)
+- Access log of every agent call, showing exactly what the agent received (sanitized/withheld field overlays). Agents cannot edit it; you can delete entries in Settings
 - Open in Apple Mail from Companion Read and Access Log previews (`message://` Message-ID handoff)
-- MailGent-owned draft ledger (in-memory; not written into Mail.app)
+- MailGent-owned draft ledger (in-memory; not written into Mail.app; no companion draft UI yet — drafts show in the Access Log)
 
 **Debug builds** default to fixture mail (and can switch to live Mail). **Release / production** builds use **live Mail only** — fixture is not offered and never planted. Live Mail needs a readable `~/Library/Mail` (Full Disk Access, or Choose Mail Folder…).
 
@@ -77,9 +102,11 @@ git push origin v0.1.8
 
 ## Pair agents
 
-In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL; each agent gets its own Bearer. Cursor can sync into `~/.cursor/mcp.json`; Grok Bot shows a copyable MCP snippet for the host to wire itself. Grants are independent per agent in Grant Desk.
+In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL; each agent gets its own Bearer. Grok Bot shows a copyable MCP snippet for the host to wire itself. Grants are independent per agent in Grant Desk.
 
-Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (source switch is off unless Settings allows it).
+On first launch with no saved pairing, MailGent pairs **Cursor** automatically. If `~/.cursor/mcp.json` exists, MailGent writes (and on revoke removes) a `mailgent` entry with the loopback URL and Cursor's Bearer. A new agent has no grants, so it sees no mail until you allow mailboxes in Grant Desk.
+
+Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `get_attachment`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (source switch is off unless Settings allows it).
 
 ## License
 
