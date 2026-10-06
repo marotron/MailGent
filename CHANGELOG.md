@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.10.0] - 2026-10-06
+
+### Added
+
+- MCP `open_in_mail` — open a granted message in Apple Mail from the MailGent process (`NSWorkspace`), same path as Companion Open in Apple Mail. Args match `get`; fails closed when Message-ID is missing or the opener is unavailable. Off by default; enable in Settings → General → **Allow agents to open messages in Apple Mail**.
+
+### Fixed
+
+- MCP `status` works while the index is still binding (no gateway yet), matching the tool’s documented indexing progress response.
+
 ## [0.8.2] - 2026-10-04
 
 ### Changed

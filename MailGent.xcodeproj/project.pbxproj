@@ -15,6 +15,7 @@
 		0C7301968CC929B458828409 /* OpenInMailGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969B803FFC0348F2B1D524E3 /* OpenInMailGlyph.swift */; };
 		0FE82B29B41F840FC45E43C7 /* MailStore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		13771BED0D84BBCA0EA39A67 /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
+		141F3AD2E07CAFEBDFD4FDF9 /* WorkspaceAppleMailOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C5F8B1E11BCC65F86DEEF8 /* WorkspaceAppleMailOpener.swift */; };
 		14D015808DE9EF4BEFA3116F /* PersistedPairingDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFB9B70A68078F3B0AA3AC90 /* PersistedPairingDocumentTests.swift */; };
 		1573478E39DB506C19875AE8 /* MailLibraryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 815D87541071517935ECCA01 /* MailLibraryAccess.swift */; };
 		16039F6CC83DA36012B97DCB /* CompanionFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD769090806F0A641969B4D /* CompanionFixture.swift */; };
@@ -205,6 +206,7 @@
 		C17826F359867E2023F73837 /* RuleEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleEngineTests.swift; sourceTree = "<group>"; };
 		C26E596BC3082684F009221C /* CompanionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSession.swift; sourceTree = "<group>"; };
 		C2F004EF060971BC18270103 /* ReadAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAPI.swift; sourceTree = "<group>"; };
+		C5C5F8B1E11BCC65F86DEEF8 /* WorkspaceAppleMailOpener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceAppleMailOpener.swift; sourceTree = "<group>"; };
 		C75F2A82AE11253A13A02AA7 /* MailGentLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailGentLog.swift; sourceTree = "<group>"; };
 		C9C4C0E6BD1754AB12EAD282 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
 		CB1AFCF3E8F6D950BF92F5A2 /* AuditLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLog.swift; sourceTree = "<group>"; };
@@ -348,6 +350,7 @@
 				969B803FFC0348F2B1D524E3 /* OpenInMailGlyph.swift */,
 				D630ADC66DDB31FC9C4BE691 /* PassDeskPane.swift */,
 				D46E33C5C81175285853B22F /* RootView.swift */,
+				C5C5F8B1E11BCC65F86DEEF8 /* WorkspaceAppleMailOpener.swift */,
 			);
 			path = MailGent;
 			sourceTree = "<group>";
@@ -599,6 +602,7 @@
 				0C7301968CC929B458828409 /* OpenInMailGlyph.swift in Sources */,
 				8C9F498B2E7159C45FEA825C /* PassDeskPane.swift in Sources */,
 				AEF71C91C5910871BC3F8F5B /* RootView.swift in Sources */,
+				141F3AD2E07CAFEBDFD4FDF9 /* WorkspaceAppleMailOpener.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -842,7 +846,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -857,7 +861,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.8.2;
+				MARKETING_VERSION = 0.10.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};
@@ -886,7 +890,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -901,7 +905,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.8.2;
+				MARKETING_VERSION = 0.10.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};

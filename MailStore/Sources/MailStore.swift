@@ -159,6 +159,12 @@ public enum AppleMailHandoff {
     }
 }
 
+/// Opens a message in Apple Mail. Implemented by the app (AppKit); MailStore stays Foundation-only.
+public protocol AppleMailOpening: Sendable {
+    /// Opens the message in Apple Mail. Returns false if the URL cannot be opened.
+    func openMessage(internetMessageID: String) -> Bool
+}
+
 public struct MailAttachment: Equatable, Hashable, Sendable, Codable {
     public let filename: String
     public let byteCount: Int

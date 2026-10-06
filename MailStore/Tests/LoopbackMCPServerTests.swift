@@ -536,12 +536,182 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"list_new\""))
         #expect(response.body.contains("\"name\":\"get\""))
         #expect(response.body.contains("\"name\":\"get_attachment\""))
+        #expect(response.body.contains("\"name\":\"open_in_mail\""))
         #expect(response.body.contains("\"name\":\"list_placements\""))
         #expect(!response.body.contains("\"name\":\"listNew\""))
         #expect(!response.body.contains("\"name\":\"listPlacements\""))
+        #expect(!response.body.contains("\"name\":\"openInMail\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
+    }
+
+    @Test func openInMailOpensGrantedMessage() async throws {
+        let opener = FakeAppleMailOpener(result: true)
+        let env = try LoopbackFixture(
+            appleMailOpener: opener,
+            agentMayOpenInMail: true,
+            internetMessageID: "<hello.42@example.com>"
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "open_in_mail",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        #expect((payload["opened"] as? NSNumber)?.boolValue == true)
+        #expect(payload["internetMessageID"] as? String == "<hello.42@example.com>")
+        #expect(payload["mailURL"] as? String == "message://%3Chello.42%40example.com%3E")
+        #expect(opener.openedIDs == ["<hello.42@example.com>"])
+        let opened = env.audit.entries().contains { entry in
+            entry.kind == .openInMail && entry.outcome == .ok
+        }
+        #expect(opened)
+    }
+
+    @Test func openInMailDeniedWhenSettingOff() async throws {
+        let opener = FakeAppleMailOpener(result: true)
+        let env = try LoopbackFixture(
+            appleMailOpener: opener,
+            agentMayOpenInMail: false,
+            internetMessageID: "<hello.42@example.com>"
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "open_in_mail",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("MailGent Settings"))
+        #expect(opener.openedIDs.isEmpty)
+        #expect(env.audit.entries().contains {
+            $0.kind == .openInMail && $0.outcome != .ok
+        })
+    }
+
+    @Test func openInMailFailsWhenMessageIDMissing() async throws {
+        let opener = FakeAppleMailOpener(result: true)
+        let env = try LoopbackFixture(appleMailOpener: opener, agentMayOpenInMail: true)
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "open_in_mail",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Message-ID"))
+        #expect(opener.openedIDs.isEmpty)
+        #expect(env.audit.entries().contains {
+            $0.kind == .openInMail && $0.outcome != .ok
+        })
+    }
+
+    @Test func openInMailFailsWhenOpenerUnset() async throws {
+        let env = try LoopbackFixture(
+            agentMayOpenInMail: true,
+            internetMessageID: "<hello.42@example.com>"
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "open_in_mail",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("opener"))
+        #expect(env.audit.entries().contains {
+            $0.kind == .openInMail && $0.outcome != .ok
+        })
+    }
+
+    @Test func openInMailFailsWhenOpenerReturnsFalse() async throws {
+        let opener = FakeAppleMailOpener(result: false)
+        let env = try LoopbackFixture(
+            appleMailOpener: opener,
+            agentMayOpenInMail: true,
+            internetMessageID: "<hello.42@example.com>"
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "open_in_mail",
+                    arguments: [
+                        "accountID": "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("did not open"))
+        #expect(opener.openedIDs == ["<hello.42@example.com>"])
+        let failed = env.audit.entries().contains { entry in
+            entry.kind == .openInMail && entry.outcome != .ok
+        }
+        #expect(failed)
     }
 
     @Test func authenticatedGetAttachmentReturnsPathJSON() async throws {
@@ -844,12 +1014,16 @@ private struct LoopbackFixture {
     init(
         bodyGranted: Bool = true,
         sourceController: (any MailSourceControlling)? = nil,
+        appleMailOpener: (any AppleMailOpening)? = nil,
+        agentMayOpenInMail: Bool = false,
+        internetMessageID: String? = nil,
         subject: String = "Invoice due",
         body: String = "Please pay",
         leakGuard: OutboundLeakGuard = OutboundLeakGuard()
     ) throws {
         root = try FixtureTree()
         let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let messageIDHeader = internetMessageID.map { "Message-ID: \($0)\n" } ?? ""
         try root.writeEmlx(
             named: "1.emlx",
             rfc822: """
@@ -858,7 +1032,7 @@ private struct LoopbackFixture {
             Cc: Finance <finance@example.com>
             Subject: \(subject)
             Date: Mon, 1 Jan 2024 00:00:00 +0000
-            Content-Type: text/plain
+            \(messageIDHeader)Content-Type: text/plain
 
             \(body)
             """,
@@ -891,7 +1065,12 @@ private struct LoopbackFixture {
             leakGuard: leakGuard,
             audit: audit
         )
-        server = LoopbackMCPServer(gateway: gateway, sourceController: sourceController)
+        server = LoopbackMCPServer(
+            gateway: gateway,
+            sourceController: sourceController,
+            appleMailOpener: appleMailOpener,
+            agentMayOpenInMail: agentMayOpenInMail
+        )
     }
 
     func remove() {
@@ -999,5 +1178,19 @@ private final class FakeMailSourceController: MailSourceControlling, @unchecked 
         guard agentMayChangeSource else { throw MailSourceError.denied }
         self.source = source
         return await snapshot()
+    }
+}
+
+private final class FakeAppleMailOpener: AppleMailOpening, @unchecked Sendable {
+    var openedIDs: [String] = []
+    var result: Bool
+
+    init(result: Bool) {
+        self.result = result
+    }
+
+    func openMessage(internetMessageID: String) -> Bool {
+        openedIDs.append(internetMessageID)
+        return result
     }
 }

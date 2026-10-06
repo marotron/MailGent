@@ -3,6 +3,7 @@ import SwiftUI
 struct MailGentSettingsView: View {
     @Bindable var session: CompanionSession
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
+    @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
     @AppStorage(MailGentPreferences.loopbackPortKey) private var loopbackPort =
         Int(MailGentPreferences.defaultLoopbackPort)
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
@@ -19,6 +20,9 @@ struct MailGentSettingsView: View {
                 .tabItem { Label("Access", systemImage: "lock.shield") }
         }
         .frame(width: 480, height: 600)
+        .onChange(of: agentMayOpenInMail) { _, _ in
+            session.agents.applyAgentMayOpenInMail()
+        }
         .onChange(of: loopbackPort) { _, newValue in
             let normalized = Int(MailGentPreferences.normalizedLoopbackPort(newValue))
             if normalized != newValue {
@@ -64,10 +68,20 @@ struct MailGentSettingsView: View {
     private var generalTab: some View {
         Form {
             Section("Agents") {
-                Toggle("Allow agents to change mail source", isOn: $agentMayChangeSource)
-                Text(agentMayChangeSourceHelp)
-                .foregroundStyle(.secondary)
-                .font(.callout)
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Allow agents to change mail source", isOn: $agentMayChangeSource)
+                    Text(agentMayChangeSourceHelp)
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Allow agents to open messages in Apple Mail", isOn: $agentMayOpenInMail)
+                    Text(
+                        "Off by default. When on, a paired agent may call MCP open_in_mail to open a granted message in Apple Mail."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
                 TextField("Loopback MCP port", value: $loopbackPort, format: .number.grouping(.never))
                 Text(session.agents.loopbackURL)
                     .foregroundStyle(.secondary)
