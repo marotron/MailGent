@@ -561,7 +561,7 @@ private struct AccessLogDetail: View {
             prettyPairList(pairs)
         } else if AccessLogFormat.isJSON(text) {
             Text(AccessLogFormat.prettyJSON(text))
-                .font(.callout.monospaced())
+                .font(.caption.monospaced())
                 .textSelection(.enabled)
         } else {
             prettyPairs(text)
@@ -751,7 +751,7 @@ private struct AccessLogDetail: View {
         let pairs = AccessLogFormat.pairs(text)
         if pairs.isEmpty {
             Text(text)
-                .font(.callout.monospaced())
+                .font(.caption)
                 .textSelection(.enabled)
         } else {
             prettyPairList(pairs)
@@ -766,7 +766,7 @@ private struct AccessLogDetail: View {
                 ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text("\(AccessLogFormat.prettyKey(pair.0)):")
-                            .font(.callout.monospaced())
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: true, vertical: false)
                         AccessLogJSONValueView(
@@ -1996,7 +1996,7 @@ private struct AccessLogJSONValueView: View {
                 accessBadge(value)
             default:
                 Text(AccessLogFormat.displayValue(key, value, accountLabel: accountLabel))
-                    .font(.callout.monospaced())
+                    .font(.caption)
                     .textSelection(.enabled)
             }
         }
@@ -2016,18 +2016,18 @@ private struct AccessLogJSONValueView: View {
                     original: original,
                     rules: leakGuard?.sanitizedRules,
                     stealth: leakGuard?.stealth == true,
-                    font: .callout.monospaced()
+                    font: .caption
                 )
             case .withheldConfidential:
                 WithheldLabel(original: original, rules: leakGuard?.sanitizedRules)
             default:
                 Text(AccessLogFormat.displayValue(key, text, accountLabel: accountLabel))
-                    .font(.callout.monospaced())
+                    .font(.caption)
                     .textSelection(.enabled)
             }
         } else {
             Text(AccessLogFormat.displayValue(key, text, accountLabel: accountLabel))
-                .font(.callout.monospaced())
+                .font(.caption)
                 .textSelection(.enabled)
         }
     }
@@ -2038,16 +2038,16 @@ private struct AccessLogJSONValueView: View {
             switch access {
             case .sanitized, .withheldConfidential:
                 Text(raw)
-                    .font(.callout.monospaced())
+                    .font(.caption)
                     .foregroundStyle(SanitizedFieldStyle.legend)
             default:
                 Text(raw)
-                    .font(.callout.monospaced())
+                    .font(.caption)
                     .textSelection(.enabled)
             }
         } else {
             Text(raw)
-                .font(.callout.monospaced())
+                .font(.caption)
                 .textSelection(.enabled)
         }
     }
