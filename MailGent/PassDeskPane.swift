@@ -163,7 +163,6 @@ struct PassDeskPane: View {
                             .font(.system(size: 9))
                             .foregroundStyle(.tertiary)
                         Spacer(minLength: 4)
-                        passAgentGlyphs(pass)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -182,7 +181,6 @@ struct PassDeskPane: View {
                 PassEditorForm(
                     pass: pass,
                     isEditing: isEditing,
-                    knownAgents: session.agents.knownAgentsForRules,
                     onChange: { session.agents.upsertRule($0) },
                     onDelete: {
                         session.agents.deleteRule(id: pass.id)
@@ -223,24 +221,6 @@ struct PassDeskPane: View {
         let n = session.agents.ruleUsageCount(ruleID)
         if n == 0 { return "Not used yet" }
         return n == 1 ? "Used on 1 placement" : "Used on \(n) placements"
-    }
-
-    @ViewBuilder
-    private func passAgentGlyphs(_ pass: GrantRule) -> some View {
-        if pass.agentIDs.isEmpty {
-            Image(systemName: "cpu")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .opacity(0.35)
-        } else {
-            HStack(spacing: 2) {
-                ForEach(pass.agentIDs, id: \.self) { agentID in
-                    let name = session.agents.knownAgentsForRules
-                        .first { $0.id == agentID }?.name ?? agentID
-                    AgentGlyph(name: name, size: 12)
-                }
-            }
-        }
     }
 }
 
@@ -335,7 +315,6 @@ private struct PassMatchSummary: View {
 private struct PassEditorForm: View {
     let pass: GrantRule
     var isEditing: Bool
-    var knownAgents: [(id: String, name: String)]
     var onChange: (GrantRule) -> Void
     var onDelete: () -> Void
 
@@ -350,7 +329,6 @@ private struct PassEditorForm: View {
     @State private var whenBefore = ""
     @State private var whenJoin: JoinOp = .and
     @State private var fields: GrantFields = GrantFields(envelope: false, body: true)
-    @State private var agentIDs: [String] = []
     @State private var fromDraftMode: MatchMode = .contains
     @State private var fromDraftValue = ""
     @State private var subjectDraftMode: MatchMode = .contains
@@ -415,7 +393,6 @@ private struct PassEditorForm: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             }
-            agentsRow
             HStack {
                 Button("Delete", role: .destructive, action: onDelete)
                     .disabled(!isEditing)
@@ -539,41 +516,6 @@ private struct PassEditorForm: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color.primary.opacity(0.18), lineWidth: 1)
         )
-    }
-
-    private var agentsRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Agents")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            if knownAgents.isEmpty {
-                Text("No agent paired yet.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(knownAgents, id: \.id) { agent in
-                    Toggle(isOn: Binding(
-                        get: { agentIDs.contains(agent.id) },
-                        set: { on in
-                            if on {
-                                if !agentIDs.contains(agent.id) { agentIDs.append(agent.id) }
-                            } else {
-                                agentIDs.removeAll { $0 == agent.id }
-                            }
-                            commit()
-                        }
-                    )) {
-                        HStack(spacing: 6) {
-                            AgentGlyph(name: agent.name, size: 14)
-                            Text(agent.name)
-                                .font(.caption)
-                        }
-                    }
-                    .toggleStyle(.checkbox)
-                    .disabled(!isEditing)
-                }
-            }
-        }
     }
 
     private var identityRow: some View {
@@ -720,7 +662,6 @@ private struct PassEditorForm: View {
         whenBefore = pass.when?.before ?? ""
         whenJoin = pass.whenJoin
         fields = pass.fields
-        agentIDs = pass.agentIDs
     }
 
     private func commit() {
@@ -742,7 +683,6 @@ private struct PassEditorForm: View {
         }
         next.whenJoin = whenJoin
         next.fields = fields
-        next.agentIDs = agentIDs
         onChange(next)
     }
 

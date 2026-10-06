@@ -456,16 +456,26 @@ final class AgentBridge {
         return rules.allRules()
     }
 
+    /// Rules enabled on a placement for the selected agent (definitions are shared; enablements are per-agent).
     func enabledRules(accountID: String, placement: String?) -> [GrantRule] {
         _ = ruleRevision
-        let agentID = selectedAgent?.id
+        guard let agentID = selectedAgent?.id else { return [] }
         return rules.allRules().filter { pass in
-            if let agentID, !pass.agentIDs.contains(agentID) { return false }
-            let exact = rules.isEnabled(ruleID: pass.id, accountID: accountID, placement: placement)
+            let exact = rules.isEnabled(
+                ruleID: pass.id,
+                agentID: agentID,
+                accountID: accountID,
+                placement: placement
+            )
             if exact { return true }
             // Account-wide enablement also covers specific mailboxes.
             if placement != nil {
-                return rules.isEnabled(ruleID: pass.id, accountID: accountID, placement: nil)
+                return rules.isEnabled(
+                    ruleID: pass.id,
+                    agentID: agentID,
+                    accountID: accountID,
+                    placement: nil
+                )
             }
             return false
         }
@@ -474,11 +484,18 @@ final class AgentBridge {
 
     func isRuleEnabled(ruleID: String, accountID: String, placement: String?) -> Bool {
         _ = ruleRevision
-        return rules.isEnabled(ruleID: ruleID, accountID: accountID, placement: placement)
+        guard let agentID = selectedAgent?.id else { return false }
+        return rules.isEnabled(
+            ruleID: ruleID,
+            agentID: agentID,
+            accountID: accountID,
+            placement: placement
+        )
     }
 
-    /// Toggle exact placement enablement; if only inherited account-wide, clears that.
+    /// Toggle exact placement enablement for the selected agent; if only inherited account-wide, clears that.
     func toggleRuleEnabled(ruleID: String, accountID: String, placement: String?) {
+        guard selectedAgent?.id != nil else { return }
         let currentlyOn = enabledRules(accountID: accountID, placement: placement)
             .contains { $0.id == ruleID }
         if currentlyOn {
@@ -494,7 +511,10 @@ final class AgentBridge {
 
     func ruleUsageCount(_ ruleID: String) -> Int {
         _ = ruleRevision
-        return rules.allEnablements().filter { $0.ruleID == ruleID }.count
+        let keys = rules.allEnablements()
+            .filter { $0.ruleID == ruleID }
+            .map { "\($0.accountID)|\($0.placement ?? "*")" }
+        return Set(keys).count
     }
 
     func nextRuleNick() -> String {
@@ -518,7 +538,14 @@ final class AgentBridge {
         accountID: String,
         placement: String?
     ) {
-        rules.setEnabled(enabled, ruleID: ruleID, accountID: accountID, placement: placement)
+        guard let agentID = selectedAgent?.id else { return }
+        rules.setEnabled(
+            enabled,
+            ruleID: ruleID,
+            agentID: agentID,
+            accountID: accountID,
+            placement: placement
+        )
         noteRulesChanged()
     }
 
@@ -540,14 +567,8 @@ final class AgentBridge {
                     attachmentMetadata: true,
                     attachmentContent: true
                 )
-                : GrantFields(envelope: false, body: true),
-            agentIDs: selectedAgent.map { [$0.id] } ?? pairedAgents.first.map { [$0.id] } ?? []
+                : GrantFields(envelope: false, body: true)
         )
-    }
-
-    /// Agents available to assign on a rule definition.
-    var knownAgentsForRules: [(id: String, name: String)] {
-        pairedAgents.map { ($0.id, $0.name) }
     }
 
     private func noteRulesChanged() {
@@ -931,6 +952,8 @@ final class AgentBridge {
             ruleRevision += 1
             clearPersistedRules()
         } else {
+            rules.removeEnablements(agentID: agentID)
+            noteRulesChanged()
             persistPairing()
             persistGrants(reason: .revokeAgent, dropAgentIDs: [agentID])
             refreshGrantRows()
@@ -1129,8 +1152,15 @@ final class AgentBridge {
             ruleRevision &+= 1
             return
         }
-        rules.replace(with: snapshot)
+        let migrated = RuleStore.migrateLegacySharedEnablements(
+            snapshot,
+            agentIDs: pairedAgents.map(\.id)
+        )
+        rules.replace(with: migrated)
         ruleRevision &+= 1
+        if migrated != snapshot {
+            persistRules()
+        }
     }
 
     private func persistRules() {
