@@ -494,6 +494,44 @@ struct ReadAPITests {
         #expect(detail["body"] as? String == "Viewing Sat 6 Sep 14:30")
     }
 
+    @Test func messageDetailIncludesMailURLWhenMessageIDPresent() {
+        let indexed = IndexedMessage(
+            id: "42",
+            accountID: "acc-1",
+            placement: "INBOX",
+            from: "a@example.com",
+            to: "b@example.com",
+            cc: "",
+            date: "2024-01-01T00:00:00Z",
+            subject: "Hello",
+            body: "Hi",
+            isPartial: false
+        )
+        let message = ReadMessage(indexed, internetMessageID: "<hello.42@example.com>")
+        let detail = AuditJSON.messageDetail(message)
+        #expect(detail["internetMessageID"] as? String == "<hello.42@example.com>")
+        #expect(detail["mailURL"] as? String == "message://%3Chello.42%40example.com%3E")
+    }
+
+    @Test func messageDetailOmitsMailURLWhenMessageIDMissing() {
+        let indexed = IndexedMessage(
+            id: "42",
+            accountID: "acc-1",
+            placement: "INBOX",
+            from: "a@example.com",
+            to: "b@example.com",
+            cc: "",
+            date: "2024-01-01T00:00:00Z",
+            subject: "Hello",
+            body: "Hi",
+            isPartial: false
+        )
+        let message = ReadMessage(indexed)
+        let detail = AuditJSON.messageDetail(message)
+        #expect(detail["internetMessageID"] == nil)
+        #expect(detail["mailURL"] == nil)
+    }
+
     @Test func getIncludesInlineMIMEAttachmentMetadata() throws {
         let root = try FixtureTree()
         defer { root.remove() }

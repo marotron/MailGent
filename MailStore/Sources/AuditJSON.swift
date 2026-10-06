@@ -90,6 +90,14 @@ enum AuditJSON {
             "date": message.date,
             "isPartial": message.isPartial
         ]
+        let trimmedMessageID = message.internetMessageID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedMessageID.isEmpty {
+            payload["internetMessageID"] = trimmedMessageID
+        }
+        if let mailURL = AppleMailHandoff.messageURL(internetMessageID: message.internetMessageID) {
+            payload["mailURL"] = mailURL.absoluteString
+        }
         if let access = message.leakGuardAccess {
             payload["subjectAccess"] = access.subjectAccess.rawValue
             if let reason = access.subjectAccessReason {

@@ -8,8 +8,11 @@ Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called o
 
 ## [0.10.0] - 2026-10-06
 
+Follows **0.8.2** (**0.9.0** was skipped). Notes below are the full user-facing delta for that jump.
+
 ### Added
 
+- MCP `get` returns `mailURL` (`message://…`) and `internetMessageID` when the message has an RFC Message-ID, so agents can hand the human an Apple Mail deep link (fail closed when the header is missing).
 - MCP `open_in_mail` — open a granted message in Apple Mail from the MailGent process (`NSWorkspace`), same path as Companion Open in Apple Mail. Args match `get`; fails closed when Message-ID is missing or the opener is unavailable. Off by default; enable in Settings → General → **Allow agents to open messages in Apple Mail**.
 
 ### Fixed
