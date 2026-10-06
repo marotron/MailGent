@@ -47,7 +47,9 @@ public struct LoopbackMCPServer {
         gateway: AgentReadAPI,
         ledger: DraftLedger = DraftLedger(),
         indexUpdater: (any IndexUpdating)? = nil,
-        sourceController: (any MailSourceControlling)? = nil
+        sourceController: (any MailSourceControlling)? = nil,
+        appleMailOpener: (any AppleMailOpening)? = nil,
+        agentMayOpenInMail: Bool = false
     ) {
         let box = LoopbackHost(
             pairing: gateway.pairing,
@@ -57,6 +59,8 @@ public struct LoopbackMCPServer {
         )
         box.setGateway(gateway, indexUpdater: indexUpdater ?? LocalIndexUpdater(index: gateway.read.index))
         box.setSourceController(sourceController)
+        box.setAppleMailOpener(appleMailOpener)
+        box.setAgentMayOpenInMail(agentMayOpenInMail)
         box.setIndexState(
             LoopbackIndexSnapshot(
                 phase: .ready,
@@ -110,7 +114,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.8.2"
+                        "version": "0.10.0"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -183,6 +187,10 @@ public struct LoopbackMCPServer {
         arguments: [String: Any],
         credential: String?
     ) async throws -> String {
+        // status must work while indexing even before a gateway is bound.
+        if name == "status" {
+            return try await statusTool(credential: credential)
+        }
         guard let gateway = host.readGateway() else {
             throw CallError.indexNotReady
         }
@@ -288,8 +296,8 @@ public struct LoopbackMCPServer {
                 )
             }
             return try jsonString(AuditJSON.version(version))
-        case "status":
-            return try await statusTool(credential: credential)
+        case "open_in_mail", "openInMail":
+            return try openInMail(arguments: arguments, credential: credential)
         case "set_source":
             return try await setSource(arguments: arguments, credential: credential)
         case "update":
@@ -301,6 +309,120 @@ public struct LoopbackMCPServer {
         default:
             throw CallError.unknownTool
         }
+    }
+
+    private func openInMail(arguments: [String: Any], credential: String?) throws -> String {
+        guard let gateway = host.readGateway() else {
+            throw CallError.indexNotReady
+        }
+        guard
+            let accountID = arguments["accountID"] as? String,
+            let placement = arguments["placement"] as? String,
+            let id = arguments["id"] as? String
+        else {
+            throw CallError.badArguments
+        }
+        let started = Date()
+        let agent = try gateway.authenticate(credential)
+        let request = AuditJSON.request([
+            "accountID": accountID,
+            "placement": placement,
+            "id": id
+        ])
+        guard host.readAgentMayOpenInMail() else {
+            recordOpenInMailFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: "\(accountID)/\(placement)/\(id)",
+                error: CallError.openDenied
+            )
+            throw CallError.openDenied
+        }
+        // Reuse get for Scope + leak-guard envelope access (also audits as get).
+        let message = try gateway.get(
+            credential: credential,
+            accountID: accountID,
+            placement: placement,
+            id: id
+        )
+        let internetMessageID = message.internetMessageID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !internetMessageID.isEmpty,
+              let mailURL = AppleMailHandoff.messageURL(internetMessageID: internetMessageID)
+        else {
+            recordOpenInMailFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: "\(accountID)/\(placement)/\(id)",
+                error: CallError.missingMessageID
+            )
+            throw CallError.missingMessageID
+        }
+        guard let opener = host.readAppleMailOpener() else {
+            recordOpenInMailFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: "\(accountID)/\(placement)/\(id)",
+                error: CallError.openerNotBound
+            )
+            throw CallError.openerNotBound
+        }
+        guard opener.openMessage(internetMessageID: internetMessageID) else {
+            recordOpenInMailFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: "\(accountID)/\(placement)/\(id)",
+                error: CallError.openFailed
+            )
+            throw CallError.openFailed
+        }
+        let payload: [String: Any] = [
+            "opened": true,
+            "accountID": accountID,
+            "placement": placement,
+            "id": id,
+            "internetMessageID": internetMessageID,
+            "mailURL": mailURL.absoluteString
+        ]
+        host.audit?.append(
+            AuditEntry(
+                kind: .openInMail,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: "\(accountID)/\(placement)/\(id)",
+                at: started,
+                finishedAt: Date(),
+                requestSummary: request,
+                responseSummary: AuditJSON.json(payload)
+            )
+        )
+        return try jsonString(payload)
+    }
+
+    private func recordOpenInMailFailure(
+        agent: PairedAgent,
+        started: Date,
+        request: String,
+        detail: String,
+        error: CallError
+    ) {
+        host.audit?.append(
+            AuditEntry(
+                kind: .openInMail,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: detail,
+                at: started,
+                finishedAt: Date(),
+                requestSummary: request,
+                responseSummary: AuditJSON.json(["error": error.description]),
+                outcome: .error(error.description)
+            )
+        )
     }
 
     private func statusTool(credential: String?) async throws -> String {
@@ -437,10 +559,33 @@ public struct LoopbackMCPServer {
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    private enum CallError: Error {
+    private enum CallError: Error, CustomStringConvertible {
         case badArguments
         case indexNotReady
         case unknownTool
+        case missingMessageID
+        case openerNotBound
+        case openFailed
+        case openDenied
+
+        var description: String {
+            switch self {
+            case .badArguments:
+                return "bad_arguments"
+            case .indexNotReady:
+                return "index_not_ready"
+            case .unknownTool:
+                return "unknown_tool"
+            case .missingMessageID:
+                return "Message has no RFC Message-ID Apple Mail can open."
+            case .openerNotBound:
+                return "Apple Mail opener is not available (MailGent app host required)."
+            case .openFailed:
+                return "Apple Mail did not open the message."
+            case .openDenied:
+                return "Opening in Apple Mail is disabled. Enable it in MailGent Settings → General."
+            }
+        }
     }
 
     private static func makeToolDescriptors() -> [[String: Any]] {
@@ -515,6 +660,20 @@ public struct LoopbackMCPServer {
                         "filename": ["type": "string", "description": "Attachment filename from get"]
                     ],
                     "required": ["accountID", "placement", "id", "filename"]
+                ]
+            ],
+            [
+                "name": "open_in_mail",
+                "description":
+                    "Open a granted message in Apple Mail on this Mac (same as Companion Open in Apple Mail). Denied unless enabled in MailGent Settings → General. Use after search/list when the human needs to reply or view that exact message. Args match get. Does not send mail or create a draft. Fails if the message has no RFC Message-ID.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "accountID": ["type": "string"],
+                        "placement": ["type": "string"],
+                        "id": ["type": "string"]
+                    ],
+                    "required": ["accountID", "placement", "id"]
                 ]
             ],
             [

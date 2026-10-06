@@ -8,6 +8,7 @@ public enum AuditKind: String, Codable, Equatable, Hashable, Sendable {
     case listPlacements
     case get
     case getAttachment = "get_attachment"
+    case openInMail = "open_in_mail"
     case createDraft
     case updateDraft
     case updateIndex

@@ -103,8 +103,8 @@ final class AgentBridge {
 
     static func isAgentRequest(_ kind: AuditKind) -> Bool {
         switch kind {
-        case .search, .list, .listNew, .listPlacements, .get, .getAttachment, .createDraft, .updateDraft,
-            .updateIndex, .status, .setSource:
+        case .search, .list, .listNew, .listPlacements, .get, .getAttachment, .openInMail, .createDraft,
+            .updateDraft, .updateIndex, .status, .setSource:
             return true
         case .pair, .revoke:
             return false
@@ -774,6 +774,10 @@ final class AgentBridge {
         makeLoopbackHost().setSourceController(sourceController)
     }
 
+    func applyAgentMayOpenInMail() {
+        makeLoopbackHost().setAgentMayOpenInMail(MailGentPreferences.agentMayOpenInMail)
+    }
+
     func detachIndex(state: LoopbackIndexSnapshot) {
         let host = makeLoopbackHost()
         host.setGateway(nil, indexUpdater: nil)
@@ -838,6 +842,8 @@ final class AgentBridge {
             grants: grants,
             ledger: ledger
         )
+        host.setAppleMailOpener(WorkspaceAppleMailOpener())
+        host.setAgentMayOpenInMail(MailGentPreferences.agentMayOpenInMail)
         loopbackHost = host
         return host
     }

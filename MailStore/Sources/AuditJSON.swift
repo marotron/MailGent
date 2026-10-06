@@ -207,6 +207,7 @@ extension AuditKind {
         case "list_placements", "listPlacements": self = .listPlacements
         case "get": self = .get
         case "get_attachment": self = .getAttachment
+        case "open_in_mail", "openInMail": self = .openInMail
         case "create_draft": self = .createDraft
         case "update_draft": self = .updateDraft
         case "status": self = .status

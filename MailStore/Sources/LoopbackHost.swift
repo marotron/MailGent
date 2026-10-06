@@ -11,6 +11,9 @@ public final class LoopbackHost: @unchecked Sendable {
     private var gateway: AgentReadAPI?
     private var indexUpdater: (any IndexUpdating)?
     private var sourceController: (any MailSourceControlling)?
+    private var appleMailOpener: (any AppleMailOpening)?
+    /// Off by default — agents may call MCP `open_in_mail` only when the companion enables it.
+    private var agentMayOpenInMail = false
     private var indexState = LoopbackIndexSnapshot.notStarted
 
     public init(
@@ -53,6 +56,18 @@ public final class LoopbackHost: @unchecked Sendable {
         return sourceController
     }
 
+    public func readAppleMailOpener() -> (any AppleMailOpening)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return appleMailOpener
+    }
+
+    public func readAgentMayOpenInMail() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return agentMayOpenInMail
+    }
+
     public func setGateway(_ gateway: AgentReadAPI?, indexUpdater: (any IndexUpdating)?) {
         lock.lock()
         self.gateway = gateway
@@ -63,6 +78,18 @@ public final class LoopbackHost: @unchecked Sendable {
     public func setSourceController(_ sourceController: (any MailSourceControlling)?) {
         lock.lock()
         self.sourceController = sourceController
+        lock.unlock()
+    }
+
+    public func setAppleMailOpener(_ opener: (any AppleMailOpening)?) {
+        lock.lock()
+        self.appleMailOpener = opener
+        lock.unlock()
+    }
+
+    public func setAgentMayOpenInMail(_ allowed: Bool) {
+        lock.lock()
+        agentMayOpenInMail = allowed
         lock.unlock()
     }
 

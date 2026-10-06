@@ -1607,6 +1607,7 @@ enum AccessLogFormat {
         switch kind {
         case .get: "Fetch one message."
         case .getAttachment: "Fetch one attachment’s file bytes."
+        case .openInMail: "Open a message in Apple Mail."
         case .search: "Search messages."
         case .list: "List messages."
         case .listNew: "List new messages."
