@@ -13,6 +13,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Install XcodeGen
         run: |
@@ -41,5 +43,6 @@ jobs:
           name: ${{ steps.release.outputs.title }}
           body_path: dist/RELEASE_NOTES.md
           files: dist/MailGent-*.dmg
-          generate_release_notes: true
+          # Notes come from CHANGELOG via Scripts/release/notes.sh (handles skipped semvers).
+          generate_release_notes: false
           prerelease: true
