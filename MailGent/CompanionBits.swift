@@ -813,10 +813,16 @@ struct CompanionStatusCopy {
 
     var source: String { session.source.title }
 
-    var connectedAgent: String { session.agents.connectedAgentLabel }
+    var connectedAgentNames: [String] {
+        session.agents.pairedAgents.map(\.name)
+    }
 
-    var lastAgentKind: String {
-        session.agents.lastAgentRequest?.kind.rawValue ?? "—"
+    var lastAgentKind: AuditKind? {
+        session.agents.lastAgentRequest?.kind
+    }
+
+    var lastAgentKindLabel: String {
+        lastAgentKind?.badgeTitle ?? "—"
     }
 
     var lastAgentClock: String? {
@@ -830,8 +836,8 @@ struct CompanionStatusCopy {
     }
 
     var lastAgentCall: String {
-        guard let clock = lastAgentClock, let relative = lastAgentRelative else { return lastAgentKind }
-        return "\(lastAgentKind) \(clock) \(relative)"
+        guard let clock = lastAgentClock, let relative = lastAgentRelative else { return lastAgentKindLabel }
+        return "\(lastAgentKindLabel) \(clock) \(relative)"
     }
 
     nonisolated static func relativeAge(from date: Date, to now: Date) -> String {
@@ -928,13 +934,18 @@ struct LastIngestValue: View {
     }
 }
 
-/// Kind plus clock and relative-age chip — same time layout as last ingest.
+/// Access-log kind badge plus clock and relative-age chip — same time layout as last ingest.
 struct LastAgentCallValue: View {
     let copy: CompanionStatusCopy
 
     var body: some View {
         HStack(alignment: .center, spacing: 6) {
-            Text(copy.lastAgentKind)
+            if let kind = copy.lastAgentKind {
+                AuditKindBadge(kind: kind, compact: true)
+                    .fixedSize()
+            } else {
+                Text("—")
+            }
             if let clock = copy.lastAgentClock {
                 ClockAndAgeValue(clock: clock, relative: copy.lastAgentRelative)
             }
@@ -942,6 +953,47 @@ struct LastAgentCallValue: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(copy.lastAgentCall)
+    }
+}
+
+/// Paired agents as icon glyphs (Access Log / Grant Desk marks).
+struct ConnectedAgentsValue: View {
+    let names: [String]
+
+    var body: some View {
+        Group {
+            if names.isEmpty {
+                Text("—")
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(Array(names.enumerated()), id: \.offset) { _, name in
+                        HStack(spacing: 4) {
+                            AgentGlyph(name: name, size: 14)
+                            Text(shortName(name))
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func shortName(_ name: String) -> String {
+        if name.compare("Grok Bot", options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+            return "Grok"
+        }
+        return name
+    }
+
+    private var accessibilityLabel: String {
+        switch names.count {
+        case 0: return "None"
+        case 1: return names[0]
+        default: return names.joined(separator: ", ")
+        }
     }
 }
 
@@ -1022,7 +1074,12 @@ struct CompanionStatusMetrics: View {
                         .fontWeight(session.source == .fixture ? .semibold : .regular)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                row("Connected agent", copy.connectedAgent)
+                HStack(alignment: .center, spacing: 8) {
+                    Text("Connected agent")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 118, alignment: .leading)
+                    ConnectedAgentsValue(names: copy.connectedAgentNames)
+                }
                 HStack(alignment: .center, spacing: 8) {
                     Text("Last agent call")
                         .foregroundStyle(.secondary)
@@ -1031,16 +1088,6 @@ struct CompanionStatusMetrics: View {
                 }
             }
             .font(.callout)
-        }
-    }
-
-    private func row(_ title: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .foregroundStyle(.secondary)
-                .frame(width: 118, alignment: .leading)
-            Text(value)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
