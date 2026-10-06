@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.10.3] - 2026-10-06
+
+### Changed
+
+- Rules are shared definitions (no per-rule agent list). Scope/Access chips enable a rule per agent on a placement; overlays apply only for that agent’s enablement. Legacy shared enablements expand to each paired agent on load.
+
 ## [0.10.2] - 2026-10-06
 
 ### Changed

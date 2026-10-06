@@ -234,11 +234,10 @@ struct AgentReadAPITests {
                 name: "Invoices",
                 nick: "A",
                 subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-                fields: GrantFields(envelope: false, body: true),
-                agentIDs: [env.agentID]
+                fields: GrantFields(envelope: false, body: true)
             )
         )
-        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
         let withPass = try env.gateway.get(
             credential: env.credential,
@@ -259,11 +258,10 @@ struct AgentReadAPITests {
                 name: "Invoices",
                 nick: "A",
                 subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-                fields: GrantFields(envelope: false, body: true),
-                agentIDs: [env.agentID]
+                fields: GrantFields(envelope: false, body: true)
             )
         )
-        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
         #expect(throws: PairingError.unauthorized) {
             try env.gateway.get(
@@ -287,11 +285,10 @@ struct AgentReadAPITests {
                 name: "Receipts",
                 nick: "A",
                 subjectRules: [MatchRule(value: "receipt", mode: .contains)],
-                fields: GrantFields(envelope: false, body: true),
-                agentIDs: [env.agentID]
+                fields: GrantFields(envelope: false, body: true)
             )
         )
-        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
         let message = try env.gateway.get(
             credential: env.credential,
@@ -316,11 +313,10 @@ struct AgentReadAPITests {
                 nick: "A",
                 polarity: .pass,
                 subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-                fields: GrantFields(envelope: false, body: true),
-                agentIDs: [env.agentID]
+                fields: GrantFields(envelope: false, body: true)
             )
         )
-        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
         _ = try env.gateway.get(
             credential: env.credential,
@@ -357,11 +353,10 @@ struct AgentReadAPITests {
                 nick: "A",
                 polarity: .pass,
                 subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-                fields: GrantFields(envelope: false, body: true),
-                agentIDs: [env.agentID]
+                fields: GrantFields(envelope: false, body: true)
             )
         )
-        env.rules.setEnabled(true, ruleID: "p1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
         _ = try env.gateway.get(
             credential: env.credential,
@@ -389,11 +384,10 @@ struct AgentReadAPITests {
                 nick: "B",
                 polarity: .block,
                 subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-                fields: GrantFields(envelope: false, body: true),
-                agentIDs: [env.agentID]
+                fields: GrantFields(envelope: false, body: true)
             )
         )
-        env.rules.setEnabled(true, ruleID: "b1", accountID: env.accountID, placement: "INBOX")
+        env.rules.setEnabled(true, ruleID: "b1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
         _ = try env.gateway.get(
             credential: env.credential,

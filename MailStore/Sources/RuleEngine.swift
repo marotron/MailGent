@@ -51,7 +51,6 @@ public struct GrantRule: Identifiable, Equatable, Codable, Sendable {
     public var when: RuleWhen?
     public var whenJoin: JoinOp
     public var fields: GrantFields
-    public var agentIDs: [String]
 
     public init(
         id: String,
@@ -63,8 +62,7 @@ public struct GrantRule: Identifiable, Equatable, Codable, Sendable {
         betweenJoin: JoinOp = .and,
         when: RuleWhen? = nil,
         whenJoin: JoinOp = .and,
-        fields: GrantFields,
-        agentIDs: [String]
+        fields: GrantFields
     ) {
         self.id = id
         self.name = name
@@ -76,19 +74,41 @@ public struct GrantRule: Identifiable, Equatable, Codable, Sendable {
         self.when = when
         self.whenJoin = whenJoin
         self.fields = fields
-        self.agentIDs = agentIDs
     }
 }
 
 public struct RuleEnablement: Equatable, Codable, Sendable {
     public var ruleID: String
+    /// Agent this enablement applies to. Empty = legacy shared (matches any agent until migrated).
+    public var agentID: String
     public var accountID: String
     public var placement: String?
 
-    public init(ruleID: String, accountID: String, placement: String? = nil) {
+    public init(ruleID: String, agentID: String, accountID: String, placement: String? = nil) {
         self.ruleID = ruleID
+        self.agentID = agentID
         self.accountID = accountID
         self.placement = placement
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case ruleID, agentID, accountID, placement
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ruleID = try c.decode(String.self, forKey: .ruleID)
+        agentID = try c.decodeIfPresent(String.self, forKey: .agentID) ?? ""
+        accountID = try c.decode(String.self, forKey: .accountID)
+        placement = try c.decodeIfPresent(String.self, forKey: .placement)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(ruleID, forKey: .ruleID)
+        try c.encode(agentID, forKey: .agentID)
+        try c.encode(accountID, forKey: .accountID)
+        try c.encodeIfPresent(placement, forKey: .placement)
     }
 }
 
@@ -194,7 +214,7 @@ public enum RuleEngine {
         return (result, applied)
     }
 
-    /// Whether a rule matches (agent + enablement + matchers/When), ignoring polarity effect.
+    /// Whether a rule matches (per-agent enablement + matchers/When), ignoring polarity effect.
     public static func matches(
         _ rule: GrantRule,
         message: IndexedMessage,
@@ -210,18 +230,21 @@ public enum RuleEngine {
         agentID: String,
         enablements: [RuleEnablement]
     ) -> Bool {
-        guard rule.agentIDs.contains(agentID) else { return false }
-        guard isEnabled(ruleID: rule.id, message: message, enablements: enablements) else { return false }
+        guard isEnabled(ruleID: rule.id, agentID: agentID, message: message, enablements: enablements) else {
+            return false
+        }
         return matchesMatchers(rule, message: message)
     }
 
     private static func isEnabled(
         ruleID: String,
+        agentID: String,
         message: IndexedMessage,
         enablements: [RuleEnablement]
     ) -> Bool {
         enablements.contains {
             $0.ruleID == ruleID
+                && ($0.agentID.isEmpty || $0.agentID == agentID)
                 && $0.accountID == message.accountID
                 && ($0.placement == nil || $0.placement == message.placement)
         }

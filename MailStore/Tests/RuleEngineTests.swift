@@ -12,11 +12,10 @@ struct RuleEngineTests {
             fromRules: [],
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
             betweenJoin: .and,
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
 
         let upgraded = RuleEngine.applyOverlays(
@@ -36,7 +35,7 @@ struct RuleEngineTests {
     @Test func startsEndsExactModesMatchAsSpecified() {
         let message = sampleMessage(from: "billing@acme.com", subject: "Invoice-42")
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")
         ]
 
         #expect(
@@ -50,8 +49,7 @@ struct RuleEngineTests {
                         name: "Starts",
                         nick: "A",
                         subjectRules: [MatchRule(value: "Inv", mode: .starts)],
-                        fields: GrantFields(envelope: false, body: true),
-                        agentIDs: ["agent-1"]
+                        fields: GrantFields(envelope: false, body: true)
                     )
                 ],
                 enablements: enablements
@@ -68,8 +66,7 @@ struct RuleEngineTests {
                         name: "Ends",
                         nick: "A",
                         subjectRules: [MatchRule(value: "-42", mode: .ends)],
-                        fields: GrantFields(envelope: false, body: true),
-                        agentIDs: ["agent-1"]
+                        fields: GrantFields(envelope: false, body: true)
                     )
                 ],
                 enablements: enablements
@@ -86,8 +83,7 @@ struct RuleEngineTests {
                         name: "Exact",
                         nick: "A",
                         subjectRules: [MatchRule(value: "Invoice-42", mode: .exact)],
-                        fields: GrantFields(envelope: false, body: true),
-                        agentIDs: ["agent-1"]
+                        fields: GrantFields(envelope: false, body: true)
                     )
                 ],
                 enablements: enablements
@@ -104,8 +100,7 @@ struct RuleEngineTests {
                         name: "Exact miss",
                         nick: "A",
                         subjectRules: [MatchRule(value: "Invoice", mode: .exact)],
-                        fields: GrantFields(envelope: false, body: true),
-                        agentIDs: ["agent-1"]
+                        fields: GrantFields(envelope: false, body: true)
                     )
                 ],
                 enablements: enablements
@@ -123,8 +118,7 @@ struct RuleEngineTests {
                 MatchRule(value: "invoice", mode: .contains),
                 MatchRule(value: "receipt", mode: .contains)
             ],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         let upgraded = RuleEngine.applyOverlays(
@@ -132,7 +126,7 @@ struct RuleEngineTests {
             message: message,
             agentID: "agent-1",
             rules: [pass],
-            enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+            enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
         )
         #expect(upgraded.body == true)
     }
@@ -146,10 +140,9 @@ struct RuleEngineTests {
             fromRules: [MatchRule(value: "bob@", mode: .contains)],
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
             betweenJoin: .and,
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
-        let enablements = [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+        let enablements = [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
 
         #expect(
             RuleEngine.applyOverlays(
@@ -168,8 +161,7 @@ struct RuleEngineTests {
             fromRules: [MatchRule(value: "alice@", mode: .contains)],
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
             betweenJoin: .and,
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         #expect(
             RuleEngine.applyOverlays(
@@ -191,8 +183,7 @@ struct RuleEngineTests {
             fromRules: [MatchRule(value: "alice@", mode: .contains)],
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
             betweenJoin: .or,
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         #expect(
@@ -201,21 +192,24 @@ struct RuleEngineTests {
                 message: message,
                 agentID: "agent-1",
                 rules: [pass],
-                enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+                enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
             ).body == true
         )
     }
 
-    @Test func skipsWhenAgentNotOnGrantRule() {
+    @Test func overlaysForAnyAgentWhenEnabled() {
+        // Shared rule definition; enablement is per-agent — agent-1's row applies only to agent-1.
         let message = sampleMessage(from: "a@x.com", subject: "Invoice")
         let pass = GrantRule(
             id: "p1",
             name: "Invoices",
             nick: "A",
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["other-agent"]
+            fields: GrantFields(envelope: false, body: true)
         )
+        let enablements = [
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")
+        ]
 
         #expect(
             RuleEngine.applyOverlays(
@@ -223,8 +217,41 @@ struct RuleEngineTests {
                 message: message,
                 agentID: "agent-1",
                 rules: [pass],
-                enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+                enablements: enablements
+            ).body == true
+        )
+        #expect(
+            RuleEngine.applyOverlays(
+                base: .headersOnly,
+                message: message,
+                agentID: "agent-2",
+                rules: [pass],
+                enablements: enablements
             ).body == false
+        )
+    }
+
+    @Test func legacyEmptyAgentIDEnablementMatchesAnyAgent() {
+        let message = sampleMessage(from: "a@x.com", subject: "Invoice")
+        let pass = GrantRule(
+            id: "p1",
+            name: "Invoices",
+            nick: "A",
+            subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+            fields: GrantFields(envelope: false, body: true)
+        )
+        let enablements = [
+            RuleEnablement(ruleID: "p1", agentID: "", accountID: "acc-1", placement: "INBOX")
+        ]
+
+        #expect(
+            RuleEngine.applyOverlays(
+                base: .headersOnly,
+                message: message,
+                agentID: "agent-2",
+                rules: [pass],
+                enablements: enablements
+            ).body == true
         )
     }
 
@@ -235,8 +262,7 @@ struct RuleEngineTests {
             name: "Invoices",
             nick: "A",
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         #expect(
@@ -245,7 +271,7 @@ struct RuleEngineTests {
                 message: message,
                 agentID: "agent-1",
                 rules: [pass],
-                enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "Sent")]
+                enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "Sent")]
             ).body == false
         )
     }
@@ -257,8 +283,7 @@ struct RuleEngineTests {
             name: "Invoices",
             nick: "A",
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         #expect(
@@ -267,7 +292,7 @@ struct RuleEngineTests {
                 message: message,
                 agentID: "agent-1",
                 rules: [pass],
-                enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: nil)]
+                enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: nil)]
             ).body == true
         )
     }
@@ -279,8 +304,7 @@ struct RuleEngineTests {
             name: "Body",
             nick: "A",
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let attPass = GrantRule(
             id: "p2",
@@ -295,12 +319,11 @@ struct RuleEngineTests {
                 date: false,
                 body: false,
                 attachmentMetadata: true
-            ),
-            agentIDs: ["agent-1"]
+            )
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX"),
-            RuleEnablement(ruleID: "p2", accountID: "acc-1", placement: "INBOX")
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX"),
+            RuleEnablement(ruleID: "p2", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")
         ]
 
         let upgraded = RuleEngine.applyOverlays(
@@ -321,8 +344,7 @@ struct RuleEngineTests {
             name: "Body",
             nick: "A",
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let base = GrantFields(
             subject: true,
@@ -338,7 +360,7 @@ struct RuleEngineTests {
             message: message,
             agentID: "agent-1",
             rules: [pass],
-            enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+            enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
         )
         #expect(upgraded == base)
     }
@@ -351,8 +373,7 @@ struct RuleEngineTests {
             nick: "A",
             fromRules: [],
             subjectRules: [],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         let upgraded = RuleEngine.applyOverlays(
@@ -360,7 +381,7 @@ struct RuleEngineTests {
             message: message,
             agentID: "agent-1",
             rules: [pass],
-            enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+            enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
         )
         #expect(upgraded == .headersOnly)
         #expect(upgraded.body == false)
@@ -374,8 +395,7 @@ struct RuleEngineTests {
             nick: "A",
             polarity: .pass,
             subjectRules: [MatchRule(value: "payslip", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true, attachmentMetadata: true, attachmentContent: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true, attachmentMetadata: true, attachmentContent: true)
         )
         let block = GrantRule(
             id: "p2",
@@ -392,12 +412,11 @@ struct RuleEngineTests {
                 body: false,
                 attachmentMetadata: true,
                 attachmentContent: true
-            ),
-            agentIDs: ["agent-1"]
+            )
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX"),
-            RuleEnablement(ruleID: "p2", accountID: "acc-1", placement: "INBOX")
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX"),
+            RuleEnablement(ruleID: "p2", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")
         ]
 
         let result = RuleEngine.applyOverlays(
@@ -420,11 +439,10 @@ struct RuleEngineTests {
             nick: "A",
             polarity: .pass,
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
 
         let (fields, applied) = RuleEngine.applyOverlaysWithApplied(
@@ -454,11 +472,10 @@ struct RuleEngineTests {
             nick: "A",
             polarity: .pass,
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
         let base = GrantFields(envelope: true, body: true)
 
@@ -482,11 +499,10 @@ struct RuleEngineTests {
             nick: "B",
             polarity: .block,
             subjectRules: [MatchRule(value: "payslip", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "b1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "b1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
         let base = GrantFields(envelope: true, body: true)
 
@@ -517,11 +533,10 @@ struct RuleEngineTests {
             nick: "B",
             polarity: .block,
             subjectRules: [MatchRule(value: "payslip", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "b1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "b1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
 
         let (fields, applied) = RuleEngine.applyOverlaysWithApplied(
@@ -544,8 +559,7 @@ struct RuleEngineTests {
             nick: "A",
             polarity: .pass,
             subjectRules: [MatchRule(value: "payslip", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let block = GrantRule(
             id: "b1",
@@ -553,12 +567,11 @@ struct RuleEngineTests {
             nick: "B",
             polarity: .block,
             subjectRules: [MatchRule(value: "payslip", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: message.accountID, placement: message.placement),
-            RuleEnablement(ruleID: "b1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: message.accountID, placement: message.placement),
+            RuleEnablement(ruleID: "b1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
 
         let (fields, applied) = RuleEngine.applyOverlaysWithApplied(
@@ -596,10 +609,9 @@ struct RuleEngineTests {
             subjectRules: [MatchRule(value: "invoice", mode: .contains)],
             when: RuleWhen(after: "2026-01-01", before: "2026-12-31"),
             whenJoin: .and,
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
-        let enablements = [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+        let enablements = [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
 
         #expect(
             RuleEngine.applyOverlays(
@@ -628,8 +640,7 @@ struct RuleEngineTests {
             name: "2026 mail",
             nick: "A",
             when: RuleWhen(after: "2026-01-01"),
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         #expect(
@@ -638,7 +649,7 @@ struct RuleEngineTests {
                 message: message,
                 agentID: "agent-1",
                 rules: [pass],
-                enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+                enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
             ).body == true
         )
     }
@@ -654,11 +665,10 @@ struct RuleEngineTests {
             nick: "D",
             polarity: .pass,
             fromRules: [MatchRule(value: "@ovoenergy.com", mode: .ends)],
-            fields: GrantFields(envelope: false, body: true, attachmentMetadata: true, attachmentContent: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true, attachmentMetadata: true, attachmentContent: true)
         )
         let enablements = [
-            RuleEnablement(ruleID: "p1", accountID: message.accountID, placement: message.placement)
+            RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: message.accountID, placement: message.placement)
         ]
 
         let fields = RuleEngine.applyOverlays(
@@ -684,8 +694,7 @@ struct RuleEngineTests {
             nick: "E",
             polarity: .pass,
             fromRules: [MatchRule(value: "no-reply@ovoenergy.com", mode: .exact)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
 
         #expect(
@@ -694,7 +703,7 @@ struct RuleEngineTests {
                 message: message,
                 agentID: "agent-1",
                 rules: [pass],
-                enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+                enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
             ).body == true
         )
     }
@@ -707,15 +716,14 @@ struct RuleEngineTests {
             nick: "A",
             polarity: .pass,
             subjectRules: [MatchRule(value: "Hi", mode: .contains)],
-            fields: GrantFields(envelope: false, body: true),
-            agentIDs: ["agent-1"]
+            fields: GrantFields(envelope: false, body: true)
         )
         let (_, applied) = RuleEngine.applyOverlaysWithApplied(
             base: .default,
             message: message,
             agentID: "agent-1",
             rules: [pass],
-            enablements: [RuleEnablement(ruleID: "p1", accountID: "acc-1", placement: "INBOX")]
+            enablements: [RuleEnablement(ruleID: "p1", agentID: "agent-1", accountID: "acc-1", placement: "INBOX")]
         )
         #expect(applied.isEmpty)
     }
