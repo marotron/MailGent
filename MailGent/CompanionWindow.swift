@@ -622,6 +622,9 @@ private struct AgentPresetCard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
+                if paired != nil {
+                    MCPMark(size: 26)
+                }
             }
 
             if let paired {
@@ -643,8 +646,11 @@ private struct AgentPresetCard: View {
                         .foregroundStyle(count == 0 ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
                 }
 
+                Divider()
+
                 AgentMCPConfigDisclosure(
-                    displaySnippet: session.agents.displayConfigSnippet(for: paired)
+                    redactedSnippet: session.agents.displayConfigSnippet(for: paired),
+                    revealedSnippet: session.agents.configSnippet(for: paired)
                 )
 
                 HStack(spacing: 8) {
@@ -722,29 +728,51 @@ private struct AgentPresetCard: View {
 
 /// MCP config disclosure for Control Center agent cards; snippet hidden until expanded.
 private struct AgentMCPConfigDisclosure: View {
-    let displaySnippet: String
+    let redactedSnippet: String
+    let revealedSnippet: String
 
     @State private var showConfig = false
+    @State private var showBearer = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    showConfig.toggle()
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showConfig.toggle()
+                        if !showConfig { showBearer = false }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(showConfig ? "Hide MCP config" : "Show MCP config")
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(showConfig ? 90 : 0))
+                            .imageScale(.small)
+                    }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(showConfig ? "Hide config" : "Show config")
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(showConfig ? 90 : 0))
-                        .imageScale(.small)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+
+                if showConfig {
+                    Spacer(minLength: 0)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showBearer.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: showBearer ? "eye.slash" : "eye")
+                                .imageScale(.small)
+                            Text(showBearer ? "Hide Bearer" : "Show Bearer")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
                 }
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
 
             if showConfig {
-                Text(displaySnippet)
+                Text(showBearer ? revealedSnippet : redactedSnippet)
                     .font(.system(.caption2, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(6)

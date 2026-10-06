@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.10.2] - 2026-10-06
+
+### Changed
+
+- Control Center agent cards: MCP mark in the header; divider above Show MCP config; Show/Hide Bearer on the config row; labels say Show/Hide MCP config.
+
 ## [0.10.1] - 2026-10-06
 
 ### Changed

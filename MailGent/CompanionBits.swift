@@ -1274,6 +1274,19 @@ struct GrokMark: View {
     }
 }
 
+struct MCPMark: View {
+    var size: CGFloat = 26
+
+    var body: some View {
+        Image("MCPMark")
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityLabel("MCP")
+    }
+}
+
 struct RawPrettyHeader: View {
     let title: String
     @Binding var showRaw: Bool

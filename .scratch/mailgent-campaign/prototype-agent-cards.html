@@ -124,9 +124,14 @@
       border-radius: 4px;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
     .btn-ghost:hover { background: rgba(0, 0, 0, 0.05); color: rgba(0, 0, 0, 0.65); }
+    .btn-ghost .eye-icon {
+      width: 14px;
+      height: 14px;
+      flex: none;
+    }
     .btn-ghost .chev {
       display: inline-block;
       font-size: 11px;
@@ -162,7 +167,7 @@
 
     .agent-head {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 8px;
       margin-bottom: 8px;
     }
@@ -172,6 +177,8 @@
       gap: 2px;
       min-height: 30px;
       justify-content: center;
+      min-width: 0;
+      flex: 1;
     }
     .agent-glyph {
       width: 30px;
@@ -182,6 +189,12 @@
     }
     .agent-glyph.grok {
       border-radius: 6.7px;
+    }
+    .agent-head .mcp-icon {
+      width: 26px;
+      height: 26px;
+      flex: none;
+      margin-left: auto;
     }
     .agent-title {
       margin: 0;
@@ -200,7 +213,9 @@
       display: flex;
       align-items: baseline;
       gap: 8px;
-      margin: 0 0 8px;
+      margin: 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--separator);
     }
     .listen-note {
       margin: 0;
@@ -220,12 +235,18 @@
     }
     .grant-label.warn { color: var(--orange); }
 
-    .credential-panel { margin-bottom: 8px; }
+    .credential-panel {
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
     .credential-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
+    }
+    .credential-actions .btn-ghost.trailing {
+      margin-left: auto;
     }
     .copy-hint {
       font-size: 10px;
@@ -369,6 +390,8 @@
         grants: 4,
         selected: false,
         showConfig: false,
+        showBearer: false,
+        bearer: "mg_cursor_EXAMPLE_SECRET_NOT_SHOWN",
       },
       {
         id: "grok",
@@ -379,36 +402,47 @@
         grants: 0,
         selected: true,
         showConfig: false,
+        showBearer: false,
+        bearer: "mg_grok_EXAMPLE_SECRET_NOT_SHOWN",
       },
     ];
 
     let copiedHint = { agentId: null, text: null, timer: null };
     let revokeTarget = null;
 
-    function displaySnippet() {
+    function displaySnippet(agent) {
+      const token = agent.showBearer ? agent.bearer : REDACTED;
       return `{
   "mcpServers": {
     "mailgent": {
       "url": "${LOOPBACK}",
       "headers": {
-        "Authorization": "Bearer ${REDACTED}"
+        "Authorization": "Bearer ${token}"
       }
     }
   }
 }`;
     }
 
-    function fullMcpConfig() {
+    function fullMcpConfig(agent) {
       return `{
   "mcpServers": {
     "mailgent": {
       "url": "${LOOPBACK}",
       "headers": {
-        "Authorization": "Bearer EXAMPLE_SECRET_NOT_SHOWN"
+        "Authorization": "Bearer ${agent.bearer}"
       }
     }
   }
 }`;
+    }
+
+    function eyeIcon(revealed) {
+      // SF-style eye / eye.slash
+      if (revealed) {
+        return `<svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.1A9.8 9.8 0 0 1 12 5c5 0 9.3 3.1 11 7.5a11.6 11.6 0 0 1-3.5 4.6"/><path d="M6.1 6.1A11.5 11.5 0 0 0 1 12.5C2.7 16.9 7 20 12 20c1.4 0 2.7-.3 3.9-.7"/></svg>`;
+      }
+      return `<svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12.5C2.7 8.1 7 5 12 5s9.3 3.1 11 7.5C21.3 16.9 17 20 12 20S2.7 16.9 1 12.5z"/><circle cx="12" cy="12.5" r="3"/></svg>`;
     }
 
     function grantLabel(count) {
@@ -423,6 +457,7 @@
       grid.innerHTML = agents.map((a) => {
         const grants = grantLabel(a.grants);
         const hint = copiedHint.agentId === a.id ? copiedHint.text : "";
+        const snippet = escapeHtml(displaySnippet(a));
         return `
           <article
             class="agent-card${a.selected ? " selected" : ""}"
@@ -436,6 +471,7 @@
                 <p class="agent-title">${a.name}</p>
                 <p class="agent-trust">${a.trust}</p>
               </div>
+              <img class="mcp-icon" src="assets/mcp-mark.svg" width="26" height="26" alt="MCP" title="MCP">
             </div>
             <div class="listen-row">
               <p class="listen-note">Listening on ${LOOPBACK}</p>
@@ -443,20 +479,25 @@
             </div>
             <div class="credential-panel">
               <div class="credential-actions">
-                <button type="button" class="btn-ghost" data-toggle-config="${a.id}" aria-expanded="${a.showConfig}">
-                  <span>${a.showConfig ? "Hide config" : "Show config"}</span>
+                <button type="button" class="btn-ghost" data-action="toggle-config" data-agent="${a.id}" aria-expanded="${a.showConfig}">
+                  <span>${a.showConfig ? "Hide MCP config" : "Show MCP config"}</span>
                   <span class="chev" aria-hidden="true">›</span>
                 </button>
+                ${a.showConfig ? `
+                <button type="button" class="btn-ghost trailing" data-action="toggle-bearer" data-agent="${a.id}" aria-pressed="${a.showBearer}">
+                  ${eyeIcon(a.showBearer)}
+                  <span>${a.showBearer ? "Hide Bearer" : "Show Bearer"}</span>
+                </button>` : ""}
               </div>
-              <pre class="config-snippet" ${a.showConfig ? "" : "hidden"}>${escapeHtml(displaySnippet())}</pre>
+              <pre class="config-snippet"${a.showConfig ? "" : " hidden"}>${snippet}</pre>
             </div>
             <div class="card-footer">
               <div class="card-footer-leading">
-                <button type="button" class="btn-bordered" data-copy="bearer" data-agent="${a.id}">Copy Bearer</button>
-                <button type="button" class="btn-bordered" data-copy="mcp" data-agent="${a.id}">Copy MCP config</button>
+                <button type="button" class="btn-bordered" data-action="copy-bearer" data-agent="${a.id}">Copy Bearer</button>
+                <button type="button" class="btn-bordered" data-action="copy-mcp" data-agent="${a.id}">Copy MCP config</button>
                 ${hint ? `<span class="copy-hint">${hint}</span>` : ""}
               </div>
-              <button type="button" class="btn-bordered destructive" data-revoke="${a.id}">Revoke credential</button>
+              <button type="button" class="btn-bordered destructive" data-action="revoke" data-agent="${a.id}">Revoke credential</button>
             </div>
           </article>
         `;
@@ -467,22 +508,23 @@
       return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
+    function agentById(id) {
+      return agents.find((a) => a.id === id);
+    }
+
     function selectAgent(id) {
       agents.forEach((a) => { a.selected = a.id === id; });
       render();
-      bind();
     }
 
     function showCopyHint(agentId, text) {
       if (copiedHint.timer) clearTimeout(copiedHint.timer);
       copiedHint = { agentId, text, timer: null };
       render();
-      bind();
       copiedHint.timer = setTimeout(() => {
         if (copiedHint.agentId === agentId) {
           copiedHint = { agentId: null, text: null, timer: null };
           render();
-          bind();
         }
       }, 1600);
     }
@@ -507,64 +549,65 @@
       document.getElementById("revoke-dialog").hidden = true;
     }
 
-    function bind() {
-      document.querySelectorAll(".agent-card").forEach((card) => {
-        card.addEventListener("click", (e) => {
-          if (e.target.closest("button")) return;
-          selectAgent(card.dataset.id);
-        });
-        card.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            selectAgent(card.dataset.id);
-          }
-        });
-      });
+    const grid = document.getElementById("agent-grid");
 
-      document.querySelectorAll("[data-copy]").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const id = btn.dataset.agent;
-          const kind = btn.dataset.copy;
-          if (kind === "bearer") {
-            copyText("EXAMPLE_BEARER_TOKEN", id, "Bearer copied");
-          } else {
-            copyText(fullMcpConfig(), id, "MCP config copied");
-          }
-        });
-      });
+    grid.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest("[data-action]");
+      if (actionBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = actionBtn.getAttribute("data-agent");
+        const action = actionBtn.getAttribute("data-action");
+        const agent = agentById(id);
+        if (!agent) return;
 
-      document.querySelectorAll("[data-toggle-config]").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const id = btn.dataset.toggleConfig;
-          const agent = agents.find((a) => a.id === id);
-          if (agent) {
-            agent.showConfig = !agent.showConfig;
-            render();
-            bind();
-          }
-        });
-      });
+        if (action === "toggle-config") {
+          agent.showConfig = !agent.showConfig;
+          if (!agent.showConfig) agent.showBearer = false;
+          render();
+          return;
+        }
+        if (action === "toggle-bearer") {
+          agent.showBearer = !agent.showBearer;
+          render();
+          return;
+        }
+        if (action === "copy-bearer") {
+          copyText(agent.bearer, id, "Bearer copied");
+          return;
+        }
+        if (action === "copy-mcp") {
+          copyText(fullMcpConfig(agent), id, "MCP config copied");
+          return;
+        }
+        if (action === "revoke") {
+          openRevokeDialog(agent);
+          return;
+        }
+        return;
+      }
 
-      document.querySelectorAll("[data-revoke]").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const agent = agents.find((a) => a.id === btn.dataset.revoke);
-          if (agent) openRevokeDialog(agent);
-        });
-      });
-    }
+      const card = e.target.closest(".agent-card");
+      if (card) selectAgent(card.getAttribute("data-id"));
+    });
+
+    grid.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest(".agent-card");
+      if (!card || e.target.closest("[data-action]")) return;
+      e.preventDefault();
+      selectAgent(card.getAttribute("data-id"));
+    });
 
     document.getElementById("revoke-cancel").addEventListener("click", closeRevokeDialog);
     document.getElementById("revoke-confirm").addEventListener("click", () => {
       if (revokeTarget) {
         revokeTarget.grants = 0;
         revokeTarget.showConfig = false;
+        revokeTarget.showBearer = false;
       }
       closeRevokeDialog();
       render();
-      bind();
     });
     document.getElementById("revoke-dialog").addEventListener("click", (e) => {
       if (e.target.id === "revoke-dialog") closeRevokeDialog();
@@ -572,7 +615,7 @@
 
     const params = new URLSearchParams(location.search);
     if (params.get("expanded") === "grok") {
-      const grok = agents.find((a) => a.id === "grok");
+      const grok = agentById("grok");
       if (grok) grok.showConfig = true;
     }
     if (params.get("selected") === "cursor") {
@@ -580,7 +623,6 @@
     }
 
     render();
-    bind();
   </script>
 </body>
 </html>
