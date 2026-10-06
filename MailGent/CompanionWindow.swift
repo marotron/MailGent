@@ -483,79 +483,10 @@ struct CompanionWindow: View {
                 spacing: 12
             ) {
                 ForEach(AgentPairingPreset.allCases) { preset in
-                    agentPresetCard(preset)
+                    AgentPresetCard(session: session, preset: preset)
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private func agentPresetCard(_ preset: AgentPairingPreset) -> some View {
-        let paired = session.agents.pairedCredential(named: preset.displayName)
-        let isSelected = paired.map { $0.id == session.agents.selectedAgentID } ?? false
-
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                AgentGlyph(name: preset.displayName, size: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(preset.displayName)
-                        .font(.headline)
-                    Text(paired?.trustClass.rawValue ?? "Not paired")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-
-            if let paired {
-                if session.agents.isListening {
-                    Text(session.agents.listenNote)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Text(session.agents.configSnippet(for: paired))
-                    .font(.system(.caption2, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-
-                HStack(spacing: 8) {
-                    Button("Revoke credential") {
-                        session.agents.revoke(agentID: paired.id)
-                    }
-                    Spacer(minLength: 0)
-                    let count = session.agents.grantCount(for: paired.id)
-                    Text(count == 0
-                         ? "Nothing granted"
-                         : "\(count) grant(s)")
-                        .font(.caption)
-                        .foregroundStyle(count == 0 ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
-                }
-            } else {
-                Text("Pair to issue a Bearer for this host.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Pair \(preset.displayName)") {
-                    _ = session.agents.pairAgent(named: preset.displayName)
-                }
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isSelected ? 2 : 1)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 12))
-        .onTapGesture {
-            guard let paired else { return }
-            session.agents.selectAgent(id: paired.id)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var healthCard: some View {
@@ -660,6 +591,166 @@ struct CompanionWindow: View {
         if session.ingestProcessed > 0 || session.ingestInserted > 0 {
             Text("\(session.ingestInserted) new / \(session.ingestProcessed) scanned")
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct AgentPresetCard: View {
+    let session: CompanionSession
+    let preset: AgentPairingPreset
+
+    @State private var confirmRevoke = false
+    @State private var copiedHint: String?
+
+    private var paired: PairedAgentCredential? {
+        session.agents.pairedCredential(named: preset.displayName)
+    }
+
+    private var isSelected: Bool {
+        paired.map { $0.id == session.agents.selectedAgentID } ?? false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                AgentGlyph(name: preset.displayName, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preset.displayName)
+                        .font(.headline)
+                    Text(paired?.trustClass.rawValue ?? "Not paired")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+
+            if let paired {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if session.agents.isListening {
+                        Text(session.agents.listenNote)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                    let count = session.agents.grantCount(for: paired.id)
+                    Text(count == 0
+                         ? "Nothing granted"
+                         : "\(count) grant(s)")
+                        .font(.caption)
+                        .foregroundStyle(count == 0 ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
+                }
+
+                AgentMCPConfigDisclosure(
+                    displaySnippet: session.agents.displayConfigSnippet(for: paired)
+                )
+
+                HStack(spacing: 8) {
+                    Button("Copy Bearer") {
+                        copyToPasteboard(session.agents.bearerString(for: paired), hint: "Bearer copied")
+                    }
+                    Button("Copy MCP config") {
+                        copyToPasteboard(session.agents.configSnippet(for: paired), hint: "MCP config copied")
+                    }
+                    if let copiedHint {
+                        Text(copiedHint)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Revoke credential", role: .destructive) {
+                        confirmRevoke = true
+                    }
+                }
+            } else {
+                Text("Pair to issue a Bearer for this host.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Pair \(preset.displayName)") {
+                    _ = session.agents.pairAgent(named: preset.displayName)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isSelected ? 2 : 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture {
+            guard let paired else { return }
+            session.agents.selectAgent(id: paired.id)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .confirmationDialog(
+            "Revoke \(preset.displayName) credential?",
+            isPresented: $confirmRevoke,
+            titleVisibility: .visible
+        ) {
+            Button("Revoke credential", role: .destructive) {
+                guard let id = paired?.id else { return }
+                session.agents.revoke(agentID: id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Invalidates the Bearer and clears this agent’s grants. Re-pair issues a new credential.")
+        }
+    }
+
+    private func copyToPasteboard(_ string: String, hint: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+        withAnimation(.easeOut(duration: 0.15)) {
+            copiedHint = hint
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            if copiedHint == hint {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    copiedHint = nil
+                }
+            }
+        }
+    }
+}
+
+/// MCP config disclosure for Control Center agent cards; snippet hidden until expanded.
+private struct AgentMCPConfigDisclosure: View {
+    let displaySnippet: String
+
+    @State private var showConfig = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showConfig.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(showConfig ? "Hide config" : "Show config")
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showConfig ? 90 : 0))
+                        .imageScale(.small)
+                }
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+
+            if showConfig {
+                Text(displaySnippet)
+                    .font(.system(.caption2, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+            }
         }
     }
 }

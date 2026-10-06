@@ -139,6 +139,7 @@ final class AgentBridge {
         }
     }
 
+    /// Pasteable Cursor `mcp.json` body (`mcpServers.mailgent` + Bearer).
     func configSnippet(for credential: String) -> String {
         """
         {
@@ -157,6 +158,18 @@ final class AgentBridge {
     func configSnippet(for agent: PairedAgentCredential) -> String {
         configSnippet(for: agent.credential)
     }
+
+    /// Control Center display — same shape as `configSnippet`, Bearer redacted.
+    func displayConfigSnippet(for agent: PairedAgentCredential) -> String {
+        configSnippet(for: Self.redactedBearerToken)
+    }
+
+    /// Raw pairing secret (no `Bearer ` prefix) for clipboard copy.
+    func bearerString(for agent: PairedAgentCredential) -> String {
+        agent.credential
+    }
+
+    private static let redactedBearerToken = "••••••••••••••••••••••••••••••••"
 
     /// Selected agent's Bearer MCP snippet (Grant Desk / legacy call sites).
     var cursorConfigSnippet: String {

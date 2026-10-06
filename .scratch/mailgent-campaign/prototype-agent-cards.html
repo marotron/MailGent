@@ -1,0 +1,586 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: Control Center agent preset cards (AgentPresetCard + AgentMCPCredentialPanel).
+     Mirrors MailGent/CompanionWindow.swift. Open in browser. Assets: assets/cursor-mark.svg, assets/grok-mark.png -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Agent cards prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --window: #ececec;
+      --paper: #ffffff;
+      --ink: #000000;
+      --secondary: rgba(0, 0, 0, 0.55);
+      --separator: rgba(0, 0, 0, 0.12);
+      --accent: #007aff;
+      --orange: #ff9500;
+      --destructive: #ff3b30;
+      --text-bg: #ffffff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      --radius-card: 12px;
+      --radius-snippet: 6px;
+      --radius-btn: 6px;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--window);
+      color: var(--ink);
+      font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .window {
+      max-width: 920px;
+      margin: 24px auto;
+      background: var(--window);
+      border: 1px solid var(--separator);
+      border-radius: 10px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      overflow: hidden;
+    }
+    .titlebar {
+      height: 28px;
+      background: linear-gradient(180deg, #f6f6f6, #ececec);
+      border-bottom: 1px solid var(--separator);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 7px;
+    }
+    .titlebar .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .titlebar .dot.r { background: #ff5f57; border: 1px solid #e0443e; }
+    .titlebar .dot.y { background: #febc2e; border: 1px solid #dea123; }
+    .titlebar .dot.g { background: #28c840; border: 1px solid #1aab29; }
+    .titlebar span {
+      flex: 1;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 510;
+      color: rgba(0, 0, 0, 0.85);
+      margin-right: 40px;
+    }
+
+    .scroll {
+      max-height: calc(100vh - 80px);
+      overflow: auto;
+      padding: 24px;
+    }
+
+    .cc-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .cc-header h1 {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .cc-header .sub {
+      margin: 2px 0 0;
+      font-size: 13px;
+      color: var(--secondary);
+    }
+    .cc-header .actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-bordered {
+      appearance: none;
+      border: 1px solid var(--separator);
+      background: linear-gradient(180deg, #fafafa, #f0f0f0);
+      border-radius: var(--radius-btn);
+      padding: 4px 10px;
+      font-size: 13px;
+      color: var(--ink);
+      box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.8) inset;
+    }
+    .btn-bordered:hover { background: linear-gradient(180deg, #ffffff, #f4f4f4); }
+    .btn-bordered:active { background: #e8e8e8; }
+    .btn-bordered.destructive {
+      color: var(--destructive);
+      background: linear-gradient(180deg, #fffafa, #f8f0f0);
+    }
+    .btn-bordered.destructive:hover { background: linear-gradient(180deg, #fff, #faf0f0); }
+
+    .btn-ghost {
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 4px 6px;
+      font-size: 13px;
+      color: var(--secondary);
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-ghost:hover { background: rgba(0, 0, 0, 0.05); color: rgba(0, 0, 0, 0.65); }
+    .btn-ghost .chev {
+      display: inline-block;
+      font-size: 11px;
+      transition: transform 0.15s ease;
+    }
+    .btn-ghost[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+    .agent-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .agent-grid { grid-template-columns: 1fr; }
+    }
+
+    .agent-card {
+      padding: 12px;
+      background: var(--paper);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--separator);
+      cursor: default;
+      text-align: left;
+    }
+    .agent-card.selected {
+      border: 2px solid var(--accent);
+      padding: 11px;
+    }
+    .agent-card:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .agent-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .agent-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-height: 30px;
+      justify-content: center;
+    }
+    .agent-glyph {
+      width: 30px;
+      height: 30px;
+      flex: none;
+      object-fit: contain;
+      align-self: center;
+    }
+    .agent-glyph.grok {
+      border-radius: 6.7px;
+    }
+    .agent-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.15;
+    }
+    .agent-trust {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.25;
+      color: var(--secondary);
+    }
+
+    .listen-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+    .listen-note {
+      margin: 0;
+      font-size: 11px;
+      color: var(--secondary);
+      line-height: 1.35;
+      min-width: 0;
+      flex: 1;
+    }
+    .grant-label {
+      flex: none;
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--secondary);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .grant-label.warn { color: var(--orange); }
+
+    .credential-panel { margin-bottom: 8px; }
+    .credential-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .copy-hint {
+      font-size: 10px;
+      color: var(--secondary);
+      animation: fadein 0.15s ease;
+    }
+    @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+    .config-snippet {
+      margin-top: 6px;
+      padding: 6px;
+      border-radius: var(--radius-snippet);
+      background: var(--text-bg);
+      font: 10px/1.45 var(--mono);
+      white-space: pre;
+      overflow-x: auto;
+      user-select: all;
+    }
+    .config-snippet[hidden] { display: none; }
+
+    .card-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-footer-leading {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-footer .btn-bordered.destructive {
+      margin-left: auto;
+    }
+
+    /* Revoke confirmation (SwiftUI confirmationDialog) */
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 100;
+    }
+    .dialog-backdrop[hidden] { display: none; }
+    .dialog {
+      width: min(360px, 100%);
+      background: var(--paper);
+      border-radius: 12px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+      padding: 20px 20px 16px;
+    }
+    .dialog h2 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      text-align: center;
+    }
+    .dialog p {
+      margin: 0 0 16px;
+      font-size: 12px;
+      color: var(--secondary);
+      text-align: center;
+      line-height: 1.45;
+    }
+    .dialog-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dialog-actions .btn-bordered { width: 100%; padding: 8px 12px; }
+    .dialog-actions .btn-cancel {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      color: var(--accent);
+    }
+
+    .proto-note {
+      margin-top: 20px;
+      font-size: 11px;
+      color: var(--secondary);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar" aria-hidden="true">
+      <span class="dot r"></span>
+      <span class="dot y"></span>
+      <span class="dot g"></span>
+      <span>MailGent</span>
+    </div>
+    <div class="scroll">
+      <header class="cc-header">
+        <div>
+          <h1>Control center</h1>
+          <p class="sub">Access and ingest first. Mail search is a separate step.</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-bordered" disabled>Grant desk…</button>
+          <button type="button" class="btn-bordered" disabled>Access log…</button>
+        </div>
+      </header>
+
+      <div class="agent-grid" id="agent-grid"></div>
+
+      <p class="proto-note">
+        Throwaway prototype of <code>AgentPresetCard</code> + <code>AgentMCPCredentialPanel</code>.
+        Click a card to select (blue ring). Toggle config per card. Revoke opens a confirmation sheet.
+      </p>
+    </div>
+  </div>
+
+  <div class="dialog-backdrop" id="revoke-dialog" hidden>
+    <div class="dialog" role="alertdialog" aria-labelledby="revoke-title" aria-describedby="revoke-msg">
+      <h2 id="revoke-title"></h2>
+      <p id="revoke-msg">Invalidates the Bearer and clears this agent’s grants. Re-pair issues a new credential.</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn-bordered destructive" id="revoke-confirm">Revoke credential</button>
+        <button type="button" class="btn-bordered btn-cancel" id="revoke-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const LOOPBACK = "http://127.0.0.1:8788/mcp";
+    const REDACTED = "••••••••••••••••••••••••••••••••";
+
+    const agents = [
+      {
+        id: "cursor",
+        name: "Cursor",
+        trust: "machine-local",
+        glyph: "assets/cursor-mark.svg",
+        glyphClass: "",
+        grants: 4,
+        selected: false,
+        showConfig: false,
+      },
+      {
+        id: "grok",
+        name: "Grok Bot",
+        trust: "machine-local",
+        glyph: "assets/grok-mark.png",
+        glyphClass: "grok",
+        grants: 0,
+        selected: true,
+        showConfig: false,
+      },
+    ];
+
+    let copiedHint = { agentId: null, text: null, timer: null };
+    let revokeTarget = null;
+
+    function displaySnippet() {
+      return `{
+  "mcpServers": {
+    "mailgent": {
+      "url": "${LOOPBACK}",
+      "headers": {
+        "Authorization": "Bearer ${REDACTED}"
+      }
+    }
+  }
+}`;
+    }
+
+    function fullMcpConfig() {
+      return `{
+  "mcpServers": {
+    "mailgent": {
+      "url": "${LOOPBACK}",
+      "headers": {
+        "Authorization": "Bearer EXAMPLE_SECRET_NOT_SHOWN"
+      }
+    }
+  }
+}`;
+    }
+
+    function grantLabel(count) {
+      if (count === 0) {
+        return { text: "Nothing granted", warn: true };
+      }
+      return { text: `${count} grant(s)`, warn: false };
+    }
+
+    function render() {
+      const grid = document.getElementById("agent-grid");
+      grid.innerHTML = agents.map((a) => {
+        const grants = grantLabel(a.grants);
+        const hint = copiedHint.agentId === a.id ? copiedHint.text : "";
+        return `
+          <article
+            class="agent-card${a.selected ? " selected" : ""}"
+            tabindex="0"
+            data-id="${a.id}"
+            aria-selected="${a.selected}"
+          >
+            <div class="agent-head">
+              <img class="agent-glyph ${a.glyphClass}" src="${a.glyph}" width="30" height="30" alt="">
+              <div class="agent-meta">
+                <p class="agent-title">${a.name}</p>
+                <p class="agent-trust">${a.trust}</p>
+              </div>
+            </div>
+            <div class="listen-row">
+              <p class="listen-note">Listening on ${LOOPBACK}</p>
+              <span class="grant-label${grants.warn ? " warn" : ""}">${grants.text}</span>
+            </div>
+            <div class="credential-panel">
+              <div class="credential-actions">
+                <button type="button" class="btn-ghost" data-toggle-config="${a.id}" aria-expanded="${a.showConfig}">
+                  <span>${a.showConfig ? "Hide config" : "Show config"}</span>
+                  <span class="chev" aria-hidden="true">›</span>
+                </button>
+              </div>
+              <pre class="config-snippet" ${a.showConfig ? "" : "hidden"}>${escapeHtml(displaySnippet())}</pre>
+            </div>
+            <div class="card-footer">
+              <div class="card-footer-leading">
+                <button type="button" class="btn-bordered" data-copy="bearer" data-agent="${a.id}">Copy Bearer</button>
+                <button type="button" class="btn-bordered" data-copy="mcp" data-agent="${a.id}">Copy MCP config</button>
+                ${hint ? `<span class="copy-hint">${hint}</span>` : ""}
+              </div>
+              <button type="button" class="btn-bordered destructive" data-revoke="${a.id}">Revoke credential</button>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function selectAgent(id) {
+      agents.forEach((a) => { a.selected = a.id === id; });
+      render();
+      bind();
+    }
+
+    function showCopyHint(agentId, text) {
+      if (copiedHint.timer) clearTimeout(copiedHint.timer);
+      copiedHint = { agentId, text, timer: null };
+      render();
+      bind();
+      copiedHint.timer = setTimeout(() => {
+        if (copiedHint.agentId === agentId) {
+          copiedHint = { agentId: null, text: null, timer: null };
+          render();
+          bind();
+        }
+      }, 1600);
+    }
+
+    async function copyText(text, agentId, hint) {
+      try {
+        await navigator.clipboard.writeText(text);
+        showCopyHint(agentId, hint);
+      } catch {
+        showCopyHint(agentId, "Copy failed");
+      }
+    }
+
+    function openRevokeDialog(agent) {
+      revokeTarget = agent;
+      document.getElementById("revoke-title").textContent = `Revoke ${agent.name} credential?`;
+      document.getElementById("revoke-dialog").hidden = false;
+    }
+
+    function closeRevokeDialog() {
+      revokeTarget = null;
+      document.getElementById("revoke-dialog").hidden = true;
+    }
+
+    function bind() {
+      document.querySelectorAll(".agent-card").forEach((card) => {
+        card.addEventListener("click", (e) => {
+          if (e.target.closest("button")) return;
+          selectAgent(card.dataset.id);
+        });
+        card.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selectAgent(card.dataset.id);
+          }
+        });
+      });
+
+      document.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.agent;
+          const kind = btn.dataset.copy;
+          if (kind === "bearer") {
+            copyText("EXAMPLE_BEARER_TOKEN", id, "Bearer copied");
+          } else {
+            copyText(fullMcpConfig(), id, "MCP config copied");
+          }
+        });
+      });
+
+      document.querySelectorAll("[data-toggle-config]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.toggleConfig;
+          const agent = agents.find((a) => a.id === id);
+          if (agent) {
+            agent.showConfig = !agent.showConfig;
+            render();
+            bind();
+          }
+        });
+      });
+
+      document.querySelectorAll("[data-revoke]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const agent = agents.find((a) => a.id === btn.dataset.revoke);
+          if (agent) openRevokeDialog(agent);
+        });
+      });
+    }
+
+    document.getElementById("revoke-cancel").addEventListener("click", closeRevokeDialog);
+    document.getElementById("revoke-confirm").addEventListener("click", () => {
+      if (revokeTarget) {
+        revokeTarget.grants = 0;
+        revokeTarget.showConfig = false;
+      }
+      closeRevokeDialog();
+      render();
+      bind();
+    });
+    document.getElementById("revoke-dialog").addEventListener("click", (e) => {
+      if (e.target.id === "revoke-dialog") closeRevokeDialog();
+    });
+
+    const params = new URLSearchParams(location.search);
+    if (params.get("expanded") === "grok") {
+      const grok = agents.find((a) => a.id === "grok");
+      if (grok) grok.showConfig = true;
+    }
+    if (params.get("selected") === "cursor") {
+      agents.forEach((a) => { a.selected = a.id === "cursor"; });
+    }
+
+    render();
+    bind();
+  </script>
+</body>
+</html>

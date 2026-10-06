@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.10.1] - 2026-10-06
+
+### Changed
+
+- Control Center agent cards: Bearer stays redacted; Show config disclosure; Copy Bearer / Copy MCP config; revoke asks for confirmation; grant count sits on the listen line.
+- Access health / menu bar: paired agents show as glyphs instead of a single label.
+- Access Log Formatted Response for scalar tools (`status`, ingest, `open_in_mail`) uses the same smaller caption type as Formatted Request.
+
 ## [0.10.0] - 2026-10-06
 
 Follows **0.8.2** (**0.9.0** was skipped). Notes below are the full user-facing delta for that jump.
