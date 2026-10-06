@@ -636,7 +636,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "get",
                 "description":
-                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant or leak_guard. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty. When attachments are listed and content is granted, use get_attachment to fetch file bytes.",
+                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. When the message has an RFC Message-ID, also returns mailURL (message://…) for opening that message in Apple Mail, plus internetMessageID. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant or leak_guard. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty. When attachments are listed and content is granted, use get_attachment to fetch file bytes.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
