@@ -135,7 +135,10 @@ From the locked v1 spec and first-ship maps, not new invention:
 - Soft delete → Trash (agent-proposeable + human). Hard/permanent delete per spec (stronger confirm; agent exposure as locked in ticket 08)
 - Persistent draft ledger + companion draft UI; still no Apple Mail store writes on local-read
 - Pairing polish, grant expiry, smart-folder selectors, Touch ID audit purge
-- Developer ID + notarization (ticket 16 still open). Mac App Store is hostile to `~/Library/Mail`
+- Menu bar icon polish (current SF Symbol status item; final mark and pulse animation TBD)
+- Personal Apple Developer Program → Developer ID + notarized GitHub Release (Gatekeeper-friendly binary outside the App Store; ticket 16 still open). Mac App Store is hostile to `~/Library/Mail`
+- In-app updates via Sparkle (check GitHub Releases, notify, user chooses to install)
+- Homebrew cask of the same notarized Release artifact (custom tap first; `homebrew/cask` later)
 - Later: remote/expiring sessions, `lan-inference`, iPhone/iPad, Microsoft/Proton
 
 **Out of scope for v1:** built-in assistant, unattended remote inbox, replacing Apple Mail
