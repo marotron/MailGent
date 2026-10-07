@@ -31,6 +31,7 @@ final class AgentBridge {
     let grants = GrantGate()
     let rules = RuleStore()
     let ledger = DraftLedger()
+    let conditionalAccessPrompt = ConditionalAccessPromptCoordinator()
 
     private(set) var pairedAgents: [PairedAgentCredential] = []
     private(set) var selectedAgentID: String?
@@ -859,7 +860,16 @@ final class AgentBridge {
                 leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
                 rules: rules,
                 audit: audit,
-                muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts
+                muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts,
+                conditionalAccessPrompter: { [weak self] agentName, accountID, placement, fields in
+                    guard let self else { return .block }
+                    return await self.conditionalAccessPrompt.requestDecision(
+                        agentName: agentName,
+                        accountID: accountID,
+                        placement: placement,
+                        requestedFields: fields
+                    )
+                }
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
             let count = (try? gateway.read.freshness().indexedCount) ?? 0
@@ -1346,7 +1356,16 @@ final class AgentBridge {
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
             rules: rules,
             audit: existing.audit,
-            muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts
+            muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts,
+            conditionalAccessPrompter: { [weak self] agentName, accountID, placement, fields in
+                guard let self else { return .block }
+                return await self.conditionalAccessPrompt.requestDecision(
+                    agentName: agentName,
+                    accountID: accountID,
+                    placement: placement,
+                    requestedFields: fields
+                )
+            }
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
         leakGuardRevision &+= 1

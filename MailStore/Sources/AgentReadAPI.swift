@@ -1,5 +1,11 @@
 import Foundation
 
+/// User decision on conditional field access prompt.
+public enum ConditionalAccessDecision: Sendable {
+    case allow
+    case block
+}
+
 /// Result of `get_attachment`: local temp path when content is granted and available.
 public struct AttachmentAccessResult: Equatable, Sendable {
     public enum Access: String, Equatable, Sendable {
@@ -54,6 +60,7 @@ public struct AgentReadAPI {
     public let rules: RuleStore
     public let audit: AuditLog?
     public var muteConditionalAccessPrompts: Bool
+    public var conditionalAccessPrompter: (@Sendable (String, String, String, [String]) async -> ConditionalAccessDecision)?
 
     public init(
         read: ReadAPI,
@@ -62,7 +69,8 @@ public struct AgentReadAPI {
         leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
         rules: RuleStore = RuleStore(),
         audit: AuditLog? = nil,
-        muteConditionalAccessPrompts: Bool = false
+        muteConditionalAccessPrompts: Bool = false,
+        conditionalAccessPrompter: (@Sendable (String, String, String, [String]) async -> ConditionalAccessDecision)? = nil
     ) {
         self.read = read
         self.pairing = pairing
@@ -71,6 +79,7 @@ public struct AgentReadAPI {
         self.rules = rules
         self.audit = audit
         self.muteConditionalAccessPrompts = muteConditionalAccessPrompts
+        self.conditionalAccessPrompter = conditionalAccessPrompter
     }
 
     @discardableResult
@@ -78,23 +87,16 @@ public struct AgentReadAPI {
         try pairing.authenticate(credential: credential)
     }
     
-    /// Resolves Ask mode fields based on the global mute setting.
+    /// Resolves Ask mode fields based on the global mute setting and user prompts.
     /// When muted: Ask → denied (fail-closed).
-    /// When not muted: Ask → allowed (TODO: actual prompt in future).
-    private func resolveConditionalFields(_ fields: GrantFields) -> GrantFields {
-        if !muteConditionalAccessPrompts {
-            // TODO: Implement actual prompt dialog. For now, treat Ask as allowed when not muted.
-            return GrantFields(
-                subjectMode: fields.subjectMode == .ask ? .on : fields.subjectMode,
-                fromMode: fields.fromMode == .ask ? .on : fields.fromMode,
-                toMode: fields.toMode == .ask ? .on : fields.toMode,
-                ccMode: fields.ccMode == .ask ? .on : fields.ccMode,
-                dateMode: fields.dateMode == .ask ? .on : fields.dateMode,
-                bodyMode: fields.bodyMode == .ask ? .on : fields.bodyMode,
-                attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? .on : fields.attachmentMetadataMode,
-                attachmentContentMode: fields.attachmentContentMode == .ask ? .on : fields.attachmentContentMode
-            )
-        } else {
+    /// When not muted: prompts user for each Ask field; timeout/dismiss → deny.
+    private func resolveConditionalFields(
+        _ fields: GrantFields,
+        agentName: String,
+        accountID: String,
+        placement: String
+    ) async -> GrantFields {
+        if muteConditionalAccessPrompts {
             // Muted: Ask → Off (fail-closed)
             return GrantFields(
                 subjectMode: fields.subjectMode == .ask ? .off : fields.subjectMode,
@@ -107,6 +109,51 @@ public struct AgentReadAPI {
                 attachmentContentMode: fields.attachmentContentMode == .ask ? .off : fields.attachmentContentMode
             )
         }
+        
+        // Not muted: check if any fields need prompting
+        let askFields = collectAskFields(fields)
+        guard !askFields.isEmpty, let prompter = conditionalAccessPrompter else {
+            // No Ask fields or no prompter → allow all Ask fields (fallback)
+            return GrantFields(
+                subjectMode: fields.subjectMode == .ask ? .on : fields.subjectMode,
+                fromMode: fields.fromMode == .ask ? .on : fields.fromMode,
+                toMode: fields.toMode == .ask ? .on : fields.toMode,
+                ccMode: fields.ccMode == .ask ? .on : fields.ccMode,
+                dateMode: fields.dateMode == .ask ? .on : fields.dateMode,
+                bodyMode: fields.bodyMode == .ask ? .on : fields.bodyMode,
+                attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? .on : fields.attachmentMetadataMode,
+                attachmentContentMode: fields.attachmentContentMode == .ask ? .on : fields.attachmentContentMode
+            )
+        }
+        
+        // Prompt user
+        let decision = await prompter(agentName, accountID, placement, askFields)
+        
+        // Apply decision to all Ask fields
+        let resolvedMode: FieldAccessMode = decision == .allow ? .on : .off
+        return GrantFields(
+            subjectMode: fields.subjectMode == .ask ? resolvedMode : fields.subjectMode,
+            fromMode: fields.fromMode == .ask ? resolvedMode : fields.fromMode,
+            toMode: fields.toMode == .ask ? resolvedMode : fields.toMode,
+            ccMode: fields.ccMode == .ask ? resolvedMode : fields.ccMode,
+            dateMode: fields.dateMode == .ask ? resolvedMode : fields.dateMode,
+            bodyMode: fields.bodyMode == .ask ? resolvedMode : fields.bodyMode,
+            attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? resolvedMode : fields.attachmentMetadataMode,
+            attachmentContentMode: fields.attachmentContentMode == .ask ? resolvedMode : fields.attachmentContentMode
+        )
+    }
+    
+    private func collectAskFields(_ fields: GrantFields) -> [String] {
+        var result: [String] = []
+        if fields.subjectMode == .ask { result.append("Subject") }
+        if fields.fromMode == .ask { result.append("From") }
+        if fields.toMode == .ask { result.append("To") }
+        if fields.ccMode == .ask { result.append("Cc") }
+        if fields.dateMode == .ask { result.append("Date") }
+        if fields.bodyMode == .ask { result.append("Body") }
+        if fields.attachmentMetadataMode == .ask { result.append("Attachment names") }
+        if fields.attachmentContentMode == .ask { result.append("Attachment content") }
+        return result
     }
 
     public func list(
@@ -247,7 +294,7 @@ public struct AgentReadAPI {
         accountID: String,
         placement: String,
         id: String
-    ) throws -> ReadMessage {
+    ) async throws -> ReadMessage {
         let started = Date()
         let agent = try authenticate(credential)
         let path = "\(accountID)/\(placement)/\(id)"
@@ -282,7 +329,7 @@ public struct AgentReadAPI {
                 throw PairingError.unauthorized
             }
             let rawFields = grant.fields
-            let fields = resolveConditionalFields(rawFields)
+            let fields = await resolveConditionalFields(rawFields, agentName: agent.name, accountID: accountID, placement: placement)
             let granted = message.applying(fields)
             let (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
             let access = ReadMessageAccess(subject: subjectField, body: bodyField)

@@ -86,7 +86,7 @@ struct MailGentSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Mute conditional access prompts", isOn: $muteConditionalAccessPrompts)
                     Text(
-                        "When on, fields set to Ask mode will be denied without prompting. Per-field Ask settings are preserved — re-enable this setting to resume prompts. Off by default (prompts shown when Ask is set)."
+                        "When enabled, fields set to Ask mode are denied without prompting (fail-closed). When disabled (default), MailGent shows a popup before granting Ask fields — Allow proceeds, Block denies. Per-field Ask settings are preserved when toggling this mute."
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)

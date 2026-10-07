@@ -229,7 +229,7 @@ public struct LoopbackMCPServer {
             else {
                 throw CallError.badArguments
             }
-            let message = try gateway.get(
+            let message = try await gateway.get(
                 credential: credential,
                 accountID: accountID,
                 placement: placement,

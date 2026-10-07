@@ -411,6 +411,25 @@ struct CompanionWindow: View {
             }
         }
         .frame(minWidth: 720, minHeight: 480)
+        .alert(
+            "Field Access Request",
+            isPresented: Binding(
+                get: { session.agents.conditionalAccessPrompt.pendingRequest != nil },
+                set: { if !$0 { session.agents.conditionalAccessPrompt.block() } }
+            ),
+            presenting: session.agents.conditionalAccessPrompt.pendingRequest
+        ) { request in
+            Button("Block", role: .cancel) {
+                session.agents.conditionalAccessPrompt.block()
+            }
+            Button("Allow") {
+                session.agents.conditionalAccessPrompt.allow()
+            }
+        } message: { request in
+            let accountLabel = session.accountLabel(request.accountID)
+            let fieldsText = request.requestedFields.joined(separator: ", ")
+            Text("Agent **\(request.agentName)** wants to read: **\(fieldsText)** from **\(accountLabel) / \(request.placement)**.\n\nThis prompt will dismiss after 30 seconds (Block by default).")
+        }
     }
 
     private var controlCenter: some View {
