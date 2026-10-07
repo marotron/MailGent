@@ -8,6 +8,7 @@ enum MailGentPreferences {
     static let auditMaxAgeSecondsKey = "auditMaxAgeSeconds"
     static let auditMaxCountKey = "auditMaxCount"
     static let auditMaxBytesKey = "auditMaxBytes"
+    static let muteConditionalAccessPromptsKey = "muteConditionalAccessPrompts"
 
     static let defaultLoopbackPort: UInt16 = 8788
 
@@ -17,6 +18,10 @@ enum MailGentPreferences {
 
     static var agentMayOpenInMail: Bool {
         UserDefaults.standard.bool(forKey: agentMayOpenInMailKey)
+    }
+    
+    static var muteConditionalAccessPrompts: Bool {
+        UserDefaults.standard.bool(forKey: muteConditionalAccessPromptsKey)
     }
 
     static var loopbackPort: UInt16 {

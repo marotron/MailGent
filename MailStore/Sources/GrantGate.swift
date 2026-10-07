@@ -17,15 +17,78 @@ public struct GrantParticipant: Equatable, Codable, Sendable {
     }
 }
 
+public enum FieldAccessMode: String, Codable, Hashable, Sendable {
+    case off
+    case on
+    case ask
+    
+    public var isAllowed: Bool {
+        self == .on
+    }
+    
+    public var requiresPrompt: Bool {
+        self == .ask
+    }
+    
+    public func nextMode() -> FieldAccessMode {
+        switch self {
+        case .off: return .ask
+        case .ask: return .on
+        case .on: return .off
+        }
+    }
+}
+
 public struct GrantFields: Equatable, Hashable, Sendable {
-    public var subject: Bool
-    public var from: Bool
-    public var to: Bool
-    public var cc: Bool
-    public var date: Bool
-    public var body: Bool
-    public var attachmentMetadata: Bool
-    public var attachmentContent: Bool
+    public var subjectMode: FieldAccessMode
+    public var fromMode: FieldAccessMode
+    public var toMode: FieldAccessMode
+    public var ccMode: FieldAccessMode
+    public var dateMode: FieldAccessMode
+    public var bodyMode: FieldAccessMode
+    public var attachmentMetadataMode: FieldAccessMode
+    public var attachmentContentMode: FieldAccessMode
+    
+    /// Legacy Bool getters for backward compatibility
+    public var subject: Bool {
+        get { subjectMode == .on }
+        set { subjectMode = newValue ? .on : .off }
+    }
+    
+    public var from: Bool {
+        get { fromMode == .on }
+        set { fromMode = newValue ? .on : .off }
+    }
+    
+    public var to: Bool {
+        get { toMode == .on }
+        set { toMode = newValue ? .on : .off }
+    }
+    
+    public var cc: Bool {
+        get { ccMode == .on }
+        set { ccMode = newValue ? .on : .off }
+    }
+    
+    public var date: Bool {
+        get { dateMode == .on }
+        set { dateMode = newValue ? .on : .off }
+    }
+    
+    public var body: Bool {
+        get { bodyMode == .on }
+        set { bodyMode = newValue ? .on : .off }
+    }
+    
+    public var attachmentMetadata: Bool {
+        get { attachmentMetadataMode == .on }
+        set { attachmentMetadataMode = newValue ? .on : .off }
+    }
+    
+    public var attachmentContent: Bool {
+        get { attachmentContentMode == .on }
+        set { attachmentContentMode = newValue ? .on : .off }
+    }
 
     /// All header fields on/off (legacy “envelope” cap).
     public var envelope: Bool {
@@ -40,6 +103,26 @@ public struct GrantFields: Equatable, Hashable, Sendable {
     }
 
     public init(
+        subjectMode: FieldAccessMode = .on,
+        fromMode: FieldAccessMode = .on,
+        toMode: FieldAccessMode = .on,
+        ccMode: FieldAccessMode = .on,
+        dateMode: FieldAccessMode = .on,
+        bodyMode: FieldAccessMode = .on,
+        attachmentMetadataMode: FieldAccessMode = .off,
+        attachmentContentMode: FieldAccessMode = .off
+    ) {
+        self.subjectMode = subjectMode
+        self.fromMode = fromMode
+        self.toMode = toMode
+        self.ccMode = ccMode
+        self.dateMode = dateMode
+        self.bodyMode = bodyMode
+        self.attachmentMetadataMode = attachmentMetadataMode
+        self.attachmentContentMode = attachmentMetadataMode == .off ? .off : attachmentContentMode
+    }
+    
+    public init(
         subject: Bool = true,
         from: Bool = true,
         to: Bool = true,
@@ -49,14 +132,16 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         attachmentMetadata: Bool = false,
         attachmentContent: Bool = false
     ) {
-        self.subject = subject
-        self.from = from
-        self.to = to
-        self.cc = cc
-        self.date = date
-        self.body = body
-        self.attachmentMetadata = attachmentMetadata
-        self.attachmentContent = attachmentContent && attachmentMetadata
+        self.init(
+            subjectMode: subject ? .on : .off,
+            fromMode: from ? .on : .off,
+            toMode: to ? .on : .off,
+            ccMode: cc ? .on : .off,
+            dateMode: date ? .on : .off,
+            bodyMode: body ? .on : .off,
+            attachmentMetadataMode: attachmentMetadata ? .on : .off,
+            attachmentContentMode: attachmentContent ? .on : .off
+        )
     }
 
     public init(
@@ -126,34 +211,67 @@ public struct GrantFields: Equatable, Hashable, Sendable {
 extension GrantFields: Codable {
     enum CodingKeys: String, CodingKey {
         case subject, from, to, cc, date, body, attachmentMetadata, attachmentContent, envelope
+        case subjectMode, fromMode, toMode, ccMode, dateMode, bodyMode, attachmentMetadataMode, attachmentContentMode
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        body = try c.decodeIfPresent(Bool.self, forKey: .body) ?? true
-        attachmentMetadata = try c.decodeIfPresent(Bool.self, forKey: .attachmentMetadata) ?? false
-        attachmentContent = try c.decodeIfPresent(Bool.self, forKey: .attachmentContent) ?? false
-        if c.contains(.subject) || c.contains(.from) || c.contains(.to) || c.contains(.cc) || c.contains(.date) {
-            subject = try c.decodeIfPresent(Bool.self, forKey: .subject) ?? true
-            from = try c.decodeIfPresent(Bool.self, forKey: .from) ?? true
-            to = try c.decodeIfPresent(Bool.self, forKey: .to) ?? true
-            cc = try c.decodeIfPresent(Bool.self, forKey: .cc) ?? true
-            date = try c.decodeIfPresent(Bool.self, forKey: .date) ?? true
+        
+        // Try new mode-based fields first
+        if c.contains(.subjectMode) {
+            subjectMode = try c.decode(FieldAccessMode.self, forKey: .subjectMode)
+            fromMode = try c.decode(FieldAccessMode.self, forKey: .fromMode)
+            toMode = try c.decode(FieldAccessMode.self, forKey: .toMode)
+            ccMode = try c.decode(FieldAccessMode.self, forKey: .ccMode)
+            dateMode = try c.decode(FieldAccessMode.self, forKey: .dateMode)
+            bodyMode = try c.decode(FieldAccessMode.self, forKey: .bodyMode)
+            attachmentMetadataMode = try c.decode(FieldAccessMode.self, forKey: .attachmentMetadataMode)
+            attachmentContentMode = try c.decode(FieldAccessMode.self, forKey: .attachmentContentMode)
         } else {
-            let envelope = try c.decodeIfPresent(Bool.self, forKey: .envelope) ?? true
-            subject = envelope
-            from = envelope
-            to = envelope
-            cc = envelope
-            date = envelope
-        }
-        if attachmentContent && !attachmentMetadata {
-            attachmentContent = false
+            // Legacy Bool-based decoding
+            let bodyBool = try c.decodeIfPresent(Bool.self, forKey: .body) ?? true
+            let attachmentMetadataBool = try c.decodeIfPresent(Bool.self, forKey: .attachmentMetadata) ?? false
+            let attachmentContentBool = try c.decodeIfPresent(Bool.self, forKey: .attachmentContent) ?? false
+            
+            bodyMode = bodyBool ? .on : .off
+            attachmentMetadataMode = attachmentMetadataBool ? .on : .off
+            attachmentContentMode = attachmentContentBool ? .on : .off
+            
+            if c.contains(.subject) || c.contains(.from) || c.contains(.to) || c.contains(.cc) || c.contains(.date) {
+                subjectMode = (try c.decodeIfPresent(Bool.self, forKey: .subject) ?? true) ? .on : .off
+                fromMode = (try c.decodeIfPresent(Bool.self, forKey: .from) ?? true) ? .on : .off
+                toMode = (try c.decodeIfPresent(Bool.self, forKey: .to) ?? true) ? .on : .off
+                ccMode = (try c.decodeIfPresent(Bool.self, forKey: .cc) ?? true) ? .on : .off
+                dateMode = (try c.decodeIfPresent(Bool.self, forKey: .date) ?? true) ? .on : .off
+            } else {
+                let envelope = try c.decodeIfPresent(Bool.self, forKey: .envelope) ?? true
+                let envelopeMode: FieldAccessMode = envelope ? .on : .off
+                subjectMode = envelopeMode
+                fromMode = envelopeMode
+                toMode = envelopeMode
+                ccMode = envelopeMode
+                dateMode = envelopeMode
+            }
+            
+            if attachmentContentMode == .on && attachmentMetadataMode == .off {
+                attachmentContentMode = .off
+            }
         }
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        // Encode new mode-based fields
+        try c.encode(subjectMode, forKey: .subjectMode)
+        try c.encode(fromMode, forKey: .fromMode)
+        try c.encode(toMode, forKey: .toMode)
+        try c.encode(ccMode, forKey: .ccMode)
+        try c.encode(dateMode, forKey: .dateMode)
+        try c.encode(bodyMode, forKey: .bodyMode)
+        try c.encode(attachmentMetadataMode, forKey: .attachmentMetadataMode)
+        try c.encode(attachmentContentMode, forKey: .attachmentContentMode)
+        
+        // Also encode legacy Bool fields for backward compatibility
         try c.encode(subject, forKey: .subject)
         try c.encode(from, forKey: .from)
         try c.encode(to, forKey: .to)
@@ -162,7 +280,6 @@ extension GrantFields: Codable {
         try c.encode(body, forKey: .body)
         try c.encode(attachmentMetadata, forKey: .attachmentMetadata)
         try c.encode(attachmentContent, forKey: .attachmentContent)
-        // Keep envelope for older readers.
         try c.encode(envelope, forKey: .envelope)
     }
 }

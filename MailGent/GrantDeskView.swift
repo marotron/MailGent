@@ -470,17 +470,42 @@ struct GrantDeskView: View {
         _ keyPath: WritableKeyPath<GrantFields, Bool>,
         systemImage: String? = nil
     ) -> some View {
-        Button {
-            session.agents.toggleAllowField(
+        let modeKeyPath = fieldModeKeyPath(for: keyPath)
+        let mode = grant.fields[keyPath: modeKeyPath]
+        return Button {
+            session.agents.cycleFieldAccessMode(
                 accountID: grant.accountID,
                 placement: grant.placement,
-                keyPath: keyPath
+                modeKeyPath: modeKeyPath
             )
         } label: {
-            GrantFieldChip(title: title, isOn: isOn, systemImage: systemImage)
+            GrantFieldChip(title: title, isOn: isOn, systemImage: systemImage, mode: mode)
         }
         .buttonStyle(.plain)
         .disabled(!isEditing)
+        .help(fieldModeHelp(mode: mode, title: title))
+    }
+    
+    private func fieldModeKeyPath(for boolKeyPath: WritableKeyPath<GrantFields, Bool>) -> WritableKeyPath<GrantFields, FieldAccessMode> {
+        switch boolKeyPath {
+        case \.subject: return \.subjectMode
+        case \.from: return \.fromMode
+        case \.to: return \.toMode
+        case \.cc: return \.ccMode
+        case \.date: return \.dateMode
+        case \.body: return \.bodyMode
+        case \.attachmentMetadata: return \.attachmentMetadataMode
+        case \.attachmentContent: return \.attachmentContentMode
+        default: return \.subjectMode
+        }
+    }
+    
+    private func fieldModeHelp(mode: FieldAccessMode, title: String) -> String {
+        switch mode {
+        case .off: return "\(title): Off — agent cannot access"
+        case .on: return "\(title): On — agent may access freely"
+        case .ask: return "\(title): Ask — prompt before each access"
+        }
     }
 
     private func accountBlock(_ account: DetectedAccount) -> some View {

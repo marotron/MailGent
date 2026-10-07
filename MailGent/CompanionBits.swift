@@ -1436,6 +1436,7 @@ struct GrantFieldChip: View {
     let isOn: Bool
     var systemImage: String? = nil
     var strikethroughWhenOff: Bool = false
+    var mode: FieldAccessMode? = nil
 
     var body: some View {
         HStack(spacing: 4) {
@@ -1447,23 +1448,72 @@ struct GrantFieldChip: View {
                 .font(.caption)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+            if let mode, mode == .ask {
+                Text("?")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(askColor)
+            }
         }
-        .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+        .foregroundStyle(foregroundColor)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
             Capsule()
-                .fill(isOn ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+                .fill(backgroundColor)
         )
         .overlay(
             Capsule()
                 .strokeBorder(
-                    isOn ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.25),
-                    lineWidth: isOn ? 1.5 : 0.5
+                    borderColor,
+                    lineWidth: borderWidth
                 )
         )
         .strikethrough(strikethroughWhenOff && !isOn, color: Color.secondary.opacity(0.45))
         .fixedSize(horizontal: true, vertical: false)
+    }
+    
+    private var foregroundColor: Color {
+        if let mode {
+            switch mode {
+            case .on: return Color.accentColor
+            case .ask: return askColor
+            case .off: return Color.secondary
+            }
+        }
+        return isOn ? Color.accentColor : Color.secondary
+    }
+    
+    private var backgroundColor: Color {
+        if let mode {
+            switch mode {
+            case .on: return Color.accentColor.opacity(0.12)
+            case .ask: return askColor.opacity(0.12)
+            case .off: return Color.secondary.opacity(0.08)
+            }
+        }
+        return isOn ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08)
+    }
+    
+    private var borderColor: Color {
+        if let mode {
+            switch mode {
+            case .on: return Color.accentColor.opacity(0.45)
+            case .ask: return askColor.opacity(0.45)
+            case .off: return Color.secondary.opacity(0.25)
+            }
+        }
+        return isOn ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.25)
+    }
+    
+    private var borderWidth: CGFloat {
+        if let mode {
+            return mode == .off ? 0.5 : 1.5
+        }
+        return isOn ? 1.5 : 0.5
+    }
+    
+    private var askColor: Color {
+        Color.orange
     }
 }
 

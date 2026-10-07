@@ -659,6 +659,27 @@ final class AgentBridge {
         fields[keyPath: keyPath].toggle()
         updateAllowFields(accountID: accountID, placement: placement, fields: fields)
     }
+    
+    func cycleFieldAccessMode(
+        accountID: String,
+        placement: String?,
+        modeKeyPath: WritableKeyPath<GrantFields, FieldAccessMode>,
+        mailboxPlacements: [String]? = nil
+    ) {
+        if let placement, hasAccountWideGrant(accountID: accountID) {
+            materializeAccountWideToMailboxes(
+                accountID: accountID,
+                placements: mailboxPlacements ?? [placement]
+            )
+        }
+        guard let existing = grantRows.first(where: {
+            $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
+        }) else { return }
+        var fields = existing.fields
+        let current = fields[keyPath: modeKeyPath]
+        fields[keyPath: modeKeyPath] = current.nextMode()
+        updateAllowFields(accountID: accountID, placement: placement, fields: fields)
+    }
 
     func hasAccountWideGrant(accountID: String) -> Bool {
         grantRows.contains {
@@ -837,7 +858,8 @@ final class AgentBridge {
                 grants: grants,
                 leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
                 rules: rules,
-                audit: audit
+                audit: audit,
+                muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
             let count = (try? gateway.read.freshness().indexedCount) ?? 0
@@ -1323,7 +1345,8 @@ final class AgentBridge {
             grants: existing.grants,
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
             rules: rules,
-            audit: existing.audit
+            audit: existing.audit,
+            muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
         leakGuardRevision &+= 1

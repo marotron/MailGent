@@ -53,6 +53,7 @@ public struct AgentReadAPI {
     public let leakGuard: OutboundLeakGuard
     public let rules: RuleStore
     public let audit: AuditLog?
+    public var muteConditionalAccessPrompts: Bool
 
     public init(
         read: ReadAPI,
@@ -60,7 +61,8 @@ public struct AgentReadAPI {
         grants: GrantGate = GrantGate(),
         leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
         rules: RuleStore = RuleStore(),
-        audit: AuditLog? = nil
+        audit: AuditLog? = nil,
+        muteConditionalAccessPrompts: Bool = false
     ) {
         self.read = read
         self.pairing = pairing
@@ -68,11 +70,43 @@ public struct AgentReadAPI {
         self.leakGuard = leakGuard
         self.rules = rules
         self.audit = audit
+        self.muteConditionalAccessPrompts = muteConditionalAccessPrompts
     }
 
     @discardableResult
     public func authenticate(_ credential: String?) throws -> PairedAgent {
         try pairing.authenticate(credential: credential)
+    }
+    
+    /// Resolves Ask mode fields based on the global mute setting.
+    /// When muted: Ask → denied (fail-closed).
+    /// When not muted: Ask → allowed (TODO: actual prompt in future).
+    private func resolveConditionalFields(_ fields: GrantFields) -> GrantFields {
+        if !muteConditionalAccessPrompts {
+            // TODO: Implement actual prompt dialog. For now, treat Ask as allowed when not muted.
+            return GrantFields(
+                subjectMode: fields.subjectMode == .ask ? .on : fields.subjectMode,
+                fromMode: fields.fromMode == .ask ? .on : fields.fromMode,
+                toMode: fields.toMode == .ask ? .on : fields.toMode,
+                ccMode: fields.ccMode == .ask ? .on : fields.ccMode,
+                dateMode: fields.dateMode == .ask ? .on : fields.dateMode,
+                bodyMode: fields.bodyMode == .ask ? .on : fields.bodyMode,
+                attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? .on : fields.attachmentMetadataMode,
+                attachmentContentMode: fields.attachmentContentMode == .ask ? .on : fields.attachmentContentMode
+            )
+        } else {
+            // Muted: Ask → Off (fail-closed)
+            return GrantFields(
+                subjectMode: fields.subjectMode == .ask ? .off : fields.subjectMode,
+                fromMode: fields.fromMode == .ask ? .off : fields.fromMode,
+                toMode: fields.toMode == .ask ? .off : fields.toMode,
+                ccMode: fields.ccMode == .ask ? .off : fields.ccMode,
+                dateMode: fields.dateMode == .ask ? .off : fields.dateMode,
+                bodyMode: fields.bodyMode == .ask ? .off : fields.bodyMode,
+                attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? .off : fields.attachmentMetadataMode,
+                attachmentContentMode: fields.attachmentContentMode == .ask ? .off : fields.attachmentContentMode
+            )
+        }
     }
 
     public func list(
@@ -247,7 +281,8 @@ public struct AgentReadAPI {
                 )
                 throw PairingError.unauthorized
             }
-            let fields = grant.fields
+            let rawFields = grant.fields
+            let fields = resolveConditionalFields(rawFields)
             let granted = message.applying(fields)
             let (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
             let access = ReadMessageAccess(subject: subjectField, body: bodyField)

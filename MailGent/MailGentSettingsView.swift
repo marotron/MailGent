@@ -4,6 +4,7 @@ struct MailGentSettingsView: View {
     @Bindable var session: CompanionSession
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
     @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
+    @AppStorage(MailGentPreferences.muteConditionalAccessPromptsKey) private var muteConditionalAccessPrompts = false
     @AppStorage(MailGentPreferences.loopbackPortKey) private var loopbackPort =
         Int(MailGentPreferences.defaultLoopbackPort)
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
@@ -78,6 +79,14 @@ struct MailGentSettingsView: View {
                     Toggle("Allow agents to open messages in Apple Mail", isOn: $agentMayOpenInMail)
                     Text(
                         "Off by default. When on, a paired agent may call MCP open_in_mail to open a granted message in Apple Mail."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Mute conditional access prompts", isOn: $muteConditionalAccessPrompts)
+                    Text(
+                        "When on, fields set to Ask mode will be denied without prompting. Per-field Ask settings are preserved — re-enable this setting to resume prompts. Off by default (prompts shown when Ask is set)."
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)
