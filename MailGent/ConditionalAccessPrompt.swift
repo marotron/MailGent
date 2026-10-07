@@ -52,18 +52,16 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         )
         
         return await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                self.continuations[request.id] = continuation
-                self.pendingRequest = request
-                
-                // Timeout after 30 seconds → block
-                let timeoutTask = Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(30))
-                    guard !Task.isCancelled else { return }
-                    self.resolveRequest(id: request.id, decision: .block)
-                }
-                self.timeoutTasks[request.id] = timeoutTask
+            self.continuations[request.id] = continuation
+            self.pendingRequest = request
+            
+            // Timeout after 30 seconds → block
+            let timeoutTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                self.resolveRequest(id: request.id, decision: .block)
             }
+            self.timeoutTasks[request.id] = timeoutTask
         }
     }
     

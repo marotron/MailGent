@@ -26,7 +26,7 @@ struct PairedAgentCredential: Identifiable, Equatable {
 @MainActor
 @Observable
 final class AgentBridge {
-    let audit = AuditLog(fileURL: AgentBridge.auditFileURL)
+    let audit: AuditLog
     let pairing: Pairing
     let grants = GrantGate()
     let rules = RuleStore()
@@ -181,6 +181,7 @@ final class AgentBridge {
     }
 
     init() {
+        audit = AuditLog(fileURL: AgentBridge.auditFileURL)
         pairing = Pairing(audit: audit)
         audit.policy = MailGentPreferences.auditRetention
         audit.onChange = { [weak self] in
@@ -861,7 +862,7 @@ final class AgentBridge {
                 rules: rules,
                 audit: audit,
                 muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts,
-                conditionalAccessPrompter: { [weak self] agentName, accountID, placement, fields in
+                conditionalAccessPrompter: { @MainActor [weak self] agentName, accountID, placement, fields in
                     guard let self else { return .block }
                     return await self.conditionalAccessPrompt.requestDecision(
                         agentName: agentName,
@@ -1357,7 +1358,7 @@ final class AgentBridge {
             rules: rules,
             audit: existing.audit,
             muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts,
-            conditionalAccessPrompter: { [weak self] agentName, accountID, placement, fields in
+            conditionalAccessPrompter: { @MainActor [weak self] agentName, accountID, placement, fields in
                 guard let self else { return .block }
                 return await self.conditionalAccessPrompt.requestDecision(
                     agentName: agentName,
