@@ -36,11 +36,12 @@ More in [`docs/screenshots/`](docs/screenshots/). Personal data in the screensho
 - Incremental ingest reports arrivals vs removals (`+44 −2277 → −2233`); Trash/Junk copies are not counted as new
 - Menu status times sit in chips; Changes shows the ingest window as `12:15–12:31 (16m)` (yesterday or the date when that window is not today); Last agent call uses clock + elapsed like Last ingest
 - Multiple `machine-local` agents (Cursor, Grok Bot), each with its own Bearer, on loopback `http://127.0.0.1:8788/mcp` (8787 reserved for Cursor OAuth callbacks)
-- Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments
+- Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments (Off / Ask / On per field)
+- Ask mode: when conditional access prompts are allowed in Settings (off by default), MCP `get` shows an on-device Allow / Block dialog with message preview before disclosing Ask fields
 - Rules: Pass / Block field overlays on already-allowed mail (From/Subject match, optional When date window)
 - Outbound leak guard: on-device subject/body scan before agents receive mail (opt in per placement; built-in + custom rules)
 - `get_attachment`: attachment bytes as a local temp file when the grant allows Attachment Content (25 MiB cap)
-- Access log of every agent call, showing exactly what the agent received (sanitized/withheld field overlays). Agents cannot edit it; you can delete entries in Settings
+- Access log of every agent call, showing exactly what the agent received (sanitized/withheld field overlays; Ask and Pass/Block hit chips). Agents cannot edit it; you can delete entries in Settings
 - Open in Apple Mail from Companion Read and Access Log previews (`message://` Message-ID handoff)
 - MailGent-owned draft ledger (in-memory; not written into Mail.app; no companion draft UI yet — drafts show in the Access Log)
 
