@@ -2667,6 +2667,8 @@ enum RuleMarkStyle {
     static let passBorder = Color(red: 143 / 255, green: 209 / 255, blue: 160 / 255)
     static let blockRed = Color(red: 215 / 255, green: 0 / 255, blue: 21 / 255)
     static let blockBorder = Color(red: 240 / 255, green: 180 / 255, blue: 187 / 255)
+    /// Filled-circle marks in Access Log list rows and field chips (Ask / Pass / Block).
+    static let circleFillIconSize: CGFloat = 12
 }
 
 /// Compact mark for a field revealed by Pass or withheld by Block (Access preview / Access Log).
@@ -2677,7 +2679,7 @@ struct RuleFieldMarkChip: View {
     var body: some View {
         HStack(spacing: 2) {
             Image(systemName: polarity == .pass ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: RuleMarkStyle.circleFillIconSize, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
             Text(nick)
                 .font(.caption.weight(.bold))
@@ -2723,7 +2725,7 @@ struct ConditionalFieldMarkChip: View {
     var body: some View {
         HStack(spacing: 2) {
             Image(systemName: "questionmark.circle.fill")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: RuleMarkStyle.circleFillIconSize, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
             Text(outcome.label)
                 .font(.caption.weight(.bold))
@@ -2849,7 +2851,7 @@ struct AccessLogRuleHitBadge: View {
     }
 
     private var symbolName: String {
-        polarity == .pass ? "checkmark" : "xmark"
+        polarity == .pass ? "checkmark.circle.fill" : "xmark.circle.fill"
     }
 
     private var accessibilityText: String {
@@ -2864,21 +2866,56 @@ struct AccessLogRuleHitBadge: View {
         let ink = onProminentBackground ? Color.white : color
         HStack(spacing: 3) {
             Image(systemName: symbolName)
-                .font(.system(size: 8, weight: .bold))
+                .font(.system(size: RuleMarkStyle.circleFillIconSize, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(ink)
-                .padding(.horizontal, 4)
                 .frame(height: 14)
-                .background(
-                    Capsule().fill(
-                        onProminentBackground ? Color.white.opacity(0.22) : color.opacity(0.12)
-                    )
-                )
-                .overlay {
-                    Capsule().strokeBorder(
-                        onProminentBackground ? Color.white.opacity(0.75) : color.opacity(0.45),
-                        lineWidth: 0.5
-                    )
-                }
+
+            if count > 1 {
+                Text("\(count)")
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(ink)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+        .help(accessibilityText)
+        .layoutPriority(1)
+    }
+}
+
+// MARK: - Conditional Ask access log visuals
+
+/// List-row chip: Ask popup happened, plus allow (green) or block (red) result.
+/// Uses the same filled `?` circle as the Ask dialog / field mark (`questionmark.circle.fill`).
+struct AccessLogConditionalAskBadge: View {
+    let outcome: ConditionalFieldOutcome
+    /// Fields decided with this outcome; shown when > 1.
+    var count: Int = 1
+    @Environment(\.backgroundProminence) private var backgroundProminence
+
+    private var onProminentBackground: Bool {
+        backgroundProminence == .increased
+    }
+
+    private var color: Color { outcome.color }
+
+    private var accessibilityText: String {
+        let base = outcome == .allowed ? "Ask: user allowed" : "Ask: user blocked"
+        if count > 1 {
+            return "\(base), \(count) fields"
+        }
+        return base
+    }
+
+    var body: some View {
+        let ink = onProminentBackground ? Color.white : color
+        HStack(spacing: 3) {
+            Image(systemName: "questionmark.circle.fill")
+                .font(.system(size: RuleMarkStyle.circleFillIconSize, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(ink)
+                .frame(height: 14)
 
             if count > 1 {
                 Text("\(count)")

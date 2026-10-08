@@ -107,6 +107,15 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 
 Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle`). Do not restyle in protos without updating Swift.
 
+### Access Log list-row chips
+
+| Chip | Job | Chrome | Swift |
+|---|---|---|---|
+| Kind | Tool/kind (`get`, `search`, …) | Blue compact kind badge | `AuditKindBadge` |
+| Ask allow / block | Request showed Ask popup; user result | `questionmark.circle.fill` (pass-green / block-red); count when >1 fields | `AccessLogConditionalAskBadge` |
+| Leak | Leak-guard hits | Shield `L` (+ count) | `AccessLogLeakHitBadge` |
+| Pass / Block rule | Effectful rule applications | `checkmark.circle.fill` / `xmark.circle.fill` (pass-green / block-red); count when >1 hits | `AccessLogRuleHitBadge` |
+
 ---
 
 ## Action catalogue

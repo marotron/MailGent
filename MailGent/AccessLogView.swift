@@ -288,6 +288,12 @@ private struct AccessLogRow: View {
                 .lineLimit(1)
                 .layoutPriority(1)
             Spacer(minLength: 8)
+            if askAllowedCount > 0 {
+                AccessLogConditionalAskBadge(outcome: .allowed, count: askAllowedCount)
+            }
+            if askBlockedCount > 0 {
+                AccessLogConditionalAskBadge(outcome: .blocked, count: askBlockedCount)
+            }
             if leakHitCount > 0 {
                 AccessLogLeakHitBadge(count: leakHitCount, compact: true)
             }
@@ -304,6 +310,14 @@ private struct AccessLogRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
+    }
+
+    private var askAllowedCount: Int {
+        AccessLogFormat.conditionalAskAllowedCount(for: entry)
+    }
+
+    private var askBlockedCount: Int {
+        AccessLogFormat.conditionalAskBlockedCount(for: entry)
     }
 
     private var leakHitCount: Int {
@@ -356,6 +370,16 @@ private struct AccessLogRow: View {
         case .error: status = "failed"
         }
         var text = "\(entry.kind.badgeTitle) \(entry.agentName) \(requestValue) \(responseShort) \(status)"
+        if askAllowedCount > 0 {
+            text += askAllowedCount == 1
+                ? ". Ask user allowed"
+                : ". Ask user allowed, \(askAllowedCount) fields"
+        }
+        if askBlockedCount > 0 {
+            text += askBlockedCount == 1
+                ? ". Ask user blocked"
+                : ". Ask user blocked, \(askBlockedCount) fields"
+        }
         if leakHitCount > 0 {
             text += ". Leak guard \(leakHitCount) detection\(leakHitCount == 1 ? "" : "s")"
         }
@@ -1340,14 +1364,8 @@ enum AccessLogFormat {
             return "\(placements.count) placements"
         }
         if let bodyAccess = obj["bodyAccess"] as? String {
-            switch obj["bodyAccessReason"] as? String {
-            case "conditional":
-                return "bodyAccess=\(bodyAccess) · user allowed"
-            case "conditional_blocked":
-                return "bodyAccess=\(bodyAccess) · user blocked"
-            default:
-                return "bodyAccess=\(bodyAccess)"
-            }
+            // Ask outcome is shown as a list-row chip; keep the access verb only.
+            return "bodyAccess=\(bodyAccess)"
         }
         if let attachmentAccess = obj["attachmentContentAccess"] as? String {
             if let filename = obj["filename"] as? String, !filename.isEmpty {
@@ -1698,6 +1716,32 @@ enum AccessLogFormat {
 
     static func blockApplicationCount(for entry: AuditEntry) -> Int {
         displayMessages(for: entry).reduce(0) { $0 + $1.blockApplicationCount }
+    }
+
+    /// Fields the user Allowed on an Ask prompt for this entry.
+    static func conditionalAskAllowedCount(for entry: AuditEntry) -> Int {
+        let fromMessages = displayMessages(for: entry).reduce(0) {
+            $0 + $1.conditionalConfirmedFields.grantedCount
+        }
+        if fromMessages > 0 { return fromMessages }
+        return conditionalAskCountFromResponse(entry.responseSummary, blocked: false)
+    }
+
+    /// Fields the user Blocked on an Ask prompt for this entry.
+    static func conditionalAskBlockedCount(for entry: AuditEntry) -> Int {
+        let fromMessages = displayMessages(for: entry).reduce(0) {
+            $0 + $1.conditionalUserBlockedFields.grantedCount
+        }
+        if fromMessages > 0 { return fromMessages }
+        return conditionalAskCountFromResponse(entry.responseSummary, blocked: true)
+    }
+
+    private static func conditionalAskCountFromResponse(_ responseSummary: String, blocked: Bool) -> Int {
+        guard let obj = jsonObject(responseSummary) else { return 0 }
+        let fields = blocked
+            ? conditionalBlockedFields(from: obj)
+            : conditionalFields(from: obj)
+        return fields?.grantedCount ?? 0
     }
 
     static func messageRef(from responseSummary: String) -> AuditMessageRef? {

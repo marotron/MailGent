@@ -236,6 +236,13 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         subject || from || to || cc || date || body || attachmentMetadata || attachmentContent
     }
 
+    /// How many discrete field bits are on (Access Log Ask chip counts).
+    public var grantedCount: Int {
+        [subject, from, to, cc, date, body, attachmentMetadata, attachmentContent]
+            .filter(\.self)
+            .count
+    }
+
     /// UI / preview mask: Ask → Off when conditional prompts are disabled (storage unchanged).
     public func displayed(allowConditional: Bool) -> GrantFields {
         GrantFields(
