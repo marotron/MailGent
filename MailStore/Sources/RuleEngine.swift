@@ -352,34 +352,38 @@ public enum RuleEngine {
 }
 
 extension GrantFields {
-    /// Field-wise OR. Attachment content still requires metadata.
+    /// Field-wise Pass merge. Preserves Ask (Bool OR collapsed Ask → Off).
     public func unioning(_ other: GrantFields) -> GrantFields {
-        GrantFields(
-            subject: subject || other.subject,
-            from: from || other.from,
-            to: to || other.to,
-            cc: cc || other.cc,
-            date: date || other.date,
-            body: body || other.body,
-            attachmentMetadata: attachmentMetadata || other.attachmentMetadata,
-            attachmentContent: attachmentContent || other.attachmentContent
+        var next = GrantFields(
+            subjectMode: subjectMode.unioning(other.subjectMode),
+            fromMode: fromMode.unioning(other.fromMode),
+            toMode: toMode.unioning(other.toMode),
+            ccMode: ccMode.unioning(other.ccMode),
+            dateMode: dateMode.unioning(other.dateMode),
+            bodyMode: bodyMode.unioning(other.bodyMode),
+            attachmentMetadataMode: attachmentMetadataMode.unioning(other.attachmentMetadataMode),
+            attachmentContentMode: attachmentContentMode.unioning(other.attachmentContentMode)
         )
+        if next.attachmentMetadataMode == .off {
+            next.attachmentContentMode = .off
+        }
+        return next
     }
 
-    /// Field-wise AND-NOT for Blocks. Clearing metadata also clears content.
+    /// Field-wise Block subtract. Clearing metadata also clears content. Preserves Ask.
     public func subtracting(_ other: GrantFields) -> GrantFields {
         var next = GrantFields(
-            subject: subject && !other.subject,
-            from: from && !other.from,
-            to: to && !other.to,
-            cc: cc && !other.cc,
-            date: date && !other.date,
-            body: body && !other.body,
-            attachmentMetadata: attachmentMetadata && !other.attachmentMetadata,
-            attachmentContent: attachmentContent && !other.attachmentContent
+            subjectMode: subjectMode.subtracting(other.subjectMode),
+            fromMode: fromMode.subtracting(other.fromMode),
+            toMode: toMode.subtracting(other.toMode),
+            ccMode: ccMode.subtracting(other.ccMode),
+            dateMode: dateMode.subtracting(other.dateMode),
+            bodyMode: bodyMode.subtracting(other.bodyMode),
+            attachmentMetadataMode: attachmentMetadataMode.subtracting(other.attachmentMetadataMode),
+            attachmentContentMode: attachmentContentMode.subtracting(other.attachmentContentMode)
         )
-        if !next.attachmentMetadata {
-            next.attachmentContent = false
+        if next.attachmentMetadataMode == .off {
+            next.attachmentContentMode = .off
         }
         return next
     }

@@ -26,6 +26,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | **Job** | Non-destructive handoff / open / preview |
 | **Chrome** | Height-locked to Access Log `Formatted` (small segmented metrics); track + raised face; icon-only by default |
 | **Hover** | Expands to icon + regular-weight small-control label; border/icon → accent blue |
+| **Always expanded** | `alwaysExpanded: true` keeps icon + label (Ask dialog message actions) |
 | **Swift** | `SecondaryActionButton` in `CompanionBits.swift` |
 | **HTML** | `.secondary-action` (+ optional `.secondary-action-row`) |
 | **Icons** | Always shown; label appears on hover / focus; see [Action catalogue](#action-catalogue) |

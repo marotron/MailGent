@@ -372,11 +372,13 @@ struct GrantDeskInfoTopic: Equatable {
         id: "grant-field-badges",
         title: "Grant field badges",
         paragraphs: [
-            "Compact caps for what the agent may read on this placement. Blue = granted; struck-through = withheld."
+            "Compact caps for what the agent may read on this placement. Edit on Scope or Access, then click chips to change the mode."
         ],
         bullets: [
-            "S Subject · F From · T To · D Date",
+            "S Subject · F From · T To · Cc · D Date",
             "B Body · A Attachment names · C Attachment content",
+            "Blue = On · Orange ? = Ask · Grey struck = Off",
+            "Cycle: Off → Ask → On when Allow conditional access prompts is on; otherwise Off ↔ On and Ask shows as Off (Ask settings kept).",
             "Denied fields return not_granted in MCP JSON and show red hatch in the access log."
         ]
     )
@@ -786,5 +788,6 @@ struct LeakGuardScopeControls: View {
                 }
             )
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }

@@ -4,7 +4,7 @@ struct MailGentSettingsView: View {
     @Bindable var session: CompanionSession
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
     @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
-    @AppStorage(MailGentPreferences.muteConditionalAccessPromptsKey) private var muteConditionalAccessPrompts = false
+    @AppStorage(MailGentPreferences.allowConditionalAccessPromptsKey) private var allowConditionalAccessPrompts = false
     @AppStorage(MailGentPreferences.loopbackPortKey) private var loopbackPort =
         Int(MailGentPreferences.defaultLoopbackPort)
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
@@ -23,6 +23,9 @@ struct MailGentSettingsView: View {
         .frame(width: 480, height: 600)
         .onChange(of: agentMayOpenInMail) { _, _ in
             session.agents.applyAgentMayOpenInMail()
+        }
+        .onChange(of: allowConditionalAccessPrompts) { _, _ in
+            session.agents.applyConditionalAccessPreference()
         }
         .onChange(of: loopbackPort) { _, newValue in
             let normalized = Int(MailGentPreferences.normalizedLoopbackPort(newValue))
@@ -84,9 +87,9 @@ struct MailGentSettingsView: View {
                     .font(.callout)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Mute conditional access prompts", isOn: $muteConditionalAccessPrompts)
+                    Toggle("Allow conditional access prompts", isOn: $allowConditionalAccessPrompts)
                     Text(
-                        "When enabled, fields set to Ask mode are denied without prompting (fail-closed). When disabled (default), MailGent shows a popup before granting Ask fields — Allow proceeds, Block denies. Per-field Ask settings are preserved when toggling this mute."
+                        "Off by default. When on, Grant Desk Ask chips prompt on MCP get (Allow / Block). When off, Ask fields show and act as Off — your Ask settings stay saved and come back when you turn this on again."
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)

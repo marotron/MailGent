@@ -4,6 +4,8 @@ import SwiftUI
 /// Lean grant desk: agent Scope/Access, mailbox-wide Rules/Privacy via Shared pick.
 struct GrantDeskView: View {
     @Bindable var session: CompanionSession
+    @AppStorage(MailGentPreferences.allowConditionalAccessPromptsKey)
+    private var allowConditionalAccessPrompts = false
     @State private var tab: Tab = .scope
     @State private var deskFocus: DeskFocus = .agent
     @State private var expandedInfo: String?
@@ -328,7 +330,11 @@ struct GrantDeskView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 GrantDeskInfoButton(topic: .grantFieldBadges, expandedInfo: $expandedInfo, size: .small)
-                Text("· Leak guard")
+                Text(
+                    allowConditionalAccessPrompts
+                        ? "· Click chips: Off → Ask → On · Leak guard"
+                        : "· Click chips: Off ↔ On (Ask paused) · Leak guard"
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 GrantDeskInfoButton(topic: .shieldScan, expandedInfo: $expandedInfo, size: .small)
@@ -361,6 +367,13 @@ struct GrantDeskView: View {
             Text("Fields are the Scope base. Matching Pass/Block rules overwrite fields on allowed mail.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Text(
+                allowConditionalAccessPrompts
+                    ? "Click a field chip to cycle Off → Ask → On. Ask prompts once per MCP get."
+                    : "Allow conditional access is off — Ask fields show and act as Off. Turn it on in Settings to restore Ask."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             LeakGuardAccessRow(
                 session: session,
@@ -392,11 +405,11 @@ struct GrantDeskView: View {
                 .font(.caption.weight(.semibold))
                 .padding(.top, 4)
             GrantChipFlow(spacing: 6) {
-                fieldBadge("Subject", fields.subject, grant, \.subject, systemImage: "text.alignleft")
-                fieldBadge("From", fields.from, grant, \.from, systemImage: "envelope")
-                fieldBadge("To", fields.to, grant, \.to, systemImage: "envelope")
-                fieldBadge("Cc", fields.cc, grant, \.cc, systemImage: "person.2")
-                fieldBadge("Date & Time", fields.date, grant, \.date, systemImage: "calendar")
+                fieldBadge("Subject", grant, \.subjectMode, systemImage: "text.alignleft")
+                fieldBadge("From", grant, \.fromMode, systemImage: "envelope")
+                fieldBadge("To", grant, \.toMode, systemImage: "envelope")
+                fieldBadge("Cc", grant, \.ccMode, systemImage: "person.2")
+                fieldBadge("Date & Time", grant, \.dateMode, systemImage: "calendar")
             }
             .disabled(!isEditing)
             Text("Content")
@@ -405,23 +418,20 @@ struct GrantDeskView: View {
             GrantChipFlow(spacing: 6) {
                 fieldBadge(
                     "Body / snippet",
-                    fields.body,
                     grant,
-                    \.body,
+                    \.bodyMode,
                     systemImage: "text.alignleft"
                 )
                 fieldBadge(
                     "Attachment names",
-                    fields.attachmentMetadata,
                     grant,
-                    \.attachmentMetadata,
+                    \.attachmentMetadataMode,
                     systemImage: "paperclip"
                 )
                 fieldBadge(
                     "Attachment content",
-                    fields.attachmentContent,
                     grant,
-                    \.attachmentContent,
+                    \.attachmentContentMode,
                     systemImage: "paperclip"
                 )
             }
@@ -465,13 +475,12 @@ struct GrantDeskView: View {
 
     private func fieldBadge(
         _ title: String,
-        _ isOn: Bool,
         _ grant: Grant,
-        _ keyPath: WritableKeyPath<GrantFields, Bool>,
+        _ modeKeyPath: WritableKeyPath<GrantFields, FieldAccessMode>,
         systemImage: String? = nil
     ) -> some View {
-        let modeKeyPath = fieldModeKeyPath(for: keyPath)
-        let mode = grant.fields[keyPath: modeKeyPath]
+        let stored = grant.fields[keyPath: modeKeyPath]
+        let mode = stored.displayed(allowConditional: allowConditionalAccessPrompts)
         return Button {
             session.agents.cycleFieldAccessMode(
                 accountID: grant.accountID,
@@ -479,33 +488,35 @@ struct GrantDeskView: View {
                 modeKeyPath: modeKeyPath
             )
         } label: {
-            GrantFieldChip(title: title, isOn: isOn, systemImage: systemImage, mode: mode)
+            GrantFieldChip(
+                title: title,
+                isOn: mode == .on,
+                systemImage: systemImage,
+                mode: mode
+            )
         }
         .buttonStyle(.plain)
         .disabled(!isEditing)
-        .help(fieldModeHelp(mode: mode, title: title))
+        .help(fieldModeHelp(stored: stored, displayed: mode, title: title))
     }
     
-    private func fieldModeKeyPath(for boolKeyPath: WritableKeyPath<GrantFields, Bool>) -> WritableKeyPath<GrantFields, FieldAccessMode> {
-        switch boolKeyPath {
-        case \.subject: return \.subjectMode
-        case \.from: return \.fromMode
-        case \.to: return \.toMode
-        case \.cc: return \.ccMode
-        case \.date: return \.dateMode
-        case \.body: return \.bodyMode
-        case \.attachmentMetadata: return \.attachmentMetadataMode
-        case \.attachmentContent: return \.attachmentContentMode
-        default: return \.subjectMode
+    private func fieldModeHelp(
+        stored: FieldAccessMode,
+        displayed: FieldAccessMode,
+        title: String
+    ) -> String {
+        if !allowConditionalAccessPrompts && stored == .ask {
+            return "\(title): Ask paused (shows Off) — enable Allow conditional access prompts in Settings to restore"
         }
-    }
-    
-    private func fieldModeHelp(mode: FieldAccessMode, title: String) -> String {
-        switch mode {
+        switch displayed {
         case .off: return "\(title): Off — agent cannot access"
         case .on: return "\(title): On — agent may access freely"
         case .ask: return "\(title): Ask — prompt before each access"
         }
+    }
+
+    private func displayedFields(_ fields: GrantFields) -> GrantFields {
+        fields.displayed(allowConditional: allowConditionalAccessPrompts)
     }
 
     private func accountBlock(_ account: DetectedAccount) -> some View {
@@ -525,13 +536,13 @@ struct GrantDeskView: View {
                 if let grant = session.agents.allowGrant(accountID: account.id, placement: nil),
                    session.agents.hasAccountWideGrant(accountID: account.id) {
                     scopeBadgeRow(
-                        fields: grant.fields,
+                        fields: displayedFields(grant.fields),
                         accountID: account.id,
                         placement: nil,
                         showsLeakGuard: true,
                         interactive: isEditing
                     ) { keyPath in
-                        session.agents.toggleAllowField(
+                        session.agents.cycleAllowField(
                             accountID: account.id,
                             placement: nil,
                             keyPath: keyPath
@@ -576,13 +587,13 @@ struct GrantDeskView: View {
                            placement: mailbox.placement
                        ) {
                         scopeBadgeRow(
-                            fields: fields,
+                            fields: displayedFields(fields),
                             accountID: account.id,
                             placement: mailbox.placement,
                             showsLeakGuard: !accountWide,
                             interactive: isEditing
                         ) { keyPath in
-                            session.agents.toggleAllowField(
+                            session.agents.cycleAllowField(
                                 accountID: account.id,
                                 placement: mailbox.placement,
                                 keyPath: keyPath,
@@ -617,7 +628,7 @@ struct GrantDeskView: View {
                 .multilineTextAlignment(.leading)
             HStack(spacing: 4) {
                 GrantFieldBadgeRow(
-                    fields: grant.fields,
+                    fields: displayedFields(grant.fields),
                     interactive: false
                 )
                 if shieldState != .off {
@@ -648,7 +659,6 @@ struct GrantDeskView: View {
         onToggle: @escaping (WritableKeyPath<GrantFields, Bool>) -> Void
     ) -> some View {
         HStack(spacing: 4) {
-            GrantFieldBadgeRow(fields: fields, interactive: interactive, onToggle: onToggle)
             if showsLeakGuard {
                 LeakGuardScopeControls(
                     session: session,
@@ -658,7 +668,9 @@ struct GrantDeskView: View {
                     expandedInfo: $expandedInfo
                 )
             }
+            GrantFieldBadgeRow(fields: fields, interactive: interactive, onToggle: onToggle)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

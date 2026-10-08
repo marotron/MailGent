@@ -37,6 +37,7 @@ struct AddressBadge: View {
 
     var body: some View {
         Text(email)
+            .textSelection(.enabled)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
@@ -528,23 +529,39 @@ enum SecondaryActionMetrics {
 struct SecondaryActionButton: View {
     let title: String
     let action: () -> Void
+    /// When true, label stays visible (Ask dialog). Default: icon-only until hover.
+    var alwaysExpanded: Bool = false
     private let icon: AnyView
 
     @State private var isHovered = false
 
     static var controlHeight: CGFloat { SecondaryActionMetrics.controlHeight }
 
-    init(title: String, systemImage: String, action: @escaping () -> Void) {
+    init(
+        title: String,
+        systemImage: String,
+        alwaysExpanded: Bool = false,
+        action: @escaping () -> Void
+    ) {
         self.title = title
         self.action = action
+        self.alwaysExpanded = alwaysExpanded
         self.icon = AnyView(SecondaryActionSystemGlyph(systemImage: systemImage))
     }
 
-    init(title: String, action: @escaping () -> Void, @ViewBuilder icon: () -> some View) {
+    init(
+        title: String,
+        alwaysExpanded: Bool = false,
+        action: @escaping () -> Void,
+        @ViewBuilder icon: () -> some View
+    ) {
         self.title = title
         self.action = action
+        self.alwaysExpanded = alwaysExpanded
         self.icon = AnyView(icon())
     }
+
+    private var showsLabel: Bool { alwaysExpanded || isHovered }
 
     var body: some View {
         Button(action: action) {
@@ -555,12 +572,12 @@ struct SecondaryActionButton: View {
                     .font(SecondaryActionMetrics.labelFont)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: true)
-                    .padding(.leading, isHovered ? 4 : 0)
-                    .opacity(isHovered ? 1 : 0)
-                    .frame(maxWidth: isHovered ? 280 : 0, alignment: .leading)
+                    .padding(.leading, showsLabel ? 4 : 0)
+                    .opacity(showsLabel ? 1 : 0)
+                    .frame(maxWidth: showsLabel ? 280 : 0, alignment: .leading)
                     .clipped()
             }
-            .padding(.horizontal, isHovered ? 5 : 4)
+            .padding(.horizontal, showsLabel ? 5 : 4)
             .padding(.vertical, 2)
             .frame(minWidth: SecondaryActionMetrics.controlHeight - 2, maxHeight: .infinity)
         }
@@ -568,6 +585,7 @@ struct SecondaryActionButton: View {
         .frame(height: SecondaryActionMetrics.controlHeight)
         .fixedSize(horizontal: true, vertical: true)
         .onHover { hovering in
+            guard !alwaysExpanded else { return }
             withAnimation(SecondaryActionMetrics.expandAnimation) {
                 isHovered = hovering
             }
@@ -1619,7 +1637,10 @@ struct GrantFieldBadgeRow: View {
     private enum Tint {
         case pass
         case block
+        case conditionalAllowed
+        case conditionalBlocked
         case granted
+        case ask
         case off
     }
 
@@ -1632,6 +1653,10 @@ struct GrantFieldBadgeRow: View {
     var passRevealed: GrantFields = .none
     /// Fields newly withheld by an effectful Block (Access Log tint).
     var blockWithheld: GrantFields = .none
+    /// Fields the user Allowed on an Ask prompt for this get (Access Log tint).
+    var conditionalConfirmed: GrantFields = .none
+    /// Fields the user Blocked on an Ask prompt for this get (Access Log tint).
+    var conditionalBlocked: GrantFields = .none
     var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
 
     private struct Item: Identifiable {
@@ -1641,60 +1666,82 @@ struct GrantFieldBadgeRow: View {
         let title: String
         let systemImage: String
         let keyPath: WritableKeyPath<GrantFields, Bool>
+        let modeKeyPath: WritableKeyPath<GrantFields, FieldAccessMode>
     }
 
     private static let items: [Item] = [
-        Item(id: "subject", letter: "S", short: "Subj", title: "Subject", systemImage: "text.alignleft", keyPath: \.subject),
-        Item(id: "from", letter: "F", short: "From", title: "From", systemImage: "envelope", keyPath: \.from),
-        Item(id: "to", letter: "T", short: "To", title: "To", systemImage: "tray.and.arrow.down", keyPath: \.to),
-        Item(id: "cc", letter: "Cc", short: "Cc", title: "Cc", systemImage: "person.2", keyPath: \.cc),
-        Item(id: "date", letter: "D", short: "Date", title: "Date & Time", systemImage: "calendar", keyPath: \.date),
-        Item(id: "body", letter: "B", short: "Body", title: "Body", systemImage: "doc.plaintext", keyPath: \.body),
-        Item(id: "att", letter: "A", short: "Att", title: "Attachment names", systemImage: "paperclip", keyPath: \.attachmentMetadata),
-        Item(id: "bytes", letter: "C", short: "File", title: "Attachment content", systemImage: "doc", keyPath: \.attachmentContent),
+        Item(id: "subject", letter: "S", short: "Subj", title: "Subject", systemImage: "text.alignleft", keyPath: \.subject, modeKeyPath: \.subjectMode),
+        Item(id: "from", letter: "F", short: "From", title: "From", systemImage: "envelope", keyPath: \.from, modeKeyPath: \.fromMode),
+        Item(id: "to", letter: "T", short: "To", title: "To", systemImage: "tray.and.arrow.down", keyPath: \.to, modeKeyPath: \.toMode),
+        Item(id: "cc", letter: "Cc", short: "Cc", title: "Cc", systemImage: "person.2", keyPath: \.cc, modeKeyPath: \.ccMode),
+        Item(id: "date", letter: "D", short: "Date", title: "Date & Time", systemImage: "calendar", keyPath: \.date, modeKeyPath: \.dateMode),
+        Item(id: "body", letter: "B", short: "Body", title: "Body", systemImage: "doc.plaintext", keyPath: \.body, modeKeyPath: \.bodyMode),
+        Item(id: "att", letter: "A", short: "Att", title: "Attachment names", systemImage: "paperclip", keyPath: \.attachmentMetadata, modeKeyPath: \.attachmentMetadataMode),
+        Item(id: "bytes", letter: "C", short: "File", title: "Attachment content", systemImage: "doc", keyPath: \.attachmentContent, modeKeyPath: \.attachmentContentMode),
     ]
+
+    private var askColor: Color { Color.orange }
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(Self.items) { item in
-                let on = fields[keyPath: item.keyPath]
-                let tint = tint(for: item.keyPath, on: on)
-                if showOff || on || tint == .pass || tint == .block {
+                let mode = fields[keyPath: item.modeKeyPath]
+                let tint = tint(for: item, mode: mode)
+                if showOff || mode != .off || tint == .pass || tint == .block
+                    || tint == .conditionalAllowed || tint == .conditionalBlocked
+                {
                     if interactive, let onToggle {
                         Button {
                             onToggle(item.keyPath)
                         } label: {
-                            compactBadge(item, on: on, tint: tint)
+                            compactBadge(item, mode: mode, tint: tint)
                         }
                         .buttonStyle(.plain)
                         .help(helpText(item, tint: tint))
                         .accessibilityLabel(accessibilityLabel(item, tint: tint))
                     } else {
-                        compactBadge(item, on: on, tint: tint)
+                        compactBadge(item, mode: mode, tint: tint)
                             .help(helpText(item, tint: tint))
                             .accessibilityLabel(accessibilityLabel(item, tint: tint))
                     }
                 }
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
-    private func tint(for keyPath: WritableKeyPath<GrantFields, Bool>, on: Bool) -> Tint {
-        if blockWithheld[keyPath: keyPath] { return .block }
-        if passRevealed[keyPath: keyPath] { return .pass }
-        return on ? .granted : .off
+    private func tint(for item: Item, mode: FieldAccessMode) -> Tint {
+        if blockWithheld[keyPath: item.keyPath] { return .block }
+        if passRevealed[keyPath: item.keyPath] { return .pass }
+        if conditionalBlocked[keyPath: item.keyPath] { return .conditionalBlocked }
+        if conditionalConfirmed[keyPath: item.keyPath] { return .conditionalAllowed }
+        switch mode {
+        case .on: return .granted
+        case .ask: return .ask
+        case .off: return .off
+        }
     }
 
-    private func compactBadge(_ item: Item, on: Bool, tint: Tint) -> some View {
+    private func compactBadge(_ item: Item, mode: FieldAccessMode, tint: Tint) -> some View {
         let ink = ink(for: tint)
-        let weight: Font.Weight = (tint == .pass || tint == .block || on) ? .medium : .regular
+        let weight: Font.Weight =
+            (tint == .pass || tint == .block
+                || tint == .conditionalAllowed || tint == .conditionalBlocked
+                || mode != .off)
+            ? .medium : .regular
         return HStack(spacing: 2) {
             Image(systemName: item.systemImage)
                 .font(.system(size: 8, weight: weight))
             if let text = labelText(item) {
                 Text(text)
                     .font(.system(size: 8, weight: weight))
-                    .strikethrough(!on, color: ink.opacity(tint == .off ? 0.45 : 0.55))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .strikethrough(mode == .off, color: ink.opacity(tint == .off ? 0.45 : 0.55))
+            }
+            if tint == .conditionalAllowed || tint == .conditionalBlocked {
+                Text("?")
+                    .font(.system(size: 7, weight: .bold))
             }
         }
         .foregroundStyle(ink)
@@ -1708,12 +1755,14 @@ struct GrantFieldBadgeRow: View {
             Capsule()
                 .strokeBorder(stroke(for: tint), lineWidth: 0.5)
         )
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func ink(for tint: Tint) -> Color {
         switch tint {
-        case .pass: RuleMarkStyle.passGreen
-        case .block: RuleMarkStyle.blockRed
+        case .pass, .conditionalAllowed: RuleMarkStyle.passGreen
+        case .block, .conditionalBlocked: RuleMarkStyle.blockRed
+        case .ask: askColor
         case .granted: Color.accentColor
         case .off: Color.secondary.opacity(0.55)
         }
@@ -1721,8 +1770,9 @@ struct GrantFieldBadgeRow: View {
 
     private func fill(for tint: Tint) -> Color {
         switch tint {
-        case .pass: RuleMarkStyle.passGreen.opacity(0.12)
-        case .block: RuleMarkStyle.blockRed.opacity(0.12)
+        case .pass, .conditionalAllowed: RuleMarkStyle.passGreen.opacity(0.12)
+        case .block, .conditionalBlocked: RuleMarkStyle.blockRed.opacity(0.12)
+        case .ask: askColor.opacity(0.12)
         case .granted: Color.accentColor.opacity(0.12)
         case .off: Color.secondary.opacity(0.08)
         }
@@ -1730,8 +1780,9 @@ struct GrantFieldBadgeRow: View {
 
     private func stroke(for tint: Tint) -> Color {
         switch tint {
-        case .pass: RuleMarkStyle.passBorder
-        case .block: RuleMarkStyle.blockBorder
+        case .pass, .conditionalAllowed: RuleMarkStyle.passBorder
+        case .block, .conditionalBlocked: RuleMarkStyle.blockBorder
+        case .ask: askColor.opacity(0.45)
         case .granted: Color.accentColor.opacity(0.35)
         case .off: Color.secondary.opacity(0.2)
         }
@@ -1741,7 +1792,11 @@ struct GrantFieldBadgeRow: View {
         switch tint {
         case .pass: "\(item.title) — revealed by Pass"
         case .block: "\(item.title) — withheld by Block"
-        case .granted, .off: item.title
+        case .conditionalAllowed: "\(item.title) — user allowed after Ask"
+        case .conditionalBlocked: "\(item.title) — user blocked after Ask"
+        case .granted: "\(item.title) — On"
+        case .ask: "\(item.title) — Ask"
+        case .off: "\(item.title) — Off"
         }
     }
 
@@ -2173,39 +2228,64 @@ struct MessageAccessCard: View {
                 GrantFieldBadgeRow(
                     fields: ref.fields,
                     passRevealed: ref.passRevealedFields,
-                    blockWithheld: ref.blockWithheldFields
+                    blockWithheld: ref.blockWithheldFields,
+                    conditionalConfirmed: ref.conditionalConfirmedFields,
+                    conditionalBlocked: ref.conditionalUserBlockedFields
                 )
             }
             subjectPreview
             if ref.fields.from {
                 AddressLine(label: "From", raw: ref.from) {
-                    ruleMarkView(for: \.from)
+                    fieldMarks(for: \.from)
                 }
             } else {
-                previewRow("From", ref.from, false, mark: ruleMark(for: \.from))
+                previewRow(
+                    "From",
+                    ref.from,
+                    false,
+                    mark: ruleMark(for: \.from),
+                    conditional: conditionalOutcome(for: \.from)
+                )
             }
             if ref.fields.to {
                 AddressLine(label: "To", raw: ref.to) {
-                    ruleMarkView(for: \.to)
+                    fieldMarks(for: \.to)
                 }
             } else {
-                previewRow("To", ref.to, false, mark: ruleMark(for: \.to))
+                previewRow(
+                    "To",
+                    ref.to,
+                    false,
+                    mark: ruleMark(for: \.to),
+                    conditional: conditionalOutcome(for: \.to)
+                )
             }
             if ref.fields.cc {
                 AddressLine(label: "Cc", raw: ref.cc) {
-                    ruleMarkView(for: \.cc)
+                    fieldMarks(for: \.cc)
                 }
             } else {
-                previewRow("Cc", ref.cc, false, mark: ruleMark(for: \.cc))
+                previewRow(
+                    "Cc",
+                    ref.cc,
+                    false,
+                    mark: ruleMark(for: \.cc),
+                    conditional: conditionalOutcome(for: \.cc)
+                )
             }
             previewRow(
                 "Date & Time",
                 AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
                 ref.fields.date,
-                mark: ruleMark(for: \.date)
+                mark: ruleMark(for: \.date),
+                conditional: conditionalOutcome(for: \.date)
             )
             Divider()
-            labeledSection("Body", mark: bodyRuleMark) {
+            labeledSection(
+                "Body",
+                mark: bodyRuleMark,
+                conditional: conditionalOutcome(for: \.body)
+            ) {
                 bodyPreview
             }
             Divider()
@@ -2213,7 +2293,8 @@ struct MessageAccessCard: View {
                 attachmentColumn(
                     "Attachment Info",
                     granted: ref.fields.attachmentMetadata,
-                    mark: attachmentInfoRuleMark
+                    mark: attachmentInfoRuleMark,
+                    conditional: conditionalOutcome(for: \.attachmentMetadata)
                 ) {
                     if ref.attachments.isEmpty {
                         attachmentTile(detail: "none in this response")
@@ -2226,7 +2307,8 @@ struct MessageAccessCard: View {
                 attachmentColumn(
                     "Attachment Content",
                     granted: attachmentContentCards != nil || ref.fields.attachmentContent,
-                    mark: attachmentContentRuleMark
+                    mark: attachmentContentRuleMark,
+                    conditional: conditionalOutcome(for: \.attachmentContent)
                 ) {
                     if let cards = attachmentContentCards, !cards.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -2291,10 +2373,21 @@ struct MessageAccessCard: View {
         ref.appliedRuleMark(for: keyPath)
     }
 
+    private func conditionalOutcome(for keyPath: KeyPath<GrantFields, Bool>) -> ConditionalFieldOutcome? {
+        if ref.conditionalUserBlockedFields[keyPath: keyPath] { return .blocked }
+        if ref.conditionalConfirmedFields[keyPath: keyPath] { return .allowed }
+        return nil
+    }
+
     @ViewBuilder
-    private func ruleMarkView(for keyPath: KeyPath<GrantFields, Bool>) -> some View {
-        if let mark = ruleMark(for: keyPath) {
-            RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
+    private func fieldMarks(for keyPath: KeyPath<GrantFields, Bool>) -> some View {
+        HStack(spacing: 4) {
+            if let outcome = conditionalOutcome(for: keyPath) {
+                ConditionalFieldMarkChip(outcome: outcome)
+            }
+            if let mark = ruleMark(for: keyPath) {
+                RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
+            }
         }
     }
 
@@ -2307,7 +2400,8 @@ struct MessageAccessCard: View {
             access: effectiveSubjectAccess,
             original: ref.subjectOriginal,
             deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject,
-            mark: ruleMark(for: \.subject)
+            mark: ruleMark(for: \.subject),
+            conditional: conditionalOutcome(for: \.subject)
         )
     }
 
@@ -2316,7 +2410,11 @@ struct MessageAccessCard: View {
         if omitsBody, effectiveBodyAccess != .notGranted {
             omittedBodyPreview
         } else if effectiveBodyAccess == .notGranted {
-            HatchDeniedLabel(placeholder: "Body / snippet", fixedHeight: 112)
+            HatchDeniedLabel(
+                placeholder: "Body / snippet",
+                fixedHeight: 112,
+                helpText: hatchHelp(for: conditionalOutcome(for: \.body))
+            )
                 .frame(maxWidth: .infinity)
                 .padding(10)
                 .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
@@ -2344,7 +2442,10 @@ struct MessageAccessCard: View {
                 .foregroundStyle(.secondary)
                 .italic()
         case .notGranted:
-            HatchDeniedLabel(placeholder: "Body / snippet")
+            HatchDeniedLabel(
+                placeholder: "Body / snippet",
+                helpText: hatchHelp(for: conditionalOutcome(for: \.body))
+            )
         case .sanitized:
             SanitizedFieldText(
                 text: ref.bodySnippet,
@@ -2387,14 +2488,18 @@ struct MessageAccessCard: View {
         access: AuditBodyAccess,
         original: String?,
         deniedPlaceholder: String,
-        mark: AppliedGrantRule? = nil
+        mark: AppliedGrantRule? = nil,
+        conditional: ConditionalFieldOutcome? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
                 .fontWeight(.light)
                 .foregroundStyle(.secondary)
             if !fieldGranted {
-                HatchDeniedLabel(placeholder: deniedPlaceholder)
+                HatchDeniedLabel(
+                    placeholder: deniedPlaceholder,
+                    helpText: hatchHelp(for: conditional)
+                )
             } else {
                 switch access {
                 case .granted, .notAvailable:
@@ -2402,7 +2507,10 @@ struct MessageAccessCard: View {
                         .foregroundStyle(text.hasPrefix("(") ? .secondary : .primary)
                         .textSelection(.enabled)
                 case .notGranted:
-                    HatchDeniedLabel(placeholder: deniedPlaceholder)
+                    HatchDeniedLabel(
+                        placeholder: deniedPlaceholder,
+                        helpText: hatchHelp(for: conditional)
+                    )
                 case .sanitized:
                     SanitizedFieldText(
                         text: text,
@@ -2413,6 +2521,9 @@ struct MessageAccessCard: View {
                 case .withheldConfidential:
                     WithheldLabel(original: original, rules: ref.sanitizedRules)
                 }
+            }
+            if let conditional {
+                ConditionalFieldMarkChip(outcome: conditional)
             }
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
@@ -2440,32 +2551,42 @@ struct MessageAccessCard: View {
     private func labeledSection<Content: View>(
         _ title: String,
         mark: AppliedGrantRule?,
+        conditional: ConditionalFieldOutcome? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(title, mark: mark)
+            sectionTitle(title, mark: mark, conditional: conditional)
             content()
         }
     }
 
-    private func sectionTitle(_ title: String, mark: AppliedGrantRule?) -> some View {
+    private func sectionTitle(
+        _ title: String,
+        mark: AppliedGrantRule?,
+        conditional: ConditionalFieldOutcome? = nil
+    ) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
+            if let conditional {
+                ConditionalFieldMarkChip(outcome: conditional)
+            }
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
             }
         }
     }
 
+    @ViewBuilder
     private func previewRow(
         _ label: String,
         _ value: String,
         _ granted: Bool,
         empty: String = " ",
-        mark: AppliedGrantRule? = nil
+        mark: AppliedGrantRule? = nil,
+        conditional: ConditionalFieldOutcome? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
@@ -2476,7 +2597,13 @@ struct MessageAccessCard: View {
                     .foregroundStyle(value.isEmpty ? .secondary : .primary)
                     .textSelection(.enabled)
             } else {
-                HatchDeniedLabel(placeholder: value.isEmpty ? empty : value)
+                HatchDeniedLabel(
+                    placeholder: value.isEmpty ? empty : value,
+                    helpText: hatchHelp(for: conditional)
+                )
+            }
+            if let conditional {
+                ConditionalFieldMarkChip(outcome: conditional)
             }
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
@@ -2485,24 +2612,32 @@ struct MessageAccessCard: View {
         .font(.caption)
     }
 
+    private func hatchHelp(for conditional: ConditionalFieldOutcome?) -> String? {
+        conditional == .blocked ? "Locked — user blocked after Ask" : nil
+    }
+
     private func attachmentColumn<Content: View>(
         _ title: String,
         granted: Bool,
         mark: AppliedGrantRule? = nil,
+        conditional: ConditionalFieldOutcome? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(title, mark: mark)
+            sectionTitle(title, mark: mark, conditional: conditional)
             if granted {
                 content()
             } else {
-                attachmentTile(detail: nil)
+                attachmentTile(
+                    detail: nil,
+                    helpText: hatchHelp(for: conditional)
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func attachmentTile(detail: String?) -> some View {
+    private func attachmentTile(detail: String?, helpText: String? = nil) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Image(systemName: "paperclip")
                 .font(.caption)
@@ -2514,7 +2649,7 @@ struct MessageAccessCard: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 } else {
-                    HatchDeniedLabel(fixedHeight: 18)
+                    HatchDeniedLabel(fixedHeight: 18, helpText: helpText)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2551,6 +2686,51 @@ struct RuleFieldMarkChip: View {
         .accessibilityLabel(
             polarity == .pass ? "Via pass \(nick)" : "Withheld by block \(nick)"
         )
+    }
+}
+
+/// Outcome of an Ask (conditional) prompt for one field on a get.
+enum ConditionalFieldOutcome {
+    case allowed
+    case blocked
+
+    var label: String {
+        switch self {
+        case .allowed: "user allowed"
+        case .blocked: "user blocked"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .allowed: "User allowed after Ask"
+        case .blocked: "User blocked after Ask"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .allowed: RuleMarkStyle.passGreen
+        case .blocked: RuleMarkStyle.blockRed
+        }
+    }
+}
+
+/// Compact mark for a field decided on an Ask (conditional) prompt.
+struct ConditionalFieldMarkChip: View {
+    var outcome: ConditionalFieldOutcome = .allowed
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "questionmark.circle.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+            Text(outcome.label)
+                .font(.caption.weight(.bold))
+        }
+        .foregroundStyle(outcome.color)
+        .accessibilityLabel(outcome.helpText)
+        .help(outcome.helpText)
     }
 }
 
@@ -2595,6 +2775,11 @@ struct HatchLockIcon: View {
 struct HatchDeniedLabel: View {
     var placeholder: String = " "
     var fixedHeight: CGFloat? = nil
+    var helpText: String? = nil
+
+    private var resolvedHelp: String {
+        helpText ?? "Locked — grant does not allow this field"
+    }
 
     var body: some View {
         Group {
@@ -2619,7 +2804,7 @@ struct HatchDeniedLabel: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .accessibilityLabel("Locked")
-        .help("Locked — grant does not allow this field")
+        .help(resolvedHelp)
     }
 }
 

@@ -696,7 +696,9 @@ private struct AccessLogDetail: View {
                 fields: ref.fields,
                 labelMode: .short,
                 passRevealed: ref.passRevealedFields,
-                blockWithheld: ref.blockWithheldFields
+                blockWithheld: ref.blockWithheldFields,
+                conditionalConfirmed: ref.conditionalConfirmedFields,
+                conditionalBlocked: ref.conditionalUserBlockedFields
             )
             .fixedSize(horizontal: true, vertical: false)
             if ref.leakDetectionCount > 0 {
@@ -887,7 +889,9 @@ private struct CollapsibleAuditMessage: View {
                                     fields: ref.fields,
                                     labelMode: .icon,
                                     passRevealed: ref.passRevealedFields,
-                                    blockWithheld: ref.blockWithheldFields
+                                    blockWithheld: ref.blockWithheldFields,
+                                    conditionalConfirmed: ref.conditionalConfirmedFields,
+                                    conditionalBlocked: ref.conditionalUserBlockedFields
                                 )
                                 .fixedSize(horizontal: true, vertical: false)
                                 if ref.leakDetectionCount > 0 {
@@ -904,7 +908,9 @@ private struct CollapsibleAuditMessage: View {
                                     fields: ref.fields,
                                     labelMode: .short,
                                     passRevealed: ref.passRevealedFields,
-                                    blockWithheld: ref.blockWithheldFields
+                                    blockWithheld: ref.blockWithheldFields,
+                                    conditionalConfirmed: ref.conditionalConfirmedFields,
+                                    conditionalBlocked: ref.conditionalUserBlockedFields
                                 )
                                 .fixedSize(horizontal: true, vertical: false)
                                 if ref.leakDetectionCount > 0 {
@@ -1040,6 +1046,8 @@ enum AccessLogFormat {
         case "attachmentAccess": "Attachment info"
         case "subjectAccessReason": "Subject reason"
         case "bodyAccessReason": "Body reason"
+        case "conditionalAccessFields": "Ask user allowed"
+        case "conditionalBlockedFields": "Ask user blocked"
         case "sanitizedRules": "Sanitized rules"
         case "cc": "Cc"
         case "indexed": "Indexed"
@@ -1062,6 +1070,14 @@ enum AccessLogFormat {
             return name.isEmpty ? value : name
         case "newestMessageDate", "lastIngestAt":
             return compactMailDate(value) ?? value
+        case "subjectAccessReason", "bodyAccessReason":
+            switch value {
+            case "conditional": return "User allowed"
+            case "conditional_blocked": return "User blocked"
+            case "leak_guard": return "Leak guard"
+            case "grant": return "Grant"
+            default: return value
+            }
         default:
             return value
         }
@@ -1324,7 +1340,14 @@ enum AccessLogFormat {
             return "\(placements.count) placements"
         }
         if let bodyAccess = obj["bodyAccess"] as? String {
-            return "bodyAccess=\(bodyAccess)"
+            switch obj["bodyAccessReason"] as? String {
+            case "conditional":
+                return "bodyAccess=\(bodyAccess) · user allowed"
+            case "conditional_blocked":
+                return "bodyAccess=\(bodyAccess) · user blocked"
+            default:
+                return "bodyAccess=\(bodyAccess)"
+            }
         }
         if let attachmentAccess = obj["attachmentContentAccess"] as? String {
             if let filename = obj["filename"] as? String, !filename.isEmpty {
@@ -1713,6 +1736,8 @@ enum AccessLogFormat {
             stealth: stealth ? true : nil,
             fields: fields,
             attachments: attachments,
+            conditionalFields: conditionalFields(from: obj),
+            conditionalBlockedFields: conditionalBlockedFields(from: obj),
             isPartial: obj["isPartial"] as? Bool ?? false
         )
     }
@@ -1723,6 +1748,14 @@ enum AccessLogFormat {
         let parsedBodyAccess = auditAccess(obj["bodyAccess"])
         let parsedRules = sanitizedRules(from: obj["sanitizedRules"])
         let parsedStealth = (obj["note"] as? String)?.contains("substituted") == true
+        let mergedConditional = mergeConditionalFields(
+            recorded: ref.conditionalFields,
+            parsed: conditionalFields(from: obj)
+        )
+        let mergedBlocked = mergeConditionalFields(
+            recorded: ref.conditionalBlockedFields,
+            parsed: conditionalBlockedFields(from: obj)
+        )
 
         let mergedRules: [String]?
         if let existing = ref.sanitizedRules, !existing.isEmpty {
@@ -1742,6 +1775,8 @@ enum AccessLogFormat {
             || parsedBodyAccess != nil
             || mergedRules != nil
             || mergedStealth == true
+            || mergedConditional != nil
+            || mergedBlocked != nil
         else { return ref }
 
         let recovered = Self.recoverStealthBodies(ref: ref, response: obj, stealth: mergedStealth == true)
@@ -1778,6 +1813,8 @@ enum AccessLogFormat {
             fields: ref.fields,
             attachments: ref.attachments,
             appliedRules: ref.appliedRules,
+            conditionalFields: mergedConditional,
+            conditionalBlockedFields: mergedBlocked,
             isPartial: ref.isPartial || (obj["isPartial"] as? Bool ?? false)
         )
     }
@@ -1831,6 +1868,8 @@ enum AccessLogFormat {
             fields: fields,
             attachments: attachments,
             appliedRules: ref.appliedRules,
+            conditionalFields: ref.conditionalFields,
+            conditionalBlockedFields: ref.conditionalBlockedFields,
             isPartial: ref.isPartial || (obj["isPartial"] as? Bool ?? false)
         )
     }
@@ -1945,6 +1984,66 @@ enum AccessLogFormat {
             attachmentMetadata: attachmentMetadata,
             attachmentContent: attachmentContent
         )
+    }
+
+    /// Ask-allowed fields from agent JSON (`conditionalAccessFields` / `*AccessReason`).
+    private static func conditionalFields(from obj: [String: Any]) -> GrantFields? {
+        var fields = GrantFields.none
+        applyConditionalLabels(obj["conditionalAccessFields"], to: &fields)
+        if obj["subjectAccessReason"] as? String == "conditional" {
+            fields.subject = true
+        }
+        if obj["bodyAccessReason"] as? String == "conditional" {
+            fields.body = true
+        }
+        return fields.hasAnyGranted ? fields : nil
+    }
+
+    /// Ask-blocked fields from agent JSON (`conditionalBlockedFields` / `*AccessReason`).
+    private static func conditionalBlockedFields(from obj: [String: Any]) -> GrantFields? {
+        var fields = GrantFields.none
+        applyConditionalLabels(obj["conditionalBlockedFields"], to: &fields)
+        if obj["subjectAccessReason"] as? String == "conditional_blocked" {
+            fields.subject = true
+        }
+        if obj["bodyAccessReason"] as? String == "conditional_blocked" {
+            fields.body = true
+        }
+        return fields.hasAnyGranted ? fields : nil
+    }
+
+    private static func applyConditionalLabels(_ raw: Any?, to fields: inout GrantFields) {
+        guard let labels = raw as? [String] else { return }
+        for label in labels {
+            switch label {
+            case "Subject": fields.subject = true
+            case "From": fields.from = true
+            case "To": fields.to = true
+            case "Cc": fields.cc = true
+            case "Date": fields.date = true
+            case "Body": fields.body = true
+            case "Attachment names": fields.attachmentMetadata = true
+            case "Attachment content": fields.attachmentContent = true
+            default: break
+            }
+        }
+    }
+
+    private static func mergeConditionalFields(
+        recorded: GrantFields?,
+        parsed: GrantFields?
+    ) -> GrantFields? {
+        switch (recorded, parsed) {
+        case let (recorded?, parsed?):
+            let merged = recorded.unioning(parsed)
+            return merged.hasAnyGranted ? merged : nil
+        case let (recorded?, nil):
+            return recorded.hasAnyGranted ? recorded : nil
+        case let (nil, parsed?):
+            return parsed
+        case (nil, nil):
+            return nil
+        }
     }
 
     private static func parseAttachments(from obj: [String: Any]) -> [MailAttachment] {

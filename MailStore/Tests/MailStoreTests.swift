@@ -439,6 +439,27 @@ struct MailStoreTests {
         )
     }
 
+    @Test func plainTextFromHTMLDropsStyleAndDecodesEntities() {
+        let html = """
+        <html><head><style>body {margin:0;padding:0; background:#f3f3f3;}</style></head>
+        <body><p>Your refund is almost there&zwnj;&zwnj;</p><p>Hello!</p></body></html>
+        """
+        let plain = MailMIME.plainText(fromHTML: html)
+        #expect(!plain.contains("margin"))
+        #expect(!plain.contains("background"))
+        #expect(!plain.contains("&zwnj;"))
+        #expect(plain.contains("Your refund is almost there"))
+        #expect(plain.contains("Hello!"))
+    }
+
+    @Test func stripLeadingEmlxByteCountPrefix() {
+        #expect(
+            MailMIME.stripLeadingByteCountPrefix("96 It’ll be in your bank account")
+                == "It’ll be in your bank account"
+        )
+        #expect(MailMIME.stripLeadingByteCountPrefix("Hello there") == "Hello there")
+    }
+
     @Test func listsExternalAttachmentMetadataAndFetchesBytesOnDemand() throws {
         let root = try FixtureTree()
         defer { root.remove() }

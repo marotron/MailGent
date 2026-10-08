@@ -195,6 +195,10 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
     public let attachments: [MailAttachment]
     /// Effectful Pass/Block applications for this message (audit-only).
     public let appliedRules: [AppliedGrantRule]?
+    /// Fields the user Allowed on an Ask prompt for this get (Access Log tint).
+    public let conditionalFields: GrantFields?
+    /// Fields the user Blocked on an Ask prompt for this get (Access Log tint).
+    public let conditionalBlockedFields: GrantFields?
     /// From agent list/get payloads (`isPartial`); false when older logs omit it.
     public let isPartial: Bool
 
@@ -218,6 +222,8 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         fields: GrantFields = .headersOnly,
         attachments: [MailAttachment] = [],
         appliedRules: [AppliedGrantRule]? = nil,
+        conditionalFields: GrantFields? = nil,
+        conditionalBlockedFields: GrantFields? = nil,
         isPartial: Bool = false
     ) {
         self.accountID = accountID
@@ -239,7 +245,21 @@ public struct AuditMessageRef: Equatable, Hashable, Sendable {
         self.fields = fields
         self.attachments = attachments
         self.appliedRules = appliedRules.flatMap { $0.isEmpty ? nil : $0 }
+        let confirmed = conditionalFields ?? .none
+        self.conditionalFields = confirmed.hasAnyGranted ? confirmed : nil
+        let blocked = conditionalBlockedFields ?? .none
+        self.conditionalBlockedFields = blocked.hasAnyGranted ? blocked : nil
         self.isPartial = isPartial
+    }
+
+    /// Fields Allowed via Ask for badge tinting (empty when none).
+    public var conditionalConfirmedFields: GrantFields {
+        conditionalFields ?? .none
+    }
+
+    /// Fields Blocked via Ask for badge tinting (empty when none).
+    public var conditionalUserBlockedFields: GrantFields {
+        conditionalBlockedFields ?? .none
     }
 
     public var rowID: String { "\(accountID)/\(placement)/\(id)" }
@@ -683,7 +703,8 @@ extension AuditMessageRef: Codable {
     enum CodingKeys: String, CodingKey {
         case accountID, placement, id, subject, from, to, cc, date
         case bodySnippet, subjectAccess, bodyAccess, subjectOriginal, bodyOriginal
-        case sanitizedRules, stealth, leakDetections, fields, attachments, appliedRules, isPartial
+        case sanitizedRules, stealth, leakDetections, fields, attachments, appliedRules
+        case conditionalFields, conditionalBlockedFields, isPartial
     }
 
     public init(from decoder: Decoder) throws {
@@ -715,6 +736,16 @@ extension AuditMessageRef: Codable {
             forKey: .appliedRules
         )
         appliedRules = decodedRules.flatMap { $0.isEmpty ? nil : $0 }
+        let decodedConditional = try container.decodeIfPresent(
+            GrantFields.self,
+            forKey: .conditionalFields
+        )
+        conditionalFields = decodedConditional.flatMap { $0.hasAnyGranted ? $0 : nil }
+        let decodedBlocked = try container.decodeIfPresent(
+            GrantFields.self,
+            forKey: .conditionalBlockedFields
+        )
+        conditionalBlockedFields = decodedBlocked.flatMap { $0.hasAnyGranted ? $0 : nil }
         isPartial = try container.decodeIfPresent(Bool.self, forKey: .isPartial) ?? false
     }
 
@@ -739,6 +770,8 @@ extension AuditMessageRef: Codable {
         try container.encode(fields, forKey: .fields)
         try container.encode(attachments, forKey: .attachments)
         try container.encodeIfPresent(appliedRules, forKey: .appliedRules)
+        try container.encodeIfPresent(conditionalFields, forKey: .conditionalFields)
+        try container.encodeIfPresent(conditionalBlockedFields, forKey: .conditionalBlockedFields)
         try container.encode(isPartial, forKey: .isPartial)
     }
 }
@@ -750,7 +783,9 @@ extension AuditMessageRef {
         _ message: IndexedMessage,
         fields: GrantFields = .headersOnly,
         subjectSanitized: SanitizedField? = nil,
-        appliedRules: [AppliedGrantRule]? = nil
+        appliedRules: [AppliedGrantRule]? = nil,
+        conditionalFields: GrantFields? = nil,
+        conditionalBlockedFields: GrantFields? = nil
     ) {
         let access: AuditBodyAccess
         let snippet: String
@@ -784,6 +819,8 @@ extension AuditMessageRef {
             leakDetections: AuditLeakDetection.from(subject: subjectSanitized, body: nil),
             fields: fields,
             appliedRules: appliedRules,
+            conditionalFields: conditionalFields,
+            conditionalBlockedFields: conditionalBlockedFields,
             isPartial: message.isPartial
         )
     }
@@ -793,7 +830,9 @@ extension AuditMessageRef {
         fields: GrantFields = .headersOnly,
         subjectSanitized: SanitizedField? = nil,
         bodySanitized: SanitizedField? = nil,
-        appliedRules: [AppliedGrantRule]? = nil
+        appliedRules: [AppliedGrantRule]? = nil,
+        conditionalFields: GrantFields? = nil,
+        conditionalBlockedFields: GrantFields? = nil
     ) {
         let bodyAuditAccess: AuditBodyAccess
         let snippet: String
@@ -853,6 +892,8 @@ extension AuditMessageRef {
             fields: fields,
             attachments: message.attachments,
             appliedRules: appliedRules,
+            conditionalFields: conditionalFields,
+            conditionalBlockedFields: conditionalBlockedFields,
             isPartial: message.isPartial
         )
     }

@@ -615,11 +615,12 @@ final class AgentBridge {
             $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
         }) else { return }
         var next = fields
-        if next.attachmentContent && !next.attachmentMetadata {
-            next.attachmentMetadata = true
+        // Use modes — Bool setters collapse Ask → On/Off and were wiping Ask on save.
+        if next.attachmentContentMode != .off && next.attachmentMetadataMode == .off {
+            next.attachmentMetadataMode = .on
         }
-        if !next.attachmentMetadata {
-            next.attachmentContent = false
+        if next.attachmentMetadataMode == .off {
+            next.attachmentContentMode = .off
         }
         try? grants.allow(
             agentID: agent.id,
@@ -679,8 +680,43 @@ final class AgentBridge {
         }) else { return }
         var fields = existing.fields
         let current = fields[keyPath: modeKeyPath]
-        fields[keyPath: modeKeyPath] = current.nextMode()
+        let allowAsk = MailGentPreferences.allowConditionalAccessPrompts
+        // When Allow is off, Ask is masked as Off in the UI — keep stored Ask so turning
+        // Allow back on restores conditional. Don't overwrite Ask via Off ↔ On clicks.
+        if !allowAsk && current == .ask {
+            return
+        }
+        fields[keyPath: modeKeyPath] = current.nextMode(allowAsk: allowAsk)
         updateAllowFields(accountID: accountID, placement: placement, fields: fields)
+    }
+
+    func cycleAllowField(
+        accountID: String,
+        placement: String?,
+        keyPath: WritableKeyPath<GrantFields, Bool>,
+        mailboxPlacements: [String]? = nil
+    ) {
+        cycleFieldAccessMode(
+            accountID: accountID,
+            placement: placement,
+            modeKeyPath: Self.modeKeyPath(for: keyPath),
+            mailboxPlacements: mailboxPlacements
+        )
+    }
+
+    static func modeKeyPath(
+        for boolKeyPath: WritableKeyPath<GrantFields, Bool>
+    ) -> WritableKeyPath<GrantFields, FieldAccessMode> {
+        // KeyPath switch equality is unreliable across call sites — compare via offset.
+        if boolKeyPath == \.subject { return \.subjectMode }
+        if boolKeyPath == \.from { return \.fromMode }
+        if boolKeyPath == \.to { return \.toMode }
+        if boolKeyPath == \.cc { return \.ccMode }
+        if boolKeyPath == \.date { return \.dateMode }
+        if boolKeyPath == \.body { return \.bodyMode }
+        if boolKeyPath == \.attachmentMetadata { return \.attachmentMetadataMode }
+        if boolKeyPath == \.attachmentContent { return \.attachmentContentMode }
+        return \.subjectMode
     }
 
     func hasAccountWideGrant(accountID: String) -> Bool {
@@ -861,15 +897,10 @@ final class AgentBridge {
                 leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
                 rules: rules,
                 audit: audit,
-                muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts,
-                conditionalAccessPrompter: { @MainActor [weak self] agentName, accountID, placement, fields in
+                allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
+                conditionalAccessPrompter: { @MainActor [weak self] context in
                     guard let self else { return .block }
-                    return await self.conditionalAccessPrompt.requestDecision(
-                        agentName: agentName,
-                        accountID: accountID,
-                        placement: placement,
-                        requestedFields: fields
-                    )
+                    return await self.conditionalAccessPrompt.requestDecision(context: context)
                 }
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
@@ -1357,15 +1388,10 @@ final class AgentBridge {
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
             rules: rules,
             audit: existing.audit,
-            muteConditionalAccessPrompts: MailGentPreferences.muteConditionalAccessPrompts,
-            conditionalAccessPrompter: { @MainActor [weak self] agentName, accountID, placement, fields in
+            allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
+            conditionalAccessPrompter: { @MainActor [weak self] context in
                 guard let self else { return .block }
-                return await self.conditionalAccessPrompt.requestDecision(
-                    agentName: agentName,
-                    accountID: accountID,
-                    placement: placement,
-                    requestedFields: fields
-                )
+                return await self.conditionalAccessPrompt.requestDecision(context: context)
             }
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
@@ -1373,6 +1399,10 @@ final class AgentBridge {
         MailGentLog.trace(
             "leak guard policy enabled=\(leakGuardPolicy.enabled) scopes=\(leakGuardPolicy.scopes.count)"
         )
+    }
+
+    func applyConditionalAccessPreference() {
+        refreshGatewayLeakGuard()
     }
 
     /// Keep Cursor's local MCP entry aligned with the Cursor Bearer (machine-local only).

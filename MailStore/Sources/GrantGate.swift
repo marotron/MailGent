@@ -30,12 +30,39 @@ public enum FieldAccessMode: String, Codable, Hashable, Sendable {
         self == .ask
     }
     
-    public func nextMode() -> FieldAccessMode {
+    public func nextMode(allowAsk: Bool = true) -> FieldAccessMode {
+        if !allowAsk {
+            // Feature off → classic On/Off only (Ask collapses toward On when clicked).
+            switch self {
+            case .on: return .off
+            case .off, .ask: return .on
+            }
+        }
         switch self {
         case .off: return .ask
         case .ask: return .on
         case .on: return .off
         }
+    }
+
+    /// When conditional prompts are off, Ask displays/acts as Off; stored Ask is unchanged.
+    public func displayed(allowConditional: Bool) -> FieldAccessMode {
+        if !allowConditional && self == .ask { return .off }
+        return self
+    }
+
+    /// Pass overlay: more permissive wins (`on` > `ask` > `off`).
+    public func unioning(_ other: FieldAccessMode) -> FieldAccessMode {
+        switch (self, other) {
+        case (.on, _), (_, .on): return .on
+        case (.ask, _), (_, .ask): return .ask
+        default: return .off
+        }
+    }
+
+    /// Block overlay: clear this field when `other` is `.on`; otherwise keep self (incl. Ask).
+    public func subtracting(_ other: FieldAccessMode) -> FieldAccessMode {
+        other == .on ? .off : self
     }
 }
 
@@ -189,22 +216,38 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         attachmentContent: false
     )
 
-    /// Bits that are true here and false in `other`.
+    /// Bits newly granted here vs `other` (Pass delta). Ask is not treated as granted.
     public func bitsNotIn(_ other: GrantFields) -> GrantFields {
         GrantFields(
-            subject: subject && !other.subject,
-            from: from && !other.from,
-            to: to && !other.to,
-            cc: cc && !other.cc,
-            date: date && !other.date,
-            body: body && !other.body,
-            attachmentMetadata: attachmentMetadata && !other.attachmentMetadata,
-            attachmentContent: attachmentContent && !other.attachmentContent
+            subjectMode: subjectMode == .on && other.subjectMode != .on ? .on : .off,
+            fromMode: fromMode == .on && other.fromMode != .on ? .on : .off,
+            toMode: toMode == .on && other.toMode != .on ? .on : .off,
+            ccMode: ccMode == .on && other.ccMode != .on ? .on : .off,
+            dateMode: dateMode == .on && other.dateMode != .on ? .on : .off,
+            bodyMode: bodyMode == .on && other.bodyMode != .on ? .on : .off,
+            attachmentMetadataMode: attachmentMetadataMode == .on && other.attachmentMetadataMode != .on
+                ? .on : .off,
+            attachmentContentMode: attachmentContentMode == .on && other.attachmentContentMode != .on
+                ? .on : .off
         )
     }
 
     public var hasAnyGranted: Bool {
         subject || from || to || cc || date || body || attachmentMetadata || attachmentContent
+    }
+
+    /// UI / preview mask: Ask → Off when conditional prompts are disabled (storage unchanged).
+    public func displayed(allowConditional: Bool) -> GrantFields {
+        GrantFields(
+            subjectMode: subjectMode.displayed(allowConditional: allowConditional),
+            fromMode: fromMode.displayed(allowConditional: allowConditional),
+            toMode: toMode.displayed(allowConditional: allowConditional),
+            ccMode: ccMode.displayed(allowConditional: allowConditional),
+            dateMode: dateMode.displayed(allowConditional: allowConditional),
+            bodyMode: bodyMode.displayed(allowConditional: allowConditional),
+            attachmentMetadataMode: attachmentMetadataMode.displayed(allowConditional: allowConditional),
+            attachmentContentMode: attachmentContentMode.displayed(allowConditional: allowConditional)
+        )
     }
 }
 
