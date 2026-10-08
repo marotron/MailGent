@@ -38,7 +38,7 @@ Backfill missing history when you discover a gap (as with 0.1.0–0.1.3 before `
 **Never** bump with only the `**X.Y.Z alpha**` headline changed. In the **same commit**, update `README.md` fully:
 
 1. Headline → `**X.Y.Z alpha**`
-2. **## This release** — fold every user-facing item from that version’s `CHANGELOG.md` into the cumulative bullet list (new bullets and/or extend existing ones). Do not leave shipped features out of this section.
+2. **## Features** — fold every user-facing item from that version’s `CHANGELOG.md` into the matching subsection (`Local mail`, `Agents`, `Grants`, `Ask`, `Rules`, `Leak guard`, `Access log`, `Drafts`). Add a subsection only when a new capability cluster appears. Keep bullets plain and scannable; do not leave shipped features out.
 3. Tool lists / Settings callouts / other README claims that the release changed
 4. Cross-check against `CHANGELOG` Added / Fixed / Changed / Breaking before closeout
 

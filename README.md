@@ -29,23 +29,57 @@ This is an **alpha**, not a beta. The first-ship slice is real (Apple Mail local
 
 More in [`docs/screenshots/`](docs/screenshots/). Personal data in the screenshots (addresses, account IDs, search terms) is replaced with sample values.
 
-## This release
+## Features
 
-- Apple Mail `.emlx` local-read from `~/Library/Mail`
-- On-device SQLite FTS
-- Incremental ingest reports arrivals vs removals (`+44 −2277 → −2233`); Trash/Junk copies are not counted as new
-- Menu status times sit in chips; Changes shows the ingest window as `12:15–12:31 (16m)` (yesterday or the date when that window is not today); Last agent call uses clock + elapsed like Last ingest
-- Multiple `machine-local` agents (Cursor, Grok Bot), each with its own Bearer, on loopback `http://127.0.0.1:8788/mcp` (8787 reserved for Cursor OAuth callbacks)
-- Grant desk: account/mailbox, From/To/date, deny carve-outs, field caps including Cc/body/attachments (Off / Ask / On per field)
-- Ask mode: when conditional access prompts are allowed in Settings (off by default), MCP `get` shows an on-device Allow / Block dialog with message preview before disclosing Ask fields
-- Rules: Pass / Block field overlays on already-allowed mail (From/Subject match, optional When date window)
-- Outbound leak guard: on-device subject/body scan before agents receive mail (opt in per placement; built-in + custom rules)
-- `get_attachment`: attachment bytes as a local temp file when the grant allows Attachment Content (25 MiB cap)
-- Access log of every agent call, showing exactly what the agent received (sanitized/withheld field overlays; Ask and Pass/Block hit chips). Agents cannot edit it; you can delete entries in Settings
-- Open in Apple Mail from Companion Read and Access Log previews (`message://` Message-ID handoff)
-- MailGent-owned draft ledger (in-memory; not written into Mail.app; no companion draft UI yet — drafts show in the Access Log)
+What this alpha can do today. Fold new `CHANGELOG` items into the matching section on each bump.
 
-**Debug builds** default to fixture mail (and can switch to live Mail). **Release / production** builds use **live Mail only** — fixture is not offered and never planted. Live Mail needs a readable `~/Library/Mail` (Full Disk Access, or Choose Mail Folder…).
+### Local mail
+
+- Reads Apple Mail on your Mac (`.emlx` under `~/Library/Mail`) — nothing is uploaded by MailGent
+- On-device search index (SQLite FTS)
+- Incremental ingest shows arrivals vs removals (e.g. `+44 −2277 → −2233`); Trash/Junk copies are not counted as new
+- Menu bar and Control Center show access health, last ingest, and last agent call
+
+**Debug builds** can use fixture mail. **Release builds use live Mail only.** Live Mail needs a readable `~/Library/Mail` (Full Disk Access, or Choose Mail Folder…).
+
+### Agents (MCP)
+
+- Pair **Cursor** and/or **Grok Bot** as separate machine-local agents (each gets its own Bearer)
+- Loopback only: `http://127.0.0.1:8788/mcp` (port 8787 reserved for Cursor OAuth callbacks)
+- Agents talk to MailGent over MCP; MailGent has no built-in AI
+
+### Grants — what each agent may see
+
+- Per agent: which mailboxes, From/To/date filters, deny carve-outs
+- Per field: Subject, From, To, Cc, Date, Body, attachments — each **Off**, **Ask**, or **On**
+- Attachment content: when On, `get_attachment` can write a local temp file for the agent (25 MiB cap)
+
+### Ask — approve before sharing
+
+- Set a field to **Ask** when you want a human decision each time (not a standing Yes)
+- Turn on **Allow conditional access prompts** in Settings (off by default)
+- On MCP `get`, MailGent shows an on-device **Allow / Block** dialog with a message preview; blocked fields stay withheld
+
+### Rules (Pass / Block)
+
+- Shared Pass / Block overlays on mail that is already in scope (match From / Subject; optional When date window)
+- Enable a rule per agent on a placement in Grant Desk
+
+### Leak guard
+
+- Optional on-device scan of subject/body before the agent receives mail (opt in per placement)
+- Built-in detectors plus your own filters; hits can redact or withhold
+
+### Access log
+
+- Every agent call is logged with exactly what the agent received (sanitized / withheld overlays)
+- List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log
+- Agents cannot edit the log; you can delete entries in Settings
+
+### Drafts
+
+- Agents can create/update drafts in a MailGent-owned ledger (in memory)
+- Drafts are **not** written into Mail.app; no send from MailGent; drafts show in the Access Log
 
 ## Not working yet
 
