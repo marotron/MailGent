@@ -1,5 +1,87 @@
 import Foundation
 
+/// User decision on conditional field access prompt.
+public enum ConditionalAccessDecision: Sendable {
+    case allow
+    case block
+}
+
+/// One Ask-field value shown to the human before Allow / Block.
+public struct ConditionalFieldPreviewLine: Equatable, Sendable {
+    public let label: String
+    public let value: String
+
+    public init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+}
+
+/// Envelope lines shown on the Ask prompt (human-only; not agent disclosure).
+public struct ConditionalMessageEnvelope: Equatable, Sendable {
+    public let subject: String
+    public let from: String
+    public let to: String
+    public let cc: String
+    public let date: String
+
+    public init(
+        subject: String = "",
+        from: String = "",
+        to: String = "",
+        cc: String = "",
+        date: String = ""
+    ) {
+        self.subject = subject
+        self.from = from
+        self.to = to
+        self.cc = cc
+        self.date = date
+    }
+}
+
+/// Context for an Ask (conditional) prompt on MCP get.
+public struct ConditionalAccessPromptContext: Equatable, Sendable {
+    public let agentName: String
+    public let accountID: String
+    public let placement: String
+    public let messageID: String
+    public let internetMessageID: String
+    public let requestedFields: [String]
+    /// Values for `requestedFields` only (what Allow would disclose).
+    public let fieldPreviews: [ConditionalFieldPreviewLine]
+    /// Pretty HTML body for in-app Preview (Companion `MessageBodyView`); nil when absent.
+    public let htmlBody: String?
+    /// Message envelope for the Ask meta card (always for the human, independent of Ask fields).
+    public let envelope: ConditionalMessageEnvelope
+
+    public init(
+        agentName: String,
+        accountID: String,
+        placement: String,
+        messageID: String,
+        internetMessageID: String = "",
+        requestedFields: [String],
+        fieldPreviews: [ConditionalFieldPreviewLine],
+        htmlBody: String? = nil,
+        envelope: ConditionalMessageEnvelope = ConditionalMessageEnvelope()
+    ) {
+        self.agentName = agentName
+        self.accountID = accountID
+        self.placement = placement
+        self.messageID = messageID
+        self.internetMessageID = internetMessageID
+        self.requestedFields = requestedFields
+        self.fieldPreviews = fieldPreviews
+        self.htmlBody = htmlBody
+        self.envelope = envelope
+    }
+
+    public var mailURL: URL? {
+        AppleMailHandoff.messageURL(internetMessageID: internetMessageID)
+    }
+}
+
 /// Result of `get_attachment`: local temp path when content is granted and available.
 public struct AttachmentAccessResult: Equatable, Sendable {
     public enum Access: String, Equatable, Sendable {
@@ -53,6 +135,8 @@ public struct AgentReadAPI {
     public let leakGuard: OutboundLeakGuard
     public let rules: RuleStore
     public let audit: AuditLog?
+    public var allowConditionalAccessPrompts: Bool
+    public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)?
 
     public init(
         read: ReadAPI,
@@ -60,7 +144,9 @@ public struct AgentReadAPI {
         grants: GrantGate = GrantGate(),
         leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
         rules: RuleStore = RuleStore(),
-        audit: AuditLog? = nil
+        audit: AuditLog? = nil,
+        allowConditionalAccessPrompts: Bool = false,
+        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
     ) {
         self.read = read
         self.pairing = pairing
@@ -68,11 +154,218 @@ public struct AgentReadAPI {
         self.leakGuard = leakGuard
         self.rules = rules
         self.audit = audit
+        self.allowConditionalAccessPrompts = allowConditionalAccessPrompts
+        self.conditionalAccessPrompter = conditionalAccessPrompter
     }
 
     @discardableResult
     public func authenticate(_ credential: String?) throws -> PairedAgent {
         try pairing.authenticate(credential: credential)
+    }
+    
+    /// Ask resolution for one get: effective modes plus which Ask fields were prompted / decided.
+    private struct ConditionalFieldResolution: Sendable {
+        let fields: GrantFields
+        /// Ask fields the user Allowed (audit badge + `conditionalAccessFields`).
+        let confirmed: GrantFields
+        /// Ask fields the user Blocked (audit badge + `conditionalBlockedFields`).
+        let blocked: GrantFields
+        /// Ask fields that went through a prompt (Allow or Block).
+        let prompted: GrantFields
+    }
+
+    /// Resolves Ask mode fields for this get.
+    /// When allow is off: Ask → denied (classic On/Off behavior; no popup).
+    /// When allow is on: prompt once for all Ask fields; timeout/dismiss → deny.
+    private func resolveConditionalFields(
+        _ fields: GrantFields,
+        agentName: String,
+        message: ReadMessage
+    ) async -> ConditionalFieldResolution {
+        let askMask = Self.askMask(fields)
+        if !allowConditionalAccessPrompts {
+            // Feature off → Ask denied (same as classic grants without conditional).
+            return ConditionalFieldResolution(
+                fields: GrantFields(
+                    subjectMode: fields.subjectMode == .ask ? .off : fields.subjectMode,
+                    fromMode: fields.fromMode == .ask ? .off : fields.fromMode,
+                    toMode: fields.toMode == .ask ? .off : fields.toMode,
+                    ccMode: fields.ccMode == .ask ? .off : fields.ccMode,
+                    dateMode: fields.dateMode == .ask ? .off : fields.dateMode,
+                    bodyMode: fields.bodyMode == .ask ? .off : fields.bodyMode,
+                    attachmentMetadataMode: fields.attachmentMetadataMode == .ask
+                        ? .off : fields.attachmentMetadataMode,
+                    attachmentContentMode: fields.attachmentContentMode == .ask
+                        ? .off : fields.attachmentContentMode
+                ),
+                confirmed: .none,
+                blocked: .none,
+                prompted: .none
+            )
+        }
+
+        let askLabels = collectAskFields(fields)
+        guard !askLabels.isEmpty, let prompter = conditionalAccessPrompter else {
+            // No Ask fields or no prompter → allow all Ask fields (fallback; not user-confirmed).
+            return ConditionalFieldResolution(
+                fields: GrantFields(
+                    subjectMode: fields.subjectMode == .ask ? .on : fields.subjectMode,
+                    fromMode: fields.fromMode == .ask ? .on : fields.fromMode,
+                    toMode: fields.toMode == .ask ? .on : fields.toMode,
+                    ccMode: fields.ccMode == .ask ? .on : fields.ccMode,
+                    dateMode: fields.dateMode == .ask ? .on : fields.dateMode,
+                    bodyMode: fields.bodyMode == .ask ? .on : fields.bodyMode,
+                    attachmentMetadataMode: fields.attachmentMetadataMode == .ask
+                        ? .on : fields.attachmentMetadataMode,
+                    attachmentContentMode: fields.attachmentContentMode == .ask
+                        ? .on : fields.attachmentContentMode
+                ),
+                confirmed: .none,
+                blocked: .none,
+                prompted: .none
+            )
+        }
+
+        let context = ConditionalAccessPromptContext(
+            agentName: agentName,
+            accountID: message.accountID,
+            placement: message.placement,
+            messageID: message.id,
+            internetMessageID: message.internetMessageID,
+            requestedFields: askLabels,
+            fieldPreviews: Self.fieldPreviews(message: message, askLabels: askLabels),
+            // Raw HTML for Ask message preview (not prettyHTMLBody — prefix heuristic can nil it).
+            htmlBody: message.htmlBody,
+            envelope: ConditionalMessageEnvelope(
+                subject: message.subject,
+                from: message.from,
+                to: message.to,
+                cc: message.cc,
+                date: message.date
+            )
+        )
+        let decision = await prompter(context)
+        let resolvedMode: FieldAccessMode = decision == .allow ? .on : .off
+        return ConditionalFieldResolution(
+            fields: GrantFields(
+                subjectMode: fields.subjectMode == .ask ? resolvedMode : fields.subjectMode,
+                fromMode: fields.fromMode == .ask ? resolvedMode : fields.fromMode,
+                toMode: fields.toMode == .ask ? resolvedMode : fields.toMode,
+                ccMode: fields.ccMode == .ask ? resolvedMode : fields.ccMode,
+                dateMode: fields.dateMode == .ask ? resolvedMode : fields.dateMode,
+                bodyMode: fields.bodyMode == .ask ? resolvedMode : fields.bodyMode,
+                attachmentMetadataMode: fields.attachmentMetadataMode == .ask
+                    ? resolvedMode : fields.attachmentMetadataMode,
+                attachmentContentMode: fields.attachmentContentMode == .ask
+                    ? resolvedMode : fields.attachmentContentMode
+            ),
+            confirmed: decision == .allow ? askMask : .none,
+            blocked: decision == .block ? askMask : .none,
+            prompted: askMask
+        )
+    }
+
+    private static let bodyPreviewCap = 2_000
+
+    private static func fieldPreviews(
+        message: ReadMessage,
+        askLabels: [String]
+    ) -> [ConditionalFieldPreviewLine] {
+        askLabels.map { label in
+            ConditionalFieldPreviewLine(
+                label: label,
+                value: previewValue(for: label, message: message)
+            )
+        }
+    }
+
+    private static func previewValue(for label: String, message: ReadMessage) -> String {
+        let raw: String
+        switch label {
+        case "Subject":
+            raw = message.subject
+        case "From":
+            raw = message.from
+        case "To":
+            raw = message.to
+        case "Cc":
+            raw = message.cc
+        case "Date":
+            raw = message.date
+        case "Body":
+            switch message.body {
+            case .text(let text):
+                if let html = message.htmlBody,
+                   !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                    raw = MailMIME.plainText(fromHTML: html)
+                } else if text.contains("<") || text.contains("body {") || text.contains("&zwnj;") {
+                    raw = MailMIME.plainText(fromHTML: text)
+                } else {
+                    raw = MailMIME.decodeHTMLEntities(text)
+                }
+            case .notAvailable, .notGranted:
+                raw = ""
+            }
+        case "Attachment names", "Attachment content":
+            if message.attachments.isEmpty {
+                raw = ""
+            } else {
+                raw = message.attachments.map(\.filename).joined(separator: ", ")
+            }
+        default:
+            raw = ""
+        }
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if label == "Body" {
+            trimmed = MailMIME.stripLeadingByteCountPrefix(trimmed)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !trimmed.isEmpty else { return "(empty)" }
+        if label == "Body", trimmed.count > bodyPreviewCap {
+            return String(trimmed.prefix(bodyPreviewCap)) + "…"
+        }
+        return trimmed
+    }
+
+    /// Modes that are Ask, expressed as `.on` bits for mask/union helpers.
+    private static func askMask(_ fields: GrantFields) -> GrantFields {
+        GrantFields(
+            subjectMode: fields.subjectMode == .ask ? .on : .off,
+            fromMode: fields.fromMode == .ask ? .on : .off,
+            toMode: fields.toMode == .ask ? .on : .off,
+            ccMode: fields.ccMode == .ask ? .on : .off,
+            dateMode: fields.dateMode == .ask ? .on : .off,
+            bodyMode: fields.bodyMode == .ask ? .on : .off,
+            attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? .on : .off,
+            attachmentContentMode: fields.attachmentContentMode == .ask ? .on : .off
+        )
+    }
+
+    private func collectAskFields(_ fields: GrantFields) -> [String] {
+        var result: [String] = []
+        if fields.subjectMode == .ask { result.append("Subject") }
+        if fields.fromMode == .ask { result.append("From") }
+        if fields.toMode == .ask { result.append("To") }
+        if fields.ccMode == .ask { result.append("Cc") }
+        if fields.dateMode == .ask { result.append("Date") }
+        if fields.bodyMode == .ask { result.append("Body") }
+        if fields.attachmentMetadataMode == .ask { result.append("Attachment names") }
+        if fields.attachmentContentMode == .ask { result.append("Attachment content") }
+        return result
+    }
+
+    private static func conditionalFieldLabels(_ confirmed: GrantFields) -> [String] {
+        var result: [String] = []
+        if confirmed.subject { result.append("Subject") }
+        if confirmed.from { result.append("From") }
+        if confirmed.to { result.append("To") }
+        if confirmed.cc { result.append("Cc") }
+        if confirmed.date { result.append("Date") }
+        if confirmed.body { result.append("Body") }
+        if confirmed.attachmentMetadata { result.append("Attachment names") }
+        if confirmed.attachmentContent { result.append("Attachment content") }
+        return result
     }
 
     public func list(
@@ -213,7 +506,7 @@ public struct AgentReadAPI {
         accountID: String,
         placement: String,
         id: String
-    ) throws -> ReadMessage {
+    ) async throws -> ReadMessage {
         let started = Date()
         let agent = try authenticate(credential)
         let path = "\(accountID)/\(placement)/\(id)"
@@ -247,10 +540,33 @@ public struct AgentReadAPI {
                 )
                 throw PairingError.unauthorized
             }
-            let fields = grant.fields
+            let rawFields = grant.fields
+            let resolution = await resolveConditionalFields(
+                rawFields,
+                agentName: agent.name,
+                message: message
+            )
+            let fields = resolution.fields
             let granted = message.applying(fields)
-            let (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
-            let access = ReadMessageAccess(subject: subjectField, body: bodyField)
+            var (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
+            if resolution.prompted.subject {
+                subjectField = subjectField.markingConditionalPrompt(
+                    allowed: resolution.confirmed.subject
+                )
+            }
+            if resolution.prompted.body {
+                bodyField = bodyField.markingConditionalPrompt(
+                    allowed: resolution.confirmed.body
+                )
+            }
+            let conditionalLabels = Self.conditionalFieldLabels(resolution.confirmed)
+            let blockedLabels = Self.conditionalFieldLabels(resolution.blocked)
+            let access = ReadMessageAccess(
+                subject: subjectField,
+                body: bodyField,
+                conditionalAccessFields: conditionalLabels,
+                conditionalBlockedFields: blockedLabels
+            )
             let agentMessage = sanitized.withLeakGuardAccess(access)
             record(
                 kind: .get,
@@ -265,7 +581,9 @@ public struct AgentReadAPI {
                         fields: fields,
                         subjectSanitized: subjectField,
                         bodySanitized: bodyField,
-                        appliedRules: grant.applied
+                        appliedRules: grant.applied,
+                        conditionalFields: resolution.confirmed,
+                        conditionalBlockedFields: resolution.blocked
                     )
                 ]
             )

@@ -26,6 +26,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | **Job** | Non-destructive handoff / open / preview |
 | **Chrome** | Height-locked to Access Log `Formatted` (small segmented metrics); track + raised face; icon-only by default |
 | **Hover** | Expands to icon + regular-weight small-control label; border/icon → accent blue |
+| **Always expanded** | `alwaysExpanded: true` keeps icon + label (Ask dialog message actions) |
 | **Swift** | `SecondaryActionButton` in `CompanionBits.swift` |
 | **HTML** | `.secondary-action` (+ optional `.secondary-action-row`) |
 | **Icons** | Always shown; label appears on hover / focus; see [Action catalogue](#action-catalogue) |
@@ -105,6 +106,15 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 ### `GrantFieldBadge` / `RuleFieldMarkChip` / hatch
 
 Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle`). Do not restyle in protos without updating Swift.
+
+### Access Log list-row chips
+
+| Chip | Job | Chrome | Swift |
+|---|---|---|---|
+| Kind | Tool/kind (`get`, `search`, …) | Blue compact kind badge | `AuditKindBadge` |
+| Ask allow / block | Request showed Ask popup; user result | `questionmark.circle.fill` (pass-green / block-red); count when >1 fields | `AccessLogConditionalAskBadge` |
+| Leak | Leak-guard hits | Shield `L` (+ count) | `AccessLogLeakHitBadge` |
+| Pass / Block rule | Effectful rule applications | `checkmark.circle.fill` / `xmark.circle.fill` (pass-green / block-red); count when >1 hits | `AccessLogRuleHitBadge` |
 
 ---
 

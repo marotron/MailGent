@@ -4,6 +4,7 @@ struct MailGentSettingsView: View {
     @Bindable var session: CompanionSession
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
     @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
+    @AppStorage(MailGentPreferences.allowConditionalAccessPromptsKey) private var allowConditionalAccessPrompts = false
     @AppStorage(MailGentPreferences.loopbackPortKey) private var loopbackPort =
         Int(MailGentPreferences.defaultLoopbackPort)
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
@@ -22,6 +23,9 @@ struct MailGentSettingsView: View {
         .frame(width: 480, height: 600)
         .onChange(of: agentMayOpenInMail) { _, _ in
             session.agents.applyAgentMayOpenInMail()
+        }
+        .onChange(of: allowConditionalAccessPrompts) { _, _ in
+            session.agents.applyConditionalAccessPreference()
         }
         .onChange(of: loopbackPort) { _, newValue in
             let normalized = Int(MailGentPreferences.normalizedLoopbackPort(newValue))
@@ -78,6 +82,14 @@ struct MailGentSettingsView: View {
                     Toggle("Allow agents to open messages in Apple Mail", isOn: $agentMayOpenInMail)
                     Text(
                         "Off by default. When on, a paired agent may call MCP open_in_mail to open a granted message in Apple Mail."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Allow conditional access prompts", isOn: $allowConditionalAccessPrompts)
+                    Text(
+                        "Off by default. When on, Grant Desk Ask chips prompt on MCP get (Allow / Block). When off, Ask fields show and act as Off — your Ask settings stay saved and come back when you turn this on again."
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)

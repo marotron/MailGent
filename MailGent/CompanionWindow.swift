@@ -20,6 +20,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var settings: NSWindow?
     private var about: NSWindow?
     private var changelog: NSWindow?
+    /// Conditional Ask — same HostedWindow protection as other detached surfaces.
+    private var ask: NSWindow?
+    private var askContinuation: CheckedContinuation<ConditionalAccessDecision, Never>?
+    private var askFinished = false
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
     /// Only `windowShouldClose` (user close) may order out hosted windows.
@@ -106,6 +110,118 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Present the conditional Ask dialog until Allow / Block / traffic-light close.
+    /// Uses `HostedWindow` + `intendedVisible` so MenuBarExtra `hide` / `orderOut` cannot flash-dismiss it.
+    func runConditionalAsk(
+        request: ConditionalAccessPromptRequest,
+        accountLabel: String
+    ) async -> ConditionalAccessDecision {
+        // Fail-closed if a prior Ask is somehow still up.
+        finishAsk(.block)
+
+        return await withCheckedContinuation { continuation in
+            askContinuation = continuation
+            askFinished = false
+
+            let dialog = ConditionalAccessPromptDialog(
+                request: request,
+                accountLabel: accountLabel,
+                onAllow: { [weak self] in self?.finishAsk(.allow) },
+                onBlock: { [weak self] in self?.finishAsk(.block) },
+                showOpenInMail: request.context.mailURL != nil,
+                onOpenInMail: {
+                    if let mailURL = request.context.mailURL {
+                        NSWorkspace.shared.open(mailURL)
+                    }
+                },
+                onPreviewVisibilityChange: { [weak self] visible in
+                    self?.resizeAskWindow(previewVisible: visible)
+                }
+            )
+
+            // Start expanded (preview on); Preview toggle shrinks/expands. Window stays resizable.
+            let size = ConditionalAskLayout.contentSize(previewVisible: true)
+            beginPresentation()
+            if let ask {
+                ask.styleMask.insert(.resizable)
+                ask.styleMask.remove(.miniaturizable)
+                ask.minSize = ConditionalAskLayout.minContentSize(previewVisible: true)
+                ask.maxSize = NSSize(width: 2400, height: 1600)
+                install(dialog, in: ask, contentSize: size)
+                ask.setContentSize(size)
+            } else {
+                ask = makeWindow(
+                    title: "Field Access Request",
+                    size: size,
+                    minSize: ConditionalAskLayout.minContentSize(previewVisible: true),
+                    root: dialog
+                )
+                ask?.styleMask.remove(.miniaturizable)
+            }
+            bringForward(ask)
+        }
+    }
+
+    fileprivate func resizeAskWindow(previewVisible: Bool) {
+        guard let ask else { return }
+        let target = ConditionalAskLayout.contentSize(previewVisible: previewVisible)
+        let minimum = ConditionalAskLayout.minContentSize(previewVisible: previewVisible)
+        ask.minSize = minimum
+
+        var content = ask.contentRect(forFrameRect: ask.frame).size
+        if previewVisible {
+            // Growing: at least the default expanded size.
+            content.width = max(content.width, target.width)
+            content.height = max(content.height, target.height)
+        } else {
+            // Shrinking: snap to compact default if still wide from preview.
+            content.width = min(content.width, target.width)
+            if content.width < minimum.width { content.width = minimum.width }
+            content.height = max(content.height, minimum.height)
+        }
+        if let hosting = ask.contentView {
+            hosting.autoresizingMask = [.width, .height]
+            hosting.frame.size = content
+        }
+        ask.setContentSize(content)
+        // Keep the window on-screen after shrinking from the trailing edge.
+        var frame = ask.frame
+        if let screen = ask.screen ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            if frame.maxX > visible.maxX {
+                frame.origin.x = visible.maxX - frame.width
+            }
+            if frame.maxY > visible.maxY {
+                frame.origin.y = visible.maxY - frame.height
+            }
+            if frame.minX < visible.minX {
+                frame.origin.x = visible.minX
+            }
+            if frame.minY < visible.minY {
+                frame.origin.y = visible.minY
+            }
+            ask.setFrame(frame, display: true)
+        }
+    }
+
+    private func finishAsk(_ decision: ConditionalAccessDecision) {
+        guard !askFinished else { return }
+        askFinished = true
+        let continuation = askContinuation
+        askContinuation = nil
+
+        if let ask {
+            intendedVisible.remove(ObjectIdentifier(ask))
+            allowingOrderOut = true
+            ask.orderOut(nil)
+            allowingOrderOut = false
+        }
+        if intendedVisible.isEmpty {
+            NSApp.setActivationPolicy(.accessory)
+        }
+        continuation?.resume(returning: decision)
+    }
+
     private func beginPresentation() {
         hideRecoveries = 0
         claimActivation()
@@ -122,7 +238,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private var hostedWindows: [NSWindow] {
-        [companion, access, grantDesk, accessLog, settings, about, changelog].compactMap { $0 }
+        [companion, access, grantDesk, accessLog, settings, about, changelog, ask].compactMap { $0 }
     }
 
     /// MenuBarExtra `.window` tears down on the same turn as the click; wait one turn.
@@ -263,6 +379,11 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 sender.orderFrontRegardless()
                 sender.makeKeyAndOrderFront(nil)
             }
+            return false
+        }
+        if sender === ask {
+            // Traffic-light / ⌘W on Ask → Block (fail-closed).
+            finishAsk(.block)
             return false
         }
         intendedVisible.remove(ObjectIdentifier(sender))
@@ -411,6 +532,8 @@ struct CompanionWindow: View {
             }
         }
         .frame(minWidth: 720, minHeight: 480)
+        // Conditional Ask prompts use DetachedWindowHost.runConditionalAsk (HostedWindow)
+        // so they appear even when this window is closed (menu-bar app).
     }
 
     private var controlCenter: some View {

@@ -10,6 +10,28 @@ public enum FieldAccess: String, Codable, Sendable {
 public enum FieldAccessReason: String, Codable, Sendable {
     case grant
     case leakGuard = "leak_guard"
+    /// User Allowed an Ask (conditional) prompt for this field on this get.
+    case conditional
+    /// User Blocked an Ask (conditional) prompt for this field on this get.
+    case conditionalBlocked = "conditional_blocked"
+}
+
+extension SanitizedField {
+    /// Stamp Ask prompt outcome without overriding leak-guard classifications.
+    public func markingConditionalPrompt(allowed: Bool) -> SanitizedField {
+        guard reason != .leakGuard else { return self }
+        return SanitizedField(
+            text: text,
+            access: access,
+            agentAccess: agentAccess,
+            reason: allowed ? .conditional : .conditionalBlocked,
+            disclosedRules: disclosedRules,
+            allRules: allRules,
+            original: original,
+            hitSpans: hitSpans,
+            stealth: stealth
+        )
+    }
 }
 
 public struct LeakHitSpan: Equatable, Sendable {
@@ -90,8 +112,17 @@ public struct ReadMessageAccess: Equatable, Sendable {
     public let subjectOriginal: String?
     public let bodyOriginal: String?
     public let stealth: Bool
+    /// Field labels the user Allowed on an Ask prompt for this get (e.g. `Body`).
+    public let conditionalAccessFields: [String]
+    /// Field labels the user Blocked on an Ask prompt for this get (e.g. `Body`).
+    public let conditionalBlockedFields: [String]
 
-    public init(subject: SanitizedField, body: SanitizedField) {
+    public init(
+        subject: SanitizedField,
+        body: SanitizedField,
+        conditionalAccessFields: [String] = [],
+        conditionalBlockedFields: [String] = []
+    ) {
         subjectAccess = subject.agentAccess
         bodyAccess = body.agentAccess
         subjectAccessReason = subject.reason
@@ -100,5 +131,7 @@ public struct ReadMessageAccess: Equatable, Sendable {
         subjectOriginal = subject.original != subject.text ? subject.original : nil
         bodyOriginal = body.original != body.text ? body.original : nil
         stealth = subject.stealth || body.stealth
+        self.conditionalAccessFields = conditionalAccessFields
+        self.conditionalBlockedFields = conditionalBlockedFields
     }
 }

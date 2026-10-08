@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.0] - 2026-10-08
+
+### Added
+
+- Grant Desk **Ask** field mode — cycle Off → Ask → On; when Ask is on and conditional prompts are allowed, MCP `get` shows an on-device Allow / Block dialog with message preview before disclosing those fields.
+- Settings → General → **Allow conditional access prompts** (off by default). When off, Ask fields show and act as Off; saved Ask choices return when you turn it back on.
+- Access Log list-row chips for Ask allow / block (`questionmark.circle.fill`) and Pass / Block rule hits (`checkmark.circle.fill` / `xmark.circle.fill`); field chips in the preview use the same filled-circle size.
+
 ## [0.10.3] - 2026-10-06
 
 ### Changed

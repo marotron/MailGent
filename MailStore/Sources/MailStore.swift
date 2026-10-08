@@ -214,13 +214,90 @@ public enum MailMIME: Sendable {
         return result
     }
 
+    /// Drop `<script>` / `<style>` blocks so CSS does not leak into plain previews.
+    static func stripNonBodyBlocks(_ html: String) -> String {
+        html.replacingOccurrences(
+            of: #"(?is)<(script|style)\b[^>]*>.*?</\1>"#,
+            with: " ",
+            options: .regularExpression
+        )
+    }
+
     static func collapsed(_ text: String) -> String {
         text.split { $0.isWhitespace || $0 == "\u{FFFC}" }.joined(separator: " ")
     }
 
-    /// Plain text for agents when a message is HTML-only (tags stripped, whitespace collapsed).
+    /// Decode common HTML entities (`&zwnj;`, `&nbsp;`, numeric) after tag strip.
+    public static func decodeHTMLEntities(_ text: String) -> String {
+        guard text.contains("&") else { return text }
+        var out = text
+        let named: [(String, String)] = [
+            ("&zwnj;", ""),
+            ("&zwj;", ""),
+            ("&nbsp;", " "),
+            ("&copy;", "©"),
+            ("&reg;", "®"),
+            ("&trade;", "™"),
+            ("&amp;", "&"),
+            ("&lt;", "<"),
+            ("&gt;", ">"),
+            ("&quot;", "\""),
+            ("&apos;", "'"),
+            ("&#39;", "'"),
+            ("&rsquo;", "'"),
+            ("&lsquo;", "'"),
+            ("&rdquo;", "\""),
+            ("&ldquo;", "\""),
+            ("&mdash;", "—"),
+            ("&ndash;", "–"),
+            ("&hellip;", "…"),
+        ]
+        for (entity, replacement) in named {
+            out = out.replacingOccurrences(of: entity, with: replacement, options: .caseInsensitive)
+        }
+        // Numeric decimal / hex entities.
+        if let regex = try? NSRegularExpression(pattern: #"&#(x?[0-9a-fA-F]+);"#) {
+            let ns = out as NSString
+            let matches = regex.matches(in: out, range: NSRange(location: 0, length: ns.length))
+            for match in matches.reversed() {
+                let inner = ns.substring(with: match.range(at: 1))
+                let scalar: UnicodeScalar?
+                if inner.lowercased().hasPrefix("x"),
+                   let value = UInt32(inner.dropFirst(), radix: 16)
+                {
+                    scalar = UnicodeScalar(value)
+                } else if let value = UInt32(inner) {
+                    scalar = UnicodeScalar(value)
+                } else {
+                    scalar = nil
+                }
+                if let scalar {
+                    out = (out as NSString).replacingCharacters(
+                        in: match.range,
+                        with: String(Character(scalar))
+                    )
+                }
+            }
+        }
+        return out
+    }
+
+    /// Plain text for agents / Ask previews (style/script removed, tags stripped, entities decoded).
     public static func plainText(fromHTML html: String) -> String {
-        collapsed(stripTags(html))
+        let cleaned = stripNonBodyBlocks(html)
+        return collapsed(decodeHTMLEntities(stripTags(cleaned)))
+    }
+
+    /// Drop a leading `.emlx` byte-count token (`96 It’ll be…` → `It’ll be…`).
+    public static func stripLeadingByteCountPrefix(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"^\d{1,7}\s+(?=\S)"#),
+              let match = regex.firstMatch(
+                  in: text,
+                  range: NSRange(text.startIndex..., in: text)
+              ),
+              match.range.location == 0
+        else { return text }
+        return (text as NSString).substring(from: match.range.length)
     }
 }
 

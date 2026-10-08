@@ -265,6 +265,57 @@ struct AccessLogFormatTests {
         #expect(AccessLogFormat.blockApplicationCount(for: entry) == 0)
     }
 
+    @Test func conditionalAskCountsFromMessageRef() {
+        let entry = AuditEntry(
+            kind: .get,
+            agentID: "a",
+            agentName: "Cursor",
+            messages: [
+                AuditMessageRef(
+                    accountID: "acc",
+                    placement: "INBOX",
+                    id: "1",
+                    subject: "A",
+                    from: "a@example.com",
+                    date: "2024-01-01T00:00:00Z",
+                    conditionalFields: GrantFields(envelope: false, body: true, attachmentMetadata: true),
+                    conditionalBlockedFields: GrantFields(
+                        subject: true,
+                        from: false,
+                        to: false,
+                        cc: false,
+                        date: false,
+                        body: false
+                    )
+                )
+            ]
+        )
+
+        #expect(AccessLogFormat.conditionalAskAllowedCount(for: entry) == 2)
+        #expect(AccessLogFormat.conditionalAskBlockedCount(for: entry) == 1)
+    }
+
+    @Test func conditionalAskCountsFromResponseSummaryFallback() {
+        let allowed = AuditEntry(
+            kind: .get,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"id":"1","accountID":"acc","placement":"INBOX","bodyAccess":"granted","bodyAccessReason":"conditional"}"#
+        )
+        let blocked = AuditEntry(
+            kind: .get,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"id":"1","accountID":"acc","placement":"INBOX","bodyAccess":"not_granted","bodyAccessReason":"conditional_blocked"}"#
+        )
+
+        #expect(AccessLogFormat.conditionalAskAllowedCount(for: allowed) == 1)
+        #expect(AccessLogFormat.conditionalAskBlockedCount(for: allowed) == 0)
+        #expect(AccessLogFormat.conditionalAskBlockedCount(for: blocked) == 1)
+        #expect(AccessLogFormat.conditionalAskAllowedCount(for: blocked) == 0)
+        #expect(AccessLogFormat.compactResponse(allowed.responseSummary) == "bodyAccess=granted")
+    }
+
     @Test func attachmentContentMapsAccessStates() {
         func entry(_ responseSummary: String) -> AuditEntry {
             AuditEntry(

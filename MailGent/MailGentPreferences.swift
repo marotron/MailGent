@@ -8,6 +8,8 @@ enum MailGentPreferences {
     static let auditMaxAgeSecondsKey = "auditMaxAgeSeconds"
     static let auditMaxCountKey = "auditMaxCount"
     static let auditMaxBytesKey = "auditMaxBytes"
+    /// When on, Grant Desk field chips may use Ask and MCP get may prompt. Off by default.
+    static let allowConditionalAccessPromptsKey = "allowConditionalAccessPrompts"
 
     static let defaultLoopbackPort: UInt16 = 8788
 
@@ -17,6 +19,10 @@ enum MailGentPreferences {
 
     static var agentMayOpenInMail: Bool {
         UserDefaults.standard.bool(forKey: agentMayOpenInMailKey)
+    }
+
+    static var allowConditionalAccessPrompts: Bool {
+        UserDefaults.standard.bool(forKey: allowConditionalAccessPromptsKey)
     }
 
     static var loopbackPort: UInt16 {

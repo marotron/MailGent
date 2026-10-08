@@ -208,7 +208,7 @@ struct GrantGateTests {
         #expect(page.items.isEmpty)
     }
 
-    @Test func bodyOffOmitsBodyOnGet() throws {
+    @Test func bodyOffOmitsBodyOnGet() async throws {
         let env = try GrantFixture()
         defer { env.remove() }
 
@@ -219,7 +219,7 @@ struct GrantGateTests {
             fields: GrantFields(envelope: true, body: false)
         )
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountA,
             placement: "INBOX",
@@ -229,7 +229,7 @@ struct GrantGateTests {
         #expect(message.body == .notGranted)
     }
 
-    @Test func subjectOffOmitsSubjectOnGet() throws {
+    @Test func subjectOffOmitsSubjectOnGet() async throws {
         let env = try GrantFixture()
         defer { env.remove() }
 
@@ -246,7 +246,7 @@ struct GrantGateTests {
             )
         )
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountA,
             placement: "INBOX",
@@ -270,7 +270,69 @@ struct GrantGateTests {
         #expect(fields.body == true)
     }
 
-    @Test func ccOffOmitsCcOnGet() throws {
+    @Test func fieldAccessModeCyclesOffAskOn() {
+        #expect(FieldAccessMode.off.nextMode(allowAsk: true) == .ask)
+        #expect(FieldAccessMode.ask.nextMode(allowAsk: true) == .on)
+        #expect(FieldAccessMode.on.nextMode(allowAsk: true) == .off)
+        #expect(FieldAccessMode.off.nextMode(allowAsk: false) == .on)
+        #expect(FieldAccessMode.ask.nextMode(allowAsk: false) == .on)
+    }
+
+    @Test func askDisplaysAsOffWhenConditionalDisabled() {
+        #expect(FieldAccessMode.ask.displayed(allowConditional: false) == .off)
+        #expect(FieldAccessMode.ask.displayed(allowConditional: true) == .ask)
+        #expect(FieldAccessMode.on.displayed(allowConditional: false) == .on)
+
+        let fields = GrantFields(subjectMode: .ask, fromMode: .on, bodyMode: .ask)
+        let masked = fields.displayed(allowConditional: false)
+        #expect(masked.subjectMode == .off)
+        #expect(masked.bodyMode == .off)
+        #expect(masked.fromMode == .on)
+        #expect(fields.subjectMode == .ask)
+    }
+
+    @Test func askSurvivesPassAndBlockOverlays() {
+        let askBody = GrantFields(bodyMode: .ask, attachmentMetadataMode: .off)
+        let passHeaders = GrantFields(subjectMode: .on, bodyMode: .off)
+        let blockedBody = GrantFields(bodyMode: .on)
+
+        let afterPass = askBody.unioning(passHeaders)
+        #expect(afterPass.bodyMode == .ask)
+        #expect(afterPass.subjectMode == .on)
+
+        let afterBlock = askBody.subtracting(blockedBody)
+        #expect(afterBlock.bodyMode == .off)
+
+        let untouched = askBody.subtracting(GrantFields(bodyMode: .off))
+        #expect(untouched.bodyMode == .ask)
+    }
+
+    @Test func askModesSurviveJSONRoundTrip() throws {
+        let original = GrantFields(
+            subjectMode: .ask,
+            fromMode: .on,
+            toMode: .off,
+            ccMode: .ask,
+            dateMode: .on,
+            bodyMode: .ask,
+            attachmentMetadataMode: .ask,
+            attachmentContentMode: .off
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(GrantFields.self, from: data)
+        #expect(decoded.subjectMode == .ask)
+        #expect(decoded.fromMode == .on)
+        #expect(decoded.toMode == .off)
+        #expect(decoded.ccMode == .ask)
+        #expect(decoded.bodyMode == .ask)
+        #expect(decoded.attachmentMetadataMode == .ask)
+        #expect(decoded.attachmentContentMode == .off)
+        // Legacy Bool view: Ask is not "on"
+        #expect(decoded.subject == false)
+        #expect(decoded.body == false)
+    }
+
+    @Test func ccOffOmitsCcOnGet() async throws {
         let env = try GrantFixture()
         defer { env.remove() }
 
@@ -288,7 +350,7 @@ struct GrantGateTests {
             )
         )
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountA,
             placement: "INBOX",

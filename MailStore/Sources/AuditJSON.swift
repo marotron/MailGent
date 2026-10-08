@@ -107,6 +107,12 @@ enum AuditJSON {
             if let reason = access.bodyAccessReason {
                 payload["bodyAccessReason"] = reason.rawValue
             }
+            if !access.conditionalAccessFields.isEmpty {
+                payload["conditionalAccessFields"] = access.conditionalAccessFields
+            }
+            if !access.conditionalBlockedFields.isEmpty {
+                payload["conditionalBlockedFields"] = access.conditionalBlockedFields
+            }
             if !access.sanitizedRules.isEmpty {
                 payload["sanitizedRules"] = access.sanitizedRules
             }

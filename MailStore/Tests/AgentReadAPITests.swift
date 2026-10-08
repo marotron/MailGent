@@ -29,11 +29,11 @@ struct AgentReadAPITests {
         #expect(page.items.map(\.subject) == ["Invoice due"])
     }
 
-    @Test func getRedactsSecretsWhenLeakGuardEnabled() throws {
+    @Test func getRedactsSecretsWhenLeakGuardEnabled() async throws {
         let env = try LeakGuardReadFixture(body: "password=hunter2\nPlease pay")
         defer { env.remove() }
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -55,14 +55,14 @@ struct AgentReadAPITests {
         #expect(page.items.first?.subject == "[REDACTED:passwordCtx] invoice")
     }
 
-    @Test func getWithholdsBodyWhenBlockWhole() throws {
+    @Test func getWithholdsBodyWhenBlockWhole() async throws {
         let env = try LeakGuardReadFixture(
             body: "password=hunter2\nPlease pay",
             bodyHitMode: .blockWhole
         )
         defer { env.remove() }
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -74,7 +74,7 @@ struct AgentReadAPITests {
         #expect(message.leakGuardAccess?.sanitizedRules.contains("Password patterns") == true)
     }
 
-    @Test func getStealthReplaceReportsGrantedBodyAccess() throws {
+    @Test func getStealthReplaceReportsGrantedBodyAccess() async throws {
         let rule = CustomLeakRule(
             label: "My name",
             kind: .literal,
@@ -90,7 +90,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -103,14 +103,14 @@ struct AgentReadAPITests {
         #expect(message.leakGuardAccess?.stealth == true)
     }
 
-    @Test func getAuditRefRetainsOriginalsWhenSanitized() throws {
+    @Test func getAuditRefRetainsOriginalsWhenSanitized() async throws {
         let env = try LeakGuardReadFixture(
             body: "password=hunter2\nPlease pay",
             audit: true
         )
         defer { env.remove() }
 
-        _ = try env.gateway.get(
+        _ = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -137,7 +137,7 @@ struct AgentReadAPITests {
         )
     }
 
-    @Test func getAuditRefRetainsStealthReplaceHits() throws {
+    @Test func getAuditRefRetainsStealthReplaceHits() async throws {
         let rule = CustomLeakRule(
             label: "My name",
             kind: .literal,
@@ -154,7 +154,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        _ = try env.gateway.get(
+        _ = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -178,14 +178,14 @@ struct AgentReadAPITests {
         )
     }
 
-    @Test func getDoesNotScanDeniedBodyEvenWithLeakGuard() throws {
+    @Test func getDoesNotScanDeniedBodyEvenWithLeakGuard() async throws {
         let env = try LeakGuardReadFixture(
             body: "password=hunter2\nPlease pay",
             bodyGranted: false
         )
         defer { env.remove() }
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -197,14 +197,14 @@ struct AgentReadAPITests {
         #expect(message.leakGuardAccess?.sanitizedRules.isEmpty == true)
     }
 
-    @Test func unprotectedScopeSkipsLeakGuardOnGet() throws {
+    @Test func unprotectedScopeSkipsLeakGuardOnGet() async throws {
         let env = try LeakGuardReadFixture(
             body: "password=hunter2\nPlease pay",
             scopes: ["work/Sent"]
         )
         defer { env.remove() }
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -214,13 +214,13 @@ struct AgentReadAPITests {
         #expect(message.leakGuardAccess?.bodyAccess == .granted)
     }
 
-    @Test func matchingPassUpgradesBodyOnGet() throws {
+    @Test func matchingPassUpgradesBodyOnGet() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: false)
         )
         defer { env.remove() }
 
-        let withoutPass = try env.gateway.get(
+        let withoutPass = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -239,7 +239,7 @@ struct AgentReadAPITests {
         )
         env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
-        let withPass = try env.gateway.get(
+        let withPass = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -248,7 +248,7 @@ struct AgentReadAPITests {
         #expect(withPass.body == .text("Please pay"))
     }
 
-    @Test func passDoesNotGrantAccessWithoutBaseAllow() throws {
+    @Test func passDoesNotGrantAccessWithoutBaseAllow() async throws {
         let env = try AgentReadFixture(grantFields: nil)
         defer { env.remove() }
 
@@ -263,8 +263,8 @@ struct AgentReadAPITests {
         )
         env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
-        #expect(throws: PairingError.unauthorized) {
-            try env.gateway.get(
+        await #expect(throws: PairingError.unauthorized) {
+            try await env.gateway.get(
                 credential: env.credential,
                 accountID: env.accountID,
                 placement: "INBOX",
@@ -273,7 +273,7 @@ struct AgentReadAPITests {
         }
     }
 
-    @Test func passDoesNotUpgradeWhenSubjectMismatches() throws {
+    @Test func passDoesNotUpgradeWhenSubjectMismatches() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: false)
         )
@@ -290,7 +290,7 @@ struct AgentReadAPITests {
         )
         env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
-        let message = try env.gateway.get(
+        let message = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -299,7 +299,7 @@ struct AgentReadAPITests {
         #expect(message.body == .notGranted)
     }
 
-    @Test func getAuditRecordsEffectfulPassApplication() throws {
+    @Test func getAuditRecordsEffectfulPassApplication() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: false),
             audit: true
@@ -318,7 +318,7 @@ struct AgentReadAPITests {
         )
         env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
-        _ = try env.gateway.get(
+        _ = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -339,7 +339,7 @@ struct AgentReadAPITests {
         #expect(get.messages[0].appliedRuleMark(for: \.body)?.nick == "A")
     }
 
-    @Test func getAuditOmitsNoOpPassMatch() throws {
+    @Test func getAuditOmitsNoOpPassMatch() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: true),
             audit: true
@@ -358,7 +358,7 @@ struct AgentReadAPITests {
         )
         env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
-        _ = try env.gateway.get(
+        _ = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -370,7 +370,7 @@ struct AgentReadAPITests {
         #expect(get.messages[0].passApplicationCount == 0)
     }
 
-    @Test func getAuditRecordsEffectfulBlockApplication() throws {
+    @Test func getAuditRecordsEffectfulBlockApplication() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: true),
             audit: true
@@ -389,7 +389,7 @@ struct AgentReadAPITests {
         )
         env.rules.setEnabled(true, ruleID: "b1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
 
-        _ = try env.gateway.get(
+        _ = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -519,6 +519,113 @@ struct AgentReadAPITests {
         #expect(result.path == nil)
         #expect((result.byteCount ?? 0) > AgentReadAPI.attachmentByteLimit)
     }
+
+    @Test func getTreatsAskBodyAsOffWhenConditionalDisabled() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: false,
+            conditionalAccessPrompter: { _ in .allow }
+        )
+        defer { env.remove() }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(message.body == .notGranted)
+    }
+
+    @Test func getPromptsAndAllowsAskBodyWhenConditionalEnabled() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var fields: [String] = []
+        }
+        let capture = PromptCapture()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            audit: true,
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                capture.fields = context.requestedFields
+                #expect(context.fieldPreviews.contains { $0.label == "Body" && $0.value == "Please pay" })
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.fields == ["Body"])
+        #expect(message.body == .text("Please pay"))
+        #expect(message.leakGuardAccess?.bodyAccessReason == .conditional)
+        #expect(message.leakGuardAccess?.conditionalAccessFields == ["Body"])
+        let get = try #require(env.audit?.entries().last { $0.kind == .get })
+        #expect(get.messages[0].conditionalConfirmedFields.body == true)
+        #expect(leakGuardJSON(get.responseSummary)["bodyAccessReason"] as? String == "conditional")
+        #expect(
+            leakGuardJSON(get.responseSummary)["conditionalAccessFields"] as? [String] == ["Body"]
+        )
+    }
+
+    @Test func getPromptsAndDeniesAskBodyWhenUserRefuses() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            audit: true,
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                #expect(context.fieldPreviews.contains { $0.label == "Body" })
+                return .block
+            }
+        )
+        defer { env.remove() }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(message.body == .notGranted)
+        #expect(message.leakGuardAccess?.bodyAccessReason == .conditionalBlocked)
+        #expect(message.leakGuardAccess?.conditionalAccessFields == [])
+        #expect(message.leakGuardAccess?.conditionalBlockedFields == ["Body"])
+        let get = try #require(env.audit?.entries().last { $0.kind == .get })
+        #expect(get.messages[0].conditionalUserBlockedFields.body == true)
+        #expect(get.messages[0].conditionalConfirmedFields.body == false)
+        #expect(
+            leakGuardJSON(get.responseSummary)["bodyAccessReason"] as? String
+                == "conditional_blocked"
+        )
+        #expect(
+            leakGuardJSON(get.responseSummary)["conditionalBlockedFields"] as? [String] == ["Body"]
+        )
+    }
 }
 
 private struct AgentReadFixture {
@@ -531,7 +638,12 @@ private struct AgentReadFixture {
     let audit: AuditLog?
     let gateway: AgentReadAPI
 
-    init(grantFields: GrantFields? = .default, audit: Bool = false) throws {
+    init(
+        grantFields: GrantFields? = .default,
+        audit: Bool = false,
+        allowConditionalAccessPrompts: Bool = false,
+        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
+    ) throws {
         root = try FixtureTree()
         try root.writeEmlx(
             named: "1.emlx",
@@ -572,7 +684,9 @@ private struct AgentReadFixture {
             pairing: pairing,
             grants: grants,
             rules: rules,
-            audit: auditLog
+            audit: auditLog,
+            allowConditionalAccessPrompts: allowConditionalAccessPrompts,
+            conditionalAccessPrompter: conditionalAccessPrompter
         )
     }
 

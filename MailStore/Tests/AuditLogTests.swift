@@ -25,12 +25,12 @@ struct AuditLogTests {
         #expect(searches[0].finishedAt != nil)
     }
 
-    @Test func getAppendsAuditEntry() throws {
+    @Test func getAppendsAuditEntry() async throws {
         let env = try AuditFixture()
         defer { env.remove() }
 
         let hit = try env.gateway.search("invoice", credential: env.credential).items[0]
-        _ = try env.gateway.get(
+        _ = try await env.gateway.get(
             credential: env.credential,
             accountID: hit.accountID,
             placement: hit.placement,
@@ -47,11 +47,11 @@ struct AuditLogTests {
         #expect(get.messages[0].id == hit.id)
     }
 
-    @Test func getIncludesAttachmentNamesWhenMetadataGranted() throws {
+    @Test func getIncludesAttachmentNamesWhenMetadataGranted() async throws {
         let env = try AttachmentAuditFixture()
         defer { env.remove() }
 
-        let granted = try env.gateway.get(
+        let granted = try await env.gateway.get(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -73,7 +73,7 @@ struct AuditLogTests {
                 .contains("checkin-vs-checkout-compare.pdf")
         )
 
-        let hidden = try env.hiddenGateway.get(
+        let hidden = try await env.hiddenGateway.get(
             credential: env.hiddenCredential,
             accountID: env.accountID,
             placement: "INBOX",
