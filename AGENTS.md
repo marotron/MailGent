@@ -24,4 +24,6 @@ Apache-2.0 + `NOTICE`; name and icon stay ours. Homebrew cask is **future** (aft
 
 Bump `MARKETING_VERSION` only when a user-facing change is ready to land. **Always update root `CHANGELOG.md` and the full `README.md` (headline + ## Features subsections, not headline-only) in the same commit** — see `.cursor/rules/versioning.mdc`.
 
+Ship tags must be **signed**: `git tag -s vX.Y.Z -m "…"`, then `git verify-tag` before push. Never lightweight or unsigned annotated release tags.
+
 After bumping version, run `python3 ../scripts/update-dev-index.py` (from repo root: `python3 ~/dev/scripts/update-dev-index.py`) to refresh `~/dev/INDEX.md`.

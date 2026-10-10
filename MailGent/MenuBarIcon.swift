@@ -2,6 +2,26 @@ import AppKit
 import MailStore
 import SwiftUI
 
+/// Pending Ask prompts (open dialog + queued). Drives menu-bar bubble and Dock `badgeLabel`.
+@MainActor
+final class AskQueueIndicator: ObservableObject {
+    static let shared = AskQueueIndicator()
+
+    @Published private(set) var depth: Int = 0
+
+    func setDepth(_ depth: Int) {
+        let next = max(0, depth)
+        guard self.depth != next else { return }
+        self.depth = next
+        NSApp.dockTile.badgeLabel = next > 0 ? Self.badgeText(next) : nil
+        NSApp.dockTile.display()
+    }
+
+    static func badgeText(_ count: Int) -> String {
+        count > 99 ? "99+" : "\(count)"
+    }
+}
+
 enum MenuBarIconKind: Equatable, Sendable {
     case idle
     case success
@@ -94,12 +114,32 @@ struct MenuBarIconPulse: Equatable, Sendable {
 struct MenuBarIconLabel: View {
     @Bindable var agents: AgentBridge
     var source: MailSourceID
+    @ObservedObject private var askQueue = AskQueueIndicator.shared
 
     var body: some View {
         let appearance = MenuBarIconAppearance.resolve(source: source, pulse: agents.iconPulse.kind)
-        Image(nsImage: Self.image(appearance))
-            .id("\(source.rawValue)-\(agents.iconPulse.kind)")
-            .accessibilityLabel(appearance.accessibilityLabel)
+        let askDepth = askQueue.depth
+        ZStack(alignment: .topTrailing) {
+            Image(nsImage: Self.image(appearance))
+            if askDepth > 0 {
+                Text(AskQueueIndicator.badgeText(askDepth))
+                    .font(.system(size: 8, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, askDepth > 9 ? 2.5 : 0)
+                    .frame(minWidth: 11, minHeight: 11)
+                    .background(Capsule().fill(Color.red))
+                    .offset(x: 5, y: -3)
+            }
+        }
+        .id("\(source.rawValue)-\(agents.iconPulse.kind)-\(askDepth)")
+        .accessibilityLabel(Self.accessibilityLabel(appearance: appearance, askDepth: askDepth))
+    }
+
+    private static func accessibilityLabel(appearance: MenuBarIconAppearance, askDepth: Int) -> String {
+        guard askDepth > 0 else { return appearance.accessibilityLabel }
+        let asks = askDepth == 1 ? "1 Ask pending" : "\(askDepth) Asks pending"
+        return "\(appearance.accessibilityLabel), \(asks)"
     }
 
     private static func image(_ appearance: MenuBarIconAppearance) -> NSImage {

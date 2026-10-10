@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.1] - 2026-10-10
+
+### Added
+
+- Menu bar and Dock show a red badge with the count of pending Ask prompts (open dialog plus queued).
+
+### Fixed
+
+- Ask prompts no longer auto-Block a prior open dialog when the agent fires concurrent `get`s — later prompts wait their turn so Allow / Block matches what you clicked.
+
 ## [0.11.0] - 2026-10-08
 
 ### Added

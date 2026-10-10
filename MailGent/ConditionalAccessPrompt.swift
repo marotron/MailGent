@@ -35,20 +35,22 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
     public init() {}
 
     /// Request a decision from the user. Suspends until Allow / Block.
-    /// Always returns (never throws); Block is fail-closed.
+    /// Concurrent gets queue behind the open Ask (Host serializes); never auto-Blocks a prior prompt.
+    /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
     public func requestDecision(
         context: ConditionalAccessPromptContext,
         accountLabel: String? = nil
     ) async -> ConditionalAccessDecision {
         let request = ConditionalAccessPromptRequest(context: context)
-        pendingRequest = request
-
         let mailboxLabel = accountLabel.flatMap { $0.isEmpty ? nil : $0 } ?? context.accountID
         let fieldsText = context.requestedFields.joined(separator: ", ")
 
         let decision = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
-            accountLabel: mailboxLabel
+            accountLabel: mailboxLabel,
+            onPresent: { [weak self] in
+                self?.pendingRequest = request
+            }
         )
 
         if pendingRequest?.id == request.id {

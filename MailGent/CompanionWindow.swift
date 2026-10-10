@@ -24,6 +24,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var ask: NSWindow?
     private var askContinuation: CheckedContinuation<ConditionalAccessDecision, Never>?
     private var askFinished = false
+    /// Serializes Ask dialogs: concurrent MCP `get`s wait instead of fail-closing the open Ask.
+    private var askBusy = false
+    private var askWaiters: [CheckedContinuation<Void, Never>] = []
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
     /// Only `windowShouldClose` (user close) may order out hosted windows.
@@ -112,14 +115,50 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     /// Present the conditional Ask dialog until Allow / Block / traffic-light close.
     /// Uses `HostedWindow` + `intendedVisible` so MenuBarExtra `hide` / `orderOut` cannot flash-dismiss it.
+    /// Concurrent callers wait their turn — a new Ask never auto-Blocks an open one.
     func runConditionalAsk(
+        request: ConditionalAccessPromptRequest,
+        accountLabel: String,
+        onPresent: (() -> Void)? = nil
+    ) async -> ConditionalAccessDecision {
+        await beginAskTurn()
+        defer { endAskTurn() }
+        onPresent?()
+        return await presentConditionalAsk(request: request, accountLabel: accountLabel)
+    }
+
+    private func beginAskTurn() async {
+        if !askBusy {
+            askBusy = true
+            refreshAskQueueBadge()
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            askWaiters.append(continuation)
+            refreshAskQueueBadge()
+        }
+    }
+
+    private func endAskTurn() {
+        if askWaiters.isEmpty {
+            askBusy = false
+            refreshAskQueueBadge()
+            return
+        }
+        askWaiters.removeFirst().resume()
+        refreshAskQueueBadge()
+    }
+
+    /// Open Ask + queued waiters (red bubble on menu bar / Dock).
+    private func refreshAskQueueBadge() {
+        AskQueueIndicator.shared.setDepth(askBusy ? 1 + askWaiters.count : 0)
+    }
+
+    private func presentConditionalAsk(
         request: ConditionalAccessPromptRequest,
         accountLabel: String
     ) async -> ConditionalAccessDecision {
-        // Fail-closed if a prior Ask is somehow still up.
-        finishAsk(.block)
-
-        return await withCheckedContinuation { continuation in
+        await withCheckedContinuation { continuation in
             askContinuation = continuation
             askFinished = false
 
