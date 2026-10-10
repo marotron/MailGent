@@ -116,6 +116,16 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | Leak | Leak-guard hits | Shield `L` (+ count) | `AccessLogLeakHitBadge` |
 | Pass / Block rule | Effectful rule applications | `checkmark.circle.fill` / `xmark.circle.fill` (pass-green / block-red); count when >1 hits | `AccessLogRuleHitBadge` |
 
+### `AskQueueBadge`
+
+| Field | Value |
+|---|---|
+| **Job** | Show how many Ask prompts are open or queued |
+| **Menu bar** | Red capsule + white count overlaid top-trailing on `MenuBarIconLabel` |
+| **Dock** | `NSApp.dockTile.badgeLabel` (visible when activation policy is `.regular`) |
+| **Count** | Open dialog + waiters (`AskQueueIndicator`) |
+| **Swift** | `AskQueueIndicator` + overlay in `MenuBarIcon.swift`; depth updated from `DetachedWindowHost` |
+
 ---
 
 ## Action catalogue

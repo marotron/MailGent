@@ -47,8 +47,36 @@ Increment `CURRENT_PROJECT_VERSION` on every release build.
 ## Git
 
 - Do not land versioned work on `main` — branch `feat/…` or `fix/…` first.
-- Tag the release commit `vX.Y.Z` when shipping.
+- Tag the release commit with a **signed** annotated tag `vX.Y.Z` when shipping (see below).
 - Docs/chore/internal-only: no version bump, no CHANGELOG entry.
+
+## Signed release tags (required)
+
+GitHub **Verified** on the Tags page requires a cryptographically signed tag. Unsigned annotated tags and lightweight tags do **not** count (lightweight may look Verified only because the pointed-to merge commit is GitHub-signed — do not rely on that).
+
+**Always** create release tags as:
+
+```bash
+git tag -s "vX.Y.Z" -m "X.Y.Z alpha"
+git verify-tag "vX.Y.Z"   # must succeed before push
+git push origin "vX.Y.Z"
+```
+
+**Never** for a ship tag:
+
+- `git tag vX.Y.Z` (lightweight)
+- `git tag -a` without signing
+- Pushing a tag when `git verify-tag` fails
+- Falling back to unsigned if signing is misconfigured — **stop** and fix signing first
+
+Signing setup (SSH preferred; one-time on this machine + GitHub):
+
+1. `git config --global gpg.format ssh`
+2. `git config --global user.signingkey ~/.ssh/id_ed25519_github` (or the key you use)
+3. GitHub → Settings → SSH and GPG keys → **New SSH key** → Key type **Signing Key** (same pubkey can already exist as Authentication)
+4. Optional: `git config --global tag.gpgsign true` so plain `git tag -s` always signs
+
+Closeout must propose the signed form, e.g. `Proposed tag: git tag -s vX.Y.Z -m "X.Y.Z alpha"`.
 
 ## Tags vs GitHub Releases (alpha until v1)
 
@@ -56,7 +84,7 @@ All **0.1.x** ships as **pre-release alpha**. Same semver everywhere in code; **
 
 | Surface | Format | Example |
 |---------|--------|---------|
-| Git tag | `vX.Y.Z` | `v0.1.8` |
+| Git tag | signed `vX.Y.Z` (`git tag -s`) | `v0.1.8` |
 | GitHub Release **title** | `X.Y.Z alpha` | `0.1.8 alpha` |
 | GitHub **pre-release** | always checked | — |
 | DMG filename | `MailGent-X.Y.Z.dmg` | `MailGent-0.1.8.dmg` |
