@@ -85,11 +85,15 @@ enum ConditionalAskLayout {
     static let previewColumnMinWidth: CGFloat = 320
     static let dialogHeight: CGFloat = 520
     static let dialogMinHeight: CGFloat = 420
+    /// Soft ceiling for the Ask popup — left column scrolls instead of growing toward full-screen.
+    static let dialogMaxHeight: CGFloat = 560
     /// Non-body long-field collapsed / expanded preview heights.
     static let fieldPreviewCollapsedHeight: CGFloat = 64
     static let fieldPreviewExpandedHeight: CGFloat = 200
-    /// Body card must keep at least this much text area when the window is short.
-    static let bodyPreviewMinHeight: CGFloat = 120
+    /// Body card text area cap inside the scrolling left column (keep compact; full body is on the right).
+    static let bodyPreviewMaxHeight: CGFloat = 120
+    /// Block / Allow row.
+    static let footerBlockHeight: CGFloat = 28
     /// Breathing room between left cards and the HSplitView divider.
     static let splitTrailingGap: CGFloat = 10
 
@@ -98,10 +102,11 @@ enum ConditionalAskLayout {
         leftColumnWidth + gap + previewColumnWidth + pad * 2
     }
 
-    static func contentSize(previewVisible: Bool) -> NSSize {
-        NSSize(
+    static func contentSize(previewVisible: Bool, preferredHeight: CGFloat? = nil) -> NSSize {
+        let height = clampedHeight(preferredHeight ?? dialogHeight)
+        return NSSize(
             width: previewVisible ? expandedWidth : compactWidth,
-            height: dialogHeight
+            height: height
         )
     }
 
@@ -113,12 +118,66 @@ enum ConditionalAskLayout {
             height: dialogMinHeight
         )
     }
+
+    /// Collapsed centered access-lead row (icon + one-liner + More).
+    /// Vertical clearance matches chrome `pad` above and VStack `gap` below (both 12).
+    static let whyHelpCollapsedHeight: CGFloat = 24
+
+    /// Window height from measured left scroll-content + why-help chrome, capped for a popup.
+    static func windowHeight(
+        forLeftScrollContent contentHeight: CGFloat,
+        whyHelpHeight: CGFloat = whyHelpCollapsedHeight
+    ) -> CGFloat {
+        let chrome =
+            pad * 2
+            + whyHelpHeight
+            + gap
+            + contentHeight
+            + gap
+            + footerBlockHeight
+        return clampedHeight(chrome)
+    }
+
+    static func clampedHeight(_ height: CGFloat) -> CGFloat {
+        let screenCap: CGFloat = {
+            guard let screen = NSScreen.main else { return dialogMaxHeight }
+            // Leave menu-bar / Dock breathing room; never taller than dialogMaxHeight.
+            let visibleCap = max(dialogMinHeight, screen.visibleFrame.height * 0.72)
+            return min(dialogMaxHeight, visibleCap)
+        }()
+        return min(max(height, dialogMinHeight), screenCap)
+    }
+}
+
+/// Reports the intrinsic height of the Ask left-column scroll content.
+private struct AskLeftScrollContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Reports the height of the collapsible Ask access-lead help row.
+private struct AskWhyHelpHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 /// In-app Preview content — Companion `MessageBodyView` (HTML via WKWebView).
 /// Entire message only (not Ask-field chips); fills the right-hand pane.
 struct ConditionalAccessInAppPreview: View {
     let context: ConditionalAccessPromptContext
+
+    /// Default denser than Companion Read so more of the thread fits the Ask canvas.
+    private static let defaultZoom: CGFloat = 0.75
+    private static let zoomStep: CGFloat = 0.25
+    private static let minZoom: CGFloat = 0.5
+    private static let maxZoom: CGFloat = 1.5
+
+    @State private var pageZoom: CGFloat = Self.defaultZoom
+    @State private var hoveringCanvas = false
 
     private var hasHTML: Bool {
         guard let html = context.htmlBody else { return false }
@@ -135,22 +194,170 @@ struct ConditionalAccessInAppPreview: View {
     }
 
     var body: some View {
-        Group {
-            if hasHTML || context.fieldPreviews.contains(where: { $0.label == "Body" }) {
-                MessageBodyView(
-                    // Empty plain when HTML exists so MessageBodyView does not discard HTML
-                    // via the closed-prefix heuristic against Ask field text.
-                    readBody: hasHTML ? .text("") : plainFallback,
-                    htmlBody: context.htmlBody
-                )
-            } else {
-                Text("(no message body to preview)")
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Floating sticky −|+ over the canvas (top-trailing). Hover via AppKit tracker
+        // because WKWebView / NSScrollView eat SwiftUI onHover.
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if hasHTML || context.fieldPreviews.contains(where: { $0.label == "Body" }) {
+                    MessageBodyView(
+                        // Empty plain when HTML exists so MessageBodyView does not discard HTML
+                        // via the closed-prefix heuristic against Ask field text.
+                        readBody: hasHTML ? .text("") : plainFallback,
+                        htmlBody: context.htmlBody,
+                        pageZoom: pageZoom,
+                        ensureReadableInsets: true
+                    )
+                } else {
+                    Text("(no message body to preview)")
+                        .foregroundStyle(.secondary)
+                        .italic()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+            }
+            .id("ask-preview-\(context.messageID)")
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
+
+            AskPreviewHoverTracker(isHovering: $hoveringCanvas)
+                .allowsHitTesting(false)
+
+            AskPreviewZoomControls(
+                zoom: pageZoom,
+                canZoomOut: pageZoom > Self.minZoom + 0.001,
+                canZoomIn: pageZoom < Self.maxZoom - 0.001,
+                onZoomOut: {
+                    pageZoom = max(Self.minZoom, pageZoom - Self.zoomStep)
+                },
+                onZoomIn: {
+                    pageZoom = min(Self.maxZoom, pageZoom + Self.zoomStep)
+                }
+            )
+            .padding(.top, 8)
+            .padding(.trailing, 10)
+            .opacity(hoveringCanvas ? 1 : 0)
+            .allowsHitTesting(hoveringCanvas)
+            .accessibilityHidden(!hoveringCanvas)
+            .onHover { hovering in
+                if hovering { hoveringCanvas = true }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Message preview")
+        .accessibilityValue("\(Int((pageZoom * 100).rounded())) percent")
+    }
+}
+
+/// Pass-through hover probe: tracking area fires over WKWebView / NSScrollView without stealing clicks/scroll.
+private struct AskPreviewHoverTracker: NSViewRepresentable {
+    @Binding var isHovering: Bool
+
+    func makeNSView(context: Context) -> AskPreviewHoverNSView {
+        let view = AskPreviewHoverNSView()
+        view.onHoverChange = { hovering in
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHovering = hovering
+                }
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: AskPreviewHoverNSView, context: Context) {
+        nsView.onHoverChange = { hovering in
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHovering = hovering
+                }
+            }
+        }
+    }
+}
+
+private final class AskPreviewHoverNSView: NSView {
+    var onHoverChange: ((Bool) -> Void)?
+    private var tracking: NSTrackingArea?
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking {
+            removeTrackingArea(tracking)
+        }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChange?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChange?(false)
+    }
+}
+
+/// Compact floating − | + for Ask preview; sticky top-trailing while the canvas is hovered.
+private struct AskPreviewZoomControls: View {
+    let zoom: CGFloat
+    let canZoomOut: Bool
+    let canZoomIn: Bool
+    let onZoomOut: () -> Void
+    let onZoomIn: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            zoomButton(systemImage: "minus", enabled: canZoomOut, action: onZoomOut)
+                .help("Zoom out")
+                .accessibilityLabel("Zoom out")
+
+            Rectangle()
+                .fill(Color.secondary.opacity(0.28))
+                .frame(width: 1, height: 14)
+
+            zoomButton(systemImage: "plus", enabled: canZoomIn, action: onZoomIn)
+                .help("Zoom in")
+                .accessibilityLabel("Zoom in")
+        }
+        .frame(height: SecondaryActionMetrics.controlHeight)
+        .padding(1)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.secondary.opacity(0.32), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.10), radius: 1, y: 0.5)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Preview zoom")
+        .accessibilityValue("\(Int((zoom * 100).rounded())) percent")
+    }
+
+    private func zoomButton(
+        systemImage: String,
+        enabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 26, height: SecondaryActionMetrics.controlHeight - 2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .foregroundStyle(.primary)
     }
 }
 
@@ -168,11 +375,29 @@ struct ConditionalAccessPromptDialog: View {
     var showsMessagePreview: Bool = true
     /// Host resizes the Ask window when Preview toggles.
     var onPreviewVisibilityChange: ((Bool) -> Void)? = nil
+    /// Host fits window height to the left column when content is measured.
+    var onPreferredHeightChange: ((CGFloat) -> Void)? = nil
 
     @State private var messagePreviewVisible: Bool = true
     @State private var hoveringIdentity = false
+    @State private var leftScrollReset = 0
+    @State private var whyThisWindowExpanded = false
+    @State private var leftScrollContentHeight: CGFloat = 0
+    @State private var whyHelpHeight: CGFloat = ConditionalAskLayout.whyHelpCollapsedHeight
 
     private var envelope: ConditionalMessageEnvelope { request.context.envelope }
+
+    private var requestedFieldsSummary: String {
+        let labels = request.requestedFields
+        guard !labels.isEmpty else { return "one or more fields" }
+        if labels.count == 1 { return labels[0] }
+        if labels.count == 2 { return "\(labels[0]) and \(labels[1])" }
+        return labels.dropLast().joined(separator: ", ") + ", and \(labels.last!)"
+    }
+
+    private var accessHelpDetail: String {
+        "This grant sets \(requestedFieldsSummary) to Ask. Allow shares those fields for this read only; Block keeps them withheld."
+    }
 
     private var accountIDLooksLikeLabel: Bool {
         accountLabel.caseInsensitiveCompare(request.accountID) == .orderedSame
@@ -211,6 +436,10 @@ struct ConditionalAccessPromptDialog: View {
         .onAppear {
             messagePreviewVisible = showsMessagePreview
             onPreviewVisibilityChange?(messagePreviewVisible && showsMessagePreview)
+            leftScrollReset &+= 1
+        }
+        .onChange(of: request.id) { _, _ in
+            leftScrollReset &+= 1
         }
     }
 
@@ -234,56 +463,71 @@ struct ConditionalAccessPromptDialog: View {
 
     private var leftColumn: some View {
         VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
-            HStack(alignment: .top, spacing: ConditionalAskLayout.gap) {
-                Image(systemName: "questionmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Field Access Request")
-                        .font(.headline)
-                    Text(
-                        "This agent’s grant is set to Ask for the fields below. Allow shares them for this read only; Block keeps them withheld."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            whyThisWindowHelp
 
-            // Message + non-body cards keep intrinsic height; Body fills the rest.
-            VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
-                messageCard
+            // Scroll the whole card stack. Attachment fields sit above Body so a long
+            // body never buries them; Body itself is hard-capped (see maxTextHeight).
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
+                        Color.clear.frame(height: 0).id("ask-left-top")
 
-                if request.fieldPreviews.isEmpty {
-                    ConditionalAskCard {
-                        Text("(no field preview available)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .italic()
+                        messageCard
+
+                        if request.fieldPreviews.isEmpty {
+                            ConditionalAskCard {
+                                Text("(no field preview available)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .italic()
+                            }
+                        } else {
+                            ForEach(preBodyFieldPreviews, id: \.label) { line in
+                                ConditionalAskFieldPreviewCard(line: line)
+                            }
+                            // Attachments / other post-body fields first — always above the fold.
+                            ForEach(postBodyFieldPreviews, id: \.label) { line in
+                                ConditionalAskFieldPreviewCard(line: line)
+                            }
+                            if let bodyFieldPreview {
+                                ConditionalAskFieldPreviewCard(
+                                    line: bodyFieldPreview,
+                                    maxTextHeight: ConditionalAskLayout.bodyPreviewMaxHeight
+                                )
+                            }
+                        }
                     }
-                } else {
-                    ForEach(preBodyFieldPreviews, id: \.label) { line in
-                        ConditionalAskFieldPreviewCard(line: line)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let bodyFieldPreview {
-                        ConditionalAskFieldPreviewCard(line: bodyFieldPreview, fillsAvailableHeight: true)
-                            .frame(
-                                maxWidth: .infinity,
-                                minHeight: ConditionalAskLayout.bodyPreviewMinHeight,
-                                maxHeight: .infinity,
-                                alignment: .topLeading
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: AskLeftScrollContentHeightKey.self,
+                                value: geo.size.height
                             )
-                            .layoutPriority(1)
+                        }
+                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .onPreferenceChange(AskLeftScrollContentHeightKey.self) { height in
+                    guard height > 0 else { return }
+                    leftScrollContentHeight = height
+                    reportPreferredHeight()
+                    // Window height changes can leave the stack mid-scroll — re-pin to top.
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("ask-left-top", anchor: .top)
                     }
-                    // Attachment / other cards hug content; Body stays the tall flex card.
-                    ForEach(postBodyFieldPreviews, id: \.label) { line in
-                        ConditionalAskFieldPreviewCard(line: line)
-                            .fixedSize(horizontal: false, vertical: true)
+                }
+                .onChange(of: leftScrollReset) { _, _ in
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("ask-left-top", anchor: .top)
+                    }
+                }
+                .onAppear {
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("ask-left-top", anchor: .top)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             HStack(spacing: ConditionalAskLayout.gap) {
                 Button("Block") {
@@ -301,6 +545,73 @@ struct ConditionalAccessPromptDialog: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onPreferenceChange(AskWhyHelpHeightKey.self) { height in
+            guard height > 0 else { return }
+            whyHelpHeight = height
+            reportPreferredHeight()
+        }
+        .onChange(of: request.id) { _, _ in
+            whyThisWindowExpanded = false
+        }
+    }
+
+    private var whyThisWindowHelp: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                whyThisWindowExpanded.toggle()
+            }
+        } label: {
+            VStack(alignment: .center, spacing: 6) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.orange)
+                    Text("\(request.agentName) wants access to the email below")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(whyThisWindowExpanded ? "Less" : "More")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .fixedSize()
+                }
+                if whyThisWindowExpanded {
+                    Text(accessHelpDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: AskWhyHelpHeightKey.self,
+                        value: geo.size.height
+                    )
+                }
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(
+            whyThisWindowExpanded
+                ? "Hide access details"
+                : "Show which fields are requested and what Allow or Block does"
+        )
+    }
+
+    private func reportPreferredHeight() {
+        guard leftScrollContentHeight > 0 else { return }
+        onPreferredHeightChange?(
+            ConditionalAskLayout.windowHeight(
+                forLeftScrollContent: leftScrollContentHeight,
+                whyHelpHeight: max(whyHelpHeight, ConditionalAskLayout.whyHelpCollapsedHeight)
+            )
+        )
     }
 
     private var messageCard: some View {
@@ -481,17 +792,22 @@ private struct FlowAddressBadges: View {
 }
 
 private struct ConditionalAskCard<Content: View>: View {
-    var fillsHeight: Bool = false
+    var compact: Bool = false
     @ViewBuilder let content: Content
 
     var body: some View {
         content
-            .padding(ConditionalAskLayout.pad)
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: fillsHeight ? .infinity : nil,
-                alignment: .topLeading
+            .padding(
+                compact
+                    ? EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
+                    : EdgeInsets(
+                        top: ConditionalAskLayout.pad,
+                        leading: ConditionalAskLayout.pad,
+                        bottom: ConditionalAskLayout.pad,
+                        trailing: ConditionalAskLayout.pad
+                    )
             )
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: ConditionalAskLayout.cardRadius, style: .continuous)
                     .fill(Color.secondary.opacity(0.06))
@@ -502,97 +818,136 @@ private struct ConditionalAskCard<Content: View>: View {
     }
 }
 
-/// One Ask-field disclosure card. Body fills remaining left-pane height and scrolls
-/// inside the card. Other long fields keep More/Less.
+/// One Ask-field disclosure card. Empty attachment fields stay one-line compact;
+/// Body uses a capped scroll area; other long fields keep More/Less.
 private struct ConditionalAskFieldPreviewCard: View {
     let line: ConditionalFieldPreviewLine
-    var fillsAvailableHeight: Bool = false
+    /// When set (Body), text scrolls inside this height instead of stretching the pane.
+    var maxTextHeight: CGFloat? = nil
     @State private var expanded = false
+
+    private var trimmedValue: String {
+        line.value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isEmptyValue: Bool {
+        trimmedValue.isEmpty
+            || trimmedValue == "(empty)"
+            || trimmedValue == "—"
+    }
 
     private var isLong: Bool { line.value.count > 120 || line.value.contains("\n") }
     private var isAddressField: Bool {
         ["From", "To", "Cc"].contains(line.label)
     }
 
-    var body: some View {
-        ConditionalAskCard(fillsHeight: fillsAvailableHeight) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(line.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    if !fillsAvailableHeight, isLong {
-                        Button(expanded ? "Less" : "More") {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                expanded.toggle()
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
-                    }
-                }
-
-                if isAddressField {
-                    addressPreview
-                } else if fillsAvailableHeight {
-                    ScrollView {
-                        Text(line.value)
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .clipped()
-                } else if isLong {
-                    ScrollView {
-                        Text(line.value)
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: expanded
-                            ? ConditionalAskLayout.fieldPreviewExpandedHeight
-                            : ConditionalAskLayout.fieldPreviewCollapsedHeight,
-                        alignment: .topLeading
+    @ViewBuilder
+    private var titleLabel: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(line.label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            if let badge = line.badge, !badge.isEmpty {
+                Text(badge)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule(style: .continuous)
+                            .strokeBorder(Color.orange.opacity(0.55), lineWidth: 1)
                     )
-                    .clipped()
-                } else {
-                    // Short fields (e.g. empty attachment names) hug content height.
-                    Text(line.value)
+            }
+        }
+    }
+
+    var body: some View {
+        if isEmptyValue, !isAddressField {
+            ConditionalAskCard(compact: true) {
+                HStack(alignment: .center, spacing: 8) {
+                    titleLabel
+                    Spacer(minLength: 8)
+                    Text(trimmedValue.isEmpty ? "(empty)" : trimmedValue)
                         .font(.caption)
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(.secondary)
+                        .italic()
                 }
             }
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: fillsAvailableHeight ? .infinity : nil,
-                alignment: .topLeading
-            )
+        } else {
+            ConditionalAskCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .center) {
+                        titleLabel
+                        Spacer(minLength: 8)
+                        if maxTextHeight == nil, isLong {
+                            Button(expanded ? "Less" : "More") {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    expanded.toggle()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                        }
+                    }
+
+                    if isAddressField {
+                        addressPreview
+                    } else if let maxTextHeight {
+                        // Fixed height (not maxHeight): nested ScrollView + fixedSize parents
+                        // otherwise report full text height and bury everything below Body.
+                        ScrollView {
+                            Text(line.value)
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(height: maxTextHeight, alignment: .topLeading)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .clipped()
+                    } else if isLong {
+                        ScrollView {
+                            Text(line.value)
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: expanded
+                                ? ConditionalAskLayout.fieldPreviewExpandedHeight
+                                : ConditionalAskLayout.fieldPreviewCollapsedHeight,
+                            alignment: .topLeading
+                        )
+                        .clipped()
+                    } else {
+                        Text(line.value)
+                            .font(.caption)
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
         }
     }
 
     @ViewBuilder
     private var addressPreview: some View {
-        let trimmed = line.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed == "(empty)" || trimmed == "—" {
-            Text(trimmed.isEmpty ? "—" : trimmed)
+        if isEmptyValue {
+            Text(trimmedValue.isEmpty ? "—" : trimmedValue)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .italic()
         } else {
-            let addresses = MailAddressParts.parseList(trimmed)
+            let addresses = MailAddressParts.parseList(trimmedValue)
             if addresses.isEmpty {
-                Text(trimmed)
+                Text(trimmedValue)
                     .font(.caption)
                     .textSelection(.enabled)
             } else {
@@ -636,79 +991,152 @@ private struct FlowFieldChips: View {
 }
 
 #if DEBUG
-private enum ConditionalAccessPreviewSamples {
+/// Sample Ask payloads for Xcode canvas + menu-bar “Debug: Ask layout…”.
+enum AskLayoutSandboxSamples {
     static let htmlBody = """
     <html><head><style>body {margin:0;padding:0; background:#f3f3f3;}</style></head>
     <body style="font-family:-apple-system;padding:12px;">
-    <p>Hi there,&zwnj;&zwnj;&zwnj;</p>
+    <p>Hi Marek,</p>
+    <p>I wanted to follow up on the <strong>Automation Engineer, AMZL</strong> role.</p>
     <p>Your <strong>Tapo</strong> order is ready. Tracking:
     <a href="https://example.com/track">ABC-123</a></p>
-    <ul><li>Item A</li><li>Item B</li></ul>
+    <ul><li>Item A</li><li>Item B</li><li>Item C — longer line for scroll testing</li></ul>
     <p style="color:#666;">— MailGent preview sample</p>
     </body></html>
     """
 
-    static let plainBody = """
-    Hi there,\u{200C}\u{200C}\u{200C}
-    Your Tapo order is ready. Tracking: ABC-123
-    - Item A
-    - Item B
-    — MailGent preview sample
+    /// Real Indeed job-match plain body (long + many URLs) for scroll / zoom stress testing.
+    static let longPlainBody = """
+    Hi Marek,
+
+    Your background in IoT and EV charging systems could align with this Senior Embedded Software Engineer role at Bramah Safeguarding CIC. If you're seeking a position with 60% new development and a hybrid work model, feel free to apply now or review the job description to learn more.
+
+    Senior Embedded Software Engineer
+    Bramah Safeguarding CIC
+    Birmingham B1
+    Salary: £70,000 - £90,000 a year
+    Job type: Permanent, Full-time
+    Work setting: Hybrid work, In-person
+
+    Benefits:
+      - Company pension
+      - Work from home
+      - Cycle to work scheme
+      - Life insurance
+
+    View job: https://cts.indeed.com/v3/H4sIAAAAAAAA_42RW4-aQBSA_wtJfSorM8jNhDSKVS6Slcpa7YsZhgGGuzAji5v978umaR_61KeTfF9OTnK-N4ELSyFjrO2X8zkvnmgdExI_4aaad3iOy-JbXpiSJicIKgRijKSFDGZJ11Rm3kQUous0KsRwJnYEYUbviNGmFkkt7tZXUiFazlhhgmKR5FACUZnCVJfALIrM80srevnt-Vittp7l8Z_fJfl2DJQEtiJX1_CiOboduPLRcB81GoPF3gnD7ITknXS7PoMLjQ22vYyV3z9slbzQric04xk5yxt-qenml69Gg5K4AWz6YbS2K7_XO1vZ0NraeuC0J_dRR8Z2VPt45brlWQVJEY4ucNbBLTzoJ-QOnmshGomYnn6wFO8aVg6-3Qfavt2dhmqtY5RTWHvOF3kzey1wZB4bK1E1H8YHbhvi6y1wpXX0KGIrPhxmXd7-eQXgLasUSnQJCl-FSli-CQjjhtfMiacgwJCBqhlAlpRJozR1m-i3kKCuA9lQF9okcElxEWZdw9Nskqzj5C8dWzKhOyXDFGiin8km8L_Rpg1WfB78J5zw_v4B6swDyzQCAAA/x6abD8z7bhgVPpwRn-kIJ5Jot2N8LItxSHPB8xg8Yoo
+    Apply now: https://cts.indeed.com/v3/H4sIAAAAAAAA_42RW4-aQBSA_wtJfSorM8jNhDSKVS6Slcpa7YsZhgGGuzAji5v978umaR_61KeTfF9OTnK-N4ELSyFjrO2X8zkvnmgdExI_4aaad3iOy-JbXpiSJicIKgRijKSFDGZJ11Rm3kQUous0KsRwJnYEYUbviNGmFkkt7tZXUiFazlhhgmKR5FACUZnCVJfALIrM80srevnt-Vittp7l8Z_fJfl2DJQEtiJX1_CiOboduPLRcB81GoPF3gnD7ITknXS7PoMLjQ22vYyV3z9slbzQric04xk5yxt-qenml69Gg5K4AWz6YbS2K7_XO1vZ0NraeuC0J_dRR8Z2VPt45brlWQVJEY4ucNbBLTzoJ-QOnmshGomYnn6wFO8aVg6-3Qfavt2dhmqtY5RTWHvOF3kzey1wZB4bK1E1H8YHbhvi6y1wpXX0KGIrPhxmXd7-eQXgLasUSnQJCl-FSli-CQjjhtfMiacgwJCBqhlAlpRJozR1m-i3kKCuA9lQF9okcElxEWZdw9Nskqzj5C8dWzKhOyXDFGiin8km8L_Rpg1WfB78J5zw_v4B6swDyzQCAAA/x6abD8z7bhgVPpwRn-kIJ5Jot2N8LItxSHPB8xg8Yoo
+
+    Do you want to get more jobs like this?
+    No: https://cts.indeed.com/v3/H4sIAAAAAAAA_12Q226CQBRF_4WkfeooI8rFxDQaiMEbeAstL2SAUQaYAWG4FOO_F9Okabrfzl45-2HdhUqYChHneTkdDiniQTQgLMQ4HAQZHRJWE444yVj5A0HRX-w6hO88mcFkfIlHIvTT6-iqivCVsEs2mz9ztj7abXei6qJVWa37zgQ1N2JuR769oHZnnsmuMBKPr8TtWY2lzVrR3MVtLBsxtSfKoZWQbtonZQnkI9B43M7DTjt0HYWf-265kY471QjFfFmuPVzcygppKVKow_MCHwF2Y1gQGKiNo8qxZQFvPk4hWjWlb-Cq2u0z13ctMG91JgPgMWTYjQrs3MHWok6aSE_HDc7YyjFryTq_SPrrpcjojIwQwBSRFFx6PT4KEuFNoML0LqAgyCrGzbBXCTUJyooGJXHS4yAlQXKKiqy6Rj3kRYV_268c99WfLZ48__85FR6Pb5SRd1-kAQAA/hWJsQlvQXlK_4jxF2Q_CPkdwnjtgRm5z6b6FTGmBzJc
+    Maybe: https://cts.indeed.com/v3/H4sIAAAAAAAA_12Q226CQBRF_4WkfeooI8rFxDQaiMEbeAstL2SAUQaYAWG4FOO_F9Okabrfzl45-2HdhUqYChHneTkdDiniQTQgLMQ4HAQZHRJWE444yVj5A0HRX-w6lN55MoPJ-BKPROin19FVFeErYZdsNn_mbH202-5E1UWrslr3nQlqbsTcjnx7Qe3OPJNdYSQeX4nbsxpLm7WiuYvbWDZiak-UQysh3bRPyhLIR6DxuJ2HnXboOgo_991yIx13qhGK-bJce7i4lRXSUqRQh-cFPgLsxrAgMFAbR5VjywLefJxCtGpK38BVtdtnru9aYN7qTAbAY8iwGxXYuYOtRZ00kZ6OG5yxlWPWknV-kfTXS5HRGRkhgCkiKbj0enwUJMKbQIXpXUBBkFWMm2GvEmoSlBUNSuKkx0FKguQUFVl1jXrIiwr_tl857qs_Wzx5_v9zKjwe3z5lt_qkAQAA/3n-Ka9VJMd74hkXMzTmOxdi10EQCkO-kMUonBWAiUcs
+    Yes: https://cts.indeed.com/v3/H4sIAAAAAAAA_12Q226CQBRF_4WkfeooI8rFxDQaiMEbeAstL2SAUQaYAWG4FOO_F9Okabrfzl45-2HdhUqYChHneTkdDiniQTQgLMQ4HAQZHRJWE444yVj5A0HRX-w6nLzzZAaT8SUeidBPr6OrKsJXwi7ZbP7M2fpot92JqotWZbXuOxPU3Ii5Hfn2gtqdeSa7wkg8vhK3ZzWWNmtFcxe3sWzE1J4oh1ZCummflCWQj0DjcTsPO-3QdRR-7rvlRjruVCMU82W59nBxKyukpUihDs8LfATYjWFBYKA2jirHlgW8-TiFaNWUvoGrarfPXN-1wLzVmQyAx5BhNyqwcwdbizppIj0dNzhjK8esJev8IumvlyKjMzJCAFNEUnDp9fgoSIQ3gQrTu4CCIKsYN8NeJdQkKCsalMRJj4OUBMkpKrLqGvWQFxX-bb9y3Fd_tnjy_P_nVHg8vgGBfofPpAEAAA/LyTSl9fqayi6ul9lUsDAlDXviWBFqa5wCvTOqE3xye4
+
+    Keep your Indeed profile up to date
+    Marek Kujawa
+    Edit profile: https://cts.indeed.com/v3/H4sIAAAAAAAA_z2OywqDMBRE_yULV4012peCFLqR7rsv8Xo1qXlIvBaK9N-bQulqYM4wMytbWMUU0TRX2-0UfK8Nptp1iF0K3p774G398K3O5T2KlQSKB5RA-ilJe8fR8eZyRyu1ScDXzSVRpkbHNsyyamUSwC-Orl3cEWUhDsdSFNk-YjAaxpsKfhlUhBQW_LuvCaM1WxmI9_FLK2Hk2Gniv48xSeO3ctz1jzwTrRny4ZQJ9n5_AAY1Qt3UAAAA/XuimjAffmzYjcORO0WX_be8i2c8YLPT_PkC-yqG7uKw
+    Minimum base pay: https://cts.indeed.com/v3/H4sIAAAAAAAA_z2OTWvDMBBE_4sOPlWJ5fQrBlPIJfTee1ivV5ZiSSvkdSGE_PeqFHoaeANv5q421Ssnktd-v8-FrQ-082kimnbIsSKyVCghrR-2cByuPPoOLjUiCDpdCFD8N4jnpCnp8-lCEXxokIfzqXFhoNRwpjRkuKknFVV_V4DIW5LPqY6b48G8vh3NoX2pNQaPy5crvM2ullI2-qe3TBWtEYpoWw-OgIv-s8rya1qe7bVrzRjmbn5vjXo8fgDBkfiN4AAAAA/WibLknqZbuSf7TdyJMlu1vd8lQGuAY74hIXhj9_6HQI
+
+    This job match email is provided by the employer posting this job on Indeed.
+    This message is intended only for you. Do not forward this email.
+    Manage email settings: https://cts.indeed.com/v3/H4sIAAAAAAAA_12OzarCMBBG3yWLrqxt6s_VQrkgXMS17iVOp8nYJpF0Ioj47kYRF3c1cL7hcO4iiloY5stYF8WIEANOybWI7RS8TYSZnB4L55k6AsXk3fjLfSP7eXeuSnkadKVXpczAN9tNZoYGXdYFb5uzP1GljulYxWDygAqYrm9Fji7fbo5oFQ1iIqyo70IB-Oh416YiuZ7J5c9azspFmmEg6A8m-KhNGjlE_NLbBROyyimNfy_d_pOcPrh_qf6FisfjCZMyCHD2AAAA/jywcMj61NuaG6asvqe0zClt_UyiRPj5x59xtO6BFjME
+    Help Centre: https://cts.indeed.com/v3/H4sIAAAAAAAA_z2NSw7CIBQA7_LWWqD1V5LGtXsvYB8IFQqEPham6d3FxLidyWRWKCDBEqVFMraUlGKmZgpKa9VgnJlFpsPejFfrBx1gBzPIFR6IsQS6qRqLvhOncy86fqwa_YTubnMsxlZJueg_fSdd0W9SKblv7g7PV8vF6E1rLlzAtn0Af1-YUZUAAAA/CIA0caHV_q2_YO8h-CifPm6P76l6_Z8Qj1I_QT1l0g0
+
+    Indeed
+    Help Centre: https://cts.indeed.com/v3/H4sIAAAAAAAA_z2NSw7CIBQA7_LWWqD1V5LGtXsvYB8IFQqEPham6d3FxLidyWRWKCDBEqVFMraUlGKmZgpKa9VgnJlFpsPejFfrBx1gBzPIFR6IsQS6qRqLvhOncy86fqwa_YTubnMsxlZJueg_fSdd0W9SKblv7g7PV8vF6E1rLlzAtn0Af1-YUZUAAAA/CIA0caHV_q2_YO8h-CifPm6P76l6_Z8Qj1I_QT1l0g0
+    Privacy Policy: https://cts.indeed.com/v3/H4sIAAAAAAAA_z2Myw7CIBQF_-W6NQKtrzYxrt37A_SCgFAgFEyapv8uJo3bmXNmgQI96Jzj1BOiU5aoYzIfjvMBw0iGxL2YiPFCSnHX7ib9bvMxOIMz7GGEfgGOGIrPD1FzrGvZ-dKxlp6qxjqzT51CUbrKnIr80znKirZgpdn-7vb4ejeUDU416koZrOsXh-AE7KcAAAA/qTXrM2Ny5RB2U0leBd0r8UEp1UD27iaivyOis5rqno8
+    Terms: https://cts.indeed.com/v3/H4sIAAAAAAAA_z2MSw6DIBQA7_K6bQS0P0lM1933AhZewfIz-Fg0xrtXNt3OZGaFAhIs0bxIxoprpqgRdaNSYB7N6O_WDxgPlBY4QgC5wqhUKpEeeg9F34nLtRcdP-9a-Um5p82pGLtLygX_9DtjRZhDHZGrsTu9Py0XL29ac-MCtu0HpBzbZo8AAAA/mqwHcilX83Isv4v1uO6ik2pUeAZTCSTNnJ6fAIQsEvA
+    Unsubscribe: https://cts.indeed.com/v3/H4sIAAAAAAAA_12RXW-iQABF_wvJ-lQqiICYkI1Ai1AsIIrgC2EGZPiQUZhRbNP_Xpo0-7DJfbonubnJ-WQos2QQIZd-OZ32FPSwKy-kxG3_XLZZnmfPEJ-n-EIwJX8hVk1tgho1byekVvl6fqpmHA-aYlYsOH4CCVH1Uvtgr4PIEoP3NG8Og_gSY0kJHjrfR_o92AN8WOm9mMtOMlhFkJ9rscNvUPM8-_1jcDJqbN258cDC1jBitrYG2SxRtUrj9MWDbzu39z3n1Wmj1CocdMwi7o9gTAiu81bVax1d7bvtATn2DgtN6HP2Gj6EDNRd425Y0NSpRARQKVsoB_rJ3BcW35MjEuYLoFfpojWqZCee5ZUbrm8ryStm5kBl9qU05Bbxm_Xp1kgmBpFCog24RXaR7BM342K8S6V24999cEwR9sPw4Cj7V5rYNj1wazO0-uzdH3-OYZ6YM7P8ZFIIMW2JlY0CeEXgJVnhBU4cMWxKWO9Qh2mBRkg6mv9rH5d8rGj7qwr8EFL_TPwng_n6-gb_-nP53QEAAA/g3mD9SHIa9qz6S9r_SC5pZ8goBGPN60_1WpCtq8eJYA
     """
 
-    static var context: ConditionalAccessPromptContext {
-        ConditionalAccessPromptContext(
+    static func context(
+        longBody: Bool = false,
+        emptyAttachments: Bool = true
+    ) -> ConditionalAccessPromptContext {
+        let body = longBody ? longPlainBody : MailMIME.plainText(fromHTML: htmlBody)
+        var fields: [ConditionalFieldPreviewLine] = [
+            ConditionalFieldPreviewLine(label: "Body", value: body),
+        ]
+        if emptyAttachments {
+            fields.append(ConditionalFieldPreviewLine(label: "Attachment names", value: "(empty)"))
+            fields.append(ConditionalFieldPreviewLine(label: "Attachment content", value: "(empty)"))
+        } else {
+            fields.append(ConditionalFieldPreviewLine(label: "Attachment names", value: "offer.pdf\nresume.docx"))
+            fields.append(ConditionalFieldPreviewLine(label: "Attachment content", value: "(empty)"))
+        }
+        return ConditionalAccessPromptContext(
             agentName: "Cursor",
             accountID: "19DAAEEB-B0A9-4C37-820B-A55EC8B979CB",
             placement: "INBOX",
-            messageID: "42",
+            messageID: longBody ? "ask-sandbox-long" : "ask-sandbox",
             internetMessageID: "<sample@mailgent.local>",
-            requestedFields: ["Body", "Attachment names", "Attachment content"],
-            fieldPreviews: [
-                ConditionalFieldPreviewLine(
-                    label: "Body",
-                    value: MailMIME.plainText(fromHTML: htmlBody)
-                ),
-                ConditionalFieldPreviewLine(label: "Attachment names", value: "(empty)"),
-                ConditionalFieldPreviewLine(label: "Attachment content", value: "(empty)"),
-            ],
-            htmlBody: htmlBody,
+            requestedFields: fields.map(\.label),
+            fieldPreviews: fields,
+            htmlBody: longBody ? nil : htmlBody,
             envelope: ConditionalMessageEnvelope(
-                subject: "Your Tapo order is ready",
-                from: "Tapo Orders <orders@tapo.example>",
-                to: "<you@icloud.com>",
+                subject: longBody
+                    ? "Senior Embedded Software Engineer at Bramah Safeguarding CIC"
+                    : "1 new job based on your recent activity",
+                from: longBody
+                    ? "Indeed <noreply@indeed.com>"
+                    : "Will Aylott <will@example.com>",
+                to: "Marek <you@icloud.com>",
                 cc: "",
-                date: "2026-10-07 16:12"
+                date: "Thu, 8 Oct 2026"
             )
         )
     }
 
-    static var request: ConditionalAccessPromptRequest {
-        ConditionalAccessPromptRequest(context: context)
+    static func request(longBody: Bool = false, emptyAttachments: Bool = true) -> ConditionalAccessPromptRequest {
+        ConditionalAccessPromptRequest(context: context(longBody: longBody, emptyAttachments: emptyAttachments))
     }
 }
 
 #Preview("Ask dialog") {
     ConditionalAccessPromptDialog(
-        request: ConditionalAccessPreviewSamples.request,
-        accountLabel: "19DAAEEB-B0A9-4C37-820B-A55EC8B979CB",
+        request: AskLayoutSandboxSamples.request(),
+        accountLabel: "iCloud",
         onAllow: {},
         onBlock: {},
         showOpenInMail: true,
         onOpenInMail: {}
+    )
+    .frame(
+        width: ConditionalAskLayout.expandedWidth,
+        height: ConditionalAskLayout.dialogHeight
     )
     .background(Color(nsColor: .windowBackgroundColor))
 }
 
 #Preview("Ask compact") {
     ConditionalAccessPromptDialog(
-        request: ConditionalAccessPreviewSamples.request,
-        accountLabel: "19DAAEEB-B0A9-4C37-820B-A55EC8B979CB",
+        request: AskLayoutSandboxSamples.request(),
+        accountLabel: "iCloud",
         onAllow: {},
         onBlock: {},
         showOpenInMail: true,
         onOpenInMail: {},
         showsMessagePreview: false
+    )
+    .frame(
+        width: ConditionalAskLayout.compactWidth,
+        height: ConditionalAskLayout.dialogHeight
+    )
+    .background(Color(nsColor: .windowBackgroundColor))
+}
+
+#Preview("Ask long body + empty attach") {
+    ConditionalAccessPromptDialog(
+        request: AskLayoutSandboxSamples.request(longBody: true),
+        accountLabel: "iCloud",
+        onAllow: {},
+        onBlock: {},
+        showOpenInMail: true,
+        onOpenInMail: {}
+    )
+    .frame(
+        width: ConditionalAskLayout.expandedWidth,
+        height: ConditionalAskLayout.dialogMinHeight
     )
     .background(Color(nsColor: .windowBackgroundColor))
 }

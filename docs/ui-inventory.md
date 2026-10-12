@@ -126,6 +126,42 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | **Count** | Open dialog + waiters (`AskQueueIndicator`) |
 | **Swift** | `AskQueueIndicator` + overlay in `MenuBarIcon.swift`; depth updated from `DetachedWindowHost` |
 
+### `AskPreviewZoomControls`
+
+| Field | Value |
+|---|---|
+| **Job** | Zoom the Ask dialog message preview canvas |
+| **Chrome** | Compact floating `−` \| `+` material pill, sticky top-trailing over the preview canvas |
+| **Visibility** | Opacity 0 until pointer is over the canvas (`AskPreviewHoverTracker`; WKWebView / NSScrollView eat SwiftUI `onHover`) |
+| **Default** | 75% (`pageZoom` 0.75); steps of 25% between 50%–150% |
+| **Swift** | `AskPreviewZoomControls` + `AskPreviewHoverTracker` in `ConditionalAccessPrompt.swift` |
+
+### Ask window title bar
+
+| Field | Value |
+|---|---|
+| **Title** | `Email access request` |
+| **Icon** | None in the title bar |
+
+### Ask access-lead help
+
+| Field | Value |
+|---|---|
+| **Job** | Name the agent and explain the ask in one line; expand for field/Allow·Block detail |
+| **Collapsed** | Centered row: larger orange `questionmark.circle.fill` + callout “{agent} wants access to the email below” + orange **More** |
+| **Expanded (click)** | Same centered line + **Less** + short centered copy: Ask fields, Allow (this read) / Block (withhold) |
+| **Spacing** | Same clearance above (chrome pad) and below (column gap) the help row |
+| **Placement** | Top of Ask left column (above the card scroll) |
+| **Swift** | `ConditionalAccessPromptDialog.whyThisWindowHelp` |
+
+### Ask field preview badge
+
+| Field | Value |
+|---|---|
+| **Job** | MIME/status chip on the field title row (not inside the value text) |
+| **Body HTML-only** | Orange outline capsule `HTML only` beside **Body** |
+| **Swift** | `ConditionalFieldPreviewLine.badge` + `ConditionalAskFieldPreviewCard.titleLabel` |
+
 ---
 
 ## Action catalogue
@@ -191,6 +227,8 @@ SecondaryActionRow
 
 | Date | Change |
 |---|---|
+| 2026-10-12 | Ask preview canvas: floating sticky `AskPreviewZoomControls` (− \| +); default 75% page zoom; plain Ask body uses `NSTextView.scrollableTextView()`. |
+| 2026-10-12 | Ask: title `Email access request`; centered larger `?` + callout “{agent} wants access…” + More/Less; popup capped (~560); Body `HTML only` title badge. |
 | 2026-10-04 | Access Log `get` chip-row Preview opens Companion Read (same as search); file Preview stays on `get_attachment` FileCard. |
 | 2026-10-04 | Open in Apple Mail icon → `OpenInMailGlyph` (`arrow.up.right.square` external-link). |
 | 2026-10-04 | Access Log mode chrome: only the active view (Formatted or JSON Pretty/Raw) shows raised selected face. |

@@ -62,6 +62,19 @@ struct MenuBarStatus: View {
                     DetachedWindowHost.shared.showAccessLog(session: session)
                 }
 
+                #if DEBUG
+                Divider()
+                    .padding(.vertical, 2)
+                    .padding(.horizontal, 8)
+
+                MenuBarActionRow(title: "Debug: Ask layout…", id: "debug-ask-layout") {
+                    DetachedWindowHost.shared.showAskLayoutSandbox()
+                }
+                MenuBarActionRow(title: "Debug: Ask layout (long body)…", id: "debug-ask-layout-long") {
+                    DetachedWindowHost.shared.showAskLayoutSandbox(longBody: true)
+                }
+                #endif
+
                 Divider()
                     .padding(.vertical, 2)
                     .padding(.horizontal, 8)

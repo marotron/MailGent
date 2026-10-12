@@ -626,6 +626,102 @@ struct AgentReadAPITests {
             leakGuardJSON(get.responseSummary)["conditionalBlockedFields"] as? [String] == ["Body"]
         )
     }
+
+    @Test func askBodyPreviewDerivesPlainFromHTMLOnlyMail() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var bodyPreview = ""
+            var bodyBadge: String?
+            var htmlBody: String?
+        }
+        let capture = PromptCapture()
+        let env = try AgentReadFixture(
+            rfc822: """
+            From: Promo <promo@example.com>
+            To: Bob <bob@example.com>
+            Subject: Payday sale
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: text/html; charset=utf-8
+
+            <html><body><p>Extra 15% off in the payday sale</p></body></html>
+            """,
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                let body = context.fieldPreviews.first { $0.label == "Body" }
+                capture.bodyPreview = body?.value ?? ""
+                capture.bodyBadge = body?.badge
+                capture.htmlBody = context.htmlBody
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.htmlBody?.contains("payday sale") == true)
+        #expect(capture.bodyBadge == "HTML only")
+        #expect(capture.bodyPreview.contains("Extra 15% off in the payday sale"))
+        #expect(!capture.bodyPreview.hasPrefix("HTML only"))
+        #expect(capture.bodyPreview != "(empty)")
+        #expect(message.body != .notGranted)
+    }
+
+    @Test func askBodyPreviewLabelsHTMLOnlyWhenPlainStripIsEmpty() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var bodyPreview = ""
+            var bodyBadge: String?
+        }
+        let capture = PromptCapture()
+        let env = try AgentReadFixture(
+            rfc822: """
+            From: Promo <promo@example.com>
+            To: Bob <bob@example.com>
+            Subject: Image only
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: text/html; charset=utf-8
+
+            <html><body><img src="cid:banner" alt=""></body></html>
+            """,
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                let body = context.fieldPreviews.first { $0.label == "Body" }
+                capture.bodyPreview = body?.value ?? ""
+                capture.bodyBadge = body?.badge
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.bodyBadge == "HTML only")
+        #expect(capture.bodyPreview == "(empty)")
+    }
 }
 
 private struct AgentReadFixture {
@@ -639,15 +735,14 @@ private struct AgentReadFixture {
     let gateway: AgentReadAPI
 
     init(
+        rfc822: String? = nil,
         grantFields: GrantFields? = .default,
         audit: Bool = false,
         allowConditionalAccessPrompts: Bool = false,
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
     ) throws {
         root = try FixtureTree()
-        try root.writeEmlx(
-            named: "1.emlx",
-            rfc822: """
+        let defaultRFC822 = """
             From: Alice <alice@example.com>
             To: Bob <bob@example.com>
             Subject: Invoice due
@@ -655,7 +750,10 @@ private struct AgentReadFixture {
             Content-Type: text/plain
 
             Please pay
-            """,
+            """
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: rfc822 ?? defaultRFC822,
             account: accountID,
             mailbox: "INBOX.mbox"
         )

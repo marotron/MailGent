@@ -1,6 +1,6 @@
 # MailGent
 
-**0.11.1 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.11.2 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -58,7 +58,10 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Set a field to **Ask** when you want a human decision each time (not a standing Yes)
 - Turn on **Allow conditional access prompts** in Settings (off by default)
-- On MCP `get`, MailGent shows an on-device **Allow / Block** dialog with a message preview; blocked fields stay withheld
+- On MCP `get`, MailGent shows an on-device **Email access request** dialog (**Allow / Block**) with a message preview; blocked fields stay withheld
+- Help row names the agent; expand More for field / Allow·Block detail
+- HTML-only Body shows an **HTML only** badge on the title row; plain preview is derived from HTML when needed
+- Preview canvas has − / + zoom (default 75%); dialog height stays compact (~560pt max)
 - Concurrent `get`s queue behind the open Ask — a new prompt never auto-Blocks the one you are answering
 - Red badge on the menu-bar icon (and Dock when visible) shows how many Ask prompts are open or queued
 

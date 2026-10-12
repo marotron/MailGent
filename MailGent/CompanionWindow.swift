@@ -27,6 +27,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     /// Serializes Ask dialogs: concurrent MCP `get`s wait instead of fail-closing the open Ask.
     private var askBusy = false
     private var askWaiters: [CheckedContinuation<Void, Never>] = []
+    #if DEBUG
+    /// Layout sandbox — never touches the real Ask queue / MCP continuation.
+    private var askLayoutSandbox: NSWindow?
+    #endif
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
     /// Only `windowShouldClose` (user close) may order out hosted windows.
@@ -175,6 +179,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 },
                 onPreviewVisibilityChange: { [weak self] visible in
                     self?.resizeAskWindow(previewVisible: visible)
+                },
+                onPreferredHeightChange: { [weak self] height in
+                    self?.fitAskWindowHeight(height)
                 }
             )
 
@@ -186,11 +193,12 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 ask.styleMask.remove(.miniaturizable)
                 ask.minSize = ConditionalAskLayout.minContentSize(previewVisible: true)
                 ask.maxSize = NSSize(width: 2400, height: 1600)
+                ask.title = "Email access request"
                 install(dialog, in: ask, contentSize: size)
                 ask.setContentSize(size)
             } else {
                 ask = makeWindow(
-                    title: "Field Access Request",
+                    title: "Email access request",
                     size: size,
                     minSize: ConditionalAskLayout.minContentSize(previewVisible: true),
                     root: dialog
@@ -201,13 +209,75 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
+    #if DEBUG
+    /// Temp layout sandbox — sample Ask UI without blocking MCP / the real Ask queue.
+    func showAskLayoutSandbox(longBody: Bool = false) {
+        let dialog = ConditionalAccessPromptDialog(
+            request: AskLayoutSandboxSamples.request(longBody: longBody),
+            accountLabel: "iCloud",
+            onAllow: { [weak self] in self?.dismissAskLayoutSandbox() },
+            onBlock: { [weak self] in self?.dismissAskLayoutSandbox() },
+            showOpenInMail: true,
+            onOpenInMail: {},
+            onPreviewVisibilityChange: { [weak self] visible in
+                self?.resizeAskLayoutSandbox(previewVisible: visible)
+            },
+            onPreferredHeightChange: { [weak self] height in
+                self?.fitAskLayoutSandboxHeight(height)
+            }
+        )
+        let size = ConditionalAskLayout.contentSize(previewVisible: true)
+        beginPresentation()
+        if let askLayoutSandbox {
+            askLayoutSandbox.styleMask.insert(.resizable)
+            askLayoutSandbox.styleMask.remove(.miniaturizable)
+            askLayoutSandbox.minSize = ConditionalAskLayout.minContentSize(previewVisible: true)
+            askLayoutSandbox.maxSize = NSSize(width: 2400, height: 1600)
+            askLayoutSandbox.title = "Email access request"
+            install(dialog, in: askLayoutSandbox, contentSize: size)
+            askLayoutSandbox.setContentSize(size)
+        } else {
+            askLayoutSandbox = makeWindow(
+                title: "Email access request",
+                size: size,
+                minSize: ConditionalAskLayout.minContentSize(previewVisible: true),
+                root: dialog
+            )
+            askLayoutSandbox?.styleMask.remove(.miniaturizable)
+        }
+        bringForward(askLayoutSandbox)
+    }
+
+    private func dismissAskLayoutSandbox() {
+        guard let askLayoutSandbox else { return }
+        intendedVisible.remove(ObjectIdentifier(askLayoutSandbox))
+        allowingOrderOut = true
+        askLayoutSandbox.orderOut(nil)
+        allowingOrderOut = false
+    }
+
+    private func resizeAskLayoutSandbox(previewVisible: Bool) {
+        guard let askLayoutSandbox else { return }
+        resizeAskWindow(askLayoutSandbox, previewVisible: previewVisible)
+    }
+
+    private func fitAskLayoutSandboxHeight(_ preferredHeight: CGFloat) {
+        guard let askLayoutSandbox else { return }
+        fitAskWindow(askLayoutSandbox, preferredHeight: preferredHeight)
+    }
+    #endif
+
     fileprivate func resizeAskWindow(previewVisible: Bool) {
         guard let ask else { return }
+        resizeAskWindow(ask, previewVisible: previewVisible)
+    }
+
+    private func resizeAskWindow(_ window: NSWindow, previewVisible: Bool) {
         let target = ConditionalAskLayout.contentSize(previewVisible: previewVisible)
         let minimum = ConditionalAskLayout.minContentSize(previewVisible: previewVisible)
-        ask.minSize = minimum
+        window.minSize = minimum
 
-        var content = ask.contentRect(forFrameRect: ask.frame).size
+        var content = window.contentRect(forFrameRect: window.frame).size
         if previewVisible {
             // Growing: at least the default expanded size.
             content.width = max(content.width, target.width)
@@ -218,14 +288,34 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             if content.width < minimum.width { content.width = minimum.width }
             content.height = max(content.height, minimum.height)
         }
-        if let hosting = ask.contentView {
+        applyAskContentSize(content, to: window)
+    }
+
+    private func fitAskWindowHeight(_ preferredHeight: CGFloat) {
+        guard let ask else { return }
+        fitAskWindow(ask, preferredHeight: preferredHeight)
+    }
+
+    private func fitAskWindow(_ window: NSWindow, preferredHeight: CGFloat) {
+        var content = window.contentRect(forFrameRect: window.frame).size
+        let next = ConditionalAskLayout.clampedHeight(preferredHeight)
+        // Only grow on first fit / when content needs more room — don't fight user shrinks below.
+        if abs(content.height - next) < 2 { return }
+        if next > content.height + 1 || content.height <= ConditionalAskLayout.dialogHeight + 1 {
+            content.height = next
+            applyAskContentSize(content, to: window)
+        }
+    }
+
+    private func applyAskContentSize(_ content: NSSize, to window: NSWindow) {
+        if let hosting = window.contentView {
             hosting.autoresizingMask = [.width, .height]
             hosting.frame.size = content
         }
-        ask.setContentSize(content)
-        // Keep the window on-screen after shrinking from the trailing edge.
-        var frame = ask.frame
-        if let screen = ask.screen ?? NSScreen.main {
+        window.setContentSize(content)
+        // Keep the window on-screen after resizing from the trailing / top edge.
+        var frame = window.frame
+        if let screen = window.screen ?? NSScreen.main {
             let visible = screen.visibleFrame
             if frame.maxX > visible.maxX {
                 frame.origin.x = visible.maxX - frame.width
@@ -239,7 +329,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             if frame.minY < visible.minY {
                 frame.origin.y = visible.minY
             }
-            ask.setFrame(frame, display: true)
+            window.setFrame(frame, display: true)
         }
     }
 
@@ -425,6 +515,12 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             finishAsk(.block)
             return false
         }
+        #if DEBUG
+        if sender === askLayoutSandbox {
+            dismissAskLayoutSandbox()
+            return false
+        }
+        #endif
         intendedVisible.remove(ObjectIdentifier(sender))
         allowingOrderOut = true
         sender.orderOut(nil)

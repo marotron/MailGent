@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.2] - 2026-10-12
+
+### Fixed
+
+- Ask Body preview for HTML-only mail (common marketing messages) now derives plain text from HTML instead of showing empty.
+- Ask dialog stays a compact popup (height capped ~560pt); the left column scrolls instead of growing toward full-screen.
+
+### Changed
+
+- Ask window title is **Email access request** (was Field Access Request).
+- Ask help row: larger centered `?` + callout “{agent} wants access to the email below” with More / Less.
+- HTML-only Body status is an orange outline **HTML only** badge on the Body title row (not prepended into the preview text).
+
+### Added
+
+- Ask message preview canvas: floating − / + zoom (default 75%, 50%–150%).
+
 ## [0.11.1] - 2026-10-10
 
 ### Added
