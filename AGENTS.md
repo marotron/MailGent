@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live as markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+**Future features / fog / deferred work → GitHub Issues** on `marotron/MailGent` (labels `roadmap`, `fog`, `next-version` — same pattern as QuotAI). Active wayfinder maps/specs/prototypes may still live under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

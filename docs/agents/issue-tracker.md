@@ -1,30 +1,112 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub (+ local wayfinder)
 
-Issues and specs for this repo live as markdown files in `.scratch/`.
+**Canonical tracker for future features, fog, and deferred work:** [GitHub Issues](https://github.com/marotron/MailGent/issues) on `marotron/MailGent`.
 
-## Conventions
+Same pattern as QuotAI: roadmap items live on GitHub; `.scratch/` holds active wayfinder maps, specs, prototypes, and optional local mirrors.
 
-- One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
-- Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
+## Labels (required on roadmap issues)
 
-## When a skill says "publish to the issue tracker"
+| Label | When |
+|-------|------|
+| `roadmap` | From a wayfinder map / product roadmap |
+| `fog` | Needs grilling / product decision |
+| `next-version` | Deferred past the current ship slice |
+| `enhancement` / `bug` / `question` / … | Standard type (pick one) |
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+Create missing labels before filing:
 
-## When a skill says "fetch the relevant ticket"
+```bash
+gh label create roadmap --repo marotron/MailGent --color 0E8A16 --description "From wayfinder map / product roadmap"
+gh label create fog --repo marotron/MailGent --color BFDADC --description "Needs grilling / product decision"
+gh label create next-version --repo marotron/MailGent --color FBCA04 --description "Deferred to a later release"
+```
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+## When to file a GitHub issue
 
-## Wayfinding operations
+File (or update) a GitHub issue when:
 
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
+- A **future feature**, deferred ticket, or product fog item should outlive the current chat
+- Wayfinder map **Not yet specified** / Fog items need a durable home
+- A skill says **publish to the issue tracker**
 
-- **Map**: `.scratch/<effort>/map.md` — the Notes / Decisions-so-far / Fog body.
-- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved`.
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+Do **not** rely on new `.scratch/.../issues/*.md` alone for deferred work — GitHub is the source of truth; local files are optional mirrors for in-flight wayfinding.
+
+## Issue body shape
+
+Match QuotAI:
+
+```markdown
+## Summary
+
+One or two sentences.
+
+## Motivation / Context
+
+Why it matters; what exists today.
+
+## Acceptance (sketch)
+
+- [ ] …
+
+## Open questions
+
+- …
+
+## Notes
+
+Local wayfinder ticket: `.scratch/<effort>/issues/NN-slug.md` (if any).
+Blocked by / builds on #N (if any).
+```
+
+Create with `gh`:
+
+```bash
+gh issue create --repo marotron/MailGent \
+  --title "Short title" \
+  --label "enhancement,roadmap,next-version" \
+  --body "$(cat <<'EOF'
+## Summary
+…
+EOF
+)"
+```
+
+## Local wayfinder (still used)
+
+Active design/build sessions may keep a local effort tree:
+
+| Path | Role |
+|------|------|
+| `.scratch/<effort>/map.md` | Notes / Decisions-so-far / Fog |
+| `.scratch/<effort>/spec.md` | Product lock for the effort |
+| `.scratch/<effort>/issues/NN-<slug>.md` | Optional local mirror while claimed |
+| `.scratch/<effort>/examples/` | HTML prototypes, etc. |
+
+Local ticket frontmatter (when a mirror exists):
+
+- `Type:` `research` / `prototype` / `grilling` / `task`
+- `Status:` `open` / `claimed` / `resolved`
+- `Blocked by:` `NN` or `—`
+- `GitHub:` full issue URL (required once mirrored)
+
+Do not invent extra frontmatter keys (e.g. `Target:`) — put deferral on the GitHub issue via `next-version` (and note it in the map).
+
+Under map **Fog** / **Deferred** / **Not yet specified**, prefer GitHub links (and optional local path). Put open questions on the GitHub issue body; the map links them instead of duplicating:
+
+```markdown
+## Fog
+- Rules-from-Ask open questions → [#N](https://github.com/marotron/MailGent/issues/N)
+
+## Deferred
+- Manual redact then Allow → [#M](https://github.com/marotron/MailGent/issues/M) · [issues/02-….md](issues/02-….md)
+```
+
+### Wayfinding ops (`/wayfinder`)
+
+- **Frontier**: open, unblocked, unclaimed local mirrors (or open GitHub issues tagged for the effort).
+- **Claim**: set local `Status: claimed` (and/or assign the GitHub issue) before work.
+- **Resolve**: append `## Answer` locally if mirrored; close the GitHub issue; append a gist + link to the map’s Decisions-so-far.
+
+## Fetching a ticket
+
+Prefer the GitHub issue number or URL (`gh issue view N --repo marotron/MailGent`). If a local mirror path is given, read that file and follow its `GitHub:` line.
