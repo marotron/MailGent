@@ -206,6 +206,10 @@ struct MessageBodyView: View {
     var htmlBody: String? = nil
     var rawBody: String = ""
     var showRaw: Bool = false
+    /// WebKit `pageZoom` for HTML; plain text scales font when ≠ 1. Companion stays at 1.
+    var pageZoom: CGFloat = 1
+    /// Ask canvas: pad MIME HTML so the first line is not flush-clipped at the top.
+    var ensureReadableInsets: Bool = false
 
     private var canShowRaw: Bool {
         showRaw && !rawBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -234,13 +238,30 @@ struct MessageBodyView: View {
                 RawBodyView(text: rawBody)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let html = prettyHTML {
-                HTMLMailView(html: Self.documentHTML(html))
+                HTMLMailView(
+                    html: Self.documentHTML(html),
+                    pageZoom: pageZoom,
+                    // Ask preview owns zoom via pageZoom; Companion keeps pinch magnify.
+                    allowsMagnification: !ensureReadableInsets && abs(pageZoom - 1) < 0.001,
+                    ensureReadableInsets: ensureReadableInsets
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 switch readBody {
                 case .text(let text):
-                    LinkAwareBodyText(attributed: Self.prettyAttributed(text))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if ensureReadableInsets {
+                        // Ask canvas: AppKit-owned scroll (`NSTextView.scrollableTextView`).
+                        // Intrinsic LinkAwareBodyText + sizeThatFits expands past the pane and
+                        // clips the top so scroll-up cannot reach the first lines.
+                        ScrollableLinkAwareBodyText(
+                            attributed: Self.prettyAttributed(text),
+                            fontScale: pageZoom
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        LinkAwareBodyText(attributed: Self.prettyAttributed(text), fontScale: pageZoom)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 case .notAvailable:
                     Text("Body not available")
                         .foregroundStyle(.secondary)
@@ -266,12 +287,14 @@ struct MessageBodyView: View {
         <meta charset="utf-8">
         <style>
           :root { color-scheme: light dark; }
+          html { margin: 0; }
           body {
             font: -apple-system-body;
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             margin: 0;
-            padding: 0;
+            padding: 12px;
             background: transparent;
+            overflow-wrap: anywhere;
           }
           img { max-width: 100%; height: auto; }
         </style>
@@ -394,6 +417,10 @@ private struct RawBodyView: NSViewRepresentable {
 /// Renders HTML mail; WebKit owns scrolling. Selection/copy work; links open in the browser.
 private struct HTMLMailView: NSViewRepresentable {
     let html: String
+    var pageZoom: CGFloat = 1
+    var allowsMagnification: Bool = true
+    /// Inject body padding so flush MIME HTML does not clip the first line (Ask preview).
+    var ensureReadableInsets: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -402,14 +429,39 @@ private struct HTMLMailView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
+        if ensureReadableInsets {
+            let pad = WKUserScript(
+                source: """
+                (function () {
+                  if (document.getElementById('mailgent-preview-pad')) return;
+                  var s = document.createElement('style');
+                  s.id = 'mailgent-preview-pad';
+                  s.textContent = 'html{margin:0!important;}body{margin:0!important;padding:12px!important;box-sizing:border-box!important;}';
+                  (document.head || document.documentElement).appendChild(s);
+                })();
+                """,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: true
+            )
+            config.userContentController.addUserScript(pad)
+        }
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
+        webView.clipsToBounds = true
         webView.navigationDelegate = context.coordinator
-        webView.allowsMagnification = true
+        webView.allowsMagnification = allowsMagnification
+        context.coordinator.ensureReadableInsets = ensureReadableInsets
+        context.coordinator.applyZoom(pageZoom, to: webView)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        webView.allowsMagnification = allowsMagnification
+        context.coordinator.ensureReadableInsets = ensureReadableInsets
+        if abs(context.coordinator.appliedZoom - pageZoom) > 0.001 {
+            context.coordinator.applyZoom(pageZoom, to: webView)
+            context.coordinator.scrollToTop(webView)
+        }
         guard context.coordinator.loadedHTML != html else { return }
         context.coordinator.loadedHTML = html
         webView.loadHTMLString(html, baseURL: nil)
@@ -417,11 +469,13 @@ private struct HTMLMailView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var loadedHTML: String?
+        var appliedZoom: CGFloat = 1
+        var ensureReadableInsets = false
 
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
             if navigationAction.navigationType == .linkActivated,
                let url = navigationAction.request.url
@@ -432,12 +486,73 @@ private struct HTMLMailView: NSViewRepresentable {
             }
             decisionHandler(.allow)
         }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation) {
+            // Re-apply after navigation replaces the document (CSS zoom is per-document).
+            applyZoom(appliedZoom, to: webView)
+            scrollToTop(webView)
+        }
+
+        func applyZoom(_ zoom: CGFloat, to webView: WKWebView) {
+            appliedZoom = zoom
+            // Prefer WebKit pageZoom: CSS zoom on documentElement breaks scroll at >100%
+            // and can paint outside the view (covering the Ask zoom strip).
+            // Readable insets (padding script) keep the first line reachable.
+            if ensureReadableInsets {
+                webView.evaluateJavaScript(
+                    "document.documentElement.style.zoom='';"
+                ) { _, _ in }
+            }
+            webView.pageZoom = zoom
+            if !webView.allowsMagnification {
+                webView.magnification = 1
+            }
+        }
+
+        func scrollToTop(_ webView: WKWebView) {
+            webView.evaluateJavaScript(
+                """
+                window.scrollTo(0, 0);
+                if (document.documentElement) document.documentElement.scrollTop = 0;
+                if (document.body) document.body.scrollTop = 0;
+                """
+            ) { _, _ in }
+            // AppKit scroll view can retain a non-zero origin after zoom/layout.
+            DispatchQueue.main.async {
+                Self.resetAppKitScroll(webView)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                Self.resetAppKitScroll(webView)
+            }
+        }
+
+        private static func resetAppKitScroll(_ webView: WKWebView) {
+            var scrollViews: [NSScrollView] = []
+            if let enclosing = webView.enclosingScrollView {
+                scrollViews.append(enclosing)
+            }
+            func collect(from view: NSView) {
+                if let scroll = view as? NSScrollView {
+                    scrollViews.append(scroll)
+                }
+                for child in view.subviews {
+                    collect(from: child)
+                }
+            }
+            collect(from: webView)
+            for scrollView in scrollViews {
+                scrollView.contentView.scroll(to: .zero)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
     }
 }
 
 /// AppKit text view so link hover shows the pointing-hand cursor (SwiftUI `Text` does not).
+/// Intrinsic height via `sizeThatFits` — for Companion plain bodies inside a SwiftUI `ScrollView`.
 private struct LinkAwareBodyText: NSViewRepresentable {
     let attributed: AttributedString
+    var fontScale: CGFloat = 1
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -458,20 +573,13 @@ private struct LinkAwareBodyText: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
         textView.setContentHuggingPriority(.required, for: .vertical)
-        textView.linkTextAttributes = [
-            .foregroundColor: NSColor.linkColor,
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-            .cursor: NSCursor.pointingHand,
-        ]
+        textView.linkTextAttributes = Self.linkAttributes
         textView.delegate = context.coordinator
         return textView
     }
 
     func updateNSView(_ textView: NSTextView, context: Context) {
-        let bridged = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
-        let font = NSFont.preferredFont(forTextStyle: .body)
-        bridged.addAttribute(.font, value: font, range: NSRange(location: 0, length: bridged.length))
-        textView.textStorage?.setAttributedString(bridged)
+        textView.textStorage?.setAttributedString(Self.scaledAttributedString(attributed, fontScale: fontScale))
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
@@ -486,7 +594,120 @@ private struct LinkAwareBodyText: NSViewRepresentable {
         return CGSize(width: width, height: ceil(used.height))
     }
 
+    fileprivate static let linkAttributes: [NSAttributedString.Key: Any] = [
+        .foregroundColor: NSColor.linkColor,
+        .underlineStyle: NSUnderlineStyle.single.rawValue,
+        .cursor: NSCursor.pointingHand,
+    ]
+
+    fileprivate static func scaledAttributedString(
+        _ attributed: AttributedString,
+        fontScale: CGFloat
+    ) -> NSAttributedString {
+        let bridged = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
+        let base = NSFont.preferredFont(forTextStyle: .body)
+        let size = max(9, base.pointSize * fontScale)
+        let font = NSFont(descriptor: base.fontDescriptor, size: size) ?? base
+        bridged.addAttribute(.font, value: font, range: NSRange(location: 0, length: bridged.length))
+        return bridged
+    }
+
     final class Coordinator: NSObject, NSTextViewDelegate {
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            if let url = link as? URL {
+                NSWorkspace.shared.open(url)
+                return true
+            }
+            if let string = link as? String, let url = URL(string: string) {
+                NSWorkspace.shared.open(url)
+                return true
+            }
+            return false
+        }
+    }
+}
+
+/// Ask preview plain body: Apple’s `NSTextView.scrollableTextView()` fills the pane and owns scrolling.
+private struct ScrollableLinkAwareBodyText: NSViewRepresentable {
+    let attributed: AttributedString
+    var fontScale: CGFloat = 1
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = .init(top: 8, left: 10, bottom: 8, right: 10)
+        scrollView.scrollerInsets = .init(top: 0, left: 0, bottom: 0, right: 0)
+
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        textView.drawsBackground = false
+        textView.isEditable = false
+        textView.isRichText = true
+        textView.isSelectable = true
+        textView.allowsUndo = false
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.linkTextAttributes = LinkAwareBodyText.linkAttributes
+        textView.delegate = context.coordinator
+        apply(attributed, fontScale: fontScale, to: textView, scrollView: scrollView, resetScroll: true)
+        context.coordinator.loadedScale = fontScale
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        let scaleChanged = abs(context.coordinator.loadedScale - fontScale) > 0.001
+        let textChanged = context.coordinator.loadedHash != attributedHash
+        guard scaleChanged || textChanged else { return }
+        context.coordinator.loadedScale = fontScale
+        context.coordinator.loadedHash = attributedHash
+        apply(attributed, fontScale: fontScale, to: textView, scrollView: scrollView, resetScroll: true)
+    }
+
+    private var attributedHash: Int {
+        var hasher = Hasher()
+        hasher.combine(String(attributed.characters))
+        hasher.combine(fontScale)
+        return hasher.finalize()
+    }
+
+    private func apply(
+        _ attributed: AttributedString,
+        fontScale: CGFloat,
+        to textView: NSTextView,
+        scrollView: NSScrollView,
+        resetScroll: Bool
+    ) {
+        textView.textStorage?.setAttributedString(
+            LinkAwareBodyText.scaledAttributedString(attributed, fontScale: fontScale)
+        )
+        guard resetScroll else { return }
+        // Pin to the document top after load/zoom (AppKit scroll views can keep a stale origin).
+        DispatchQueue.main.async {
+            textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var loadedHash: Int = 0
+        var loadedScale: CGFloat = 1
+
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
             if let url = link as? URL {
                 NSWorkspace.shared.open(url)

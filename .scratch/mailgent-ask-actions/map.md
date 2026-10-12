@@ -30,6 +30,7 @@ Active grilling lives on GitHub (prefer links over duplicating questions here):
 ## Deferred
 
 - Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) (`roadmap`, `next-version`) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md) — blocked on 01 / #21
+- Ask button pointer cursor on hover → [#23](https://github.com/marotron/MailGent/issues/23) (`bug`, `next-version`) · [issues/03-ask-button-cursor.md](issues/03-ask-button-cursor.md)
 
 ## Out of scope
 

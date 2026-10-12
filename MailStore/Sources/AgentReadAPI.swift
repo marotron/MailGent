@@ -10,10 +10,13 @@ public enum ConditionalAccessDecision: Sendable {
 public struct ConditionalFieldPreviewLine: Equatable, Sendable {
     public let label: String
     public let value: String
+    /// Optional status chip on the title row (e.g. Body → "HTML only").
+    public let badge: String?
 
-    public init(label: String, value: String) {
+    public init(label: String, value: String, badge: String? = nil) {
         self.label = label
         self.value = value
+        self.badge = badge
     }
 }
 
@@ -272,10 +275,10 @@ public struct AgentReadAPI {
         askLabels: [String]
     ) -> [ConditionalFieldPreviewLine] {
         askLabels.map { label in
-            ConditionalFieldPreviewLine(
-                label: label,
-                value: previewValue(for: label, message: message)
-            )
+            let value = previewValue(for: label, message: message)
+            let badge: String? =
+                label == "Body" && Self.isHTMLOnlyBody(message) ? "HTML only" : nil
+            return ConditionalFieldPreviewLine(label: label, value: value, badge: badge)
         }
     }
 
@@ -293,19 +296,23 @@ public struct AgentReadAPI {
         case "Date":
             raw = message.date
         case "Body":
-            switch message.body {
-            case .text(let text):
-                if let html = message.htmlBody,
-                   !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                {
-                    raw = MailMIME.plainText(fromHTML: html)
-                } else if text.contains("<") || text.contains("body {") || text.contains("&zwnj;") {
-                    raw = MailMIME.plainText(fromHTML: text)
-                } else {
-                    raw = MailMIME.decodeHTMLEntities(text)
+            // Prefer HTML → plain so HTML-only mail (indexed body empty → `.notAvailable`)
+            // still fills the Ask left-pane Body card. Matches right-pane `htmlBody` preview.
+            if let html = message.htmlBody,
+               !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                raw = MailMIME.plainText(fromHTML: html)
+            } else {
+                switch message.body {
+                case .text(let text):
+                    if text.contains("<") || text.contains("body {") || text.contains("&zwnj;") {
+                        raw = MailMIME.plainText(fromHTML: text)
+                    } else {
+                        raw = MailMIME.decodeHTMLEntities(text)
+                    }
+                case .notAvailable, .notGranted:
+                    raw = ""
                 }
-            case .notAvailable, .notGranted:
-                raw = ""
             }
         case "Attachment names", "Attachment content":
             if message.attachments.isEmpty {
@@ -321,11 +328,28 @@ public struct AgentReadAPI {
             trimmed = MailMIME.stripLeadingByteCountPrefix(trimmed)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard !trimmed.isEmpty else { return "(empty)" }
+        guard !trimmed.isEmpty else {
+            return "(empty)"
+        }
         if label == "Body", trimmed.count > bodyPreviewCap {
-            return String(trimmed.prefix(bodyPreviewCap)) + "…"
+            trimmed = String(trimmed.prefix(bodyPreviewCap)) + "…"
         }
         return trimmed
+    }
+
+    /// True when there is HTML but no plain-text body part (common marketing mail).
+    private static func isHTMLOnlyBody(_ message: ReadMessage) -> Bool {
+        guard let html = message.htmlBody,
+              !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+        switch message.body {
+        case .text(let text):
+            return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .notAvailable:
+            return true
+        case .notGranted:
+            return false
+        }
     }
 
     /// Modes that are Ask, expressed as `.on` bits for mask/union helpers.
