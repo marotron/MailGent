@@ -375,14 +375,11 @@ private struct PassEditorForm: View {
                     fields: fields,
                     interactive: isEditing,
                     showOff: isEditing
-                ) { keyPath in
-                    fields[keyPath: keyPath].toggle()
-                    if keyPath == \.attachmentContent, fields.attachmentContent {
-                        fields.attachmentMetadata = true
-                    }
-                    if keyPath == \.attachmentMetadata, !fields.attachmentMetadata {
-                        fields.attachmentContent = false
-                    }
+                ) { modeKeyPath in
+                    // Rules are On/Off deltas (no Ask).
+                    let current = fields[keyPath: modeKeyPath]
+                    fields[keyPath: modeKeyPath] = current == .on ? .off : .on
+                    fields.reconcileAttachmentModes(changed: modeKeyPath)
                     commit()
                 }
                 Text(

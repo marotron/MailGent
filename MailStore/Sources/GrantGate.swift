@@ -256,6 +256,25 @@ public struct GrantFields: Equatable, Hashable, Sendable {
             attachmentContentMode: attachmentContentMode.displayed(allowConditional: allowConditional)
         )
     }
+
+    /// Attachment content requires names. When cycling a single field, pass `changed` so turning
+    /// names Off clears content instead of resurrecting names (which stuck chips on On).
+    public mutating func reconcileAttachmentModes(
+        changed: PartialKeyPath<GrantFields>? = nil
+    ) {
+        if changed == \GrantFields.attachmentMetadataMode {
+            if attachmentMetadataMode == .off {
+                attachmentContentMode = .off
+            }
+            return
+        }
+        if attachmentContentMode != .off && attachmentMetadataMode == .off {
+            attachmentMetadataMode = .on
+        }
+        if attachmentMetadataMode == .off {
+            attachmentContentMode = .off
+        }
+    }
 }
 
 extension GrantFields: Codable {

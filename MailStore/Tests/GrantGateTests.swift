@@ -276,6 +276,50 @@ struct GrantGateTests {
         #expect(FieldAccessMode.on.nextMode(allowAsk: true) == .off)
         #expect(FieldAccessMode.off.nextMode(allowAsk: false) == .on)
         #expect(FieldAccessMode.ask.nextMode(allowAsk: false) == .on)
+        #expect(FieldAccessMode.on.nextMode(allowAsk: false) == .off)
+    }
+
+    @Test func cyclingAttachmentNamesOffClearsContentInsteadOfResurrectingOn() {
+        // Screenshot repro: names On, content Ask → On→Off on names must stick.
+        var fields = GrantFields(
+            subjectMode: .on,
+            bodyMode: .ask,
+            attachmentMetadataMode: .on,
+            attachmentContentMode: .ask
+        )
+        fields.attachmentMetadataMode = fields.attachmentMetadataMode.nextMode(allowAsk: true)
+        #expect(fields.attachmentMetadataMode == .off)
+        fields.reconcileAttachmentModes(changed: \GrantFields.attachmentMetadataMode)
+        #expect(fields.attachmentMetadataMode == .off)
+        #expect(fields.attachmentContentMode == .off)
+    }
+
+    @Test func enablingAttachmentContentTurnsNamesOn() {
+        var fields = GrantFields(
+            attachmentMetadataMode: .off,
+            attachmentContentMode: .off
+        )
+        fields.attachmentContentMode = .on
+        fields.reconcileAttachmentModes(changed: \GrantFields.attachmentContentMode)
+        #expect(fields.attachmentMetadataMode == .on)
+        #expect(fields.attachmentContentMode == .on)
+    }
+
+    @Test func fullChipCycleReachesOffForEveryModeField() {
+        let paths: [WritableKeyPath<GrantFields, FieldAccessMode>] = [
+            \.subjectMode, \.fromMode, \.toMode, \.ccMode, \.dateMode,
+            \.bodyMode, \.attachmentMetadataMode, \.attachmentContentMode,
+        ]
+        for path in paths {
+            var fields = GrantFields(
+                subjectMode: .on, fromMode: .on, toMode: .on, ccMode: .on, dateMode: .on,
+                bodyMode: .on, attachmentMetadataMode: .on, attachmentContentMode: .on
+            )
+            fields[keyPath: path] = .on
+            fields[keyPath: path] = fields[keyPath: path].nextMode(allowAsk: true)
+            fields.reconcileAttachmentModes(changed: path)
+            #expect(fields[keyPath: path] == .off, "expected Off after On for \(path)")
+        }
     }
 
     @Test func askDisplaysAsOffWhenConditionalDisabled() {
