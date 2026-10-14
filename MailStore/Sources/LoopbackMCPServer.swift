@@ -114,7 +114,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.11.3"
+                        "version": "0.11.4"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -245,7 +245,7 @@ public struct LoopbackMCPServer {
             else {
                 throw CallError.badArguments
             }
-            let result = try gateway.getAttachment(
+            let result = try await gateway.getAttachment(
                 credential: credential,
                 accountID: accountID,
                 placement: placement,

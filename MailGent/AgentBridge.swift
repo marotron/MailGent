@@ -16,6 +16,8 @@ struct PairedAgentCredential: Identifiable, Equatable {
     let name: String
     let trustClass: AgentTrustClass
     let credential: String
+    /// When this Bearer was generated. Nil only for legacy pairing rows that never recorded it.
+    let issuedAt: Date?
 
     var pairedAgent: PairedAgent {
         PairedAgent(id: id, name: name, trustClass: trustClass)
@@ -324,7 +326,8 @@ final class AgentBridge {
                 id: paired.id,
                 name: paired.name,
                 trustClass: paired.trustClass,
-                credential: token
+                credential: token,
+                issuedAt: Date()
             )
             pairedAgents.append(row)
             selectedAgentID = row.id
@@ -1025,6 +1028,7 @@ final class AgentBridge {
             let (document, migrated) = try PersistedPairingDocument.decodeMigrating(from: data)
             var restored: [PairedAgentCredential] = []
             var renamedLegacyGrok = false
+            var backfilledIssuedAt = false
             for saved in document.agents {
                 guard
                     let trust = AgentTrustClass(rawValue: saved.trustClass),
@@ -1034,12 +1038,15 @@ final class AgentBridge {
                 if name != saved.name { renamedLegacyGrok = true }
                 let agent = PairedAgent(id: saved.agentID, name: name, trustClass: trust)
                 pairing.restore(agent: agent, credential: saved.credential)
+                let issuedAt = saved.issuedAt ?? Self.pairIssuedAt(agentID: saved.agentID, from: audit)
+                if saved.issuedAt == nil, issuedAt != nil { backfilledIssuedAt = true }
                 restored.append(
                     PairedAgentCredential(
                         id: saved.agentID,
                         name: name,
                         trustClass: trust,
-                        credential: saved.credential
+                        credential: saved.credential,
+                        issuedAt: issuedAt
                     )
                 )
             }
@@ -1052,7 +1059,7 @@ final class AgentBridge {
                 selectedAgentID = restored.first?.id
             }
             restorePersistedGrants()
-            if migrated || renamedLegacyGrok {
+            if migrated || renamedLegacyGrok || backfilledIssuedAt {
                 persistPairing()
             }
             if pairedAgents.contains(where: { Self.isCursorName($0.name) }) {
@@ -1075,7 +1082,8 @@ final class AgentBridge {
                     agentID: $0.id,
                     name: $0.name,
                     trustClass: $0.trustClass.rawValue,
-                    credential: $0.credential
+                    credential: $0.credential,
+                    issuedAt: $0.issuedAt
                 )
             },
             selectedAgentID: selectedAgentID ?? pairedAgents.first?.id
@@ -1085,10 +1093,20 @@ final class AgentBridge {
                 at: Self.pairingFileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try JSONEncoder().encode(document).write(to: Self.pairingFileURL, options: .atomic)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(document).write(to: Self.pairingFileURL, options: .atomic)
         } catch {
             MailGentLog.trace("agent pair persist failed: \(error)")
         }
+    }
+
+    /// Oldest pair audit for this agent — used to backfill `issuedAt` on legacy pairing rows.
+    private static func pairIssuedAt(agentID: String, from audit: AuditLog) -> Date? {
+        audit.entries()
+            .filter { $0.kind == .pair && $0.agentID == agentID }
+            .map(\.at)
+            .min()
     }
 
     private func clearPersistedPairing() {
@@ -1105,6 +1123,9 @@ final class AgentBridge {
         case fields
         case mailbox
         case revokeAgent
+        #if DEBUG
+        case screenshotDemo
+        #endif
     }
 
     private func restorePersistedGrants() {
@@ -1378,6 +1399,7 @@ final class AgentBridge {
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
             rules: rules,
             audit: existing.audit,
+            attachmentContentAskCache: existing.attachmentContentAskCache,
             allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
             conditionalAccessPrompter: { @MainActor [weak self] context in
                 guard let self else { return .block }
@@ -1503,6 +1525,100 @@ final class AgentBridge {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
+
+    // MARK: - SCREENSHOT_DEMO_POLICY (DEBUG only — remove with CompanionDemoPolicy.swift)
+    #if DEBUG
+    /// Backs up live grants/rules once, then plants the two-account screenshot policy for the selected agent.
+    @discardableResult
+    func applyScreenshotDemoPolicy() -> String {
+        if isEditingGrants {
+            return "Finish or cancel Grant Desk edits first"
+        }
+        guard let agent = selectedAgent else {
+            return "Pair an agent first (Cursor)"
+        }
+        do {
+            try Self.backupPolicyFilesIfNeeded()
+        } catch {
+            return "Backup failed: \(error.localizedDescription)"
+        }
+        grants.replaceAll(agentID: agent.id, with: CompanionDemoPolicy.grants(agentID: agent.id))
+        rules.replace(with: CompanionDemoPolicy.ruleSnapshot(agentID: agent.id))
+        selectedAccessKey = Self.accessKey(
+            mode: .allow,
+            accountID: CompanionAccounts.work,
+            placement: nil
+        )
+        persistGrants(reason: .screenshotDemo)
+        persistRules()
+        MailGentLog.grantsEvent("screenshot demo policy applied agent=\(Self.shortID(agent.id))")
+        return "Screenshot policy on · 2 accounts · Shared rules A–D (backup kept)"
+    }
+
+    /// Restores the pre-demo grants.json + rules.json backup.
+    @discardableResult
+    func restoreScreenshotDemoPolicy() -> String {
+        if isEditingGrants {
+            return "Finish or cancel Grant Desk edits first"
+        }
+        guard CompanionDemoPolicy.backupExists else {
+            return "No screenshot-policy backup"
+        }
+        do {
+            try Self.restorePolicyFilesFromBackup()
+        } catch {
+            return "Restore failed: \(error.localizedDescription)"
+        }
+        restorePersistedGrants()
+        restorePersistedRules()
+        MailGentLog.grantsEvent("screenshot demo policy restored")
+        return "Restored live grants + rules"
+    }
+
+    private static func backupPolicyFilesIfNeeded() throws {
+        guard !CompanionDemoPolicy.backupExists else { return }
+        let fm = FileManager.default
+        try fm.createDirectory(
+            at: CompanionDemoPolicy.backupDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        try copyPolicyFile(from: grantsFileURL, toBackupNamed: "grants.json")
+        try copyPolicyFile(from: rulesFileURL, toBackupNamed: "rules.json")
+    }
+
+    private static func copyPolicyFile(from source: URL, toBackupNamed name: String) throws {
+        let dest = CompanionDemoPolicy.backupDirectoryURL.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: source.path) {
+            try FileManager.default.copyItem(at: source, to: dest)
+        } else {
+            // Empty snapshot so restore still clears a planted demo file.
+            let empty: Data
+            if name == "grants.json" {
+                empty = try JSONEncoder().encode(GrantSnapshot())
+            } else {
+                empty = try JSONEncoder().encode(RuleSnapshot())
+            }
+            try empty.write(to: dest, options: .atomic)
+        }
+    }
+
+    private static func restorePolicyFilesFromBackup() throws {
+        let fm = FileManager.default
+        let support = grantsFileURL.deletingLastPathComponent()
+        try fm.createDirectory(at: support, withIntermediateDirectories: true)
+        for name in ["grants.json", "rules.json"] {
+            let backup = CompanionDemoPolicy.backupDirectoryURL.appendingPathComponent(name)
+            let live = support.appendingPathComponent(name)
+            if fm.fileExists(atPath: live.path) {
+                try fm.removeItem(at: live)
+            }
+            if fm.fileExists(atPath: backup.path) {
+                try fm.copyItem(at: backup, to: live)
+            }
+        }
+        try? fm.removeItem(at: CompanionDemoPolicy.backupDirectoryURL)
+    }
+    #endif
 }
 
 private struct GrantDeskEditBaseline {

@@ -84,7 +84,33 @@ struct GrantDeskView: View {
         }
         .padding(16)
         .frame(minWidth: 700, minHeight: 560)
+        #if DEBUG
+        .onAppear { applyScreenshotDemoSceneIfNeeded() }
+        #endif
     }
+
+    #if DEBUG
+    /// SCREENSHOT_DEMO_POLICY — remove with CompanionDemoPolicy.swift
+    private func applyScreenshotDemoSceneIfNeeded() {
+        guard let scene = session.screenshotDemoScene else { return }
+        switch scene {
+        case .controlCenter:
+            break
+        case .grantDeskScope:
+            deskFocus = .agent
+            tab = .scope
+        case .grantDeskAccess:
+            deskFocus = .agent
+            tab = .access
+        case .grantDeskRules:
+            deskFocus = .shared
+            tab = .rules
+        case .grantDeskPrivacy:
+            deskFocus = .shared
+            tab = .privacy
+        }
+    }
+    #endif
 
     private var agentPickerRow: some View {
         HStack(spacing: 8) {

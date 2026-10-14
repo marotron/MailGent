@@ -85,6 +85,41 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
     }
 }
 
+/// Process-lifetime Ask decisions for Attachment content (agent + message).
+/// Shared across `AgentReadAPI` value copies so gateway rebuilds keep Allow after `get`.
+public final class AttachmentContentAskCache: @unchecked Sendable {
+    public struct Key: Hashable, Sendable {
+        public let agentID: String
+        public let accountID: String
+        public let placement: String
+        public let messageID: String
+
+        public init(agentID: String, accountID: String, placement: String, messageID: String) {
+            self.agentID = agentID
+            self.accountID = accountID
+            self.placement = placement
+            self.messageID = messageID
+        }
+    }
+
+    private let lock = NSLock()
+    private var decisions: [Key: ConditionalAccessDecision] = [:]
+
+    public init() {}
+
+    public func decision(for key: Key) -> ConditionalAccessDecision? {
+        lock.lock()
+        defer { lock.unlock() }
+        return decisions[key]
+    }
+
+    public func store(_ decision: ConditionalAccessDecision, for key: Key) {
+        lock.lock()
+        decisions[key] = decision
+        lock.unlock()
+    }
+}
+
 /// Result of `get_attachment`: local temp path when content is granted and available.
 public struct AttachmentAccessResult: Equatable, Sendable {
     public enum Access: String, Equatable, Sendable {
@@ -138,6 +173,7 @@ public struct AgentReadAPI {
     public let leakGuard: OutboundLeakGuard
     public let rules: RuleStore
     public let audit: AuditLog?
+    public let attachmentContentAskCache: AttachmentContentAskCache
     public var allowConditionalAccessPrompts: Bool
     public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)?
 
@@ -148,6 +184,7 @@ public struct AgentReadAPI {
         leakGuard: OutboundLeakGuard = OutboundLeakGuard(),
         rules: RuleStore = RuleStore(),
         audit: AuditLog? = nil,
+        attachmentContentAskCache: AttachmentContentAskCache = AttachmentContentAskCache(),
         allowConditionalAccessPrompts: Bool = false,
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
     ) {
@@ -157,6 +194,7 @@ public struct AgentReadAPI {
         self.leakGuard = leakGuard
         self.rules = rules
         self.audit = audit
+        self.attachmentContentAskCache = attachmentContentAskCache
         self.allowConditionalAccessPrompts = allowConditionalAccessPrompts
         self.conditionalAccessPrompter = conditionalAccessPrompter
     }
@@ -180,25 +218,30 @@ public struct AgentReadAPI {
     /// Resolves Ask mode fields for this get.
     /// When allow is off: Ask → denied (classic On/Off behavior; no popup).
     /// When allow is on: prompt once for all Ask fields; timeout/dismiss → deny.
+    /// `limitingAskTo` restricts which Ask fields are prompted (e.g. Attachment content only on `get_attachment`).
     private func resolveConditionalFields(
         _ fields: GrantFields,
         agentName: String,
-        message: ReadMessage
+        message: ReadMessage,
+        limitingAskTo: Set<String>? = nil
     ) async -> ConditionalFieldResolution {
-        let askMask = Self.askMask(fields)
+        func isAsk(_ mode: FieldAccessMode, label: String) -> Bool {
+            mode == .ask && (limitingAskTo?.contains(label) ?? true)
+        }
+        let askMask = Self.askMask(fields, limitingAskTo: limitingAskTo)
         if !allowConditionalAccessPrompts {
             // Feature off → Ask denied (same as classic grants without conditional).
             return ConditionalFieldResolution(
                 fields: GrantFields(
-                    subjectMode: fields.subjectMode == .ask ? .off : fields.subjectMode,
-                    fromMode: fields.fromMode == .ask ? .off : fields.fromMode,
-                    toMode: fields.toMode == .ask ? .off : fields.toMode,
-                    ccMode: fields.ccMode == .ask ? .off : fields.ccMode,
-                    dateMode: fields.dateMode == .ask ? .off : fields.dateMode,
-                    bodyMode: fields.bodyMode == .ask ? .off : fields.bodyMode,
-                    attachmentMetadataMode: fields.attachmentMetadataMode == .ask
+                    subjectMode: isAsk(fields.subjectMode, label: "Subject") ? .off : fields.subjectMode,
+                    fromMode: isAsk(fields.fromMode, label: "From") ? .off : fields.fromMode,
+                    toMode: isAsk(fields.toMode, label: "To") ? .off : fields.toMode,
+                    ccMode: isAsk(fields.ccMode, label: "Cc") ? .off : fields.ccMode,
+                    dateMode: isAsk(fields.dateMode, label: "Date") ? .off : fields.dateMode,
+                    bodyMode: isAsk(fields.bodyMode, label: "Body") ? .off : fields.bodyMode,
+                    attachmentMetadataMode: isAsk(fields.attachmentMetadataMode, label: "Attachment names")
                         ? .off : fields.attachmentMetadataMode,
-                    attachmentContentMode: fields.attachmentContentMode == .ask
+                    attachmentContentMode: isAsk(fields.attachmentContentMode, label: "Attachment content")
                         ? .off : fields.attachmentContentMode
                 ),
                 confirmed: .none,
@@ -207,20 +250,20 @@ public struct AgentReadAPI {
             )
         }
 
-        let askLabels = collectAskFields(fields)
+        let askLabels = collectAskFields(fields).filter { limitingAskTo?.contains($0) ?? true }
         guard !askLabels.isEmpty, let prompter = conditionalAccessPrompter else {
             // No Ask fields or no prompter → allow all Ask fields (fallback; not user-confirmed).
             return ConditionalFieldResolution(
                 fields: GrantFields(
-                    subjectMode: fields.subjectMode == .ask ? .on : fields.subjectMode,
-                    fromMode: fields.fromMode == .ask ? .on : fields.fromMode,
-                    toMode: fields.toMode == .ask ? .on : fields.toMode,
-                    ccMode: fields.ccMode == .ask ? .on : fields.ccMode,
-                    dateMode: fields.dateMode == .ask ? .on : fields.dateMode,
-                    bodyMode: fields.bodyMode == .ask ? .on : fields.bodyMode,
-                    attachmentMetadataMode: fields.attachmentMetadataMode == .ask
+                    subjectMode: isAsk(fields.subjectMode, label: "Subject") ? .on : fields.subjectMode,
+                    fromMode: isAsk(fields.fromMode, label: "From") ? .on : fields.fromMode,
+                    toMode: isAsk(fields.toMode, label: "To") ? .on : fields.toMode,
+                    ccMode: isAsk(fields.ccMode, label: "Cc") ? .on : fields.ccMode,
+                    dateMode: isAsk(fields.dateMode, label: "Date") ? .on : fields.dateMode,
+                    bodyMode: isAsk(fields.bodyMode, label: "Body") ? .on : fields.bodyMode,
+                    attachmentMetadataMode: isAsk(fields.attachmentMetadataMode, label: "Attachment names")
                         ? .on : fields.attachmentMetadataMode,
-                    attachmentContentMode: fields.attachmentContentMode == .ask
+                    attachmentContentMode: isAsk(fields.attachmentContentMode, label: "Attachment content")
                         ? .on : fields.attachmentContentMode
                 ),
                 confirmed: .none,
@@ -251,15 +294,15 @@ public struct AgentReadAPI {
         let resolvedMode: FieldAccessMode = decision == .allow ? .on : .off
         return ConditionalFieldResolution(
             fields: GrantFields(
-                subjectMode: fields.subjectMode == .ask ? resolvedMode : fields.subjectMode,
-                fromMode: fields.fromMode == .ask ? resolvedMode : fields.fromMode,
-                toMode: fields.toMode == .ask ? resolvedMode : fields.toMode,
-                ccMode: fields.ccMode == .ask ? resolvedMode : fields.ccMode,
-                dateMode: fields.dateMode == .ask ? resolvedMode : fields.dateMode,
-                bodyMode: fields.bodyMode == .ask ? resolvedMode : fields.bodyMode,
-                attachmentMetadataMode: fields.attachmentMetadataMode == .ask
+                subjectMode: isAsk(fields.subjectMode, label: "Subject") ? resolvedMode : fields.subjectMode,
+                fromMode: isAsk(fields.fromMode, label: "From") ? resolvedMode : fields.fromMode,
+                toMode: isAsk(fields.toMode, label: "To") ? resolvedMode : fields.toMode,
+                ccMode: isAsk(fields.ccMode, label: "Cc") ? resolvedMode : fields.ccMode,
+                dateMode: isAsk(fields.dateMode, label: "Date") ? resolvedMode : fields.dateMode,
+                bodyMode: isAsk(fields.bodyMode, label: "Body") ? resolvedMode : fields.bodyMode,
+                attachmentMetadataMode: isAsk(fields.attachmentMetadataMode, label: "Attachment names")
                     ? resolvedMode : fields.attachmentMetadataMode,
-                attachmentContentMode: fields.attachmentContentMode == .ask
+                attachmentContentMode: isAsk(fields.attachmentContentMode, label: "Attachment content")
                     ? resolvedMode : fields.attachmentContentMode
             ),
             confirmed: decision == .allow ? askMask : .none,
@@ -353,17 +396,77 @@ public struct AgentReadAPI {
     }
 
     /// Modes that are Ask, expressed as `.on` bits for mask/union helpers.
-    private static func askMask(_ fields: GrantFields) -> GrantFields {
-        GrantFields(
-            subjectMode: fields.subjectMode == .ask ? .on : .off,
-            fromMode: fields.fromMode == .ask ? .on : .off,
-            toMode: fields.toMode == .ask ? .on : .off,
-            ccMode: fields.ccMode == .ask ? .on : .off,
-            dateMode: fields.dateMode == .ask ? .on : .off,
-            bodyMode: fields.bodyMode == .ask ? .on : .off,
-            attachmentMetadataMode: fields.attachmentMetadataMode == .ask ? .on : .off,
-            attachmentContentMode: fields.attachmentContentMode == .ask ? .on : .off
+    /// Sets `attachmentContentMode` after init so content-only Ask is not cleared when names are On (not Ask).
+    private static func askMask(_ fields: GrantFields, limitingAskTo: Set<String>? = nil) -> GrantFields {
+        func included(_ mode: FieldAccessMode, label: String) -> Bool {
+            mode == .ask && (limitingAskTo?.contains(label) ?? true)
+        }
+        var mask = GrantFields(
+            subjectMode: included(fields.subjectMode, label: "Subject") ? .on : .off,
+            fromMode: included(fields.fromMode, label: "From") ? .on : .off,
+            toMode: included(fields.toMode, label: "To") ? .on : .off,
+            ccMode: included(fields.ccMode, label: "Cc") ? .on : .off,
+            dateMode: included(fields.dateMode, label: "Date") ? .on : .off,
+            bodyMode: included(fields.bodyMode, label: "Body") ? .on : .off,
+            attachmentMetadataMode: included(fields.attachmentMetadataMode, label: "Attachment names")
+                ? .on : .off,
+            attachmentContentMode: .off
         )
+        if included(fields.attachmentContentMode, label: "Attachment content") {
+            mask.attachmentContentMode = .on
+        }
+        return mask
+    }
+
+    private func rememberAttachmentContentAsk(
+        agentID: String,
+        message: ReadMessage,
+        resolution: ConditionalFieldResolution
+    ) {
+        guard resolution.prompted.attachmentContent else { return }
+        let key = AttachmentContentAskCache.Key(
+            agentID: agentID,
+            accountID: message.accountID,
+            placement: message.placement,
+            messageID: message.id
+        )
+        attachmentContentAskCache.store(
+            resolution.confirmed.attachmentContent ? .allow : .block,
+            for: key
+        )
+    }
+
+    /// Effective Attachment content bit after cache / content-only Ask (Off/On unchanged).
+    private func resolveAttachmentContentAllowed(
+        fields: GrantFields,
+        agentID: String,
+        agentName: String,
+        message: ReadMessage
+    ) async -> (allowed: Bool, askBlocked: Bool) {
+        switch fields.attachmentContentMode {
+        case .on:
+            return (true, false)
+        case .off:
+            return (false, false)
+        case .ask:
+            let key = AttachmentContentAskCache.Key(
+                agentID: agentID,
+                accountID: message.accountID,
+                placement: message.placement,
+                messageID: message.id
+            )
+            if let cached = attachmentContentAskCache.decision(for: key) {
+                return (cached == .allow, cached == .block)
+            }
+            let resolution = await resolveConditionalFields(
+                fields,
+                agentName: agentName,
+                message: message,
+                limitingAskTo: ["Attachment content"]
+            )
+            rememberAttachmentContentAsk(agentID: agentID, message: message, resolution: resolution)
+            return (resolution.fields.attachmentContent, resolution.blocked.attachmentContent)
+        }
     }
 
     private func collectAskFields(_ fields: GrantFields) -> [String] {
@@ -570,6 +673,11 @@ public struct AgentReadAPI {
                 agentName: agent.name,
                 message: message
             )
+            rememberAttachmentContentAsk(
+                agentID: agent.id,
+                message: message,
+                resolution: resolution
+            )
             let fields = resolution.fields
             let granted = message.applying(fields)
             var (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
@@ -633,7 +741,7 @@ public struct AgentReadAPI {
         placement: String,
         id: String,
         filename: String
-    ) throws -> AttachmentAccessResult {
+    ) async throws -> AttachmentAccessResult {
         let started = Date()
         let agent = try authenticate(credential)
         let path = "\(accountID)/\(placement)/\(id)"
@@ -669,49 +777,13 @@ public struct AgentReadAPI {
                 throw PairingError.unauthorized
             }
             let fields = grant.fields
-            let resolvedName = message.attachments.first {
-                $0.filename.lowercased() == filename.lowercased()
-            }?.filename ?? filename
 
-            let result: AttachmentAccessResult
-            if !fields.attachmentContent {
-                result = AttachmentAccessResult(
-                    accountID: accountID,
-                    placement: placement,
-                    id: id,
-                    filename: resolvedName,
-                    byteCount: message.attachments.first {
-                        $0.filename.lowercased() == filename.lowercased()
-                    }?.byteCount,
-                    isPartial: message.isPartial,
-                    attachmentContentAccess: .notGranted,
-                    note: "Attachment content omitted: the active grant does not allow attachment content. Ask the user to enable Attachment Content on the grant."
-                )
-            } else if let meta = message.attachments.first(where: {
+            // Resolve the actual attachment metadata first. A non-existent filename is
+            // notAvailable regardless of grant/Ask state, and we must not prompt the user
+            // for an attachment that isn't there.
+            guard let meta = message.attachments.first(where: {
                 $0.filename.lowercased() == filename.lowercased()
-            }) {
-                if meta.byteCount > Self.attachmentByteLimit {
-                    result = AttachmentAccessResult(
-                        accountID: accountID,
-                        placement: placement,
-                        id: id,
-                        filename: meta.filename,
-                        byteCount: meta.byteCount,
-                        isPartial: message.isPartial,
-                        attachmentContentAccess: .tooLarge,
-                        note: "Attachment exceeds the \(Self.attachmentByteLimit)-byte size limit."
-                    )
-                } else {
-                    result = try loadAttachmentResult(
-                        accountID: accountID,
-                        placement: placement,
-                        id: id,
-                        filename: meta.filename,
-                        knownByteCount: meta.byteCount,
-                        isPartial: message.isPartial
-                    )
-                }
-            } else {
+            }) else {
                 let note: String
                 if message.attachments.isEmpty {
                     note = message.isPartial
@@ -720,7 +792,7 @@ public struct AgentReadAPI {
                 } else {
                     note = "No attachment named \"\(filename)\" on this message."
                 }
-                result = AttachmentAccessResult(
+                let result = AttachmentAccessResult(
                     accountID: accountID,
                     placement: placement,
                     id: id,
@@ -728,6 +800,85 @@ public struct AgentReadAPI {
                     isPartial: message.isPartial,
                     attachmentContentAccess: .notAvailable,
                     note: note
+                )
+
+                let auditAttachments: [MailAttachment] = message.attachments.filter {
+                    $0.filename.lowercased() == filename.lowercased()
+                }
+
+                record(
+                    kind: .getAttachment,
+                    agent: agent,
+                    started: started,
+                    detail: "\(path)/\(result.filename)",
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(
+                        AuditJSON.attachmentResult(result, pathForAudit: true)
+                    ),
+                    messages: [
+                        AuditMessageRef(
+                            accountID: message.accountID,
+                            placement: message.placement,
+                            id: message.id,
+                            subject: fields.subject ? message.subject : "",
+                            from: fields.from ? message.from : "",
+                            date: fields.date ? message.date : "",
+                            to: fields.to ? message.to : "",
+                            cc: fields.cc ? message.cc : "",
+                            bodyAccess: fields.body ? .notAvailable : .notGranted,
+                            fields: fields,
+                            attachments: auditAttachments,
+                            appliedRules: grant.applied
+                        )
+                    ]
+                )
+                return result
+            }
+
+            let contentAccess = await resolveAttachmentContentAllowed(
+                fields: fields,
+                agentID: agent.id,
+                agentName: agent.name,
+                message: message
+            )
+
+            let result: AttachmentAccessResult
+            if !contentAccess.allowed {
+                let note: String
+                if contentAccess.askBlocked {
+                    note = "Attachment content omitted: the user blocked Attachment Content on Ask for this message."
+                } else {
+                    note = "Attachment content omitted: the active grant does not allow attachment content. Ask the user to enable Attachment Content on the grant."
+                }
+                result = AttachmentAccessResult(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id,
+                    filename: meta.filename,
+                    byteCount: meta.byteCount,
+                    isPartial: message.isPartial,
+                    attachmentContentAccess: .notGranted,
+                    note: note
+                )
+            } else if meta.byteCount > Self.attachmentByteLimit {
+                result = AttachmentAccessResult(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id,
+                    filename: meta.filename,
+                    byteCount: meta.byteCount,
+                    isPartial: message.isPartial,
+                    attachmentContentAccess: .tooLarge,
+                    note: "Attachment exceeds the \(Self.attachmentByteLimit)-byte size limit."
+                )
+            } else {
+                result = try loadAttachmentResult(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id,
+                    filename: meta.filename,
+                    knownByteCount: meta.byteCount,
+                    isPartial: message.isPartial
                 )
             }
 

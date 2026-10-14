@@ -1288,12 +1288,12 @@
         line2 = stateCopyHtml("huge");
       }
 
-      // EntityTrailingAction — Preview always looks clickable; fail-closed on click when
-      // agent did not get bytes (reason under the card). Do not mute the chrome.
+      // EntityTrailingAction — Preview always works for the user; the under-card note
+      // explains the agent-side restriction. Missing has no bytes, so it stays fail-closed.
       const previewBlockedReason =
-        state === "denied" ? "Attachment content is not granted — Preview stays closed."
+        state === "denied" ? "Not delivered to the agent. You can still preview it."
         : state === "missing" ? "Attachment is not available in Mail — nothing to preview."
-        : state === "huge" ? "Attachment is too large to deliver — Preview stays closed."
+        : state === "huge" ? "Too large to deliver to the agent. You can still preview it."
         : "";
       const preview = secondaryActionHtml({
         label: "Preview",
@@ -1303,12 +1303,15 @@
         attrs: isGranted
           ? `data-preview-file data-preview-note="previewMsg"`
           : `data-preview-file data-preview-note="previewMsg" data-preview-reason="${esc(previewBlockedReason)}"`,
-        blocked: !isGranted,
+        blocked: state === "missing",
         muted: false
       });
 
       const lockedLegend = state === "denied"
-        ? `<div class="locked-legend">${lockIcon()} Locked. Grant does not allow attachment content.</div>`
+        ? `<div class="locked-legend">${lockIcon()} Locked. Grant does not allow the agent to read this field.</div>`
+        : "";
+      const previewContextNote = previewBlockedReason && state !== "missing"
+        ? `<p class="secondary-action-note" style="display:block">${esc(previewBlockedReason)}</p>`
         : "";
 
       const passRow = passMark
@@ -1338,6 +1341,7 @@
           ${cardInner}
         </div>
         ${lockedLegend}
+        ${previewContextNote}
         <p class="secondary-action-note" id="previewMsg" hidden></p>
         ${r.note ? `<p class="note">${esc(r.note)}</p>` : ""}
         ${partial ? `<p class="caption">${esc(partial)}</p>` : ""}
@@ -1807,7 +1811,7 @@
             note.hidden = false;
             note.textContent = previewBtn.getAttribute("data-preview-reason")
               || previewBtn.getAttribute("title")
-              || "Preview stays closed — this agent response did not include file bytes.";
+              || "Preview not available — this agent response did not include file bytes.";
           }
           return;
         }

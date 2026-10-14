@@ -1517,9 +1517,9 @@ enum AccessLogFormat {
         var previewBlockedReason: String? {
             switch state {
             case .granted: return nil
-            case .denied: return "Attachment content is not granted — Preview stays closed."
+            case .denied: return "Not delivered to the agent. You can still preview it."
             case .missing: return "Attachment is not available in Mail — nothing to preview."
-            case .huge: return "Attachment is too large to deliver — Preview stays closed."
+            case .huge: return "Too large to deliver to the agent. You can still preview it."
             }
         }
 

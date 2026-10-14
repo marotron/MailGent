@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.4] - 2026-10-15
+
+### Fixed
+
+- MCP `get_attachment` honors Attachment Content **Ask**: Allow writes a temp path; Block returns `not_granted` with a clear note. A later `get_attachment` on the same message reuses that decision (no second prompt).
+- Unknown attachment filenames return `not_available` immediately (no Ask prompt), even when Attachment Content is blocked on Ask for the message.
+- Access Log / Companion **Preview** still opens the file for you when the agent is denied or the attachment is too large; the note under the card explains the agent-side restriction.
+
 ## [0.11.3] - 2026-10-14
 
 ### Fixed
