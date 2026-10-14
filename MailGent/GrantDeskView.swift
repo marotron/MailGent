@@ -285,10 +285,10 @@ struct GrantDeskView: View {
                                 .font(.subheadline.weight(.semibold))
                             previewCaption(for: selected)
                             AgentAccessPreview(session: session, grant: selected)
-                                .id("\(session.agents.grantRevision)-\(session.agents.ruleRevision)-\(session.agents.leakGuardRevision)-\(AgentBridge.accessKey(for: selected))")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 8)
+                        .id("\(session.agents.grantRevision)-\(session.agents.ruleRevision)-\(session.agents.leakGuardRevision)-\(AgentBridge.accessKey(for: selected))")
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -541,11 +541,11 @@ struct GrantDeskView: View {
                         placement: nil,
                         showsLeakGuard: true,
                         interactive: isEditing
-                    ) { keyPath in
+                    ) { modeKeyPath in
                         session.agents.cycleAllowField(
                             accountID: account.id,
                             placement: nil,
-                            keyPath: keyPath
+                            modeKeyPath: modeKeyPath
                         )
                     }
                     PassToggleChips(
@@ -592,11 +592,11 @@ struct GrantDeskView: View {
                             placement: mailbox.placement,
                             showsLeakGuard: !accountWide,
                             interactive: isEditing
-                        ) { keyPath in
+                        ) { modeKeyPath in
                             session.agents.cycleAllowField(
                                 accountID: account.id,
                                 placement: mailbox.placement,
-                                keyPath: keyPath,
+                                modeKeyPath: modeKeyPath,
                                 mailboxPlacements: account.mailboxes.map(\.placement)
                             )
                         }
@@ -656,7 +656,7 @@ struct GrantDeskView: View {
         placement: String?,
         showsLeakGuard: Bool,
         interactive: Bool,
-        onToggle: @escaping (WritableKeyPath<GrantFields, Bool>) -> Void
+        onToggle: @escaping (WritableKeyPath<GrantFields, FieldAccessMode>) -> Void
     ) -> some View {
         HStack(spacing: 4) {
             if showsLeakGuard {

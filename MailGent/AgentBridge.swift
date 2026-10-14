@@ -609,19 +609,19 @@ final class AgentBridge {
     }
 
     /// Updates field caps on an existing allow (per-placement Access).
-    func updateAllowFields(accountID: String, placement: String?, fields: GrantFields) {
+    func updateAllowFields(
+        accountID: String,
+        placement: String?,
+        fields: GrantFields,
+        changedMode: PartialKeyPath<GrantFields>? = nil
+    ) {
         guard let agent = selectedAgent else { return }
         guard let existing = grantRows.first(where: {
             $0.mode == .allow && $0.accountID == accountID && $0.placement == placement
         }) else { return }
         var next = fields
         // Use modes — Bool setters collapse Ask → On/Off and were wiping Ask on save.
-        if next.attachmentContentMode != .off && next.attachmentMetadataMode == .off {
-            next.attachmentMetadataMode = .on
-        }
-        if next.attachmentMetadataMode == .off {
-            next.attachmentContentMode = .off
-        }
+        next.reconcileAttachmentModes(changed: changedMode)
         try? grants.allow(
             agentID: agent.id,
             accountID: accountID,
@@ -687,36 +687,26 @@ final class AgentBridge {
             return
         }
         fields[keyPath: modeKeyPath] = current.nextMode(allowAsk: allowAsk)
-        updateAllowFields(accountID: accountID, placement: placement, fields: fields)
+        updateAllowFields(
+            accountID: accountID,
+            placement: placement,
+            fields: fields,
+            changedMode: modeKeyPath
+        )
     }
 
     func cycleAllowField(
         accountID: String,
         placement: String?,
-        keyPath: WritableKeyPath<GrantFields, Bool>,
+        modeKeyPath: WritableKeyPath<GrantFields, FieldAccessMode>,
         mailboxPlacements: [String]? = nil
     ) {
         cycleFieldAccessMode(
             accountID: accountID,
             placement: placement,
-            modeKeyPath: Self.modeKeyPath(for: keyPath),
+            modeKeyPath: modeKeyPath,
             mailboxPlacements: mailboxPlacements
         )
-    }
-
-    static func modeKeyPath(
-        for boolKeyPath: WritableKeyPath<GrantFields, Bool>
-    ) -> WritableKeyPath<GrantFields, FieldAccessMode> {
-        // KeyPath switch equality is unreliable across call sites — compare via offset.
-        if boolKeyPath == \.subject { return \.subjectMode }
-        if boolKeyPath == \.from { return \.fromMode }
-        if boolKeyPath == \.to { return \.toMode }
-        if boolKeyPath == \.cc { return \.ccMode }
-        if boolKeyPath == \.date { return \.dateMode }
-        if boolKeyPath == \.body { return \.bodyMode }
-        if boolKeyPath == \.attachmentMetadata { return \.attachmentMetadataMode }
-        if boolKeyPath == \.attachmentContent { return \.attachmentContentMode }
-        return \.subjectMode
     }
 
     func hasAccountWideGrant(accountID: String) -> Bool {

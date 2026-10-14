@@ -1878,7 +1878,7 @@ struct GrantFieldBadgeRow: View {
     var conditionalConfirmed: GrantFields = .none
     /// Fields the user Blocked on an Ask prompt for this get (Access Log tint).
     var conditionalBlocked: GrantFields = .none
-    var onToggle: ((WritableKeyPath<GrantFields, Bool>) -> Void)? = nil
+    var onToggle: ((WritableKeyPath<GrantFields, FieldAccessMode>) -> Void)? = nil
 
     private struct Item: Identifiable {
         let id: String
@@ -1913,7 +1913,7 @@ struct GrantFieldBadgeRow: View {
                 {
                     if interactive, let onToggle {
                         Button {
-                            onToggle(item.keyPath)
+                            onToggle(item.modeKeyPath)
                         } label: {
                             compactBadge(item, mode: mode, tint: tint)
                         }

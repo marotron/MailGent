@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.3] - 2026-10-14
+
+### Fixed
+
+- Grant Desk field chips cycle Off → Ask → On → Off again. Turning Attachment Names Off while Content was Ask/On no longer resurrects Names to On (Content clears instead).
+
 ## [0.11.2] - 2026-10-12
 
 ### Fixed
