@@ -21,6 +21,12 @@ jobs:
           brew untap aws/tap || true
           brew install xcodegen
 
+      # Local DEBUG helpers (CompanionDemoPolicy / screenshot scripts) stay in git for
+      # fixture-based screenshot capture. Release builds strip them from this checkout
+      # before packaging so the DMG is not built with screenshot-only scaffolding.
+      - name: Strip screenshot demo policy
+        run: Scripts/release/strip-screenshot-demo-policy.sh
+
       - name: Build DMG
         env:
           RELEASE_TAG: ${{ github.ref_name }}

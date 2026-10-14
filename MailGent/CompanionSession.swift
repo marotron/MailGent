@@ -106,6 +106,12 @@ final class CompanionSession {
     private var loopbackStore: MailStore?
     private let worker = MailIndexWorker()
     private var indexTask: Task<Void, Never>?
+    #if DEBUG
+    /// SCREENSHOT_DEMO_POLICY — set by `MAILGENT_SCREENSHOT_POLICY=1` (make screenshots).
+    private var pendingScreenshotDemoPolicy = false
+    /// Optional scene for CI capture (`MAILGENT_SCREENSHOT_SCENE`).
+    private(set) var screenshotDemoScene: CompanionScreenshotDemo.Scene?
+    #endif
 
     private var databaseURL: URL {
         switch source {
@@ -126,6 +132,20 @@ final class CompanionSession {
         agents.ensureLoopbackListening()
         agents.setLoopbackSourceController(makeSourceController())
         agents.updateIndexState(.notStarted)
+        #if DEBUG
+        // SCREENSHOT_DEMO_POLICY — remove with CompanionDemoPolicy.swift
+        if ProcessInfo.processInfo.environment["MAILGENT_SCREENSHOT_POLICY"] == "1" {
+            pendingScreenshotDemoPolicy = true
+            screenshotDemoScene = CompanionScreenshotDemo.sceneFromEnvironment()
+            CompanionScreenshotDemo.clearReadyMarker()
+            if source != .fixture {
+                source = .fixture
+            }
+            MailGentLog.trace(
+                "screenshot demo policy pending after fixture index scene=\(screenshotDemoScene?.rawValue ?? "default")"
+            )
+        }
+        #endif
         scheduleReload(reason: "startup")
     }
 
@@ -180,6 +200,21 @@ final class CompanionSession {
     func reindexNow() {
         scheduleReload(reason: "reindex")
     }
+
+    #if DEBUG
+    /// SCREENSHOT_DEMO_POLICY — remove with CompanionDemoPolicy.swift
+    func applyScreenshotDemoPolicy() {
+        status = agents.applyScreenshotDemoPolicy()
+    }
+
+    func restoreScreenshotDemoPolicy() {
+        status = agents.restoreScreenshotDemoPolicy()
+    }
+
+    var hasScreenshotDemoPolicyBackup: Bool {
+        CompanionDemoPolicy.backupExists
+    }
+    #endif
 
     func applyLoopbackPort() {
         agents.rebindLoopbackPort()
@@ -496,6 +531,9 @@ final class CompanionSession {
             MailGentLog.trace(
                 "reload finished indexed=\(snapshot.indexedCount) onDisk=\(snapshot.catalog.messagesCount)"
             )
+            #if DEBUG
+            finishScreenshotDemoPolicyIfPending()
+            #endif
         } catch is CancellationError {
             MailGentLog.trace("reload cancelled during ingest reason=\(reason)")
             status = "Index cancelled"
@@ -506,6 +544,29 @@ final class CompanionSession {
 
         isIndexing = false
     }
+
+    #if DEBUG
+    /// SCREENSHOT_DEMO_POLICY — remove with CompanionDemoPolicy.swift
+    private func finishScreenshotDemoPolicyIfPending() {
+        guard pendingScreenshotDemoPolicy, source == .fixture else { return }
+        pendingScreenshotDemoPolicy = false
+        agents.selectAgent(named: AgentPairingPreset.cursor.displayName)
+        applyScreenshotDemoPolicy()
+        let scene = screenshotDemoScene
+        if scene == nil || scene?.opensCompanion == true {
+            DetachedWindowHost.shared.showCompanion(session: self)
+        }
+        if scene == nil || scene?.opensGrantDesk == true {
+            DetachedWindowHost.shared.showGrantDesk(session: self)
+        }
+        let readyScene = scene ?? .grantDeskScope
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(900))
+            CompanionScreenshotDemo.writeReadyMarker(scene: readyScene)
+            MailGentLog.trace("screenshot ready marker scene=\(readyScene.rawValue)")
+        }
+    }
+    #endif
 
     private func openExistingIndex(store: MailStore, databaseURL: URL) async throws -> Bool {
         do {

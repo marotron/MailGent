@@ -410,7 +410,7 @@ struct AgentReadAPITests {
         #expect(get.messages[0].appliedRuleMark(for: \.body)?.polarity == .block)
     }
 
-    @Test func getAttachmentDeniedWhenContentNotGranted() throws {
+    @Test func getAttachmentDeniedWhenContentNotGranted() async throws {
         let env = try AttachmentReadFixture(
             fields: GrantFields(
                 envelope: true,
@@ -421,7 +421,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        let result = try env.gateway.getAttachment(
+        let result = try await env.gateway.getAttachment(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -433,7 +433,7 @@ struct AgentReadAPITests {
         #expect(result.filename == "statement.pdf")
     }
 
-    @Test func getAttachmentWritesTempFileWhenContentGranted() throws {
+    @Test func getAttachmentWritesTempFileWhenContentGranted() async throws {
         let env = try AttachmentReadFixture(
             fields: GrantFields(
                 envelope: true,
@@ -444,7 +444,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        let result = try env.gateway.getAttachment(
+        let result = try await env.gateway.getAttachment(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -459,12 +459,12 @@ struct AgentReadAPITests {
         #expect(result.filename == "statement.pdf")
     }
 
-    @Test func getAttachmentUnauthorizedWithoutScope() throws {
+    @Test func getAttachmentUnauthorizedWithoutScope() async throws {
         let env = try AttachmentReadFixture(fields: nil)
         defer { env.remove() }
 
-        #expect(throws: PairingError.unauthorized) {
-            try env.gateway.getAttachment(
+        await #expect(throws: PairingError.unauthorized) {
+            try await env.gateway.getAttachment(
                 credential: env.credential,
                 accountID: env.accountID,
                 placement: "INBOX",
@@ -474,7 +474,7 @@ struct AgentReadAPITests {
         }
     }
 
-    @Test func getAttachmentUnknownFilenameIsNotAvailable() throws {
+    @Test func getAttachmentUnknownFilenameIsNotAvailable() async throws {
         let env = try AttachmentReadFixture(
             fields: GrantFields(
                 envelope: true,
@@ -485,7 +485,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        let result = try env.gateway.getAttachment(
+        let result = try await env.gateway.getAttachment(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -496,7 +496,30 @@ struct AgentReadAPITests {
         #expect(result.path == nil)
     }
 
-    @Test func getAttachmentRejectsOversizedMetadata() throws {
+    @Test func getAttachmentUnknownFilenameIsNotAvailableEvenWhenContentBlocked() async throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                envelope: true,
+                body: true,
+                attachmentMetadata: true,
+                attachmentContent: false
+            )
+        )
+        defer { env.remove() }
+
+        let result = try await env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "missing.zip"
+        )
+        #expect(result.attachmentContentAccess == .notAvailable)
+        #expect(result.note?.contains("No attachment named") == true)
+        #expect(result.path == nil)
+    }
+
+    @Test func getAttachmentRejectsOversizedMetadata() async throws {
         let env = try AttachmentReadFixture(
             fields: GrantFields(
                 envelope: true,
@@ -508,7 +531,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        let result = try env.gateway.getAttachment(
+        let result = try await env.gateway.getAttachment(
             credential: env.credential,
             accountID: env.accountID,
             placement: "INBOX",
@@ -518,6 +541,176 @@ struct AgentReadAPITests {
         #expect(result.attachmentContentAccess == .tooLarge)
         #expect(result.path == nil)
         #expect((result.byteCount ?? 0) > AgentReadAPI.attachmentByteLimit)
+    }
+
+    @Test func getAttachmentHonoursAskContentAllowFromPriorGet() async throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .on,
+                attachmentMetadataMode: .ask,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { _ in .allow }
+        )
+        defer { env.remove() }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(
+            message.leakGuardAccess?.conditionalAccessFields.contains("Attachment content") == true
+        )
+
+        let result = try await env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "statement.pdf"
+        )
+        #expect(result.attachmentContentAccess == .granted)
+        let path = try #require(result.path)
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == env.pdfBytes)
+    }
+
+    @Test func getAttachmentPromptsAskContentWhenUncached() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var fields: [String] = []
+        }
+        let capture = PromptCapture()
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask,
+                attachmentMetadataMode: .ask,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                capture.fields = context.requestedFields
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        let result = try await env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "statement.pdf"
+        )
+        #expect(capture.fields == ["Attachment content"])
+        #expect(result.attachmentContentAccess == .granted)
+        let path = try #require(result.path)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == env.pdfBytes)
+    }
+
+    @Test func getAttachmentHonoursAskContentBlockFromPriorGet() async throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .on,
+                attachmentMetadataMode: .ask,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { _ in .block }
+        )
+        defer { env.remove() }
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+
+        let result = try await env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "statement.pdf"
+        )
+        #expect(result.attachmentContentAccess == .notGranted)
+        #expect(result.path == nil)
+        #expect(result.note?.contains("blocked Attachment Content on Ask") == true)
+        #expect(result.note?.contains("enable Attachment Content on the grant") != true)
+    }
+
+    @Test func getAttachmentReusesAskContentAllowForSecondFile() async throws {
+        final class PromptCounter: @unchecked Sendable {
+            var count = 0
+        }
+        let counter = PromptCounter()
+        let jpegBytes = Data("JPEG-BYTES".utf8)
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .on,
+                attachmentMetadataMode: .ask,
+                attachmentContentMode: .ask
+            ),
+            extraJPEGAttachment: jpegBytes,
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                counter.count += 1
+                #expect(context.requestedFields.contains("Attachment content"))
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.count == 1)
+
+        let pdf = try await env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "statement.pdf"
+        )
+        let jpeg = try await env.gateway.getAttachment(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1",
+            filename: "photo.jpeg"
+        )
+        #expect(pdf.attachmentContentAccess == .granted)
+        #expect(jpeg.attachmentContentAccess == .granted)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: try #require(pdf.path))) == env.pdfBytes)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: try #require(jpeg.path))) == jpegBytes)
+        #expect(counter.count == 1)
     }
 
     @Test func getTreatsAskBodyAsOffWhenConditionalDisabled() async throws {
@@ -892,7 +1085,13 @@ private struct AttachmentReadFixture {
     let pdfBytes = Data("%PDF-1.4\nattachment-bytes".utf8)
     let gateway: AgentReadAPI
 
-    init(fields: GrantFields?, oversizedMetadata: Bool = false) throws {
+    init(
+        fields: GrantFields?,
+        oversizedMetadata: Bool = false,
+        extraJPEGAttachment: Data? = nil,
+        allowConditionalAccessPrompts: Bool = false,
+        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
+    ) throws {
         root = try FixtureTree()
         if oversizedMetadata {
             let overLimit = AgentReadAPI.attachmentByteLimit + 1
@@ -925,6 +1124,21 @@ private struct AttachmentReadFixture {
             )
         } else {
             let pdfB64 = pdfBytes.base64EncodedString()
+            let jpegPart: String
+            if let extraJPEGAttachment {
+                let jpegB64 = extraJPEGAttachment.base64EncodedString()
+                jpegPart = """
+
+                --MIX
+                Content-Type: image/jpeg; name="photo.jpeg"
+                Content-Disposition: attachment; filename="photo.jpeg"
+                Content-Transfer-Encoding: base64
+
+                \(jpegB64)
+                """
+            } else {
+                jpegPart = ""
+            }
             try root.writeEmlx(
                 named: "1.emlx",
                 rfc822: """
@@ -945,7 +1159,7 @@ private struct AttachmentReadFixture {
                 Content-Disposition: attachment; filename="statement.pdf"
                 Content-Transfer-Encoding: base64
 
-                \(pdfB64)
+                \(pdfB64)\(jpegPart)
                 --MIX--
                 """,
                 account: accountID,
@@ -972,7 +1186,9 @@ private struct AttachmentReadFixture {
             read: ReadAPI(index: index),
             pairing: pairing,
             grants: grants,
-            rules: RuleStore()
+            rules: RuleStore(),
+            allowConditionalAccessPrompts: allowConditionalAccessPrompts,
+            conditionalAccessPrompter: conditionalAccessPrompter
         )
     }
 

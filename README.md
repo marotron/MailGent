@@ -1,6 +1,6 @@
 # MailGent
 
-**0.11.3 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.11.4 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -53,13 +53,15 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Per agent: which mailboxes, From/To/date filters, deny carve-outs
 - Per field: Subject, From, To, Cc, Date, Body, attachments — each **Off**, **Ask**, or **On** (cycle chips through all three)
 - Attachment Names Off clears Attachment Content; Content On turns Names On
-- Attachment content: when On, `get_attachment` can write a local temp file for the agent (25 MiB cap)
+- Attachment content: when On, `get_attachment` can write a local temp file for the agent (25 MiB cap); when Ask, the same tool prompts Allow / Block for that message
 
 ### Ask — approve before sharing
 
 - Set a field to **Ask** when you want a human decision each time (not a standing Yes)
 - Turn on **Allow conditional access prompts** in Settings (off by default)
 - On MCP `get`, MailGent shows an on-device **Email access request** dialog (**Allow / Block**) with a message preview; blocked fields stay withheld
+- On MCP `get_attachment` with Attachment Content on Ask, MailGent prompts for that field only; Allow/Block is remembered for the message until you restart
+- A missing attachment filename returns `not_available` without prompting
 - Help row names the agent; expand More for field / Allow·Block detail
 - HTML-only Body shows an **HTML only** badge on the title row; plain preview is derived from HTML when needed
 - Preview canvas has − / + zoom (default 75%); dialog height stays compact (~560pt max)
@@ -80,6 +82,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Every agent call is logged with exactly what the agent received (sanitized / withheld overlays)
 - List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log
+- Attachment **Preview** still opens for you when the agent was denied or the file is too large; the note under the card is about agent delivery, not your preview
 - Agents cannot edit the log; you can delete entries in Settings
 
 ### Drafts
@@ -121,9 +124,13 @@ Menu bar only (`LSUIElement`). Settings → Access → Recheck, Open Full Disk A
 Build a Release `.dmg` locally (output: `dist/MailGent-<version>.dmg`, version from `project.yml`):
 
 ```bash
-make dmg        # package only
-make release    # run tests, then package
+make dmg             # package only
+make release         # run tests, then package
+make screenshots     # DEBUG: fixture + demo grants/rules (capture locally)
+make screenshots-ci  # DEBUG: same, auto-write PNGs under dist/screenshots/
 ```
+
+Capture README / `docs/screenshots/` images **locally** with fixture fake data (`make screenshots`). Release tags strip screenshot-only scaffolding before the DMG. Full workflow: [`docs/agents/screenshots.md`](docs/agents/screenshots.md).
 
 For Gatekeeper-safe distribution, set before `make dmg`:
 

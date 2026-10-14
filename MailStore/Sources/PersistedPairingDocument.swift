@@ -6,12 +6,21 @@ public struct PersistedAgentCredential: Codable, Equatable, Sendable {
     public var name: String
     public var trustClass: String
     public var credential: String
+    /// When the Bearer was issued. Optional for pairing files written before this field existed.
+    public var issuedAt: Date?
 
-    public init(agentID: String, name: String, trustClass: String, credential: String) {
+    public init(
+        agentID: String,
+        name: String,
+        trustClass: String,
+        credential: String,
+        issuedAt: Date? = nil
+    ) {
         self.agentID = agentID
         self.name = name
         self.trustClass = trustClass
         self.credential = credential
+        self.issuedAt = issuedAt
     }
 }
 
@@ -33,10 +42,12 @@ public struct PersistedPairingDocument: Codable, Equatable, Sendable {
 
     /// Decode v2, or wrap a legacy v1 single-agent file. `migrated` is true when the caller should rewrite v2.
     public static func decodeMigrating(from data: Data) throws -> (document: PersistedPairingDocument, migrated: Bool) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         if let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
            root["agents"] is [Any]
         {
-            let document = try JSONDecoder().decode(PersistedPairingDocument.self, from: data)
+            let document = try decoder.decode(PersistedPairingDocument.self, from: data)
             return (document, false)
         }
 
@@ -47,7 +58,7 @@ public struct PersistedPairingDocument: Codable, Equatable, Sendable {
             let credential: String
         }
 
-        let v1 = try JSONDecoder().decode(V1.self, from: data)
+        let v1 = try decoder.decode(V1.self, from: data)
         let agent = PersistedAgentCredential(
             agentID: v1.agentID,
             name: v1.name,

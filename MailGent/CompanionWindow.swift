@@ -809,6 +809,29 @@ struct CompanionWindow: View {
                 .disabled(session.isBusy || !session.canCycleSource)
                 .help("Switch to \(session.nextSource.title)")
             }
+            #if DEBUG
+            // SCREENSHOT_DEMO_POLICY — remove with CompanionDemoPolicy.swift
+            if session.source == .fixture {
+                Divider()
+                Text("DEBUG · screenshot policy")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.purple)
+                Text("Backs up live grants/rules, then plants 2 fixture accounts + Shared rules A–D. Restore undoes.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Load screenshot policy") {
+                        session.applyScreenshotDemoPolicy()
+                    }
+                    .disabled(session.isBusy)
+                    Button("Restore real policy") {
+                        session.restoreScreenshotDemoPolicy()
+                    }
+                    .disabled(session.isBusy || !session.hasScreenshotDemoPolicyBackup)
+                }
+            }
+            #endif
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -908,7 +931,8 @@ private struct AgentPresetCard: View {
 
                 AgentMCPConfigDisclosure(
                     redactedSnippet: session.agents.displayConfigSnippet(for: paired),
-                    revealedSnippet: session.agents.configSnippet(for: paired)
+                    revealedSnippet: session.agents.configSnippet(for: paired),
+                    issuedAt: paired.issuedAt
                 )
 
                 HStack(spacing: 8) {
@@ -988,6 +1012,7 @@ private struct AgentPresetCard: View {
 private struct AgentMCPConfigDisclosure: View {
     let redactedSnippet: String
     let revealedSnippet: String
+    let issuedAt: Date?
 
     @State private var showConfig = false
     @State private var showBearer = false
@@ -1011,8 +1036,9 @@ private struct AgentMCPConfigDisclosure: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
 
+                Spacer(minLength: 0)
+
                 if showConfig {
-                    Spacer(minLength: 0)
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) {
                             showBearer.toggle()
@@ -1026,6 +1052,12 @@ private struct AgentMCPConfigDisclosure: View {
                     }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
+                } else if let issuedAt {
+                    Text(Self.issuedCaption(issuedAt))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.trailing)
                 }
             }
 
@@ -1038,6 +1070,23 @@ private struct AgentMCPConfigDisclosure: View {
                     .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
             }
         }
+    }
+
+    /// Short datetime plus calendar age, e.g. `12/10/2026, 17:39 (3 days ago)`.
+    private static func issuedCaption(_ issuedAt: Date, now: Date = .now) -> String {
+        let clock = issuedAt.formatted(date: .numeric, time: .shortened)
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: issuedAt),
+            to: Calendar.current.startOfDay(for: now)
+        ).day ?? 0
+        let age: String
+        switch days {
+        case ...0: age = "today"
+        case 1: age = "1 day ago"
+        default: age = "\(days) days ago"
+        }
+        return "Generated \(clock) (\(age))"
     }
 }
 

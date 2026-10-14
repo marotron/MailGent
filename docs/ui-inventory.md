@@ -57,7 +57,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 |---|---|
 | **Job** | Delivered attachment result (`get_attachment`) |
 | **States** | `granted` / `denied` / `missing` / `huge` (hatch + status icon when not granted) |
-| **Trailing** | `Preview` always — same clickable chrome for all states; denied / missing / huge fail-closed on click (reason under card), not dimmed |
+| **Trailing** | `Preview` always — same clickable chrome for all states; opens the file for the user even when denied / huge (reason under card shows the agent-side restriction), not dimmed. Missing shows reason only because there are no bytes. |
 | **For-row** | Plain “for [subject]” (not a link) · parent message handoff trails right — **not** “open the attachment in Mail” |
 | **Swift** | `FileCard` in `CompanionBits.swift`; Companion Read uses `MessageAttachmentRow` |
 | **HTML** | `.file-card` in `prototype-access-log-attach.html` |
@@ -168,7 +168,7 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 
 | Action ID | Label | Icon (SF Symbol) | Placement | When |
 |---|---|---|---|---|
-| `previewFile` | Preview | `eye` | Entity trailing on `FileCard` (`get_attachment`) | Always on file card with full chrome; granted runs preview; denied / missing / huge fail-closed explain on click |
+| `previewFile` | Preview | `eye` | Entity trailing on `FileCard` (`get_attachment`) | Always on file card with full chrome; opens the file for the user. Denied / huge also show the agent-side restriction under the card; missing only shows reason because there are no bytes |
 | `previewMessage` | Preview | `eye` | Trailing right on `MessageAccessCard` / `SearchResultCard` chip-row | Message focus (`get`, search/list) — opens Companion Read (re-fetch). Not file bytes |
 | `openMessageInMail` | Open in Apple Mail | `OpenInMailGlyph` (`arrow.up.right.square`) | Trailing right on message/search chip-row (Companion Read: under body) | Message in focus (`get`, search card, Companion Read) |
 | `openParentMessageInMail` | Open message in Apple Mail | `OpenInMailGlyph` (`arrow.up.right.square`) | Trailing right on `attach-for` (“for [subject]”) | Attachment in focus (`get_attachment`) — opens **parent email**, not the file |
@@ -227,6 +227,7 @@ SecondaryActionRow
 
 | Date | Change |
 |---|---|
+| 2026-10-14 | FileCard Preview opens the file for the user even when agent access is denied / too large; the under-card note now explains the agent-side restriction instead of saying Preview stays closed. Missing still shows reason only. |
 | 2026-10-12 | Ask preview canvas: floating sticky `AskPreviewZoomControls` (− \| +); default 75% page zoom; plain Ask body uses `NSTextView.scrollableTextView()`. |
 | 2026-10-12 | Ask: title `Email access request`; centered larger `?` + callout “{agent} wants access…” + More/Less; popup capped (~560); Body `HTML only` title badge. |
 | 2026-10-04 | Access Log `get` chip-row Preview opens Companion Read (same as search); file Preview stays on `get_attachment` FileCard. |

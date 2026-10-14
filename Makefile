@@ -5,7 +5,7 @@ DERIVED_DATA := .build/DerivedData
 
 .DEFAULT_GOAL := test
 
-.PHONY: generate test run xcode prototype-accounts dmg release
+.PHONY: generate test run xcode prototype-accounts dmg screenshots screenshots-ci release
 
 generate:
 	xcodegen generate
@@ -31,5 +31,16 @@ prototype-accounts: generate
 dmg: generate
 	@./Scripts/release/dmg.sh
 
+# SCREENSHOT_DEMO_POLICY — DEBUG only; remove with CompanionDemoPolicy.swift
+screenshots:
+	@./Scripts/release/screenshots.sh
+
+screenshots-ci:
+	@./Scripts/release/screenshots.sh --ci
+
 release: test dmg
+	@echo ""
+	@echo "→ DMG ready. Docs screenshots: make screenshots (local DEBUG + fixture fake data)."
+	@echo "  GitHub Release strips SCREENSHOT_DEMO_POLICY before packaging the DMG."
+	@echo ""
 

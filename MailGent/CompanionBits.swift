@@ -2055,8 +2055,6 @@ struct FileCard: View {
     var showsLockedLegend: Bool = true
     var onPreview: (() -> Void)? = nil
 
-    @State private var previewNote: String?
-
     /// Match Attachment Info `attachmentTile` radius when side-by-side in get Formatted.
     private static let cardRadius: CGFloat = 6
 
@@ -2066,8 +2064,8 @@ struct FileCard: View {
             if showsLockedLegend, model.state == .denied {
                 LockedFieldsLegend()
             }
-            if let previewNote {
-                Text(previewNote)
+            if let reason = model.previewBlockedReason {
+                Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -2146,12 +2144,7 @@ struct FileCard: View {
     private var previewControl: some View {
         if showsPreview {
             SecondaryActionButton(title: "Preview", systemImage: "eye") {
-                if let reason = model.previewBlockedReason {
-                    previewNote = reason
-                } else {
-                    previewNote = nil
-                    onPreview?()
-                }
+                onPreview?()
             }
         }
     }
