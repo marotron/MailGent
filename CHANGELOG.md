@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.5] - 2026-10-15
+
+### Fixed
+
+- Ask **Allow / Block** no longer go dead after a backlog of queued prompts. Finishing one Ask no longer leaves a window that delayed “keep visible” work could resurrect with buttons that do nothing; queued prompts keep the same window and swap content instead of flashing out and back.
+
 ## [0.11.4] - 2026-10-15
 
 ### Fixed
