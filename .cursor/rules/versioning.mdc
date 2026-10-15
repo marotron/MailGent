@@ -57,9 +57,9 @@ GitHub **Verified** on the Tags page requires a cryptographically signed tag. Un
 **Always** create release tags as:
 
 ```bash
-git tag -s "vX.Y.Z" -m "X.Y.Z alpha"
-git verify-tag "vX.Y.Z"   # must succeed before push
-git push origin "vX.Y.Z"
+    git tag -s "vX.Y.Z" -m "X.Y.Z alpha"
+    git verify-tag "vX.Y.Z"   # must succeed before push
+    git push origin "vX.Y.Z"
 ```
 
 **Never** for a ship tag:
@@ -69,12 +69,34 @@ git push origin "vX.Y.Z"
 - Pushing a tag when `git verify-tag` fails
 - Falling back to unsigned if signing is misconfigured — **stop** and fix signing first
 
-Signing setup (SSH preferred; one-time on this machine + GitHub):
+### Signing setup (SSH preferred; one-time on this machine + GitHub)
+
+If `git tag -s` fails with "gpg failed to sign the data", signing is not configured. Fix it before retrying.
 
 1. `git config --global gpg.format ssh`
 2. `git config --global user.signingkey ~/.ssh/id_ed25519_github` (or the key you use)
-3. GitHub → Settings → SSH and GPG keys → **New SSH key** → Key type **Signing Key** (same pubkey can already exist as Authentication)
-4. Optional: `git config --global tag.gpgsign true` so plain `git tag -s` always signs
+3. `git config --global gpg.ssh.allowedSignersFile ~/.git_allowed_signers`
+4. Create the allowed signers file with your email + public key:
+
+   ```bash
+   echo "$(git config user.email) $(cat ~/.ssh/id_ed25519_github.pub)" > ~/.git_allowed_signers
+   ```
+
+5. GitHub → Settings → SSH and GPG keys → **New SSH key** → Key type **Signing Key** (same pubkey can already exist as Authentication)
+6. Optional: `git config --global tag.gpgsign true` so plain `git tag -s` always signs
+
+### Pre-tag checklist
+
+Before creating the tag, run:
+
+```bash
+    git config --get gpg.format          # must be ssh
+    git config --get user.signingkey     # must point to your SSH signing key
+    git config --get gpg.ssh.allowedSignersFile   # must exist
+    test -f "$(git config gpg.ssh.allowedSignersFile)"
+```
+
+If any check fails, run the signing setup above. Then create the tag, verify it, and only then push.
 
 Closeout must propose the signed form, e.g. `Proposed tag: git tag -s vX.Y.Z -m "X.Y.Z alpha"`.
 
