@@ -8,22 +8,24 @@
 
 ## Screenshots
 
+Captured in **v0.8.2** — UI has changed since then, especially around Ask, the access log, and Settings.
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/menu-bar.png" alt="Menu-bar status"><br><b>Menu bar</b> — access, last ingest, connected agents, last agent call.</td>
-    <td width="50%"><img src="docs/screenshots/control-center.png" alt="Control center"><br><b>Control center</b> — access health, ingest stats, one card per paired agent.</td>
+    <td width="50%"><img src="docs/screenshots/menu-bar.png" alt="Menu-bar status"><br><b>Menu bar</b> <i>(v0.8.2)</i> — access, last ingest, connected agents, last agent call.</td>
+    <td width="50%"><img src="docs/screenshots/control-center.png" alt="Control center"><br><b>Control center</b> <i>(v0.8.2)</i> — access health, ingest stats, one card per paired agent.</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/grant-desk-scope.png" alt="Grant Desk Scope"><br><b>Grant Desk · Scope</b> — allowed placements per agent, field caps, leak guard.</td>
-    <td><img src="docs/screenshots/grant-desk-access.png" alt="Grant Desk Access"><br><b>Grant Desk · Access</b> — per-placement fields, presets, preview with leak guard applied.</td>
+    <td><img src="docs/screenshots/grant-desk-scope.png" alt="Grant Desk Scope"><br><b>Grant Desk · Scope</b> <i>(v0.8.2)</i> — allowed placements per agent, field caps, leak guard.</td>
+    <td><img src="docs/screenshots/grant-desk-access.png" alt="Grant Desk Access"><br><b>Grant Desk · Access</b> <i>(v0.8.2)</i> — per-placement fields, presets, preview with leak guard applied.</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/grant-desk-rules.png" alt="Pass and Block rules"><br><b>Shared · Rules</b> — Pass / Block overlays by From and Subject.</td>
-    <td><img src="docs/screenshots/grant-desk-privacy.png" alt="Leak guard detectors"><br><b>Shared · Privacy</b> — built-in detectors, custom filters, hit modes.</td>
+    <td><img src="docs/screenshots/grant-desk-rules.png" alt="Pass and Block rules"><br><b>Shared · Rules</b> <i>(v0.8.2)</i> — Pass / Block overlays by From and Subject.</td>
+    <td><img src="docs/screenshots/grant-desk-privacy.png" alt="Leak guard detectors"><br><b>Shared · Privacy</b> <i>(v0.8.2)</i> — built-in detectors, custom filters, hit modes.</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/access-log.png" alt="Access log"><br><b>Access Log</b> — every agent call, with leak-guard and rule hit counts.</td>
-    <td><img src="docs/screenshots/access-log-json-pretty.png" alt="Access log JSON response"><br><b>Access Log · JSON</b> — the exact response the agent received.</td>
+    <td><img src="docs/screenshots/access-log.png" alt="Access log"><br><b>Access Log</b> <i>(v0.8.2)</i> — every agent call, with leak-guard and rule hit counts.</td>
+    <td><img src="docs/screenshots/access-log-json-pretty.png" alt="Access log JSON response"><br><b>Access Log · JSON</b> <i>(v0.8.2)</i> — the exact response the agent received.</td>
   </tr>
 </table>
 

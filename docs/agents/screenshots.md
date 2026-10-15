@@ -29,7 +29,9 @@ Do **not** capture screenshots on hosted runners. Do **not** ship real Mail / li
    - `grant-desk-scope.png` / `grant-desk-access.png` / `grant-desk-rules.png` / `grant-desk-privacy.png`
    - `access-log.png` (optional this pass)
 
-4. Optional HQ refs: `docs/agents/assets/refs/<MARKETING_VERSION>/` (and `-hq/` if you keep originals).
+4. Update `README.md` screenshot captions with the version they were captured in, e.g. `<b>Menu bar</b> <i>(v0.11.5)</i> — …`.
+
+5. Optional HQ refs: `docs/agents/assets/refs/<MARKETING_VERSION>/` (and `-hq/` if you keep originals).
 
 5. Companion → Last ingest → **Restore real policy** (or quit after restore) so live grants/rules come back.
 
