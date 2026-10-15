@@ -1,0 +1,2299 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — Control Center when agents are user-defined endpoints.
+  Question: layout for N agents with name, optional icon, MCP and/or CLI.
+  Variants via ?variant=A|B|C — also ← → keys / floating bar.
+  Open: open .scratch/mailgent-local-cli/examples/prototype-agent-api-settings.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Agent API settings proto</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --window: #ececec;
+      --paper: #ffffff;
+      --ink: #000000;
+      --secondary: rgba(0, 0, 0, 0.55);
+      --separator: rgba(0, 0, 0, 0.12);
+      --accent: #007aff;
+      --orange: #ff9500;
+      --destructive: #ff3b30;
+      --green: #34c759;
+      --text-bg: #ffffff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      --radius-card: 12px;
+      --radius-snippet: 6px;
+      --radius-btn: 6px;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink);
+      font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      padding: 24px 16px 100px;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .page { max-width: 960px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note strong { font-weight: 650; }
+    .note table { width: 100%; border-collapse: collapse; margin: 8px 0 0; font-size: 11px; }
+    .note th, .note td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid #00000012; vertical-align: top; }
+    .note th { color: var(--secondary); font-weight: 600; width: 72px; }
+
+    .window {
+      max-width: 920px;
+      background: var(--window);
+      border: 1px solid var(--separator);
+      border-radius: 10px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      overflow: hidden;
+    }
+    .titlebar {
+      height: 28px;
+      background: linear-gradient(180deg, #f6f6f6, #ececec);
+      border-bottom: 1px solid var(--separator);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 7px;
+    }
+    .titlebar .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .titlebar .dot.r { background: #ff5f57; border: 1px solid #e0443e; }
+    .titlebar .dot.y { background: #febc2e; border: 1px solid #dea123; }
+    .titlebar .dot.g { background: #28c840; border: 1px solid #1aab29; }
+    .titlebar span {
+      flex: 1; text-align: center; font-size: 13px; font-weight: 510;
+      color: rgba(0, 0, 0, 0.85); margin-right: 40px;
+    }
+
+    .scroll { max-height: calc(100vh - 160px); overflow: auto; padding: 24px; }
+
+    .cc-header {
+      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px;
+    }
+    .cc-header h1 {
+      margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.02em;
+    }
+    .cc-header .sub { margin: 2px 0 0; font-size: 13px; color: var(--secondary); }
+    .cc-header .actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+    .btn-bordered {
+      appearance: none;
+      border: 1px solid var(--separator);
+      background: linear-gradient(180deg, #fafafa, #f0f0f0);
+      border-radius: var(--radius-btn);
+      padding: 4px 10px;
+      font-size: 13px;
+      color: var(--ink);
+      box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.8) inset;
+    }
+    .btn-bordered:hover { background: linear-gradient(180deg, #ffffff, #f4f4f4); }
+    .btn-bordered:active { background: #e8e8e8; }
+    .btn-bordered:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-bordered.destructive {
+      color: var(--destructive);
+      background: linear-gradient(180deg, #fffafa, #f8f0f0);
+    }
+    .btn-bordered.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+      box-shadow: none;
+    }
+    .btn-bordered.primary:hover { filter: brightness(1.05); }
+
+    .btn-ghost {
+      appearance: none; border: none; background: transparent;
+      padding: 4px 6px; font-size: 13px; color: var(--secondary);
+      border-radius: 4px; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .btn-ghost:hover { background: rgba(0, 0, 0, 0.05); color: rgba(0, 0, 0, 0.65); }
+    .btn-ghost .chev {
+      display: inline-block; font-size: 11px; transition: transform 0.15s ease;
+    }
+    .btn-ghost[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+    .chip {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0; border-radius: 7px;
+      border: 1px solid var(--separator); background: #eef5ff;
+      flex: none; overflow: hidden;
+    }
+    .chip img {
+      width: 22px; height: 22px; display: block; object-fit: contain;
+    }
+    .chip.sm { width: 22px; height: 22px; border-radius: 5px; }
+    .chip.sm img { width: 16px; height: 16px; }
+
+    .glyph {
+      width: 30px; height: 30px; flex: none; border-radius: 7px;
+      display: inline-grid; place-items: center; overflow: hidden;
+      background: #e8e8ed; font-weight: 700; font-size: 12px; color: #3a3a3c;
+    }
+    .glyph img { width: 30px; height: 30px; object-fit: contain; display: block; }
+    .glyph.mark-grok img { border-radius: 6.7px; }
+    .glyph.symbol { font-size: 15px; font-weight: 500; }
+    .glyph.sm { width: 22px; height: 22px; font-size: 10px; border-radius: 5px; }
+    .glyph.sm img { width: 22px; height: 22px; }
+
+    /* —— Variant A: cards —— */
+    .agent-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+    }
+    @media (max-width: 720px) { .agent-grid { grid-template-columns: minmax(0, 1fr); } }
+
+    .agent-card {
+      min-width: 0; /* equal tracks: long <pre> must not blow a column */
+      padding: 10px 12px; background: var(--paper);
+      border-radius: var(--radius-card); border: 1px solid var(--separator);
+      text-align: left;
+    }
+    .agent-card.selected { border: 2px solid var(--accent); padding: 9px 11px; }
+    .agent-card.is-expanded { padding: 12px; }
+    .agent-card.selected.is-expanded { padding: 11px; }
+    .agent-add {
+      border-style: dashed; background: transparent; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; min-height: 72px; color: var(--secondary);
+    }
+    .agent-add:hover { background: rgba(0, 122, 255, 0.04); border-color: var(--accent); color: var(--accent); }
+    .agent-add .plus { font-size: 22px; font-weight: 300; line-height: 1; }
+
+    .card-summary {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      border: 0; background: transparent; padding: 0; margin: 0;
+      text-align: left; cursor: pointer; color: inherit; font: inherit;
+    }
+    .card-summary:hover .agent-title { color: var(--accent); }
+    .card-summary .chev {
+      flex: none; font-size: 14px; color: var(--secondary); line-height: 1;
+      transition: transform 0.12s ease;
+    }
+    .agent-card.is-expanded > .card-summary .chev { transform: rotate(90deg); }
+    .card-body { margin-top: 8px; }
+    .card-body .listen-row { border-top: 1px solid var(--separator); }
+
+    .agent-head {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
+    .agent-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+    .agent-title { margin: 0; font-size: 13px; font-weight: 600; }
+    .agent-trust { margin: 0; font-size: 11px; color: var(--secondary); }
+    .chip-row { display: flex; gap: 4px; flex-wrap: wrap; flex: none; }
+
+    .listen-row {
+      display: flex; align-items: baseline; gap: 8px; margin: 0;
+      padding: 8px 0; border-bottom: 1px solid var(--separator);
+    }
+    .listen-note { margin: 0; font-size: 11px; color: var(--secondary); flex: 1; min-width: 0; }
+    .grant-label { flex: none; font-size: 11px; color: var(--secondary); white-space: nowrap; }
+    .grant-label.warn { color: var(--orange); }
+
+    .channel-panels { margin-top: 8px; display: grid; gap: 8px; }
+    .panel-block {
+      border: 1px solid var(--separator); border-radius: 8px; padding: 8px;
+      background: #fafafa;
+    }
+    .panel-block h3 {
+      margin: 0 0 6px; font-size: 11px; font-weight: 650; color: var(--secondary);
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .config-snippet {
+      margin-top: 6px; padding: 6px; border-radius: var(--radius-snippet);
+      background: var(--text-bg); font: 10px/1.45 var(--mono);
+      white-space: pre; overflow-x: auto; max-width: 100%; box-sizing: border-box;
+      user-select: all; border: 1px solid var(--separator);
+    }
+    .setup-step-list {
+      margin: 0 0 12px; padding-left: 18px; font-size: 12px; line-height: 1.55; color: var(--text);
+    }
+    .setup-step-list li { margin-bottom: 6px; }
+    .setup-step-list code { font: 11px/1.4 var(--mono); background: var(--text-bg); padding: 1px 4px; border-radius: 4px; }
+    .sheet.setup { width: min(520px, 100%); }
+    .cli-warn {
+      font-size: 11px; color: var(--orange); margin: 0 0 6px; line-height: 1.4;
+    }
+    .card-footer {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
+    }
+    .card-footer .spacer { flex: 1; }
+    .copy-hint { font-size: 10px; color: var(--secondary); }
+
+    /* —— Variant B: list + inspector —— */
+    .split {
+      display: grid; grid-template-columns: 240px 1fr; gap: 12px; min-height: 420px;
+    }
+    @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+    .roster, .inspector {
+      background: var(--paper); border: 1px solid var(--separator);
+      border-radius: var(--radius-card); padding: 10px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pane-label {
+      font-size: 11px; font-weight: 650; color: var(--secondary); letter-spacing: 0.02em;
+    }
+    .roster-list { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow: auto; }
+    .roster-item {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      border: 0; background: transparent; padding: 8px; border-radius: 8px; text-align: left;
+    }
+    .roster-item:hover { background: #f2f2f7; }
+    .roster-item.sel { background: #d6e9ff; }
+    .roster-item .meta { min-width: 0; flex: 1; }
+    .roster-item .name { font-weight: 600; font-size: 12px; }
+    .roster-item .sub { font-size: 10px; color: var(--secondary); }
+
+    .field { display: grid; gap: 4px; margin-bottom: 10px; }
+    .field label { font-size: 11px; font-weight: 600; color: var(--secondary); }
+    .field input[type="text"] {
+      border: 1px solid var(--separator); border-radius: 6px; padding: 6px 8px;
+      background: #fff;
+    }
+    .field .err { font-size: 11px; color: var(--destructive); }
+
+    .toggle-row {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+    }
+    .toggle {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 12px; border: 1px solid var(--separator); border-radius: 8px;
+      background: #fff; cursor: pointer; user-select: none;
+    }
+    .toggle.on { border-color: var(--accent); background: #eef5ff; }
+    .toggle input { accent-color: var(--accent); }
+    .toggle .t-label { font-weight: 650; font-size: 13px; }
+    .toggle .t-sub { font-size: 10px; color: var(--secondary); }
+
+    .icon-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .icon-opt {
+      width: 36px; height: 36px; border: 1px solid var(--separator); border-radius: 8px;
+      background: #fff; display: grid; place-items: center; padding: 0;
+    }
+    .icon-opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px #a8d0ff; }
+    .icon-opt.none { font-size: 9px; font-weight: 650; color: var(--secondary); }
+
+    .color-dot {
+      width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff;
+      box-shadow: 0 0 0 1px var(--separator);
+    }
+
+    .insp-toolbar {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    }
+    .insp-toolbar .pane-label { flex: 1; margin: 0; }
+    .mode-pill {
+      font-size: 10px; font-weight: 650; letter-spacing: 0.02em;
+      padding: 2px 8px; border-radius: 999px; background: #f2f2f7; color: var(--secondary);
+    }
+    .mode-pill.edit { background: #eef5ff; color: var(--accent); }
+    .insp-identity {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .insp-identity .meta { flex: 1; min-width: 0; }
+    .insp-identity .title { margin: 0; font-size: 15px; font-weight: 650; }
+    .insp-identity .sub { margin: 2px 0 0; font-size: 11px; color: var(--secondary); }
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 720px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .stat-card {
+      background: #f7f7fa; border: 1px solid var(--separator); border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .stat-card .n { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .stat-card .l { font-size: 10px; color: var(--secondary); margin-top: 2px; }
+    .stat-card.warn .n { color: var(--orange); }
+    .chart-block {
+      border: 1px solid var(--separator); border-radius: 10px; padding: 10px 12px;
+      background: #fafafa; margin-bottom: 12px;
+    }
+    .chart-block .chart-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .chart-block .chart-title { font-size: 11px; font-weight: 650; color: var(--secondary); letter-spacing: 0.02em; text-transform: uppercase; }
+    .chart-block .chart-note { font-size: 10px; color: var(--secondary); }
+    .chart-scope {
+      display: inline-flex; border: 1px solid var(--separator); border-radius: 7px; overflow: hidden;
+      background: #fff;
+    }
+    .chart-scope button {
+      appearance: none; border: 0; background: transparent; padding: 3px 9px;
+      font-size: 11px; font-weight: 600; color: var(--secondary); cursor: pointer;
+    }
+    .chart-scope button + button { border-left: 1px solid var(--separator); }
+    .chart-scope button.on { background: #eef5ff; color: var(--accent); }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px;
+      font-size: 10px; color: var(--secondary);
+    }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .chart-legend i {
+      width: 10px; height: 3px; border-radius: 2px; background: currentColor; display: inline-block;
+    }
+    .chart-block svg { display: block; width: 100%; height: 88px; }
+    .chart-block.svg-tall svg { height: 110px; }
+    .detail-block {
+      border: 1px solid var(--separator); border-radius: 10px; padding: 10px 12px;
+      background: #fff; margin-bottom: 10px;
+    }
+    .detail-block h3 {
+      margin: 0 0 8px; font-size: 11px; font-weight: 650; color: var(--secondary);
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .detail-rows { display: grid; gap: 6px; }
+    .detail-row {
+      display: flex; align-items: baseline; gap: 10px; font-size: 12px;
+    }
+    .detail-row .k { flex: none; width: 96px; color: var(--secondary); font-size: 11px; }
+    .detail-row .v { flex: 1; min-width: 0; word-break: break-word; }
+    .detail-row .v.mono { font: 11px/1.4 var(--mono); }
+
+    /* —— Variant C: compact roster —— */
+    .compact-head {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .compact-head .cta { margin-left: auto; }
+    .compact-list { display: flex; flex-direction: column; gap: 6px; }
+    .compact-row {
+      background: var(--paper); border: 1px solid var(--separator);
+      border-radius: 10px; overflow: hidden;
+    }
+    .compact-main {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      border: 0; background: transparent; padding: 10px 12px; text-align: left;
+    }
+    .compact-main:hover { background: #f7f7f7; }
+    .compact-main .name { font-weight: 600; flex: 1; }
+    .compact-body {
+      padding: 0 12px 12px; border-top: 1px solid var(--separator);
+      background: #fafafa;
+    }
+
+    /* —— Sheet / dialog —— */
+    .backdrop {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.28);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; z-index: 100;
+    }
+    .backdrop[hidden] { display: none; }
+    .sheet {
+      width: min(440px, 100%);
+      background: var(--paper); border-radius: 14px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+      padding: 20px; max-height: calc(100vh - 48px); overflow: auto;
+    }
+    .sheet h2 { margin: 0 0 4px; font-size: 17px; font-weight: 650; }
+    .sheet .blurb { margin: 0 0 14px; font-size: 12px; color: var(--secondary); }
+    .steps {
+      display: flex; gap: 6px; margin-bottom: 14px;
+    }
+    .steps span {
+      flex: 1; text-align: center; font-size: 10px; font-weight: 650;
+      padding: 4px; border-radius: 6px; background: #f2f2f7; color: var(--secondary);
+    }
+    .steps span.on { background: #eef5ff; color: var(--accent); }
+    .steps span.done { color: var(--green); }
+    .templates { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .templates button {
+      border: 1px solid var(--separator); background: #fff; border-radius: 8px;
+      padding: 6px 10px; font-size: 12px; font-weight: 600;
+    }
+    .templates button.on { border-color: var(--accent); background: #eef5ff; color: var(--accent); }
+    .sheet-actions {
+      display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
+      padding-top: 12px; border-top: 1px solid var(--separator);
+    }
+    .channel-hero {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 12px;
+    }
+    .channel-hero .toggle {
+      flex-direction: column; align-items: flex-start; padding: 14px;
+      min-height: 88px;
+    }
+    .channel-hero .t-label { font-size: 16px; }
+
+    .state-dump {
+      margin: 0; padding: 12px 14px; border-radius: 10px;
+      background: #1d1d1f; color: #d1d1d6; font: 11px/1.45 var(--mono);
+      white-space: pre-wrap; overflow: auto; max-height: 280px;
+    }
+
+    .switcher {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px; z-index: 50;
+      background: #1d1d1f; color: #f5f5f7; border-radius: 999px;
+      padding: 8px 10px; box-shadow: 0 10px 30px #00000040;
+      font-size: 12px; font-weight: 600;
+    }
+    .switcher button {
+      border: 0; background: #3a3a3c; color: #fff; border-radius: 999px;
+      width: 28px; height: 28px; font-size: 14px;
+    }
+    .switcher button:hover { background: #4b5563; }
+    .switcher .label { min-width: 260px; text-align: center; }
+    .switcher .label span {
+      display: block; font-weight: 500; color: #9ca3af; font-size: 10px; margin-top: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <strong>Throwaway proto</strong> · User-defined agent endpoints (name · icon · MCP and/or CLI).
+      Flip A/B/C below. Footer dumps live JSON state.
+      <table>
+        <tr><th>A</th><td>Dynamic cards — N cards + dashed Add tile; inline Pair/Revoke + expand</td></tr>
+        <tr><th>B</th><td>List + inspector — View (stats + chart + creds) / Edit (name, access, icon); Add = draft</td></tr>
+        <tr><th>C</th><td>Channels-first sheet — compact roster; stepped Add (name → channels → icon)</td></tr>
+      </table>
+    </div>
+
+    <div class="window">
+      <div class="titlebar" aria-hidden="true">
+        <span class="dot r"></span>
+        <span class="dot y"></span>
+        <span class="dot g"></span>
+        <span>MailGent</span>
+      </div>
+      <div class="scroll" id="root"></div>
+    </div>
+
+    <pre class="state-dump" id="stateDump"></pre>
+  </div>
+
+  <div class="backdrop" id="sheetBackdrop" hidden>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <div class="backdrop" id="revokeBackdrop" hidden>
+    <div class="sheet" role="alertdialog" style="width:min(360px,100%)">
+      <h2 id="revokeTitle">Revoke credential?</h2>
+      <p class="blurb">Invalidates the Bearer and clears this agent’s grants. Re-pair issues a new credential.</p>
+      <div class="sheet-actions">
+        <button type="button" class="btn-bordered" id="revokeCancel">Cancel</button>
+        <button type="button" class="btn-bordered destructive" id="revokeConfirm">Revoke credential</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="switcher" role="toolbar" aria-label="Prototype variants">
+    <button type="button" id="prevVar" aria-label="Previous variant">←</button>
+    <div class="label" id="varLabel">A — Dynamic cards</div>
+    <button type="button" id="nextVar" aria-label="Next variant">→</button>
+  </div>
+
+<script>
+const ASSET = {
+  cursor: "../../mailgent-campaign/assets/cursor-mark.svg",
+  grok: "../../mailgent-campaign/assets/grok-mark.png",
+  mcp: "../assets/mcp-mark.svg",
+  cli: "../assets/cli-mark.svg",
+};
+const LOOPBACK = "http://127.0.0.1:8788/mcp";
+const REDACTED = "••••••••••••••••••••••••••••••••";
+const BEARER_PLACEHOLDER = "<paste-MailGent-Bearer-here>";
+const TOKEN_PLACEHOLDER = "<MAILGENT_TOKEN>";
+const UDS_PATH = "~/Library/Application Support/MailGent/cli.sock";
+const SYMBOLS = ["sparkles", "terminal", "brain", "bolt", "cpu", "antenna.radiowaves.left.and.right"];
+const SYMBOL_GLYPH = {
+  sparkles: "✦",
+  terminal: ">_",
+  brain: "◎",
+  bolt: "⚡",
+  cpu: "▣",
+  "antenna.radiowaves.left.and.right": "〰️",
+};
+const MONOGRAM_COLORS = ["#007aff", "#34c759", "#ff9500", "#af52de", "#ff2d55", "#5856d6"];
+
+const TEMPLATES = {
+  cursor: {
+    name: "Cursor",
+    icon: { kind: "mark", value: "cursor" },
+    allowsMCP: true,
+    allowsCLI: false,
+  },
+  grok: {
+    name: "Grok Bot",
+    icon: { kind: "mark", value: "grok" },
+    allowsMCP: false,
+    allowsCLI: true,
+  },
+  blank: {
+    name: "",
+    icon: null,
+    allowsMCP: true,
+    allowsCLI: false,
+  },
+};
+
+const VARIANTS = {
+  A: { key: "A", name: "Dynamic cards", blurb: "Compact cards · click to expand · Add tile" },
+  B: { key: "B", name: "List + inspector", blurb: "Roster · View stats / Edit identity" },
+  C: { key: "C", name: "Channels-first sheet", blurb: "Compact roster · stepped Add" },
+};
+
+function seedAgents() {
+  return [
+    {
+      id: "cursor",
+      name: "Cursor",
+      icon: { kind: "mark", value: "cursor" },
+      allowsMCP: true,
+      allowsCLI: false,
+      paired: true,
+      bearer: "mg_cursor_EXAMPLE_SECRET_NOT_SHOWN",
+      issuedAt: "2026-10-08T14:22:00",
+      grants: 4,
+      // Proto mock: calls per day (oldest → newest), last 14 days
+      callSeries: [2, 5, 3, 8, 12, 7, 4, 9, 15, 11, 6, 10, 14, 18],
+      denied7d: 2,
+      showConfig: false,
+      showBearer: false,
+      showCli: false,
+      expanded: false,
+    },
+    {
+      id: "grok",
+      name: "Grok Bot",
+      icon: { kind: "mark", value: "grok" },
+      allowsMCP: false,
+      allowsCLI: true,
+      paired: false,
+      bearer: null,
+      issuedAt: null,
+      grants: 0,
+      callSeries: [1, 0, 2, 1, 3, 2, 4, 1, 5, 3, 2, 6, 4, 7],
+      denied7d: 1,
+      showConfig: false,
+      showBearer: false,
+      showCli: false,
+      expanded: false,
+    },
+  ];
+}
+
+const state = {
+  variant: "A",
+  // Owned by app Settings (not Control Center). Proto assumes on; dump only.
+  cliEnabled: true,
+  agents: seedAgents(),
+  selectedId: "cursor",
+  // Variant B right pane: view (stats + creds) | edit (name / access / icon)
+  inspMode: "view",
+  // Calls chart: selected endpoint only | all endpoints overlaid
+  chartScope: "selected", // "selected" | "all"
+  _editSnap: null,
+  sheet: null, // { mode: 'add'|'edit'|'setup', step, draft?, agentId?, template? }
+  revokeId: null,
+  copied: { agentId: null, text: null, timer: null },
+  nameError: "",
+};
+
+function uid() {
+  return "a" + Math.random().toString(36).slice(2, 8);
+}
+
+function agentById(id) {
+  return state.agents.find((a) => a.id === id);
+}
+
+function selected() {
+  return agentById(state.selectedId) || state.agents[0] || null;
+}
+
+function initials(name) {
+  const parts = (name || "?").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function glyphHTML(icon, name, sizeClass) {
+  const cls = "glyph" + (sizeClass ? " " + sizeClass : "");
+  if (!icon) {
+    return `<span class="${cls}" aria-hidden="true">${escapeHtml(initials(name))}</span>`;
+  }
+  if (icon.kind === "mark" && icon.value === "cursor") {
+    return `<span class="${cls}" aria-hidden="true"><img src="${ASSET.cursor}" alt=""></span>`;
+  }
+  if (icon.kind === "mark" && icon.value === "grok") {
+    return `<span class="${cls} mark-grok" aria-hidden="true"><img src="${ASSET.grok}" alt=""></span>`;
+  }
+  if (icon.kind === "symbol") {
+    const g = SYMBOL_GLYPH[icon.value] || "•";
+    return `<span class="${cls} symbol" aria-hidden="true" title="${escapeHtml(icon.value)}">${g}</span>`;
+  }
+  if (icon.kind === "monogram") {
+    const color = icon.color || MONOGRAM_COLORS[0];
+    const letter = (icon.value || initials(name)).slice(0, 2).toUpperCase();
+    return `<span class="${cls}" style="background:${color};color:#fff" aria-hidden="true">${escapeHtml(letter)}</span>`;
+  }
+  return `<span class="${cls}" aria-hidden="true">${escapeHtml(initials(name))}</span>`;
+}
+
+function channelChips(a, sizeClass) {
+  const cls = "chip" + (sizeClass ? " " + sizeClass : "");
+  const parts = [];
+  if (a.allowsMCP) {
+    parts.push(`<span class="${cls}" title="MCP"><img src="${ASSET.mcp}" alt=""></span>`);
+  }
+  if (a.allowsCLI) {
+    parts.push(`<span class="${cls}" title="CLI"><img src="${ASSET.cli}" alt=""></span>`);
+  }
+  return parts.join("");
+}
+
+function grantLabel(count) {
+  if (count === 0) return { text: "Nothing granted", warn: true };
+  return { text: `${count} grant(s)`, warn: false };
+}
+
+function mcpSnippet(agent, reveal) {
+  const token = reveal && agent.bearer ? agent.bearer : REDACTED;
+  return `{
+  "mcpServers": {
+    "mailgent": {
+      "url": "${LOOPBACK}",
+      "headers": {
+        "Authorization": "Bearer ${token}"
+      }
+    }
+  }
+}`;
+}
+
+/** Secret-free MCP JSON for agent-side paste (Bearer filled in separately). */
+function mcpSnippetSafe(agent) {
+  return `{
+  "mcpServers": {
+    "mailgent": {
+      "url": "${LOOPBACK}",
+      "headers": {
+        "Authorization": "Bearer ${BEARER_PLACEHOLDER}"
+      }
+    }
+  }
+}`;
+}
+
+function cliExamples(agent) {
+  const n = agent.name || "Agent";
+  return `# Same secret as MCP Bearer — caller must possess MAILGENT_TOKEN (never argv)
+export MAILGENT_TOKEN=…
+mailgent-cli --agent "${n}" '{"name":"search","arguments":{"query":"invoice"}}'
+echo '{"name":"status","arguments":{}}' | mailgent-cli --agent "${n}"
+mailgent-cli --agent "${n}" '{"name":"get","arguments":{"accountID":"ABC","placement":"inbox","id":"MSGID"}}'`;
+}
+
+/** Secret-free CLI guide for agent-side setup. */
+function cliExamplesSafe(agent) {
+  const n = agent.name || "Agent";
+  return `# MailGent CLI — agent "${n}"
+# Socket: ${UDS_PATH}
+# Credential: paste MAILGENT_TOKEN from MailGent "Copy Bearer / token" into this agent’s secrets / env.
+# mailgent-cli does NOT unlock Keychain from --agent alone (avoids ambient authority).
+
+export MAILGENT_TOKEN=${TOKEN_PLACEHOLDER}
+mailgent-cli --agent "${n}" '{"name":"search","arguments":{"query":"invoice"}}'
+echo '{"name":"status","arguments":{}}' | mailgent-cli --agent "${n}"
+mailgent-cli --agent "${n}" '{"name":"get","arguments":{"accountID":"ABC","placement":"inbox","id":"MSGID"}}'`;
+}
+
+function agentSetupInstructions(agent) {
+  const n = agent.name || "Agent";
+  const parts = [
+    `# MailGent · setup for agent "${n}"`,
+    ``,
+    `Secrets stay in MailGent’s Keychain vault. Use "Copy Bearer / token" when a step asks for a credential — never commit tokens.`,
+    `Callers (MCP config or MAILGENT_TOKEN) must possess the secret. --agent is a mismatch check only.`,
+    ``,
+  ];
+  if (agent.allowsMCP) {
+    parts.push(
+      `## MCP`,
+      `1. In MailGent, Pair this endpoint if needed, then Copy Bearer.`,
+      `2. On the agent host, add an MCP server pointing at ${LOOPBACK}.`,
+      `3. Paste this config and replace ${BEARER_PLACEHOLDER} with the Bearer:`,
+      ``,
+      "```json",
+      mcpSnippetSafe(agent).trim(),
+      "```",
+      ``,
+    );
+  }
+  if (agent.allowsCLI) {
+    parts.push(
+      `## CLI`,
+      `1. Enable "Local CLI" in MailGent Settings.`,
+      `2. Ensure mailgent-cli can reach ${UDS_PATH}.`,
+      `3. Copy Bearer / token once → put in this agent’s secret store or shell env as MAILGENT_TOKEN (same bytes as MCP Bearer).`,
+      `4. --agent "${n}" must match the agent that owns that token (mismatch check).`,
+      `5. Send MCP tools/call params as JSON (argv or stdin):`,
+      ``,
+      "```bash",
+      cliExamplesSafe(agent).trim(),
+      "```",
+      ``,
+    );
+  }
+  return parts.join("\n").trim() + "\n";
+}
+
+function setupStepKeys(agent) {
+  const steps = ["intro", "credential"];
+  if (agent.allowsMCP) steps.push("mcp");
+  if (agent.allowsCLI) steps.push("cli");
+  steps.push("done");
+  return steps;
+}
+
+function setupStepLabel(key) {
+  return ({
+    intro: "Start",
+    credential: "Credential",
+    mcp: "MCP",
+    cli: "CLI",
+    done: "Done",
+  })[key] || key;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function nameTaken(name, exceptId) {
+  const key = name.trim().toLowerCase();
+  if (!key) return false;
+  return state.agents.some((a) => a.id !== exceptId && a.name.trim().toLowerCase() === key);
+}
+
+function validateDraft(draft, exceptId) {
+  const name = (draft.name || "").trim();
+  if (!name) return "Name is required.";
+  if (nameTaken(name, exceptId)) return "Name must be unique (case-insensitive).";
+  if (!draft.allowsMCP && !draft.allowsCLI) return "Enable MCP, CLI, or both.";
+  return "";
+}
+
+function showCopy(agentId, text) {
+  if (state.copied.timer) clearTimeout(state.copied.timer);
+  state.copied = { agentId, text, timer: null };
+  render();
+  state.copied.timer = setTimeout(() => {
+    if (state.copied.agentId === agentId) {
+      state.copied = { agentId: null, text: null, timer: null };
+      render();
+    }
+  }, 1600);
+}
+
+async function copyText(text, agentId, hint) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showCopy(agentId, hint);
+  } catch {
+    showCopy(agentId, "Copy failed");
+  }
+}
+
+function emptyDraft(templateKey) {
+  const t = TEMPLATES[templateKey] || TEMPLATES.blank;
+  return {
+    name: t.name,
+    icon: t.icon ? { ...t.icon } : null,
+    allowsMCP: t.allowsMCP,
+    allowsCLI: t.allowsCLI,
+    monogramLetter: "",
+    monogramColor: MONOGRAM_COLORS[0],
+  };
+}
+
+function openSheet(mode, opts = {}) {
+  if (mode === "add") {
+    state.sheet = {
+      mode: "add",
+      step: opts.step || 1,
+      template: opts.template || "blank",
+      draft: emptyDraft(opts.template || "blank"),
+    };
+  } else if (mode === "edit") {
+    const a = agentById(opts.id);
+    if (!a) return;
+    state.sheet = {
+      mode: "edit",
+      step: 1,
+      agentId: a.id,
+      draft: {
+        name: a.name,
+        icon: a.icon ? { ...a.icon } : null,
+        allowsMCP: a.allowsMCP,
+        allowsCLI: a.allowsCLI,
+        monogramLetter: a.icon?.kind === "monogram" ? a.icon.value : initials(a.name),
+        monogramColor: a.icon?.kind === "monogram" ? (a.icon.color || MONOGRAM_COLORS[0]) : MONOGRAM_COLORS[0],
+      },
+    };
+  } else if (mode === "setup") {
+    const a = agentById(opts.id);
+    if (!a) return;
+    state.sheet = {
+      mode: "setup",
+      agentId: a.id,
+      step: 0, // index into setupStepKeys(a)
+    };
+  }
+  state.nameError = "";
+  render();
+}
+
+function closeSheet() {
+  state.sheet = null;
+  state.nameError = "";
+  render();
+}
+
+function commitDraft() {
+  const s = state.sheet;
+  if (!s) return;
+  const err = validateDraft(s.draft, s.mode === "edit" ? s.agentId : null);
+  state.nameError = err;
+  if (err) { render(); return; }
+
+  const icon = normalizeIcon(s.draft);
+  if (s.mode === "add") {
+    const a = {
+      id: uid(),
+      name: s.draft.name.trim(),
+      icon,
+      allowsMCP: s.draft.allowsMCP,
+      allowsCLI: s.draft.allowsCLI,
+      paired: false,
+      bearer: null,
+      issuedAt: null,
+      grants: 0,
+      callSeries: Array(14).fill(0),
+      denied7d: 0,
+      showConfig: false,
+      showBearer: false,
+      showCli: false,
+      expanded: false,
+    };
+    state.agents.push(a);
+    state.selectedId = a.id;
+    state.inspMode = "view";
+  } else {
+    const a = agentById(s.agentId);
+    if (!a) return;
+    a.name = s.draft.name.trim();
+    a.icon = icon;
+    a.allowsMCP = s.draft.allowsMCP;
+    a.allowsCLI = s.draft.allowsCLI;
+    if (!a.allowsMCP) {
+      a.showConfig = false;
+      a.showBearer = false;
+    }
+    if (!a.allowsCLI) a.showCli = false;
+  }
+  closeSheet();
+}
+
+function normalizeIcon(draft) {
+  if (!draft.icon) return null;
+  if (draft.icon.kind === "monogram") {
+    return {
+      kind: "monogram",
+      value: (draft.monogramLetter || initials(draft.name)).slice(0, 2).toUpperCase(),
+      color: draft.monogramColor || MONOGRAM_COLORS[0],
+    };
+  }
+  return { ...draft.icon };
+}
+
+function pairAgent(id) {
+  const a = agentById(id);
+  if (!a) return;
+  // Same secret for MCP Bearer and CLI MAILGENT_TOKEN (issue 03).
+  a.paired = true;
+  a.bearer = `mg_${a.id}_EXAMPLE_SECRET_NOT_SHOWN`;
+  a.issuedAt = new Date().toISOString();
+  if (!a.callSeries) a.callSeries = Array(14).fill(0);
+  if (a.denied7d == null) a.denied7d = 0;
+  render();
+}
+
+function revokeAgent(id) {
+  const a = agentById(id);
+  if (!a) return;
+  a.paired = false;
+  a.bearer = null;
+  a.issuedAt = null;
+  a.grants = 0;
+  a.showConfig = false;
+  a.showBearer = false;
+  state.revokeId = null;
+  render();
+}
+
+function formatIssuedAt(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function agentCallSeries(a) {
+  if (Array.isArray(a.callSeries) && a.callSeries.length) return a.callSeries;
+  return Array(14).fill(0);
+}
+
+function agentCallStats(a) {
+  const series = agentCallSeries(a);
+  const today = series[series.length - 1] || 0;
+  const last7 = series.slice(-7).reduce((s, n) => s + n, 0);
+  const last14 = series.reduce((s, n) => s + n, 0);
+  return { today, last7, last14, denied7d: a.denied7d || 0, grants: a.grants || 0 };
+}
+
+const CHART_COLORS = ["#007aff", "#34c759", "#ff9500", "#af52de", "#ff2d55", "#5856d6"];
+
+function chartColorForAgent(a, index) {
+  if (a.icon?.kind === "mark" && a.icon.value === "cursor") return "#007aff";
+  if (a.icon?.kind === "mark" && a.icon.value === "grok") return "#34c759";
+  return CHART_COLORS[index % CHART_COLORS.length];
+}
+
+/**
+ * SVG line chart (proto mock).
+ * @param {{ id: string, name: string, series: number[], color: string, emphasize?: boolean }[]} lines
+ */
+function callsChartSVG(lines) {
+  const w = 320;
+  const h = lines.length > 1 ? 110 : 88;
+  const padX = 4;
+  const padY = 8;
+  const seriesList = lines.length ? lines : [{ series: [0], color: "#007aff", name: "—" }];
+  const max = Math.max(1, ...seriesList.flatMap((l) => l.series.length ? l.series : [0]));
+  const n = Math.max(1, ...seriesList.map((l) => l.series.length));
+
+  function pathFor(vals, withArea) {
+    const pts = vals.map((v, i) => {
+      const x = padX + (n === 1 ? 0 : (i / (n - 1)) * (w - padX * 2));
+      const y = h - padY - ((v || 0) / max) * (h - padY * 2);
+      return [x, y];
+    });
+    const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const area = withArea
+      ? `${line} L${pts[pts.length - 1][0].toFixed(1)},${h - padY} L${pts[0][0].toFixed(1)},${h - padY} Z`
+      : "";
+    return { line, area, pts };
+  }
+
+  const multi = seriesList.length > 1;
+  const paths = seriesList.map((l) => {
+    const emphasize = !!l.emphasize || !multi;
+    const { line, area, pts } = pathFor(l.series.length ? l.series : [0], !multi);
+    const sw = emphasize ? 2.4 : 1.6;
+    const op = emphasize ? 1 : 0.72;
+    const dots = (!multi || emphasize)
+      ? pts.map(([x, y]) =>
+        `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${emphasize ? 2.2 : 1.6}" fill="${l.color}" opacity="${op}"/>`
+      ).join("")
+      : "";
+    return `
+      ${area ? `<path d="${area}" fill="${l.color}" opacity="0.12"/>` : ""}
+      <path d="${line}" fill="none" stroke="${l.color}" stroke-width="${sw}" opacity="${op}"
+        stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}`;
+  }).join("");
+
+  const label = multi ? "Calls over time · all endpoints" : "Calls over time";
+  return `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(label)}">
+      ${paths}
+    </svg>`;
+}
+
+function chartLinesForScope(selectedAgent) {
+  if (state.chartScope === "all") {
+    return state.agents
+      .filter((x) => !x._draft)
+      .map((x, i) => ({
+        id: x.id,
+        name: x.name || "Agent",
+        series: agentCallSeries(x),
+        color: chartColorForAgent(x, i),
+        emphasize: x.id === selectedAgent?.id,
+      }));
+  }
+  return [{
+    id: selectedAgent.id,
+    name: selectedAgent.name,
+    series: agentCallSeries(selectedAgent),
+    color: chartColorForAgent(selectedAgent, 0),
+    emphasize: true,
+  }];
+}
+
+function chartLegendHTML(lines) {
+  if (lines.length < 2) return "";
+  return `<div class="chart-legend">${lines.map((l) =>
+    `<span style="color:${l.color}"><i></i>${escapeHtml(l.name)}${l.emphasize ? " · selected" : ""}</span>`
+  ).join("")}</div>`;
+}
+
+function enterInspEdit(a) {
+  if (!a || a._draft) {
+    state.inspMode = "edit";
+    state._editSnap = null;
+    return;
+  }
+  state._editSnap = {
+    id: a.id,
+    name: a.name,
+    icon: a.icon ? JSON.parse(JSON.stringify(a.icon)) : null,
+    allowsMCP: a.allowsMCP,
+    allowsCLI: a.allowsCLI,
+  };
+  state.inspMode = "edit";
+  state.nameError = "";
+  state._nameBuf = a.name;
+  state._bufFor = a.id;
+}
+
+function cancelInspEdit() {
+  const snap = state._editSnap;
+  if (snap) {
+    const a = agentById(snap.id);
+    if (a) {
+      a.name = snap.name;
+      a.icon = snap.icon;
+      a.allowsMCP = snap.allowsMCP;
+      a.allowsCLI = snap.allowsCLI;
+    }
+  }
+  state._editSnap = null;
+  state.inspMode = "view";
+  state._nameBuf = undefined;
+  state.nameError = "";
+}
+
+function doneInspEdit() {
+  const a = selected();
+  if (!a || a._draft) return;
+  const name = (state._bufFor === a.id && state._nameBuf !== undefined)
+    ? state._nameBuf.trim()
+    : a.name.trim();
+  const err = validateDraft({ name, allowsMCP: a.allowsMCP, allowsCLI: a.allowsCLI }, a.id);
+  state.nameError = err;
+  if (err) { render(); return; }
+  a.name = name;
+  state._editSnap = null;
+  state.inspMode = "view";
+  state._nameBuf = undefined;
+  state.nameError = "";
+  render();
+}
+
+function deleteAgent(id) {
+  state.agents = state.agents.filter((a) => a.id !== id);
+  if (state.selectedId === id) {
+    state.selectedId = state.agents[0]?.id || null;
+  }
+  render();
+}
+
+/* —— Shared panels —— */
+function panelCopyHint(a, prefix) {
+  const t = state.copied.agentId === a.id ? state.copied.text : "";
+  if (!t || (prefix && !t.startsWith(prefix))) return "";
+  return `<span class="copy-hint">${escapeHtml(t)}</span>`;
+}
+
+function mcpPanelHTML(a) {
+  if (!a.allowsMCP) return "";
+  if (!a.paired) {
+    return `
+      <div class="panel-block">
+        <h3>MCP</h3>
+        <p class="listen-note" style="margin:0 0 8px">Pair to issue a Bearer for this host.</p>
+        <button type="button" class="btn-bordered" data-act="pair" data-id="${a.id}">Pair ${escapeHtml(a.name)}</button>
+      </div>`;
+  }
+  return `
+    <div class="panel-block">
+      <h3>MCP</h3>
+      <div class="listen-row" style="border:0;padding:0 0 6px">
+        <p class="listen-note">Listening on ${LOOPBACK}</p>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <button type="button" class="btn-ghost" data-act="toggle-config" data-id="${a.id}" aria-expanded="${a.showConfig}">
+          <span>${a.showConfig ? "Hide MCP config" : "Show MCP config"}</span>
+          <span class="chev" aria-hidden="true">›</span>
+        </button>
+        ${a.showConfig ? `
+        <button type="button" class="btn-ghost" data-act="toggle-bearer" data-id="${a.id}">
+          <span>${a.showBearer ? "Hide Bearer" : "Show Bearer"}</span>
+        </button>` : ""}
+      </div>
+      ${a.showConfig ? `<pre class="config-snippet">${escapeHtml(mcpSnippet(a, a.showBearer))}</pre>` : ""}
+      <div class="card-footer" style="margin-top:8px">
+        <button type="button" class="btn-bordered" data-act="copy-bearer" data-id="${a.id}">Copy Bearer</button>
+        <button type="button" class="btn-bordered" data-act="copy-mcp" data-id="${a.id}">Copy MCP config</button>
+        ${panelCopyHint(a, "MCP")}${panelCopyHint(a, "Bearer")}
+        <span class="spacer"></span>
+        <button type="button" class="btn-bordered destructive" data-act="revoke" data-id="${a.id}">Revoke credential</button>
+      </div>
+    </div>`;
+}
+
+function cliPanelHTML(a) {
+  if (!a.allowsCLI) return "";
+  return `
+    <div class="panel-block">
+      <h3>CLI</h3>
+      <p class="listen-note" style="margin:0 0 8px">UDS · MCP <code>tools/call</code> JSON (argv or stdin). Credential required — name alone is not identity.</p>
+      ${!state.cliEnabled ? `<p class="cli-warn">Local CLI is off in Settings. Examples still copy; calls would refuse until enabled.</p>` : ""}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <button type="button" class="btn-ghost" data-act="toggle-cli" data-id="${a.id}" aria-expanded="${!!a.showCli}">
+          <span>${a.showCli ? "Hide CLI examples" : "Show CLI examples"}</span>
+          <span class="chev" aria-hidden="true">›</span>
+        </button>
+      </div>
+      ${a.showCli ? `<pre class="config-snippet">${escapeHtml(cliExamples(a))}</pre>` : ""}
+      <div class="card-footer" style="margin-top:8px">
+        <button type="button" class="btn-bordered" data-act="copy-cli" data-id="${a.id}">Copy CLI examples</button>
+        ${panelCopyHint(a, "CLI")}
+      </div>
+    </div>`;
+}
+
+function setupFooterButton(a) {
+  return `<button type="button" class="btn-bordered primary" data-act="setup" data-id="${a.id}">Setup agent…</button>`;
+}
+
+function headerHTML() {
+  return `
+    <header class="cc-header">
+      <div>
+        <h1>Control center</h1>
+        <p class="sub">Agents are endpoints — name, icon, MCP and/or CLI.</p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn-bordered" disabled>Grant desk…</button>
+        <button type="button" class="btn-bordered" disabled>Access log…</button>
+      </div>
+    </header>`;
+}
+
+function agentTrustLine(a) {
+  if (a.paired && a.allowsMCP) return "machine-local";
+  if (a.allowsCLI) return "CLI endpoint";
+  return "Not paired";
+}
+
+function agentListenLine(a) {
+  if (a.allowsMCP && a.paired) return `Listening on ${LOOPBACK}`;
+  if (a.allowsCLI) return "CLI via UDS · tools/call JSON";
+  return "Configure channels…";
+}
+
+/* —— Variant A —— */
+function renderA() {
+  const cards = state.agents.map((a) => {
+    const grants = grantLabel(a.grants);
+    const selected = a.id === state.selectedId;
+    const expanded = !!a.expanded;
+    return `
+      <article class="agent-card${selected ? " selected" : ""}${expanded ? " is-expanded" : " is-compact"}" data-select="${a.id}">
+        <button type="button" class="card-summary" data-act="toggle-expand" data-id="${a.id}" aria-expanded="${expanded}">
+          ${glyphHTML(a.icon, a.name)}
+          <div class="agent-meta">
+            <p class="agent-title">${escapeHtml(a.name)}</p>
+            <p class="agent-trust">${agentTrustLine(a)}</p>
+          </div>
+          <span class="grant-label${grants.warn ? " warn" : ""}">${grants.text}</span>
+          <div class="chip-row">${channelChips(a)}</div>
+          <span class="chev" aria-hidden="true">›</span>
+        </button>
+        ${expanded ? `
+        <div class="card-body">
+          <div class="listen-row">
+            <p class="listen-note">${agentListenLine(a)}</p>
+          </div>
+          <div class="channel-panels">
+            ${mcpPanelHTML(a)}
+            ${cliPanelHTML(a)}
+          </div>
+          <div class="card-footer">
+            ${setupFooterButton(a)}
+            <button type="button" class="btn-bordered" data-act="edit" data-id="${a.id}">Edit…</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn-bordered destructive" data-act="delete" data-id="${a.id}">Remove</button>
+          </div>
+        </div>` : ""}
+      </article>`;
+  }).join("");
+
+  return `
+    ${headerHTML()}
+    <div class="agent-grid">
+      ${cards}
+      <button type="button" class="agent-card agent-add" data-act="add">
+        <span class="plus">+</span>
+        <span>Add agent</span>
+      </button>
+    </div>`;
+}
+
+function renderBView(a) {
+  const stats = agentCallStats(a);
+  const chartLines = chartLinesForScope(a);
+  const allScope = state.chartScope === "all";
+  const hint = state.copied.agentId === a.id ? state.copied.text : "";
+  const credStatus = a.paired
+    ? "Issued"
+    : "Not issued";
+  const issueLabel = a.allowsMCP ? `Issue credential (Pair ${a.name})` : "Issue credential";
+  return `
+    <div class="insp-identity">
+      ${glyphHTML(a.icon, a.name)}
+      <div class="meta">
+        <p class="title">${escapeHtml(a.name)}</p>
+        <p class="sub">${agentTrustLine(a)} · ${agentListenLine(a)}</p>
+      </div>
+      <div class="chip-row">${channelChips(a)}</div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="n">${stats.today}</div><div class="l">Calls today</div></div>
+      <div class="stat-card"><div class="n">${stats.last7}</div><div class="l">Last 7 days</div></div>
+      <div class="stat-card${stats.denied7d ? " warn" : ""}"><div class="n">${stats.denied7d}</div><div class="l">Denied (7d)</div></div>
+      <div class="stat-card"><div class="n">${stats.grants}</div><div class="l">Grants</div></div>
+    </div>
+    <div class="chart-block${allScope ? " svg-tall" : ""}">
+      <div class="chart-head">
+        <span class="chart-title">Calls over time</span>
+        <div class="chart-scope" role="group" aria-label="Chart scope">
+          <button type="button" class="${!allScope ? "on" : ""}" data-act="chart-scope" data-scope="selected">This endpoint</button>
+          <button type="button" class="${allScope ? "on" : ""}" data-act="chart-scope" data-scope="all">All endpoints</button>
+        </div>
+      </div>
+      <p class="chart-note" style="margin:0 0 6px">Last 14 days · proto mock${allScope ? " · selected line emphasized" : ""}</p>
+      ${callsChartSVG(chartLines)}
+      ${chartLegendHTML(chartLines)}
+    </div>
+    <div class="detail-block">
+      <h3>Credential</h3>
+      <div class="detail-rows">
+        <div class="detail-row"><span class="k">Status</span><span class="v">${credStatus}</span></div>
+        <div class="detail-row"><span class="k">Issued</span><span class="v">${escapeHtml(formatIssuedAt(a.issuedAt))}</span></div>
+        <div class="detail-row"><span class="k">Secret</span><span class="v mono">${a.paired ? "••••••••  (Copy Bearer / token)" : "—"}</span></div>
+        <div class="detail-row"><span class="k">Channels</span><span class="v">${[
+          a.allowsMCP ? "MCP Bearer" : null,
+          a.allowsCLI ? "CLI MAILGENT_TOKEN" : null,
+        ].filter(Boolean).join(" · ") || "—"}</span></div>
+      </div>
+      <div class="card-footer" style="margin-top:10px">
+        ${a.paired
+          ? `<button type="button" class="btn-bordered" data-act="copy-bearer" data-id="${a.id}">Copy Bearer / token</button>`
+          : `<button type="button" class="btn-bordered primary" data-act="pair" data-id="${a.id}">${escapeHtml(issueLabel)}</button>`}
+        <button type="button" class="btn-bordered" data-act="copy-setup" data-id="${a.id}">Copy setup instructions</button>
+        ${setupFooterButton(a)}
+        ${hint ? `<span class="copy-hint">${escapeHtml(hint)}</span>` : ""}
+      </div>
+    </div>
+    <div class="card-footer">
+      <button type="button" class="btn-bordered primary" data-act="insp-edit" data-id="${a.id}">Edit…</button>
+      <span class="spacer"></span>
+      ${a.paired ? `<button type="button" class="btn-bordered destructive" data-act="revoke" data-id="${a.id}">Revoke credential</button>` : ""}
+      <button type="button" class="btn-bordered destructive" data-act="delete" data-id="${a.id}">Delete endpoint</button>
+    </div>`;
+}
+
+function renderBEdit(a) {
+  const displayName = (state._nameBuf !== undefined && state._bufFor === a.id)
+    ? state._nameBuf
+    : a.name;
+  return `
+    <div class="field">
+      <label for="inspName">Name</label>
+      <input type="text" id="inspName" value="${escapeHtml(displayName)}" data-insp-name>
+      ${state.nameError ? `<div class="err">${escapeHtml(state.nameError)}</div>` : ""}
+    </div>
+    <div class="field">
+      <label>Access</label>
+      <div class="toggle-row">
+        <label class="toggle${a.allowsMCP ? " on" : ""}">
+          <input type="checkbox" data-insp-mcp ${a.allowsMCP ? "checked" : ""}>
+          <span><span class="t-label">MCP</span><br><span class="t-sub">Bearer + loopback</span></span>
+        </label>
+        <label class="toggle${a.allowsCLI ? " on" : ""}">
+          <input type="checkbox" data-insp-cli ${a.allowsCLI ? "checked" : ""}>
+          <span><span class="t-label">CLI</span><br><span class="t-sub">UDS + tools/call JSON</span></span>
+        </label>
+      </div>
+    </div>
+    <div class="field">
+      <label>Icon <span style="font-weight:500">(optional)</span></label>
+      ${iconStripHTML(a.icon, a.name || displayName || "?", "insp")}
+    </div>
+    ${a._draft ? `
+    <div class="sheet-actions" style="border:0;padding:0;margin-top:8px">
+      <button type="button" class="btn-bordered" data-act="cancel-draft">Cancel</button>
+      <button type="button" class="btn-bordered primary" data-act="save-draft">Save</button>
+    </div>` : `
+    <div class="sheet-actions" style="border:0;padding:0;margin-top:8px">
+      <button type="button" class="btn-bordered" data-act="insp-cancel">Cancel</button>
+      <button type="button" class="btn-bordered primary" data-act="insp-done">Done</button>
+    </div>`}`;
+}
+
+/* —— Variant B —— */
+function renderB() {
+  const a = selected();
+  const roster = state.agents.filter((x) => !x._draft || x.id === state.selectedId).map((x) => `
+    <button type="button" class="roster-item${x.id === state.selectedId ? " sel" : ""}" data-select="${x.id}">
+      ${glyphHTML(x.icon, x.name || "New", "sm")}
+      <div class="meta">
+        <div class="name">${escapeHtml(x.name || (x._draft ? "New agent…" : "?"))}</div>
+        <div class="sub chip-row" style="margin-top:3px">${channelChips(x, "sm")}</div>
+      </div>
+    </button>`).join("");
+
+  const mode = a?._draft ? "edit" : state.inspMode;
+  let detail = `<p class="listen-note">No agents yet. Add one to start.</p>`;
+  let paneLabel = "Detail";
+  if (a) {
+    if (a._draft) {
+      paneLabel = "New agent";
+      detail = renderBEdit(a);
+    } else if (mode === "edit") {
+      paneLabel = "Edit endpoint";
+      detail = renderBEdit(a);
+    } else {
+      paneLabel = "Endpoint";
+      detail = renderBView(a);
+    }
+  }
+
+  return `
+    ${headerHTML()}
+    <div class="split">
+      <div class="roster">
+        <div class="pane-label">Agents</div>
+        <div class="roster-list">${roster || '<p class="listen-note">Empty</p>'}</div>
+        <button type="button" class="btn-bordered primary" data-act="add-draft">Add agent</button>
+      </div>
+      <div class="inspector">
+        <div class="insp-toolbar">
+          <div class="pane-label">${paneLabel}</div>
+          ${a && !a._draft ? `<span class="mode-pill${mode === "edit" ? " edit" : ""}">${mode === "edit" ? "Edit" : "View"}</span>` : ""}
+        </div>
+        ${detail}
+      </div>
+    </div>`;
+}
+
+function iconStripHTML(current, name, prefix) {
+  const isNone = !current;
+  const isMark = (v) => current?.kind === "mark" && current.value === v;
+  const isSym = (v) => current?.kind === "symbol" && current.value === v;
+  const isMono = current?.kind === "monogram";
+  const letter = isMono ? current.value : initials(name);
+  const color = isMono ? (current.color || MONOGRAM_COLORS[0]) : MONOGRAM_COLORS[0];
+
+  let html = `
+    <div class="icon-strip" data-icon-strip="${prefix}">
+      <button type="button" class="icon-opt none${isNone ? " on" : ""}" data-icon='{"kind":null}' title="None">None</button>
+      <button type="button" class="icon-opt${isMark("cursor") ? " on" : ""}" data-icon='{"kind":"mark","value":"cursor"}' title="Cursor">
+        <img src="${ASSET.cursor}" width="22" height="22" alt="">
+      </button>
+      <button type="button" class="icon-opt${isMark("grok") ? " on" : ""}" data-icon='{"kind":"mark","value":"grok"}' title="Grok">
+        <img src="${ASSET.grok}" width="22" height="22" alt="" style="border-radius:5px">
+      </button>`;
+  for (const s of SYMBOLS) {
+    html += `<button type="button" class="icon-opt${isSym(s) ? " on" : ""}" data-icon='{"kind":"symbol","value":"${s}"}' title="${s}">${SYMBOL_GLYPH[s]}</button>`;
+  }
+  html += `
+      <button type="button" class="icon-opt${isMono ? " on" : ""}" data-icon-mono title="Monogram"
+        style="background:${color};color:#fff;font-weight:700;font-size:11px">${escapeHtml(letter)}</button>
+    </div>`;
+  if (isMono || prefix === "sheet") {
+    html += `<div class="icon-strip" style="margin-top:4px">`;
+    for (const c of MONOGRAM_COLORS) {
+      html += `<button type="button" class="icon-opt" data-mono-color="${c}" title="${c}" style="width:28px;height:28px">
+        <span class="color-dot" style="background:${c}"></span>
+      </button>`;
+    }
+    html += `</div>
+      <div class="field" style="margin-top:6px">
+        <label>Monogram letters</label>
+        <input type="text" maxlength="2" data-mono-letter value="${escapeHtml(letter)}" style="width:64px">
+      </div>`;
+  }
+  return html;
+}
+
+/* —— Variant C —— */
+function renderC() {
+  const rows = state.agents.map((a) => {
+    const grants = grantLabel(a.grants);
+    return `
+      <div class="compact-row">
+        <button type="button" class="compact-main" data-act="toggle-expand" data-id="${a.id}">
+          ${glyphHTML(a.icon, a.name, "sm")}
+          <span class="name">${escapeHtml(a.name)}</span>
+          <span class="chip-row">${channelChips(a, "sm")}</span>
+          <span class="grant-label${grants.warn ? " warn" : ""}">${grants.text}</span>
+          <span class="chev" style="color:var(--secondary)">${a.expanded ? "▾" : "›"}</span>
+        </button>
+        ${a.expanded ? `
+        <div class="compact-body">
+          <div class="channel-panels" style="padding-top:10px">
+            ${mcpPanelHTML(a)}
+            ${cliPanelHTML(a)}
+          </div>
+          <div class="card-footer">
+            ${setupFooterButton(a)}
+            <button type="button" class="btn-bordered" data-act="edit" data-id="${a.id}">Edit…</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn-bordered destructive" data-act="delete" data-id="${a.id}">Remove</button>
+          </div>
+        </div>` : ""}
+      </div>`;
+  }).join("");
+
+  return `
+    ${headerHTML()}
+    <div class="compact-head">
+      <p class="sub" style="margin:0">Endpoints on this Mac. MCP = loopback Bearer · CLI = UDS + tools/call JSON.</p>
+      <button type="button" class="btn-bordered primary cta" data-act="add">Add agent</button>
+    </div>
+    <div class="compact-list">
+      ${rows || '<p class="listen-note">No agents yet.</p>'}
+    </div>`;
+}
+
+function renderSetupSheet(el, s) {
+  const a = agentById(s.agentId);
+  if (!a) {
+    closeSheet();
+    return;
+  }
+  el.classList.add("setup");
+  const keys = setupStepKeys(a);
+  const idx = Math.max(0, Math.min(s.step || 0, keys.length - 1));
+  s.step = idx;
+  const key = keys[idx];
+  const hint = state.copied.agentId === a.id ? state.copied.text : "";
+
+  const stepsNav = `
+    <div class="steps">
+      ${keys.map((k, i) => {
+        const cls = i === idx ? "on" : i < idx ? "done" : "";
+        return `<span class="${cls}">${i + 1} · ${setupStepLabel(k)}</span>`;
+      }).join("")}
+    </div>`;
+
+  let body = "";
+  if (key === "intro") {
+    const channels = [
+      a.allowsMCP ? "MCP (loopback + Bearer)" : null,
+      a.allowsCLI ? "CLI (UDS + tools/call JSON)" : null,
+    ].filter(Boolean).join(" and ");
+    body = `
+      ${stepsNav}
+      <p class="blurb">Walk through how to configure <strong>${escapeHtml(a.name)}</strong> on the agent side (${channels}).</p>
+      <ol class="setup-step-list">
+        <li>Next step issues the credential and shows how to hand it to <em>this</em> agent (Copy Bearer → MCP headers and/or <code>MAILGENT_TOKEN</code>).</li>
+        <li>Later MCP/CLI steps use <strong>secret-free</strong> placeholders only.</li>
+        <li>Never put tokens in shared prompts, git, chat, or argv. CLI does not unlock Keychain from name alone.</li>
+      </ol>
+      <div class="card-footer">
+        <button type="button" class="btn-bordered" data-act="copy-setup" data-id="${a.id}">Copy all instructions</button>
+        ${hint && hint.startsWith("Setup") ? `<span class="copy-hint">${escapeHtml(hint)}</span>` : ""}
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn-bordered" data-sheet="cancel">Close</button>
+        <button type="button" class="btn-bordered primary" data-sheet="next">Continue</button>
+      </div>`;
+  } else if (key === "credential") {
+    const needIssue = !a.paired;
+    const issueLabel = a.allowsMCP ? `Pair ${a.name}` : `Issue credential for ${a.name}`;
+    body = `
+      ${stepsNav}
+      <p class="blurb">One secret per agent — MCP <code>Authorization: Bearer</code> and CLI <code>MAILGENT_TOKEN</code> are the same bytes. The agent must <strong>possess</strong> that secret (same model for both channels).</p>
+      <ol class="setup-step-list">
+        <li><strong>MailGent vault:</strong> on issue, store the credential in Keychain. <code>pairing.json</code> → metadata + hash only. Instruction copies never include the real token.</li>
+        ${a.allowsMCP ? `<li><strong>MCP handoff:</strong> Copy Bearer → paste into this agent’s MCP headers, or let MailGent auto-write a known local config (e.g. Cursor <code>mcp.json</code>).</li>` : ""}
+        ${a.allowsCLI ? `<li><strong>CLI handoff:</strong> Copy Bearer / token → put in <em>this</em> agent’s secret store or shell as <code>MAILGENT_TOKEN</code>. <code>mailgent-cli</code> does <strong>not</strong> auto-unlock Keychain from <code>--agent</code> (that would be ambient authority).</li>` : ""}
+        <li><strong>Do not</strong> email, chat, commit, or pass via argv. Revoke invalidates immediately.</li>
+      </ol>
+      ${needIssue ? `
+      <p class="cli-warn">No credential yet — issue one before handoff.</p>
+      <div class="card-footer">
+        <button type="button" class="btn-bordered primary" data-act="pair" data-id="${a.id}">${escapeHtml(issueLabel)}</button>
+      </div>` : `
+      <div class="card-footer" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <button type="button" class="btn-bordered primary" data-act="copy-bearer" data-id="${a.id}">Copy Bearer / token</button>
+          ${hint && (hint.startsWith("Bearer") || hint.startsWith("Token")) ? `<span class="copy-hint">${escapeHtml(hint)}</span>` : ""}
+        </div>
+        <p class="listen-note" style="margin:0">${a.allowsCLI && a.allowsMCP
+          ? "Paste once into MCP headers <em>and</em> this agent’s CLI secrets / env (same bytes)."
+          : a.allowsCLI
+            ? "Paste once into this agent’s secrets or <code>export MAILGENT_TOKEN=…</code> for its runtime."
+            : "Paste once into this agent’s MCP Authorization header (or rely on auto-write if available)."} Ship: clear pasteboard after ~30s.</p>
+      </div>`}
+      <div class="sheet-actions">
+        <button type="button" class="btn-bordered" data-sheet="back">Back</button>
+        <button type="button" class="btn-bordered primary" data-sheet="next" ${needIssue ? "disabled" : ""}>Continue</button>
+      </div>`;
+  } else if (key === "mcp") {
+    body = `
+      ${stepsNav}
+      <p class="blurb">Paste MCP config into the agent (e.g. Cursor Settings → MCP). Replace the Bearer placeholder with the real secret from the Credential step.</p>
+      <ol class="setup-step-list">
+        <li>Credential handoff already happened (clipboard paste or auto-written client config).</li>
+        <li>Add an MCP server URL: <code>${LOOPBACK}</code></li>
+        <li>Set header <code>Authorization: Bearer …</code> — this blob uses a placeholder only.</li>
+      </ol>
+      <pre class="config-snippet">${escapeHtml(mcpSnippetSafe(a))}</pre>
+      <div class="card-footer" style="margin-top:8px">
+        <button type="button" class="btn-bordered" data-act="copy-mcp-safe" data-id="${a.id}">Copy MCP config (no secret)</button>
+        ${a.paired ? `<button type="button" class="btn-bordered" data-act="copy-bearer" data-id="${a.id}">Copy Bearer</button>` : `<button type="button" class="btn-bordered" data-act="pair" data-id="${a.id}">Pair ${escapeHtml(a.name)}</button>`}
+        ${hint && (hint.startsWith("MCP") || hint.startsWith("Bearer")) ? `<span class="copy-hint">${escapeHtml(hint)}</span>` : ""}
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn-bordered" data-sheet="back">Back</button>
+        <button type="button" class="btn-bordered primary" data-sheet="next">Continue</button>
+      </div>`;
+  } else if (key === "cli") {
+    body = `
+      ${stepsNav}
+      <p class="blurb">CLI mirrors MCP <code>tools/call</code> over UDS. Identity is <code>MAILGENT_TOKEN</code>; <code>--agent</code> is a mismatch check against that token.</p>
+      <ol class="setup-step-list">
+        <li>Enable <strong>Local CLI</strong> in MailGent <strong>Settings</strong> (not Control Center)${!state.cliEnabled ? " <span style=\"color:var(--orange)\">(currently off)</span>" : ""}.</li>
+        <li>Socket: <code>${UDS_PATH}</code></li>
+        <li>Require <code>MAILGENT_TOKEN</code> in this agent’s env / secret store (from Credential step). Never argv. No silent Keychain fill by name.</li>
+        <li>Pass <code>{"name","arguments"}</code> as argv JSON or stdin.</li>
+      </ol>
+      <pre class="config-snippet">${escapeHtml(cliExamplesSafe(a))}</pre>
+      <div class="card-footer" style="margin-top:8px">
+        <button type="button" class="btn-bordered" data-act="copy-cli-safe" data-id="${a.id}">Copy CLI guide (no secret)</button>
+        ${a.paired ? `<button type="button" class="btn-bordered" data-act="copy-bearer" data-id="${a.id}">Copy Bearer / token</button>` : ""}
+        ${hint && (hint.startsWith("CLI") || hint.startsWith("Bearer")) ? `<span class="copy-hint">${escapeHtml(hint)}</span>` : ""}
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn-bordered" data-sheet="back">Back</button>
+        <button type="button" class="btn-bordered primary" data-sheet="next">Continue</button>
+      </div>`;
+  } else {
+    body = `
+      ${stepsNav}
+      <p class="blurb">${escapeHtml(a.name)} is ready on the MailGent side. Finish putting the credential into the agent’s own config / secrets, then try a tool call.</p>
+      <ol class="setup-step-list">
+        ${a.allowsMCP ? "<li>MCP server URL + Bearer header configured on the agent.</li>" : ""}
+        ${a.allowsCLI ? "<li><code>MAILGENT_TOKEN</code> in this agent’s env / secrets; <code>--agent</code> mismatch check matches this name.</li>" : ""}
+        <li>Grant Desk scopes as needed — connector config alone does not grant mail.</li>
+      </ol>
+      <div class="card-footer">
+        <button type="button" class="btn-bordered" data-act="copy-setup" data-id="${a.id}">Copy all instructions</button>
+        ${hint && hint.startsWith("Setup") ? `<span class="copy-hint">${escapeHtml(hint)}</span>` : ""}
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="btn-bordered" data-sheet="back">Back</button>
+        <button type="button" class="btn-bordered primary" data-sheet="cancel">Done</button>
+      </div>`;
+  }
+
+  el.innerHTML = `<h2>Setup ${escapeHtml(a.name)}</h2>${body}`;
+}
+
+/* —— Sheet —— */
+function renderSheet() {
+  const backdrop = document.getElementById("sheetBackdrop");
+  const el = document.getElementById("sheet");
+  if (!state.sheet) {
+    backdrop.hidden = true;
+    el.classList.remove("setup");
+    el.innerHTML = "";
+    return;
+  }
+  backdrop.hidden = false;
+  const s = state.sheet;
+
+  if (s.mode === "setup") {
+    renderSetupSheet(el, s);
+    return;
+  }
+
+  el.classList.remove("setup");
+  const d = s.draft;
+  const isC = state.variant === "C" && s.mode === "add";
+  const step = isC ? s.step : 1;
+
+  if (isC) {
+    const steps = `
+      <div class="steps">
+        <span class="${step === 1 ? "on" : step > 1 ? "done" : ""}">1 · Name</span>
+        <span class="${step === 2 ? "on" : step > 2 ? "done" : ""}">2 · Channels</span>
+        <span class="${step === 3 ? "on" : ""}">3 · Icon</span>
+      </div>`;
+
+    let body = "";
+    if (step === 1) {
+      body = `
+        ${steps}
+        <p class="blurb">Start from a template or blank. Name must be unique.</p>
+        <div class="templates">
+          ${["cursor", "grok", "blank"].map((k) => `
+            <button type="button" class="${s.template === k ? "on" : ""}" data-template="${k}">
+              ${k === "cursor" ? "Cursor" : k === "grok" ? "Grok Bot" : "Blank"}
+            </button>`).join("")}
+        </div>
+        <div class="field">
+          <label for="sheetName">Name</label>
+          <input type="text" id="sheetName" value="${escapeHtml(d.name)}" data-draft-name placeholder="e.g. Research Bot">
+          ${state.nameError ? `<div class="err">${escapeHtml(state.nameError)}</div>` : ""}
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn-bordered" data-sheet="cancel">Cancel</button>
+          <button type="button" class="btn-bordered primary" data-sheet="next">Continue</button>
+        </div>`;
+    } else if (step === 2) {
+      body = `
+        ${steps}
+        <p class="blurb">At least one channel required. This is the hero choice for the endpoint.</p>
+        <div class="channel-hero">
+          <label class="toggle${d.allowsMCP ? " on" : ""}">
+            <input type="checkbox" data-draft-mcp ${d.allowsMCP ? "checked" : ""}>
+            <span class="t-label">MCP</span>
+            <span class="t-sub">Loopback Bearer for Cursor-style clients</span>
+          </label>
+          <label class="toggle${d.allowsCLI ? " on" : ""}">
+            <input type="checkbox" data-draft-cli ${d.allowsCLI ? "checked" : ""}>
+            <span class="t-label">CLI</span>
+            <span class="t-sub">UDS · MCP tools/call JSON + credential</span>
+          </label>
+        </div>
+        ${state.nameError ? `<div class="err">${escapeHtml(state.nameError)}</div>` : ""}
+        <div class="sheet-actions">
+          <button type="button" class="btn-bordered" data-sheet="back">Back</button>
+          <button type="button" class="btn-bordered primary" data-sheet="next">Continue</button>
+        </div>`;
+    } else {
+      body = `
+        ${steps}
+        <p class="blurb">Optional. Skip for initials fallback.</p>
+        ${iconStripHTML(d.icon, d.name || "?", "sheet")}
+        <div class="sheet-actions">
+          <button type="button" class="btn-bordered" data-sheet="back">Back</button>
+          <button type="button" class="btn-bordered" data-sheet="skip">Skip</button>
+          <button type="button" class="btn-bordered primary" data-sheet="save">Save agent</button>
+        </div>`;
+    }
+    el.innerHTML = `<h2>Add agent</h2>${body}`;
+    return;
+  }
+
+  // A/B edit or A add (single-page sheet)
+  const title = s.mode === "add" ? "Add agent" : "Edit agent";
+  el.innerHTML = `
+    <h2>${title}</h2>
+    <p class="blurb">Name, channels (at least one), optional icon.</p>
+    ${s.mode === "add" ? `
+    <div class="templates">
+      ${["cursor", "grok", "blank"].map((k) => `
+        <button type="button" class="${s.template === k ? "on" : ""}" data-template="${k}">
+          ${k === "cursor" ? "Cursor" : k === "grok" ? "Grok Bot" : "Blank"}
+        </button>`).join("")}
+    </div>` : ""}
+    <div class="field">
+      <label for="sheetName">Name</label>
+      <input type="text" id="sheetName" value="${escapeHtml(d.name)}" data-draft-name>
+      ${state.nameError ? `<div class="err">${escapeHtml(state.nameError)}</div>` : ""}
+    </div>
+    <div class="field">
+      <label>Access</label>
+      <div class="toggle-row">
+        <label class="toggle${d.allowsMCP ? " on" : ""}">
+          <input type="checkbox" data-draft-mcp ${d.allowsMCP ? "checked" : ""}>
+          <span><span class="t-label">MCP</span></span>
+        </label>
+        <label class="toggle${d.allowsCLI ? " on" : ""}">
+          <input type="checkbox" data-draft-cli ${d.allowsCLI ? "checked" : ""}>
+          <span><span class="t-label">CLI</span></span>
+        </label>
+      </div>
+    </div>
+    <div class="field">
+      <label>Icon <span style="font-weight:500">(optional)</span></label>
+      ${iconStripHTML(d.icon, d.name || "?", "sheet")}
+    </div>
+    <div class="sheet-actions">
+      <button type="button" class="btn-bordered" data-sheet="cancel">Cancel</button>
+      <button type="button" class="btn-bordered primary" data-sheet="save">${s.mode === "add" ? "Add agent" : "Save"}</button>
+    </div>`;
+}
+
+function dumpState() {
+  const payload = {
+    variant: state.variant,
+    cliEnabled: state.cliEnabled,
+    selectedId: state.selectedId,
+    inspMode: state.inspMode,
+    chartScope: state.chartScope,
+    agents: state.agents.map((a) => ({
+      id: a.id,
+      name: a.name,
+      icon: a.icon,
+      allowsMCP: a.allowsMCP,
+      allowsCLI: a.allowsCLI,
+      paired: a.paired,
+      bearer: a.paired ? "[issued]" : null,
+      issuedAt: a.issuedAt || null,
+      grants: a.grants,
+      _draft: !!a._draft,
+    })),
+    sheet: state.sheet ? {
+      mode: state.sheet.mode,
+      step: state.sheet.step,
+      agentId: state.sheet.agentId || null,
+      draft: state.sheet.draft || null,
+    } : null,
+  };
+  document.getElementById("stateDump").textContent = JSON.stringify(payload, null, 2);
+}
+
+function render() {
+  const root = document.getElementById("root");
+  if (state.variant === "A") root.innerHTML = renderA();
+  else if (state.variant === "B") root.innerHTML = renderB();
+  else root.innerHTML = renderC();
+
+  const v = VARIANTS[state.variant];
+  document.getElementById("varLabel").innerHTML =
+    `${v.key} — ${v.name}<span>${v.blurb}</span>`;
+
+  renderSheet();
+
+  document.getElementById("revokeBackdrop").hidden = !state.revokeId;
+  if (state.revokeId) {
+    const a = agentById(state.revokeId);
+    document.getElementById("revokeTitle").textContent =
+      `Revoke ${a?.name || "agent"} credential?`;
+  }
+
+  dumpState();
+  bindRoot();
+}
+
+function applyIconChoice(target, raw, agent) {
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { return; }
+  if (parsed.kind === null) {
+    if (agent) agent.icon = null;
+    else target.icon = null;
+    return;
+  }
+  const icon = { kind: parsed.kind, value: parsed.value };
+  if (agent) agent.icon = icon;
+  else target.icon = icon;
+}
+
+function bindRoot() {
+  const root = document.getElementById("root");
+
+  root.querySelectorAll("[data-select]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      if (e.target.closest("[data-act]")) return;
+      const id = el.getAttribute("data-select");
+      if (state.inspMode === "edit" && state._editSnap && state.selectedId !== id) {
+        cancelInspEdit();
+      }
+      state.selectedId = id;
+      state.inspMode = agentById(id)?._draft ? "edit" : "view";
+      state._nameBuf = undefined;
+      state.nameError = "";
+      render();
+    });
+  });
+
+  root.querySelectorAll("[data-act]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id");
+      const a = id ? agentById(id) : null;
+
+      if (act === "add") {
+        openSheet("add", { step: 1, template: "blank" });
+        return;
+      }
+      if (act === "add-draft") {
+        // B: draft row in inspector (edit mode)
+        const draft = {
+          id: uid(),
+          name: "",
+          icon: null,
+          allowsMCP: true,
+          allowsCLI: false,
+          paired: false,
+          bearer: null,
+          issuedAt: null,
+          grants: 0,
+          callSeries: Array(14).fill(0),
+          denied7d: 0,
+          showConfig: false,
+          showBearer: false,
+          showCli: false,
+          expanded: false,
+          _draft: true,
+        };
+        // drop prior draft
+        state.agents = state.agents.filter((x) => !x._draft);
+        state.agents.push(draft);
+        state.selectedId = draft.id;
+        state.inspMode = "edit";
+        state._editSnap = null;
+        state._nameBuf = "";
+        state._bufFor = draft.id;
+        state.nameError = "";
+        render();
+        return;
+      }
+      if (act === "cancel-draft") {
+        state.agents = state.agents.filter((x) => !x._draft);
+        state.selectedId = state.agents[0]?.id || null;
+        state.inspMode = "view";
+        state._nameBuf = undefined;
+        render();
+        return;
+      }
+      if (act === "save-draft") {
+        const d = state.agents.find((x) => x._draft);
+        if (!d) return;
+        const name = (state._bufFor === d.id && state._nameBuf !== undefined)
+          ? state._nameBuf.trim()
+          : d.name.trim();
+        const err = validateDraft({ name, allowsMCP: d.allowsMCP, allowsCLI: d.allowsCLI }, d.id);
+        state.nameError = err;
+        if (err) { render(); return; }
+        d.name = name;
+        d._draft = false;
+        state.inspMode = "view";
+        state._nameBuf = undefined;
+        render();
+        return;
+      }
+      if (act === "chart-scope") {
+        const scope = btn.getAttribute("data-scope");
+        if (scope === "selected" || scope === "all") {
+          state.chartScope = scope;
+          render();
+        }
+        return;
+      }
+      if (act === "insp-edit" && a) {
+        enterInspEdit(a);
+        render();
+        return;
+      }
+      if (act === "insp-cancel") {
+        cancelInspEdit();
+        render();
+        return;
+      }
+      if (act === "insp-done") {
+        doneInspEdit();
+        return;
+      }
+      if (act === "edit" && a) {
+        if (state.variant === "B") {
+          enterInspEdit(a);
+          render();
+          return;
+        }
+        openSheet("edit", { id: a.id });
+        return;
+      }
+      if (act === "setup" && a) {
+        openSheet("setup", { id: a.id });
+        return;
+      }
+      if (act === "delete" && a) {
+        deleteAgent(a.id);
+        return;
+      }
+      if (act === "pair" && a) { pairAgent(a.id); return; }
+      if (act === "revoke" && a) { state.revokeId = a.id; render(); return; }
+      if (act === "toggle-config" && a) {
+        a.showConfig = !a.showConfig;
+        if (!a.showConfig) a.showBearer = false;
+        render();
+        return;
+      }
+      if (act === "toggle-cli" && a) {
+        a.showCli = !a.showCli;
+        render();
+        return;
+      }
+      if (act === "toggle-bearer" && a) {
+        a.showBearer = !a.showBearer;
+        render();
+        return;
+      }
+      if (act === "copy-bearer" && a && a.bearer) {
+        copyText(a.bearer, a.id, "Bearer copied");
+        return;
+      }
+      if (act === "copy-mcp" && a && a.bearer) {
+        copyText(mcpSnippet(a, true), a.id, "MCP config copied");
+        return;
+      }
+      if (act === "copy-mcp-safe" && a) {
+        copyText(mcpSnippetSafe(a), a.id, "MCP config copied (no secret)");
+        return;
+      }
+      if (act === "copy-cli" && a) {
+        copyText(cliExamples(a), a.id, "CLI examples copied");
+        return;
+      }
+      if (act === "copy-cli-safe" && a) {
+        copyText(cliExamplesSafe(a), a.id, "CLI guide copied (no secret)");
+        return;
+      }
+      if (act === "copy-setup" && a) {
+        copyText(agentSetupInstructions(a), a.id, "Setup instructions copied");
+        return;
+      }
+      if (act === "toggle-expand" && a) {
+        a.expanded = !a.expanded;
+        state.selectedId = a.id;
+        render();
+        return;
+      }
+    });
+  });
+
+  // B inspector bindings (edit mode only)
+  const nameInput = root.querySelector("[data-insp-name]");
+  if (nameInput) {
+    const a = selected();
+    nameInput.addEventListener("input", (e) => {
+      state._nameBuf = e.target.value;
+      state._bufFor = a?.id;
+      if (a?._draft) a.name = e.target.value;
+    });
+    nameInput.addEventListener("change", (e) => {
+      if (!a) return;
+      const name = e.target.value.trim();
+      state._nameBuf = name;
+      state._bufFor = a.id;
+      if (a._draft) {
+        a.name = name;
+        return;
+      }
+      // Commit on Done (insp-done); only surface uniqueness while typing blur
+      const err = !name
+        ? "Name is required."
+        : (nameTaken(name, a.id) ? "Name must be unique (case-insensitive)." : "");
+      state.nameError = err;
+      if (!err) a.name = name;
+      render();
+    });
+  }
+
+  root.querySelector("[data-insp-mcp]")?.addEventListener("change", (e) => {
+    const a = selected();
+    if (!a) return;
+    a.allowsMCP = e.target.checked;
+    if (!a.allowsMCP && !a.allowsCLI) a.allowsCLI = true;
+    if (!a.allowsMCP) { a.showConfig = false; a.showBearer = false; }
+    render();
+  });
+  root.querySelector("[data-insp-cli]")?.addEventListener("change", (e) => {
+    const a = selected();
+    if (!a) return;
+    a.allowsCLI = e.target.checked;
+    if (!a.allowsMCP && !a.allowsCLI) a.allowsMCP = true;
+    render();
+  });
+
+  root.querySelectorAll("[data-icon-strip='insp'] [data-icon]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const a = selected();
+      if (!a) return;
+      applyIconChoice(null, btn.getAttribute("data-icon"), a);
+      render();
+    });
+  });
+  root.querySelector("[data-icon-strip='insp'] [data-icon-mono]")?.addEventListener("click", () => {
+    const a = selected();
+    if (!a) return;
+    a.icon = {
+      kind: "monogram",
+      value: initials(a.name),
+      color: a.icon?.color || MONOGRAM_COLORS[0],
+    };
+    render();
+  });
+  root.querySelectorAll("[data-mono-color]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const a = selected();
+      if (!a) return;
+      if (!a.icon || a.icon.kind !== "monogram") {
+        a.icon = { kind: "monogram", value: initials(a.name), color: btn.getAttribute("data-mono-color") };
+      } else {
+        a.icon.color = btn.getAttribute("data-mono-color");
+      }
+      render();
+    });
+  });
+  root.querySelector("[data-mono-letter]")?.addEventListener("change", (e) => {
+    const a = selected();
+    if (!a) return;
+    const v = e.target.value.trim().slice(0, 2).toUpperCase() || initials(a.name);
+    if (!a.icon || a.icon.kind !== "monogram") {
+      a.icon = { kind: "monogram", value: v, color: MONOGRAM_COLORS[0] };
+    } else {
+      a.icon.value = v;
+    }
+    render();
+  });
+
+  bindSheet();
+}
+
+function handleAgentAct(act, a) {
+  if (!a) return false;
+  if (act === "pair") { pairAgent(a.id); return true; }
+  if (act === "copy-bearer" && a.bearer) {
+    copyText(a.bearer, a.id, "Bearer copied");
+    return true;
+  }
+  if (act === "copy-mcp" && a.bearer) {
+    copyText(mcpSnippet(a, true), a.id, "MCP config copied");
+    return true;
+  }
+  if (act === "copy-mcp-safe") {
+    copyText(mcpSnippetSafe(a), a.id, "MCP config copied (no secret)");
+    return true;
+  }
+  if (act === "copy-cli") {
+    copyText(cliExamples(a), a.id, "CLI examples copied");
+    return true;
+  }
+  if (act === "copy-cli-safe") {
+    copyText(cliExamplesSafe(a), a.id, "CLI guide copied (no secret)");
+    return true;
+  }
+  if (act === "copy-setup") {
+    copyText(agentSetupInstructions(a), a.id, "Setup instructions copied");
+    return true;
+  }
+  return false;
+}
+
+function bindSheet() {
+  const sheet = document.getElementById("sheet");
+  if (!state.sheet) return;
+
+  // Setup wizard (+ any sheet-local copy/pair buttons)
+  sheet.querySelectorAll("[data-act]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id") || state.sheet.agentId;
+      handleAgentAct(act, agentById(id));
+    });
+  });
+
+  if (state.sheet.mode === "setup") {
+    sheet.querySelector("[data-sheet='cancel']")?.addEventListener("click", closeSheet);
+    sheet.querySelector("[data-sheet='next']")?.addEventListener("click", () => {
+      const a = agentById(state.sheet.agentId);
+      if (!a) return;
+      const keys = setupStepKeys(a);
+      state.sheet.step = Math.min(keys.length - 1, (state.sheet.step || 0) + 1);
+      render();
+    });
+    sheet.querySelector("[data-sheet='back']")?.addEventListener("click", () => {
+      state.sheet.step = Math.max(0, (state.sheet.step || 0) - 1);
+      render();
+    });
+    return;
+  }
+
+  const d = state.sheet.draft;
+  if (!d) return;
+
+  sheet.querySelectorAll("[data-template]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.getAttribute("data-template");
+      state.sheet.template = key;
+      state.sheet.draft = emptyDraft(key);
+      state.nameError = "";
+      render();
+    });
+  });
+
+  sheet.querySelector("[data-draft-name]")?.addEventListener("input", (e) => {
+    d.name = e.target.value;
+  });
+
+  sheet.querySelector("[data-draft-mcp]")?.addEventListener("change", (e) => {
+    d.allowsMCP = e.target.checked;
+    if (!d.allowsMCP && !d.allowsCLI) d.allowsCLI = true;
+    render();
+  });
+  sheet.querySelector("[data-draft-cli]")?.addEventListener("change", (e) => {
+    d.allowsCLI = e.target.checked;
+    if (!d.allowsMCP && !d.allowsCLI) d.allowsMCP = true;
+    render();
+  });
+
+  sheet.querySelectorAll("[data-icon]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyIconChoice(d, btn.getAttribute("data-icon"), null);
+      render();
+    });
+  });
+  sheet.querySelector("[data-icon-mono]")?.addEventListener("click", () => {
+    d.icon = {
+      kind: "monogram",
+      value: (d.monogramLetter || initials(d.name || "?")).slice(0, 2).toUpperCase(),
+      color: d.monogramColor,
+    };
+    render();
+  });
+  sheet.querySelectorAll("[data-mono-color]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      d.monogramColor = btn.getAttribute("data-mono-color");
+      d.icon = {
+        kind: "monogram",
+        value: (d.monogramLetter || initials(d.name || "?")).slice(0, 2).toUpperCase(),
+        color: d.monogramColor,
+      };
+      render();
+    });
+  });
+  sheet.querySelector("[data-mono-letter]")?.addEventListener("input", (e) => {
+    d.monogramLetter = e.target.value;
+  });
+  sheet.querySelector("[data-mono-letter]")?.addEventListener("change", (e) => {
+    d.monogramLetter = e.target.value.trim().slice(0, 2).toUpperCase();
+    d.icon = {
+      kind: "monogram",
+      value: d.monogramLetter || initials(d.name || "?"),
+      color: d.monogramColor,
+    };
+    render();
+  });
+
+  sheet.querySelector("[data-sheet='cancel']")?.addEventListener("click", closeSheet);
+  sheet.querySelector("[data-sheet='save']")?.addEventListener("click", commitDraft);
+  sheet.querySelector("[data-sheet='skip']")?.addEventListener("click", () => {
+    d.icon = null;
+    commitDraft();
+  });
+  sheet.querySelector("[data-sheet='next']")?.addEventListener("click", () => {
+    const step = state.sheet.step;
+    if (step === 1) {
+      const err = !(d.name || "").trim()
+        ? "Name is required."
+        : nameTaken(d.name, null)
+          ? "Name must be unique (case-insensitive)."
+          : "";
+      state.nameError = err;
+      if (err) { render(); return; }
+      state.sheet.step = 2;
+      state.nameError = "";
+      render();
+      return;
+    }
+    if (step === 2) {
+      if (!d.allowsMCP && !d.allowsCLI) {
+        state.nameError = "Enable MCP, CLI, or both.";
+        render();
+        return;
+      }
+      state.nameError = "";
+      state.sheet.step = 3;
+      render();
+    }
+  });
+  sheet.querySelector("[data-sheet='back']")?.addEventListener("click", () => {
+    state.sheet.step = Math.max(1, state.sheet.step - 1);
+    state.nameError = "";
+    render();
+  });
+}
+
+document.getElementById("revokeCancel").addEventListener("click", () => {
+  state.revokeId = null;
+  render();
+});
+document.getElementById("revokeConfirm").addEventListener("click", () => {
+  if (state.revokeId) revokeAgent(state.revokeId);
+});
+document.getElementById("revokeBackdrop").addEventListener("click", (e) => {
+  if (e.target.id === "revokeBackdrop") {
+    state.revokeId = null;
+    render();
+  }
+});
+document.getElementById("sheetBackdrop").addEventListener("click", (e) => {
+  if (e.target.id === "sheetBackdrop") closeSheet();
+});
+
+function setVariant(key) {
+  if (!VARIANTS[key]) return;
+  // Drop B drafts when leaving
+  state.agents = state.agents.filter((a) => !a._draft);
+  state.variant = key;
+  state.sheet = null;
+  state.inspMode = "view";
+  state._editSnap = null;
+  state.nameError = "";
+  state._nameBuf = undefined;
+  const url = new URL(location.href);
+  url.searchParams.set("variant", key);
+  history.replaceState(null, "", url);
+  render();
+}
+
+function cycle(delta) {
+  const keys = Object.keys(VARIANTS);
+  const i = keys.indexOf(state.variant);
+  setVariant(keys[(i + delta + keys.length) % keys.length]);
+}
+
+document.getElementById("prevVar").addEventListener("click", () => cycle(-1));
+document.getElementById("nextVar").addEventListener("click", () => cycle(1));
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select, [contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+
+const initial = new URL(location.href).searchParams.get("variant") || "A";
+setVariant(VARIANTS[initial] ? initial : "A");
+</script>
+</body>
+</html>
