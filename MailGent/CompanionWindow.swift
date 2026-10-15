@@ -334,11 +334,42 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private func finishAsk(_ decision: ConditionalAccessDecision) {
-        guard !askFinished else { return }
+        // Delayed bringForward pokes used to resurrect a finished Ask; buttons then
+        // hit this guard and appeared dead. Dismiss the zombie if no turn is live.
+        if askFinished {
+            if askContinuation == nil, !askBusy {
+                MailGentLog.trace("ask finish ignored (zombie) — dismissing stale dialog")
+                dismissAskWindow(invalidatePokes: true)
+            } else {
+                MailGentLog.trace("ask finish ignored (already decided, queue handoff)")
+            }
+            return
+        }
         askFinished = true
         let continuation = askContinuation
         askContinuation = nil
 
+        // Keep the window when more Asks are queued — next presentConditionalAsk
+        // swaps content. Ordering out here left a gap where delayed pokes could
+        // resurrect a finished dialog with dead Allow / Block buttons.
+        let keepForQueue = !askWaiters.isEmpty
+        if keepForQueue {
+            MailGentLog.trace(
+                "ask \(decision == .allow ? "allow" : "block") — keeping window for \(askWaiters.count) queued"
+            )
+        } else {
+            dismissAskWindow(invalidatePokes: true)
+        }
+        continuation?.resume(returning: decision)
+    }
+
+    /// Hide the Ask window and drop it from `intendedVisible`.
+    /// - Parameter invalidatePokes: bump `presentationToken` so delayed `bringForward`
+    ///   work from this Ask cannot order the window back in.
+    private func dismissAskWindow(invalidatePokes: Bool) {
+        if invalidatePokes {
+            presentationToken += 1
+        }
         if let ask {
             intendedVisible.remove(ObjectIdentifier(ask))
             allowingOrderOut = true
@@ -348,7 +379,6 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         if intendedVisible.isEmpty {
             NSApp.setActivationPolicy(.accessory)
         }
-        continuation?.resume(returning: decision)
     }
 
     private func beginPresentation() {
@@ -600,6 +630,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let token = presentationToken
         let poke = { [weak self] in
             guard let self, token == self.presentationToken else { return }
+            // Never resurrect a window the user (or finishAsk) already dismissed.
+            guard self.wantsVisible(window) else { return }
             self.claimActivation()
             if window.isMiniaturized {
                 window.deminiaturize(nil)
