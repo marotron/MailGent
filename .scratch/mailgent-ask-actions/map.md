@@ -26,12 +26,16 @@ Ship optional **Rules-from-Ask** on the conditional Ask dialog (create **or upda
 Active grilling lives on GitHub (prefer links over duplicating questions here):
 
 - Rules-from-Ask open questions → [#21](https://github.com/marotron/MailGent/issues/21) (`roadmap`, `fog`)
+- Cache Ask Allow/Block (Settings on/off + TTL; per-agent default vs All/Selected share) → [#41](https://github.com/marotron/MailGent/issues/41) (`roadmap`, `fog`, `next-version`)
 
 ## Deferred
 
 - Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) (`roadmap`, `next-version`) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md) — blocked on 01 / #21
 - Ask button pointer cursor on hover → [#23](https://github.com/marotron/MailGent/issues/23) (`bug`, `next-version`) · [issues/03-ask-button-cursor.md](issues/03-ask-button-cursor.md)
 - Ask help-row equal clearance → [#24](https://github.com/marotron/MailGent/issues/24) (`enhancement`, `next-version`) · [issues/04-ask-info-row-clearance.md](issues/04-ask-info-row-clearance.md)
+- Cache Ask for same agent + message → [#41](https://github.com/marotron/MailGent/issues/41) (`roadmap`, `fog`, `next-version`) · [issues/05-cache-ask-for-same-message.md](issues/05-cache-ask-for-same-message.md)
+- Traffic-sign Pass/Block marks (consume from Ask too) → [#26](https://github.com/marotron/MailGent/issues/26) · [../mailgent-ui-icons/](../mailgent-ui-icons/)
+- Unify icons/colors app-wide → [#27](https://github.com/marotron/MailGent/issues/27)
 
 ## Out of scope
 
