@@ -1,6 +1,6 @@
 # MailGent
 
-**0.11.6 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.11.7 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -80,6 +80,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Optional on-device scan of subject/body before the agent receives mail (opt in per placement)
 - Built-in detectors plus your own filters; hits can redact or withhold
+- A match after an emoji (or any other multi-unit character) is redacted in place; that scan no longer quits the app
 
 ### Access log
 

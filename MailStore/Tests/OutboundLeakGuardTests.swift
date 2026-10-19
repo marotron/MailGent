@@ -125,6 +125,21 @@ struct OutboundLeakGuardTests {
         #expect(result.disclosedRules.contains("JWT tokens"))
     }
 
+    @Test func builtInPhoneRedactAfterEmoji() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let prefix = String(repeating: "👤", count: 20)
+        let result = guard_.sanitize(
+            text: "\(prefix) +1 (415) 555-2671",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .sanitized)
+        #expect(result.text == "\(prefix) [REDACTED:phones]")
+        #expect(result.disclosedRules.contains("Phone numbers"))
+    }
+
     @Test func customRegexRuleMatches() {
         let rule = CustomLeakRule(
             label: "Project code",

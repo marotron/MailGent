@@ -77,6 +77,21 @@ public struct OutboundLeakGuard: Sendable {
                 stealth: false
             )
         }
+        let characterCount = original.count
+        guard hits.allSatisfy({ $0.start >= 0 && $0.end >= $0.start && $0.end <= characterCount }) else {
+            let labels = Array(Set(hits.map(\.label))).sorted()
+            return SanitizedField(
+                text: "",
+                access: .withheldConfidential,
+                agentAccess: .withheldConfidential,
+                reason: .leakGuard,
+                disclosedRules: labels,
+                allRules: labels,
+                original: original,
+                hitSpans: hits,
+                stealth: false
+            )
+        }
         var out = original
         var allRules = Set<String>()
         var disclosedRules = Set<String>()

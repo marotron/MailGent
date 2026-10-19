@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.7] - 2026-10-19
+
+### Fixed
+
+- Leak guard no longer quits the app when a redaction match follows an emoji or other character that uses more than one UTF-16 unit. The match is still redacted in place.
+
 ## [0.11.6] - 2026-10-19
 
 ### Added

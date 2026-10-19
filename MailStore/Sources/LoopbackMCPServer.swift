@@ -114,7 +114,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.11.6"
+                        "version": "0.11.7"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
