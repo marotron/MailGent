@@ -120,7 +120,7 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 
 | Field | Value |
 |---|---|
-| **Job** | Show how many Ask prompts are open or queued |
+| **Job** | Show how many access-request windows are open |
 | **Menu bar** | Red capsule + white count overlaid top-trailing on `MenuBarIconLabel` |
 | **Dock** | `NSApp.dockTile.badgeLabel` (visible when activation policy is `.regular`) |
 | **Count** | One per open Ask window (`AskQueueIndicator.pending`) |
