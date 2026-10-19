@@ -26,16 +26,14 @@ public struct ConditionalAccessPromptRequest: Identifiable, Sendable {
 /// Coordinator for showing conditional access prompts and waiting for user decisions.
 /// Lives on AgentBridge (main actor) and is called from MCP get via MainActor hop.
 ///
-/// Presents via `DetachedWindowHost.runConditionalAsk` (HostedWindow) so MenuBarExtra
-/// hide / orderOut cannot flash-dismiss the Ask dialog or other MailGent windows.
+/// Each request is its own `DetachedWindowHost` window. Pending rows live on
+/// `AskQueueIndicator`, not a single coordinator request.
 @MainActor
 public final class ConditionalAccessPromptCoordinator: ObservableObject {
-    @Published public var pendingRequest: ConditionalAccessPromptRequest?
-
     public init() {}
 
-    /// Request a decision from the user. Suspends until Allow / Block.
-    /// Concurrent gets queue behind the open Ask (Host serializes); never auto-Blocks a prior prompt.
+    /// Request a decision from the user. Suspends until Allow / Block for this request.
+    /// Concurrent gets each open their own dialog; one decision never resolves another.
     /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
     public func requestDecision(
         context: ConditionalAccessPromptContext,
@@ -47,29 +45,13 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
 
         let decision = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
-            accountLabel: mailboxLabel,
-            onPresent: { [weak self] in
-                self?.pendingRequest = request
-            }
+            accountLabel: mailboxLabel
         )
 
-        if pendingRequest?.id == request.id {
-            pendingRequest = nil
-        }
         MailGentLog.trace(
             "conditional access \(decision == .allow ? "allow" : "block") agent=\(context.agentName) fields=\(fieldsText)"
         )
         return decision
-    }
-
-    /// User chose Allow (SwiftUI path, if any).
-    public func allow() {
-        pendingRequest = nil
-    }
-
-    /// User chose Block or dismissed (SwiftUI path, if any).
-    public func block() {
-        pendingRequest = nil
     }
 }
 

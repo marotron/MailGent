@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.11.6] - 2026-10-19
+
+### Added
+
+- Status menu **Access requests** while prompts are waiting: the count, one agent / subject row per request, and **Block** / **Allow** on each row. A circular **?** is the only selection mark. Clicking the rest of the row raises that window and does not decide it.
+
+### Changed
+
+- Concurrent Ask prompts each open their own **Email access request** window. Allow, Block, or closing one window decides only that request.
+- Opening the menu-bar icon raises every pending access-request window without taking focus. Closing the menu leaves the selected window in front.
+- The menu-bar icon accessibility label counts “access request” / “access requests”.
+
 ## [0.11.5] - 2026-10-15
 
 ### Fixed

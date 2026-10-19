@@ -123,8 +123,23 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | **Job** | Show how many Ask prompts are open or queued |
 | **Menu bar** | Red capsule + white count overlaid top-trailing on `MenuBarIconLabel` |
 | **Dock** | `NSApp.dockTile.badgeLabel` (visible when activation policy is `.regular`) |
-| **Count** | Open dialog + waiters (`AskQueueIndicator`) |
-| **Swift** | `AskQueueIndicator` + overlay in `MenuBarIcon.swift`; depth updated from `DetachedWindowHost` |
+| **Count** | One per open Ask window (`AskQueueIndicator.pending`) |
+| **Swift** | `AskQueueIndicator` + overlay in `MenuBarIcon.swift`; register / resolve from `DetachedWindowHost` |
+| **Copy** | Icon accessibility: “1 access request” / “N access requests” |
+| **Menu click** | Opens the status dropdown and raises every pending Ask with `orderFrontRegardless` (no key while the menu is open). Close leaves the selected Ask in front |
+
+### `AccessRequestsSection`
+
+| Field | Value |
+|---|---|
+| **Job** | Review and decide pending access requests from the status menu |
+| **Visibility** | Hidden at zero, including its lower separator |
+| **Header** | Disclosure **Access requests**, trailing count, chevron. Collapsed until opened |
+| **Row** | Truncated `agent · subject`. 16pt **?** mark only (no row highlight, no trailing dot). Unselected: 1px `#8e8e93` outline and `?`. Selected: `#8e8e93` disc, `?` knocked out |
+| **Quick controls** | **Block** `#f8d0d0` / `#c41212`. **Allow** `#dff4e4` / `#166a2d`. Each decides only that request |
+| **Row click** | Raises that window. Does not Allow or Block |
+| **Swift** | `AccessRequestMenu` projection + `AccessRequestMenuRow` in `MenuBarStatus.swift` |
+| **Prototype** | `.scratch/mailgent-ask-queue/examples/prototype-menu-surfaces-ask.html` |
 
 ### `AskPreviewZoomControls`
 
@@ -227,6 +242,7 @@ SecondaryActionRow
 
 | Date | Change |
 |---|---|
+| 2026-10-19 | Status menu `AccessRequestsSection`: one row per concurrent Ask, ? selection mark, Block / Allow. Menu open raises every Ask window without taking key. |
 | 2026-10-14 | FileCard Preview opens the file for the user even when agent access is denied / too large; the under-card note now explains the agent-side restriction instead of saying Preview stays closed. Missing still shows reason only. |
 | 2026-10-12 | Ask preview canvas: floating sticky `AskPreviewZoomControls` (− \| +); default 75% page zoom; plain Ask body uses `NSTextView.scrollableTextView()`. |
 | 2026-10-12 | Ask: title `Email access request`; centered larger `?` + callout “{agent} wants access…” + More/Less; popup capped (~560); Body `HTML only` title badge. |

@@ -20,19 +20,31 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var settings: NSWindow?
     private var about: NSWindow?
     private var changelog: NSWindow?
-    /// Conditional Ask — same HostedWindow protection as other detached surfaces.
-    private var ask: NSWindow?
-    private var askContinuation: CheckedContinuation<ConditionalAccessDecision, Never>?
-    private var askFinished = false
-    /// Serializes Ask dialogs: concurrent MCP `get`s wait instead of fail-closing the open Ask.
-    private var askBusy = false
-    private var askWaiters: [CheckedContinuation<Void, Never>] = []
+    /// One Ask dialog per request id. Concurrent prompts stay independent.
+    private final class AskRecord {
+        let window: NSWindow
+        var continuation: CheckedContinuation<ConditionalAccessDecision, Never>?
+        var finished = false
+        var pokeToken = 0
+        let presentedAt = Date()
+
+        init(window: NSWindow, continuation: CheckedContinuation<ConditionalAccessDecision, Never>) {
+            self.window = window
+            self.continuation = continuation
+        }
+    }
+
+    private var asks: [String: AskRecord] = [:]
+    /// True while the status dropdown is on screen. Ask windows must not become key then.
+    private var statusMenuIsOpen = false
     #if DEBUG
     /// Layout sandbox — never touches the real Ask queue / MCP continuation.
     private var askLayoutSandbox: NSWindow?
     #endif
     /// Bumps when a new menu action schedules a present; stale delayed work bails.
     private var presentationToken = 0
+    /// Bumps when the status menu opens again; a stale close must not steal key.
+    private var menuOpenGeneration = 0
     /// Only `windowShouldClose` (user close) may order out hosted windows.
     private var allowingOrderOut = false
     private var presentedAt: Date?
@@ -109,6 +121,64 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Status menu opened: raise every pending Ask without taking key from the dropdown.
+    func noteStatusMenuOpened() {
+        statusMenuIsOpen = true
+        menuOpenGeneration += 1
+        let generation = menuOpenGeneration
+        DispatchQueue.main.async { [weak self] in
+            guard let self, generation == self.menuOpenGeneration else { return }
+            self.surfacePendingAsks(makeKey: false)
+        }
+    }
+
+    /// Status menu closed without starting another window: keep the selected Ask in front.
+    func noteStatusMenuClosed() {
+        let generation = menuOpenGeneration
+        let token = presentationToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, generation == self.menuOpenGeneration else { return }
+            guard token == self.presentationToken else { return }
+            self.statusMenuIsOpen = false
+            self.surfacePendingAsks(makeKey: true)
+        }
+    }
+
+    /// Row click: select and raise that request. No Allow / Block.
+    func raisePendingAsk(id: String) {
+        _ = AskQueueIndicator.shared.select(id: id)
+        guard AskQueueIndicator.shared.pending.selectedID == id else { return }
+        orderAsk(id: id, makeKey: !statusMenuIsOpen)
+    }
+
+    /// Menu Block / Allow — same once-only path as the dialog buttons.
+    func decidePendingAsk(id: String, decision: ConditionalAccessDecision) {
+        finishAsk(id: id, decision: decision)
+    }
+
+    /// Raise every pending Ask. The selected window is ordered last. `makeKey` only when the menu is closed.
+    private func surfacePendingAsks(makeKey: Bool) {
+        let pending = AskQueueIndicator.shared.pending
+        guard pending.count > 0 else { return }
+        for summary in pending.summaries {
+            orderAsk(id: summary.id, makeKey: false)
+        }
+        if let selected = pending.selectedID {
+            orderAsk(id: selected, makeKey: makeKey)
+        }
+    }
+
+    private func orderAsk(id: String, makeKey: Bool) {
+        guard let record = asks[id], wantsVisible(record.window) else { return }
+        if record.window.isMiniaturized {
+            record.window.deminiaturize(nil)
+        }
+        record.window.orderFrontRegardless()
+        guard makeKey, !statusMenuIsOpen else { return }
+        claimActivation()
+        record.window.makeKeyAndOrderFront(nil)
+    }
+
     /// Flip off `.accessory` on the click itself so MenuBarExtra dismiss does not hide the app.
     func claimActivation() {
         presentedAt = Date()
@@ -117,45 +187,13 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Present the conditional Ask dialog until Allow / Block / traffic-light close.
-    /// Uses `HostedWindow` + `intendedVisible` so MenuBarExtra `hide` / `orderOut` cannot flash-dismiss it.
-    /// Concurrent callers wait their turn — a new Ask never auto-Blocks an open one.
+    /// Present one conditional Ask dialog until Allow / Block / traffic-light close.
+    /// Each request gets its own `HostedWindow`. MenuBarExtra `hide` / `orderOut` cannot flash-dismiss it.
     func runConditionalAsk(
         request: ConditionalAccessPromptRequest,
-        accountLabel: String,
-        onPresent: (() -> Void)? = nil
+        accountLabel: String
     ) async -> ConditionalAccessDecision {
-        await beginAskTurn()
-        defer { endAskTurn() }
-        onPresent?()
-        return await presentConditionalAsk(request: request, accountLabel: accountLabel)
-    }
-
-    private func beginAskTurn() async {
-        if !askBusy {
-            askBusy = true
-            refreshAskQueueBadge()
-            return
-        }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            askWaiters.append(continuation)
-            refreshAskQueueBadge()
-        }
-    }
-
-    private func endAskTurn() {
-        if askWaiters.isEmpty {
-            askBusy = false
-            refreshAskQueueBadge()
-            return
-        }
-        askWaiters.removeFirst().resume()
-        refreshAskQueueBadge()
-    }
-
-    /// Open Ask + queued waiters (red bubble on menu bar / Dock).
-    private func refreshAskQueueBadge() {
-        AskQueueIndicator.shared.setDepth(askBusy ? 1 + askWaiters.count : 0)
+        await presentConditionalAsk(request: request, accountLabel: accountLabel)
     }
 
     private func presentConditionalAsk(
@@ -163,14 +201,21 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         accountLabel: String
     ) async -> ConditionalAccessDecision {
         await withCheckedContinuation { continuation in
-            askContinuation = continuation
-            askFinished = false
-
+            AskQueueIndicator.shared.register(
+                id: request.id,
+                agent: request.agentName,
+                subject: request.context.envelope.subject
+            )
+            let index = max(0, AskQueueIndicator.shared.pending.count - 1)
             let dialog = ConditionalAccessPromptDialog(
                 request: request,
                 accountLabel: accountLabel,
-                onAllow: { [weak self] in self?.finishAsk(.allow) },
-                onBlock: { [weak self] in self?.finishAsk(.block) },
+                onAllow: { [weak self] in
+                    self?.finishAsk(id: request.id, decision: .allow)
+                },
+                onBlock: { [weak self] in
+                    self?.finishAsk(id: request.id, decision: .block)
+                },
                 showOpenInMail: request.context.mailURL != nil,
                 onOpenInMail: {
                     if let mailURL = request.context.mailURL {
@@ -178,35 +223,61 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                     }
                 },
                 onPreviewVisibilityChange: { [weak self] visible in
-                    self?.resizeAskWindow(previewVisible: visible)
+                    self?.resizeAskWindow(id: request.id, previewVisible: visible)
                 },
                 onPreferredHeightChange: { [weak self] height in
-                    self?.fitAskWindowHeight(height)
+                    self?.fitAskWindowHeight(id: request.id, preferredHeight: height)
                 }
             )
 
-            // Start expanded (preview on); Preview toggle shrinks/expands. Window stays resizable.
             let size = ConditionalAskLayout.contentSize(previewVisible: true)
-            beginPresentation()
-            if let ask {
-                ask.styleMask.insert(.resizable)
-                ask.styleMask.remove(.miniaturizable)
-                ask.minSize = ConditionalAskLayout.minContentSize(previewVisible: true)
-                ask.maxSize = NSSize(width: 2400, height: 1600)
-                ask.title = "Email access request"
-                install(dialog, in: ask, contentSize: size)
-                ask.setContentSize(size)
-            } else {
-                ask = makeWindow(
-                    title: "Email access request",
-                    size: size,
-                    minSize: ConditionalAskLayout.minContentSize(previewVisible: true),
-                    root: dialog
-                )
-                ask?.styleMask.remove(.miniaturizable)
+            if !statusMenuIsOpen {
+                beginPresentation()
             }
-            bringForward(ask)
+            let window = makeWindow(
+                title: "Email access request",
+                size: size,
+                minSize: ConditionalAskLayout.minContentSize(previewVisible: true),
+                root: dialog
+            )
+            window.styleMask.remove(.miniaturizable)
+            window.maxSize = NSSize(width: 2400, height: 1600)
+            cascade(window, index: index)
+            asks[request.id] = AskRecord(window: window, continuation: continuation)
+            bringAskForward(id: request.id)
         }
+    }
+
+    private func cascade(_ window: NSWindow, index: Int) {
+        window.center()
+        guard index > 0 else { return }
+        var frame = window.frame
+        frame.origin.x += CGFloat(index) * 28
+        frame.origin.y -= CGFloat(index) * 28
+        window.setFrame(frame, display: false)
+    }
+
+    private func bringAskForward(id: String) {
+        guard let record = asks[id] else { return }
+        intendedVisible.insert(ObjectIdentifier(record.window))
+        record.pokeToken += 1
+        let token = record.pokeToken
+        let poke = { [weak self] in
+            guard let self, let record = self.asks[id], record.pokeToken == token else { return }
+            guard self.wantsVisible(record.window) else { return }
+            if record.window.isMiniaturized {
+                record.window.deminiaturize(nil)
+            }
+            record.window.orderFrontRegardless()
+            guard !self.statusMenuIsOpen else { return }
+            guard AskQueueIndicator.shared.pending.selectedID == id else { return }
+            self.claimActivation()
+            record.window.makeKeyAndOrderFront(nil)
+        }
+        poke()
+        DispatchQueue.main.async { poke() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { poke() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { poke() }
     }
 
     #if DEBUG
@@ -267,9 +338,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
     #endif
 
-    fileprivate func resizeAskWindow(previewVisible: Bool) {
-        guard let ask else { return }
-        resizeAskWindow(ask, previewVisible: previewVisible)
+    private func resizeAskWindow(id: String, previewVisible: Bool) {
+        guard let window = asks[id]?.window else { return }
+        resizeAskWindow(window, previewVisible: previewVisible)
     }
 
     private func resizeAskWindow(_ window: NSWindow, previewVisible: Bool) {
@@ -291,9 +362,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         applyAskContentSize(content, to: window)
     }
 
-    private func fitAskWindowHeight(_ preferredHeight: CGFloat) {
-        guard let ask else { return }
-        fitAskWindow(ask, preferredHeight: preferredHeight)
+    private func fitAskWindowHeight(id: String, preferredHeight: CGFloat) {
+        guard let window = asks[id]?.window else { return }
+        fitAskWindow(window, preferredHeight: preferredHeight)
     }
 
     private func fitAskWindow(_ window: NSWindow, preferredHeight: CGFloat) {
@@ -333,49 +404,28 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    private func finishAsk(_ decision: ConditionalAccessDecision) {
-        // Delayed bringForward pokes used to resurrect a finished Ask; buttons then
-        // hit this guard and appeared dead. Dismiss the zombie if no turn is live.
-        if askFinished {
-            if askContinuation == nil, !askBusy {
-                MailGentLog.trace("ask finish ignored (zombie) — dismissing stale dialog")
-                dismissAskWindow(invalidatePokes: true)
-            } else {
-                MailGentLog.trace("ask finish ignored (already decided, queue handoff)")
-            }
+    private func finishAsk(id: String, decision: ConditionalAccessDecision) {
+        guard let record = asks[id] else { return }
+        if record.finished {
+            MailGentLog.trace("ask finish ignored (already decided) id=\(id)")
             return
         }
-        askFinished = true
-        let continuation = askContinuation
-        askContinuation = nil
-
-        // Keep the window when more Asks are queued — next presentConditionalAsk
-        // swaps content. Ordering out here left a gap where delayed pokes could
-        // resurrect a finished dialog with dead Allow / Block buttons.
-        let keepForQueue = !askWaiters.isEmpty
-        if keepForQueue {
-            MailGentLog.trace(
-                "ask \(decision == .allow ? "allow" : "block") — keeping window for \(askWaiters.count) queued"
-            )
-        } else {
-            dismissAskWindow(invalidatePokes: true)
-        }
+        guard AskQueueIndicator.shared.resolve(id: id, with: decision) != nil else { return }
+        record.finished = true
+        record.pokeToken += 1
+        let continuation = record.continuation
+        record.continuation = nil
+        asks[id] = nil
+        dismissAskWindow(record.window)
         continuation?.resume(returning: decision)
     }
 
-    /// Hide the Ask window and drop it from `intendedVisible`.
-    /// - Parameter invalidatePokes: bump `presentationToken` so delayed `bringForward`
-    ///   work from this Ask cannot order the window back in.
-    private func dismissAskWindow(invalidatePokes: Bool) {
-        if invalidatePokes {
-            presentationToken += 1
-        }
-        if let ask {
-            intendedVisible.remove(ObjectIdentifier(ask))
-            allowingOrderOut = true
-            ask.orderOut(nil)
-            allowingOrderOut = false
-        }
+    /// Hide one Ask window. Other pending requests stay up.
+    private func dismissAskWindow(_ window: NSWindow) {
+        intendedVisible.remove(ObjectIdentifier(window))
+        allowingOrderOut = true
+        window.orderOut(nil)
+        allowingOrderOut = false
         if intendedVisible.isEmpty {
             NSApp.setActivationPolicy(.accessory)
         }
@@ -397,7 +447,11 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     private var hostedWindows: [NSWindow] {
-        [companion, access, grantDesk, accessLog, settings, about, changelog, ask].compactMap { $0 }
+        let fixed = [companion, access, grantDesk, accessLog, settings, about, changelog].compactMap { $0 }
+        let selected = AskQueueIndicator.shared.pending.selectedID
+        let others = asks.filter { $0.key != selected }.values.map(\.window)
+        let selectedWindow = selected.flatMap { asks[$0]?.window }
+        return fixed + others + [selectedWindow].compactMap { $0 }
     }
 
     /// MenuBarExtra `.window` tears down on the same turn as the click; wait one turn.
@@ -530,19 +584,27 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         // Opening click is still `currentEvent` while MenuBarExtra tears down —
         // treating that mouseUp as a real close flash-dismisses the new window and
         // thrash-reinstalls hosting views (memory climb). Ignore until present ages.
-        if isRecentPresent { return false }
+        // Each Ask ages on its own so a second prompt does not freeze the first close button.
+        if let record = asks.first(where: { $0.value.window === sender })?.value {
+            if Date().timeIntervalSince(record.presentedAt) < 2 { return false }
+        } else if isRecentPresent {
+            return false
+        }
         // After that, only traffic-light / ⌘W may order out; synthetic close/orderOut
         // from the status item must keep intended windows up.
         guard isUserInitiatedClose(for: sender) else {
             if wantsVisible(sender) {
                 sender.orderFrontRegardless()
-                sender.makeKeyAndOrderFront(nil)
+                let senderIsAsk = asks.contains { $0.value.window === sender }
+                if !(statusMenuIsOpen && senderIsAsk) {
+                    sender.makeKeyAndOrderFront(nil)
+                }
             }
             return false
         }
-        if sender === ask {
-            // Traffic-light / ⌘W on Ask → Block (fail-closed).
-            finishAsk(.block)
+        if let id = asks.first(where: { $0.value.window === sender })?.key {
+            // Traffic-light / ⌘W on this Ask → Block (fail-closed) for this request only.
+            finishAsk(id: id, decision: .block)
             return false
         }
         #if DEBUG

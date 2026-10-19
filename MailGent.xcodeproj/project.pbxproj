@@ -28,6 +28,7 @@
 		293779A26AB1BC2F6EDAACA9 /* AuditLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D148D69F39BF09DF9CF97C8B /* AuditLogTests.swift */; };
 		2F4FE3368AA28992C7B23BBA /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 		2F5324489BAA27248291B03D /* MailboxIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */; };
+		3823562C960A6A1C567C2A39 /* PendingAskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484B9EDA0FCEC54EF4654590 /* PendingAskStateTests.swift */; };
 		3A1074812FD9A761D9287699 /* RuleEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17826F359867E2023F73837 /* RuleEngineTests.swift */; };
 		3E66836A46714BCF9F405D69 /* PersistedPairingDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19BBF7283CD24EE161B31A98 /* PersistedPairingDocument.swift */; };
 		4465780ADD2AE3D8D7736CC8 /* ConditionalAccessPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = B014DB2C34437042D2990197 /* ConditionalAccessPrompt.swift */; };
@@ -171,6 +172,7 @@
 		427ADB50B63D1F261E1026D8 /* CustomRuleDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomRuleDetector.swift; sourceTree = "<group>"; };
 		4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccessTests.swift; sourceTree = "<group>"; };
 		466928AF4F28F66ECF13B5BB /* CompanionFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionFixtureTests.swift; sourceTree = "<group>"; };
+		484B9EDA0FCEC54EF4654590 /* PendingAskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingAskStateTests.swift; sourceTree = "<group>"; };
 		4AC12DE84FE059C771B0C5CB /* AgentReadAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentReadAPI.swift; sourceTree = "<group>"; };
 		4D4FE71A2E9E5ADD630382FC /* MailGent.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MailGent.entitlements; sourceTree = "<group>"; };
 		4E926E6F6C4F992FC732F05A /* AgentReadAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentReadAPITests.swift; sourceTree = "<group>"; };
@@ -388,6 +390,7 @@
 				4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */,
 				E2B51DCEADC842920CCD3614 /* MenuBarIconAppearanceTests.swift */,
 				95AD375037F9E0F42CCCE20B /* MenuBarIconPulseTests.swift */,
+				484B9EDA0FCEC54EF4654590 /* PendingAskStateTests.swift */,
 			);
 			path = MailGentTests;
 			sourceTree = "<group>";
@@ -637,6 +640,7 @@
 				E23BD62991A7F29E5F665642 /* MailLibraryAccessTests.swift in Sources */,
 				F1036185EA7E3B1DBF78D877 /* MenuBarIconAppearanceTests.swift in Sources */,
 				6F96A306E5E77F0D71F9E22F /* MenuBarIconPulseTests.swift in Sources */,
+				3823562C960A6A1C567C2A39 /* PendingAskStateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -866,7 +870,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -881,7 +885,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.11.5;
+				MARKETING_VERSION = 0.11.6;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};
@@ -910,7 +914,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -925,7 +929,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.11.5;
+				MARKETING_VERSION = 0.11.6;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};

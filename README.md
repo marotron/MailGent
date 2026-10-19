@@ -1,6 +1,6 @@
 # MailGent
 
-**0.11.5 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.11.6 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -67,8 +67,9 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Help row names the agent; expand More for field / Allow·Block detail
 - HTML-only Body shows an **HTML only** badge on the title row; plain preview is derived from HTML when needed
 - Preview canvas has − / + zoom (default 75%); dialog height stays compact (~560pt max)
-- Concurrent `get`s queue behind the open Ask — a new prompt never auto-Blocks the one you are answering; queued prompts reuse the same window (content swap) so Allow / Block stay live after a backlog
-- Red badge on the menu-bar icon (and Dock when visible) shows how many Ask prompts are open or queued
+- Concurrent `get`s each open their own **Email access request** window. Allow, Block, or closing a window decides only that request
+- Red badge on the menu-bar icon (and Dock when visible) shows how many access requests are waiting
+- The status menu lists them under **Access requests** (count, one row each, **Block** / **Allow**). Clicking a row raises that window and does not decide it. Opening the menu raises every pending window without taking focus; closing it leaves the selected one in front
 
 ### Rules (Pass / Block)
 
