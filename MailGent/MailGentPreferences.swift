@@ -10,8 +10,16 @@ enum MailGentPreferences {
     static let auditMaxBytesKey = "auditMaxBytes"
     /// When on, Grant Desk field chips may use Ask and MCP get may prompt. Off by default.
     static let allowConditionalAccessPromptsKey = "allowConditionalAccessPrompts"
+    /// When on (and conditional prompts are allowed), remember Ask Allow/Block per field for a short window.
+    static let askDecisionCacheEnabledKey = "askDecisionCacheEnabled"
+    /// Wall-clock TTL in seconds. `0` means until MailGent quits.
+    static let askDecisionCacheTTLSecondsKey = "askDecisionCacheTTLSeconds"
+    /// `perAgent` (default) or `allAgents`.
+    static let askDecisionCacheShareScopeKey = "askDecisionCacheShareScope"
 
     static let defaultLoopbackPort: UInt16 = 8788
+    /// Default TTL when the cache is first enabled in Settings (1 hour).
+    static let defaultAskDecisionCacheTTLSeconds = 3_600
 
     static var agentMayChangeSource: Bool {
         UserDefaults.standard.bool(forKey: agentMayChangeSourceKey)
@@ -23,6 +31,32 @@ enum MailGentPreferences {
 
     static var allowConditionalAccessPrompts: Bool {
         UserDefaults.standard.bool(forKey: allowConditionalAccessPromptsKey)
+    }
+
+    static var askDecisionCacheEnabled: Bool {
+        UserDefaults.standard.bool(forKey: askDecisionCacheEnabledKey)
+    }
+
+    /// `nil` → until quit. Missing key uses the 1-hour default when enabled.
+    static var askDecisionCacheTTLSeconds: TimeInterval? {
+        guard UserDefaults.standard.object(forKey: askDecisionCacheTTLSecondsKey) != nil else {
+            return TimeInterval(defaultAskDecisionCacheTTLSeconds)
+        }
+        let value = UserDefaults.standard.integer(forKey: askDecisionCacheTTLSecondsKey)
+        return value > 0 ? TimeInterval(value) : nil
+    }
+
+    static var askDecisionCacheShareScope: AskDecisionCacheShareScope {
+        let raw = UserDefaults.standard.string(forKey: askDecisionCacheShareScopeKey) ?? ""
+        return AskDecisionCacheShareScope(rawValue: raw) ?? .perAgent
+    }
+
+    static var askDecisionCachePolicy: AskDecisionCachePolicy {
+        AskDecisionCachePolicy(
+            enabled: askDecisionCacheEnabled,
+            ttlSeconds: askDecisionCacheTTLSeconds,
+            shareScope: askDecisionCacheShareScope
+        )
     }
 
     static var loopbackPort: UInt16 {

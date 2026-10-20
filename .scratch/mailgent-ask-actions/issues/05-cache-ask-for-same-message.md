@@ -1,7 +1,7 @@
 # 05 · Cache Ask for same agent + message
 
 Type: research  
-Status: open  
+Status: shipped in 0.13.0 (Selected agents share deferred)  
 Blocked by: —  
 GitHub: https://github.com/marotron/MailGent/issues/41
 

@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.13.0] - 2026-10-20
+
+### Added
+
+- **Remember Ask decisions** in Settings (off by default; shown when conditional prompts are on). Reuses Allow / Block per field for the same message within a validity window (15 minutes / 1 hour / 24 hours / until quit). Default share is this agent only; optional All agents. New Ask fields still prompt. Pass/Block overlays still win first. Forgetting an agent clears its cache entries.
+
 ## [0.12.1] - 2026-10-20
 
 ### Added

@@ -864,6 +864,453 @@ struct AgentReadAPITests {
         )
     }
 
+    @Test func getReusesCachedAskBodyAllowWithoutSecondPrompt() async throws {
+        final class PromptCounter: @unchecked Sendable {
+            var count = 0
+            var lastFields: [String] = []
+        }
+        let counter = PromptCounter()
+        let cache = FieldAskDecisionCache()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .perAgent
+            ),
+            fieldAskDecisionCache: cache,
+            conditionalAccessPrompter: { context in
+                counter.count += 1
+                counter.lastFields = context.requestedFields
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        let first = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.count == 1)
+        #expect(first.body == .text("Please pay"))
+        #expect(first.leakGuardAccess?.conditionalAccessFields == ["Body"])
+
+        let second = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.count == 1)
+        #expect(second.body == .text("Please pay"))
+        #expect(second.leakGuardAccess?.conditionalAccessFields == ["Body"])
+        #expect(second.leakGuardAccess?.bodyAccessReason == .conditional)
+    }
+
+    @Test func getReusesCachedAskBodyBlockWithoutSecondPrompt() async throws {
+        final class PromptCounter: @unchecked Sendable {
+            var count = 0
+        }
+        let counter = PromptCounter()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .perAgent
+            ),
+            conditionalAccessPrompter: { _ in
+                counter.count += 1
+                return .block
+            }
+        )
+        defer { env.remove() }
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        let second = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.count == 1)
+        #expect(second.body == .notGranted)
+        #expect(second.leakGuardAccess?.conditionalBlockedFields == ["Body"])
+    }
+
+    @Test func getAskCacheTTLExpiryPromptsAgain() async throws {
+        final class PromptCounter: @unchecked Sendable {
+            var count = 0
+        }
+        let counter = PromptCounter()
+        let cache = FieldAskDecisionCache()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 60,
+                shareScope: .perAgent
+            ),
+            fieldAskDecisionCache: cache,
+            conditionalAccessPrompter: { _ in
+                counter.count += 1
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        cache.store(
+            .allow,
+            agentID: env.agentID,
+            accountID: env.accountID,
+            placement: "INBOX",
+            messageID: "1",
+            field: "Body",
+            now: t0
+        )
+        #expect(
+            cache.decision(
+                agentID: env.agentID,
+                accountID: env.accountID,
+                placement: "INBOX",
+                messageID: "1",
+                field: "Body",
+                policy: AskDecisionCachePolicy(enabled: true, ttlSeconds: 60, shareScope: .perAgent),
+                now: t0.addingTimeInterval(30)
+            ) == .allow
+        )
+        #expect(
+            cache.decision(
+                agentID: env.agentID,
+                accountID: env.accountID,
+                placement: "INBOX",
+                messageID: "1",
+                field: "Body",
+                policy: AskDecisionCachePolicy(enabled: true, ttlSeconds: 60, shareScope: .perAgent),
+                now: t0.addingTimeInterval(61)
+            ) == nil
+        )
+
+        // Expired entry must not satisfy get — prompt again.
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.count == 1)
+    }
+
+    @Test func getAskCacheOnlyCoversPreviouslyPromptedFields() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var prompts: [[String]] = []
+        }
+        let capture = PromptCapture()
+        let cache = FieldAskDecisionCache()
+        let grants = GrantGate()
+        let root = try FixtureTree()
+        defer { root.remove() }
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Invoice due
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Please pay
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-cache-fields-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let pairing = Pairing()
+        let agent = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: "secret-token"
+        )
+        try grants.allow(
+            agentID: agent.id,
+            accountID: accountID,
+            fields: GrantFields(
+                subjectMode: .ask,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .on
+            )
+        )
+        var gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            fieldAskDecisionCache: cache,
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .perAgent
+            ),
+            conditionalAccessPrompter: { context in
+                capture.prompts.append(context.requestedFields)
+                return .allow
+            }
+        )
+        _ = try await gateway.get(
+            credential: "secret-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.prompts == [["Subject"]])
+
+        try grants.allow(
+            agentID: agent.id,
+            accountID: accountID,
+            fields: GrantFields(
+                subjectMode: .ask,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            )
+        )
+        gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            fieldAskDecisionCache: cache,
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .perAgent
+            ),
+            conditionalAccessPrompter: { context in
+                capture.prompts.append(context.requestedFields)
+                return .allow
+            }
+        )
+        _ = try await gateway.get(
+            credential: "secret-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.prompts == [["Subject"], ["Body"]])
+    }
+
+    @Test func getAskCachePerAgentIsolatesOtherAgents() async throws {
+        final class PromptCounter: @unchecked Sendable {
+            var byAgent: [String: Int] = [:]
+        }
+        let counter = PromptCounter()
+        let cache = FieldAskDecisionCache()
+        let root = try FixtureTree()
+        defer { root.remove() }
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Invoice due
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Please pay
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-cache-iso-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let pairing = Pairing()
+        let cursor = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: "cursor-token"
+        )
+        let grok = try pairing.register(
+            name: "Grok Bot",
+            trustClass: .machineLocal,
+            credential: "grok-token"
+        )
+        let grants = GrantGate()
+        let askBody = GrantFields(
+            subjectMode: .on,
+            fromMode: .on,
+            toMode: .on,
+            ccMode: .on,
+            dateMode: .on,
+            bodyMode: .ask
+        )
+        try grants.allow(agentID: cursor.id, accountID: accountID, fields: askBody)
+        try grants.allow(agentID: grok.id, accountID: accountID, fields: askBody)
+        let gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            fieldAskDecisionCache: cache,
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .perAgent
+            ),
+            conditionalAccessPrompter: { context in
+                counter.byAgent[context.agentID, default: 0] += 1
+                return .allow
+            }
+        )
+        _ = try await gateway.get(
+            credential: "cursor-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        _ = try await gateway.get(
+            credential: "cursor-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        _ = try await gateway.get(
+            credential: "grok-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.byAgent[cursor.id] == 1)
+        #expect(counter.byAgent[grok.id] == 1)
+    }
+
+    @Test func getAskCacheAllAgentsShareAllowsOtherAgent() async throws {
+        final class PromptCounter: @unchecked Sendable {
+            var byAgent: [String: Int] = [:]
+        }
+        let counter = PromptCounter()
+        let cache = FieldAskDecisionCache()
+        let root = try FixtureTree()
+        defer { root.remove() }
+        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Invoice due
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Please pay
+            """,
+            account: accountID,
+            mailbox: "INBOX.mbox"
+        )
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-cache-all-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: db) }
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+        let pairing = Pairing()
+        let cursor = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: "cursor-token"
+        )
+        let grok = try pairing.register(
+            name: "Grok Bot",
+            trustClass: .machineLocal,
+            credential: "grok-token"
+        )
+        let grants = GrantGate()
+        let askBody = GrantFields(
+            subjectMode: .on,
+            fromMode: .on,
+            toMode: .on,
+            ccMode: .on,
+            dateMode: .on,
+            bodyMode: .ask
+        )
+        try grants.allow(agentID: cursor.id, accountID: accountID, fields: askBody)
+        try grants.allow(agentID: grok.id, accountID: accountID, fields: askBody)
+        let gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            fieldAskDecisionCache: cache,
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .allAgents
+            ),
+            conditionalAccessPrompter: { context in
+                counter.byAgent[context.agentID, default: 0] += 1
+                return .allow
+            }
+        )
+        _ = try await gateway.get(
+            credential: "cursor-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        _ = try await gateway.get(
+            credential: "grok-token",
+            accountID: accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(counter.byAgent[cursor.id] == 1)
+        #expect(counter.byAgent[grok.id] == nil)
+    }
+
     @Test func askBodyPreviewDerivesPlainFromHTMLOnlyMail() async throws {
         final class PromptCapture: @unchecked Sendable {
             var bodyPreview = ""
@@ -976,6 +1423,8 @@ private struct AgentReadFixture {
         grantFields: GrantFields? = .default,
         audit: Bool = false,
         allowConditionalAccessPrompts: Bool = false,
+        askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
+        fieldAskDecisionCache: FieldAskDecisionCache = FieldAskDecisionCache(),
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
     ) throws {
         root = try FixtureTree()
@@ -1020,7 +1469,9 @@ private struct AgentReadFixture {
             grants: grants,
             rules: rules,
             audit: auditLog,
+            fieldAskDecisionCache: fieldAskDecisionCache,
             allowConditionalAccessPrompts: allowConditionalAccessPrompts,
+            askDecisionCachePolicy: askDecisionCachePolicy,
             conditionalAccessPrompter: conditionalAccessPrompter
         )
     }

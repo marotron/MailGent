@@ -34,6 +34,8 @@ final class AgentBridge {
     let rules = RuleStore()
     let ledger = DraftLedger()
     let conditionalAccessPrompt = ConditionalAccessPromptCoordinator()
+    let attachmentContentAskCache = AttachmentContentAskCache()
+    let fieldAskDecisionCache = FieldAskDecisionCache()
 
     private(set) var pairedAgents: [PairedAgentCredential] = []
     private(set) var selectedAgentID: String?
@@ -907,7 +909,10 @@ final class AgentBridge {
                 leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
                 rules: rules,
                 audit: audit,
+                attachmentContentAskCache: attachmentContentAskCache,
+                fieldAskDecisionCache: fieldAskDecisionCache,
                 allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
+                askDecisionCachePolicy: MailGentPreferences.askDecisionCachePolicy,
                 conditionalAccessPrompter: { @MainActor [weak self] context in
                     guard let self else { return .block }
                     return await self.askDecision(for: context)
@@ -1003,6 +1008,7 @@ final class AgentBridge {
         let removed = pairedAgents[index]
         pairing.revoke(agentID: agentID)
         grants.revokeAll(agentID: agentID)
+        fieldAskDecisionCache.removeAll(forAgentID: agentID)
         pairedAgents.remove(at: index)
 
         if selectedAgentID == agentID {
@@ -1416,8 +1422,10 @@ final class AgentBridge {
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
             rules: rules,
             audit: existing.audit,
-            attachmentContentAskCache: existing.attachmentContentAskCache,
+            attachmentContentAskCache: attachmentContentAskCache,
+            fieldAskDecisionCache: fieldAskDecisionCache,
             allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
+            askDecisionCachePolicy: MailGentPreferences.askDecisionCachePolicy,
             conditionalAccessPrompter: { @MainActor [weak self] context in
                 guard let self else { return .block }
                 return await self.askDecision(for: context)
@@ -1431,6 +1439,10 @@ final class AgentBridge {
     }
 
     func applyConditionalAccessPreference() {
+        refreshGatewayLeakGuard()
+    }
+
+    func applyAskDecisionCachePreference() {
         refreshGatewayLeakGuard()
     }
 
