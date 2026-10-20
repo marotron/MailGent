@@ -1,7 +1,7 @@
 # 01 · Rules-from-Ask
 
 Type: prototype  
-Status: shipped in 0.12.0 (variant G)  
+Status: shipped in 0.12.1 (variant G)  
 Blocked by: —  
 GitHub: https://github.com/marotron/MailGent/issues/21
 
