@@ -433,7 +433,7 @@ public struct Grant: Equatable, Codable, Sendable {
             && (self.placement == nil || self.placement == placement)
     }
 
-    static func normalizeAddress(_ raw: String) -> String {
+    public static func normalizeAddress(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if let start = trimmed.firstIndex(of: "<"),
            let end = trimmed.firstIndex(of: ">"),

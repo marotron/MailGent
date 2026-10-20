@@ -1,0 +1,1718 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — rule settings on the right pane.
+
+  Question: Can “remember this ask as a rule” live on the right (mail preview)
+  so the left column stays the ask, with one control beside Block | Allow?
+
+  The control has three states:
+    1. With this decision — generated rule rides along with Allow or Block
+       (Pass if Allow, Block if Block). Right pane shows that card.
+    2. New rule — right pane is the editor, intent = new.
+    3. Update existing — right pane is the editor, loaded with the likely rule.
+
+  Variants (?variant=):
+    A — Two controls beside Allow. Apply = include the rule with Allow or
+        Block. Settings › shows or hides the editor on the right.
+    B — The three states are always a segmented control in the footer.
+        Mail preview stays, shortened, under the rule UI.
+    C — SecondaryAction on Subject and From (Add to rule / In rule). New or
+        Existing (same sheet pattern as create-rule). The words after Allow
+        say which. Pass or Block in the editor stays folded; Allow or Block
+        decides unless you open it. Selected = subtle (white face, blue icon).
+    D — Same as C; selected = solid blue fill + white icon/label (like field
+        letter chips). Flush tile (no track gutter).
+    E — Same as D; chips height-locked to --control-h (AND/OR join-seg + toggle).
+    F — Same as D; thin track gap between border and face on both selected
+        and non-selected.
+    G — Unified chrome family: same height / 11px type / 6px radius / flush
+        fill (no track gutter) as Preview · Open in Mail · AND/OR · Close.
+        Subtle selected; icon-only with left overlay expand. Ship-candidate.
+
+  Open: open .scratch/mailgent-ask-actions/examples/prototype-ask-rule-right.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Ask · rule on the right</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --window-bg: #f5f5f7;
+      --card: rgba(0, 0, 0, 0.045);
+      /* Solid match for --card over --window-bg (fog / overlays). */
+      --card-surface: #eaeaec;
+      /* Shared chrome: AND/OR, Close, Preview/Open, envelope picks, toggle. */
+      --control-h: 20px;
+      --control-r: 6px;
+      --blue: #0071e3;
+      --sel: #d6e9ff;
+      --green: #248a3d;
+      --green-soft: rgba(36, 138, 61, 0.12);
+      --green-border: #8fd1a0;
+      --red: #d70015;
+      --red-soft: rgba(215, 0, 21, 0.1);
+      --red-border: #f0b4bb;
+      --amber: #b25e09;
+      --orange: #ff9f0a;
+      --shadow: 0 18px 50px #00000028, 0 1px 0 #ffffff90 inset;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 64px 16px 32px;
+      font: 13px/1.4 inherit;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 1080px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note strong { font-weight: 650; }
+    .note table { width: 100%; border-collapse: collapse; margin: 8px 0 0; font-size: 11px; }
+    .note th, .note td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid #00000012; vertical-align: top; }
+    .note th { color: var(--muted); font-weight: 600; width: 88px; }
+    .lean { color: var(--green); font-weight: 650; }
+
+    .window {
+      background: var(--window-bg); border-radius: 10px;
+      box-shadow: var(--shadow); border: 1px solid #00000018; overflow: hidden;
+    }
+    .titlebar {
+      display: flex; align-items: center; justify-content: center; height: 38px;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      position: relative; font-size: 13px; font-weight: 600;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+
+    .ask { display: grid; grid-template-columns: 420px 1fr; min-height: 560px; }
+    @media (max-width: 720px) { .ask { grid-template-columns: 1fr; } }
+    .left {
+      padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px;
+      border-right: 1px solid var(--line); min-height: 560px; position: relative;
+    }
+    .right {
+      background: #fff; min-height: 560px; position: relative;
+      display: flex; flex-direction: column; min-width: 0;
+    }
+
+    .head { display: flex; gap: 10px; align-items: flex-start; }
+    .head .q {
+      width: 22px; height: 22px; border-radius: 50%; background: var(--orange);
+      color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none;
+    }
+    .head .copy { font-size: 13px; font-weight: 500; line-height: 1.35; padding-top: 1px; }
+    .head .more { color: var(--orange); font-weight: 600; border: 0; background: none; padding: 0; }
+
+    .card {
+      background: var(--card); border-radius: 8px; padding: 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .id-line { font-size: 12px; font-weight: 650; }
+    .id-line .muted { color: var(--muted); font-weight: 500; }
+    .msg-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+    .msg-head .spacer { flex: 1; }
+    .btn-ghost {
+      box-sizing: border-box;
+      height: var(--control-h);
+      border: 1px solid var(--line); background: #fff; border-radius: var(--control-r);
+      padding: 0 8px; font-size: 11px; font-weight: 500; line-height: 1;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    /* Flush chrome family (same as AND/OR · Close): no track gutter. */
+    .secondary-action {
+      display: inline-flex; align-items: center; flex: 0 0 auto;
+      box-sizing: border-box;
+      height: var(--control-h);
+      border: 1px solid var(--line); background: #fff; border-radius: var(--control-r);
+      padding: 0; font-size: 11px; font-weight: 400; color: var(--ink);
+      line-height: 1; box-shadow: none;
+      transition: border-color 0.28s ease, color 0.28s ease, background 0.2s ease;
+    }
+    .secondary-action .sa-face {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0;
+      background: transparent; border-radius: var(--control-r);
+      box-shadow: none;
+      min-width: calc(var(--control-h) - 2px); height: 100%;
+      padding: 0 4px; box-sizing: border-box;
+      transition: padding 0.32s cubic-bezier(0.22, 1, 0.36, 1), gap 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .secondary-action .sa-ic {
+      width: 11px; height: 11px; flex: 0 0 auto; color: var(--muted);
+    }
+    .secondary-action .sa-label {
+      max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+      transition:
+        max-width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.22s ease 0.04s;
+    }
+    .secondary-action:not(:disabled):hover,
+    .secondary-action:not(:disabled):focus-visible {
+      border-color: var(--blue); color: var(--blue);
+    }
+    .secondary-action:not(:disabled):hover .sa-ic,
+    .secondary-action:not(:disabled):focus-visible .sa-ic { color: var(--blue); }
+    .secondary-action:not(:disabled):hover .sa-face,
+    .secondary-action:not(:disabled):focus-visible .sa-face {
+      gap: 5px; padding: 0 8px;
+    }
+    .secondary-action:not(:disabled):hover .sa-label,
+    .secondary-action:not(:disabled):focus-visible .sa-label {
+      max-width: 16em; opacity: 1;
+    }
+    .secondary-action.always-expanded .sa-face { gap: 5px; padding: 0 8px; }
+    .secondary-action.always-expanded .sa-label { max-width: 16em; opacity: 1; }
+    .secondary-action.on {
+      border-color: #7eb6ff; background: var(--sel); color: var(--ink);
+    }
+    .secondary-action.on .sa-ic { color: var(--blue); }
+    .secondary-action.on .sa-face { background: transparent; }
+    .secondary-action.sa-ph {
+      visibility: hidden; pointer-events: none;
+    }
+    .secondary-action:active .sa-face { background: #f8f9fb; }
+    .secondary-action.on:active .sa-face { background: transparent; }
+    .msg-head .secondary-action { flex: 0 0 auto; }
+    .env { display: grid; gap: 2px; font-size: 12px; line-height: 1.25; }
+    .env .row {
+      display: grid; grid-template-columns: 58px 1fr; gap: 8px;
+      align-items: center;
+    }
+    .env .row.can-pick {
+      grid-template-columns: 58px 1fr var(--control-h);
+    }
+    /* Fixed slot; button always absolute — hover only grows width left (no jump). */
+    .env .sa-slot {
+      position: relative;
+      width: var(--control-h); height: var(--control-h);
+      justify-self: end;
+    }
+    .env .sa-slot .secondary-action {
+      position: absolute;
+      right: 0; top: 0;
+      width: var(--control-h); height: var(--control-h);
+      box-sizing: border-box;
+      overflow: hidden;
+      z-index: 1;
+      align-items: stretch;
+    }
+    .env .sa-slot .secondary-action .sa-face {
+      background: transparent;
+      box-shadow: none;
+      border-radius: var(--control-r);
+      min-width: 0;
+      min-height: 0;
+      height: auto;
+      flex: 1 1 auto;
+      box-sizing: border-box;
+    }
+    .env .sa-slot .secondary-action:not(:disabled):hover,
+    .env .sa-slot .secondary-action:not(:disabled):focus-visible {
+      width: max-content;
+      overflow: visible;
+      z-index: 4;
+      /* Real border paints under fog; ::after redraws the stroke on top. */
+      border-color: transparent;
+      background: #fff;
+    }
+    .env .sa-slot .secondary-action.on:not(:disabled):hover,
+    .env .sa-slot .secondary-action.on:not(:disabled):focus-visible {
+      background: var(--sel);
+    }
+    /* Left-only fog over envelope text (under the redrawn border). */
+    .env .sa-slot .secondary-action:not(:disabled):hover::before,
+    .env .sa-slot .secondary-action:not(:disabled):focus-visible::before {
+      content: "";
+      position: absolute;
+      top: -3px;
+      bottom: -3px;
+      left: -26px;
+      width: 26px;
+      z-index: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--card-surface) 50%,
+        var(--card-surface) 100%
+      );
+    }
+    /* Stroke on top of fog so the left edge stays complete. */
+    .env .sa-slot .secondary-action:not(:disabled):hover::after,
+    .env .sa-slot .secondary-action:not(:disabled):focus-visible::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: var(--control-r);
+      border: 1px solid var(--blue);
+      pointer-events: none;
+      z-index: 2;
+    }
+    /* D / E: selected = solid blue fill + white icon/label (C keeps subtle). */
+    html[data-variant="D"] .env .sa-slot .secondary-action.on,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+    html[data-variant="D"] .env .sa-slot .secondary-action.on .sa-ic,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on .sa-ic { color: #fff; }
+    html[data-variant="D"] .env .sa-slot .secondary-action.on .sa-face,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on .sa-face {
+      background: transparent;
+      box-shadow: none;
+      color: #fff;
+    }
+    html[data-variant="D"] .env .sa-slot .secondary-action.on .sa-label,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on .sa-label { color: #fff; }
+    html[data-variant="D"] .env .sa-slot .secondary-action.on:not(:disabled):hover,
+    html[data-variant="D"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on:not(:disabled):hover,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible {
+      color: #fff;
+      border-color: transparent;
+      background: var(--blue);
+    }
+    html[data-variant="D"] .env .sa-slot .secondary-action.on:not(:disabled):hover .sa-ic,
+    html[data-variant="D"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible .sa-ic,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on:not(:disabled):hover .sa-ic,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible .sa-ic { color: #fff; }
+    html[data-variant="D"] .env .sa-slot .secondary-action.on:not(:disabled):hover::after,
+    html[data-variant="D"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible::after,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on:not(:disabled):hover::after,
+    html[data-variant="E"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible::after {
+      border-color: var(--blue);
+    }
+    /* E: solid selected; size already matches shared --control-h / --control-r. */
+    html[data-variant="E"] .env .sa-slot .secondary-action:not(:disabled):hover .sa-face,
+    html[data-variant="E"] .env .sa-slot .secondary-action:not(:disabled):focus-visible .sa-face {
+      padding: 0 7px; gap: 5px;
+    }
+    /* F: thin track gap for selected and non-selected (solid selected face). */
+    html[data-variant="F"] .env .sa-slot .secondary-action {
+      padding: 1px;
+      background: #f4f6f9;
+      align-items: stretch;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action .sa-face {
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: none;
+      min-height: 0;
+      height: auto;
+      flex: 1 1 auto;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on {
+      border-color: var(--blue);
+      background: #f4f6f9;
+      color: #fff;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on .sa-ic { color: #fff; }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on .sa-face {
+      background: var(--blue);
+      color: #fff;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on .sa-label { color: #fff; }
+    html[data-variant="F"] .env .sa-slot .secondary-action:not(:disabled):hover,
+    html[data-variant="F"] .env .sa-slot .secondary-action:not(:disabled):focus-visible {
+      padding: 1px;
+      background: #f4f6f9;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):hover,
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible {
+      color: #fff;
+      border-color: transparent;
+      background: #f4f6f9;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):hover .sa-ic,
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible .sa-ic { color: #fff; }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):hover .sa-face,
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible .sa-face {
+      background: var(--blue);
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action:not(:disabled):hover .sa-face,
+    html[data-variant="F"] .env .sa-slot .secondary-action:not(:disabled):focus-visible .sa-face {
+      background: #fff;
+    }
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):hover::after,
+    html[data-variant="F"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible::after {
+      border-color: var(--blue);
+    }
+    /*
+     * G — ship-candidate: inherits shared flush chrome (Preview · Open · AND/OR · Close).
+     * Subtle .on; left overlay expand only. No extra size / track overrides.
+     */
+    html[data-variant="G"] .env .sa-slot .secondary-action.on:not(:disabled):hover::after,
+    html[data-variant="G"] .env .sa-slot .secondary-action.on:not(:disabled):focus-visible::after {
+      border-color: #7eb6ff;
+    }
+    /* C / default pick: keep light ::after ring when selected + expanded */
+    .env .sa-slot .secondary-action.on:not(:disabled):hover::after,
+    .env .sa-slot .secondary-action.on:not(:disabled):focus-visible::after {
+      border-color: #7eb6ff;
+    }
+    .env .sa-slot .secondary-action:not(:disabled):hover .sa-face,
+    .env .sa-slot .secondary-action:not(:disabled):focus-visible .sa-face {
+      position: relative;
+      z-index: 1;
+    }
+    .env .lbl { color: var(--muted); }
+    .badge {
+      display: inline-block; background: #e5e5ea; border-radius: 4px;
+      padding: 1px 6px; font-size: 11px; font-weight: 500;
+    }
+    .ask-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid #00000010; }
+    .ask-row .lbl { font-size: 12px; color: var(--muted); }
+    .chip-ask {
+      font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 999px;
+      background: #fff3e0; color: #c93400; border: 1px solid #ffd7a8;
+    }
+    .field-card {
+      background: var(--card); border-radius: 8px; padding: 10px 12px; font-size: 12px;
+      display: flex; justify-content: space-between; gap: 8px; color: var(--muted);
+    }
+    .field-card .fl { font-weight: 650; color: var(--ink); }
+    .field-card.tall { display: block; }
+    .field-card.tall .fl { margin-bottom: 6px; }
+    .field-card .fv { color: var(--ink); line-height: 1.45; max-height: 72px; overflow: auto; }
+
+    .footer { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; position: relative; }
+    .footer .row { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .footer.stack { flex-direction: column; align-items: stretch; }
+    .footer.stack .tri { width: 100%; }
+    .footer .spacer { flex: 1; }
+    .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      padding: 6px 12px; font-size: 13px; font-weight: 500;
+    }
+    .btn.primary { background: var(--blue); border-color: #0077ed; color: #fff; font-weight: 600; }
+    .btn.small { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.45; }
+
+    /* A — one group: apply tick | show/hide settings */
+    .rule-group {
+      display: inline-flex; align-items: stretch;
+      border: 1px solid var(--line); background: #fff; border-radius: 8px; overflow: hidden;
+    }
+    .rule-group.on { border-color: #7eb6ff; }
+    .rule-tag {
+      display: inline-flex; align-items: center;
+      padding: 0 8px; background: #f2f2f7;
+      border-right: 1px solid var(--line);
+      font-size: 11px; font-weight: 750; letter-spacing: 0.04em;
+      text-transform: uppercase; color: var(--ink);
+    }
+    .rule-group.on .rule-tag { background: #e7f1ff; border-right-color: #b7d4f7; color: var(--blue); }
+    .apply-ctrl, .settings-ctrl {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 0; background: transparent; margin: 0;
+      padding: 6px 10px; font-size: 12px; font-weight: 650; line-height: 1.2;
+    }
+    .apply-ctrl.on, .settings-ctrl.on { background: #f3f8ff; }
+    .settings-ctrl { border-left: 1px solid var(--line); cursor: pointer; }
+    .rule-group.on .settings-ctrl { border-left-color: #b7d4f7; }
+    .apply-ctrl input { margin: 0; width: 14px; height: 14px; accent-color: var(--blue); }
+    .settings-ctrl .chev { color: var(--muted); font-size: 14px; }
+
+    /* B — three segments always visible */
+    .tri {
+      display: inline-grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px;
+      background: #e8e8ed; border-radius: 8px; padding: 2px; flex: 1; min-width: 0;
+    }
+    .tri button {
+      border: 0; background: transparent; border-radius: 6px; padding: 5px 4px;
+      font-size: 11px; font-weight: 650; color: var(--muted); line-height: 1.15;
+    }
+    .tri button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px #00000018; }
+    .tri button .s { display: block; font-size: 9px; font-weight: 600; color: var(--muted); }
+
+    /* C — menu button */
+    .menu-btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 8px;
+      padding: 6px 10px; display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; max-width: 230px;
+    }
+    .menu-btn.on { border-color: #7eb6ff; background: #f3f8ff; }
+    .menu-btn .lab { text-align: left; line-height: 1.15; }
+    .menu-btn .sub { display: block; font-size: 10px; font-weight: 500; color: var(--muted); }
+    .menu-btn .chev { color: var(--muted); margin-left: auto; }
+    .menu {
+      position: absolute; right: 78px; bottom: 46px; z-index: 6;
+      width: 280px; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+      box-shadow: 0 12px 40px #00000028; padding: 6px; display: grid; gap: 2px;
+    }
+    .menu button {
+      border: 0; background: transparent; border-radius: 8px; text-align: left;
+      padding: 8px 10px; display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start;
+    }
+    .menu button:hover, .menu button.on { background: #f2f2f7; }
+    .menu .mark { font-weight: 800; color: var(--blue); }
+    .menu .t { display: block; font-weight: 650; font-size: 12px; }
+    .menu .d { display: block; font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+
+    .mail { padding: 28px 32px 24px; color: var(--ink); font-size: 13px; line-height: 1.45; overflow: auto; }
+    .mail p { margin: 0 0 12px; }
+    .mail ul { margin: 0 0 12px; padding-left: 18px; }
+    .mail a { color: var(--blue); }
+    .mail .sign { color: var(--muted); }
+
+    .pane-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; border-bottom: 1px solid var(--line);
+      font-size: 12px; font-weight: 650;
+    }
+    .pane-head .spacer { flex: 1; }
+    .pane-head .hint { font-weight: 500; color: var(--muted); font-size: 11px; }
+    .pane-scroll { flex: 1; overflow: auto; padding: 12px; display: grid; gap: 8px; align-content: start; background: #fbfbfd; }
+
+    .summary {
+      border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 12px;
+      display: grid; gap: 8px;
+    }
+    .summary h3 { margin: 0; font-size: 13px; }
+    .summary p { margin: 0; font-size: 12px; color: var(--muted); }
+    .kv { display: grid; grid-template-columns: 72px 1fr; gap: 6px; font-size: 12px; }
+    .kv .k { color: var(--muted); }
+    .follow {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    }
+    .follow div {
+      border-radius: 8px; padding: 8px; font-size: 11px; font-weight: 650;
+    }
+    .follow .allow { background: var(--green-soft); color: var(--green); }
+    .follow .block { background: var(--red-soft); color: var(--red); }
+
+    .peek {
+      border-top: 1px solid var(--line); background: #fff; padding: 10px 16px 12px;
+      font-size: 12px; color: var(--ink); max-height: 150px; overflow: auto;
+    }
+    .peek .lbl { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; margin-bottom: 4px; }
+
+    .sheet {
+      position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3;
+      background: #fbfbfd; border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: 0 16px 40px #00000030; max-height: 78%; overflow: auto;
+      display: grid; gap: 8px; padding: 12px;
+    }
+    .mail-peek-top { padding: 22px 28px 80px; }
+
+    .mode-seg {
+      display: inline-grid; grid-auto-flow: column; gap: 2px;
+      background: #e8e8ed; border-radius: 8px; padding: 2px; width: 100%;
+    }
+    .mode-seg button {
+      border: 0; background: transparent; border-radius: 6px; padding: 5px 10px;
+      font-weight: 600; font-size: 12px; color: var(--muted);
+    }
+    .mode-seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px #00000018; }
+
+    .pick-row { display: grid; gap: 4px; }
+    .pick-row .hint .hit { color: var(--amber); font-weight: 650; }
+
+    .polarity { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+    .polarity-fold {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      border: 1px solid var(--line); background: #fff; border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; font-weight: 650; text-align: left;
+    }
+    .polarity-fold .sub { display: block; font-size: 10px; font-weight: 500; color: var(--muted); }
+    .polarity-fold .chev { margin-left: auto; color: var(--muted); }
+    .rule-fate { font-size: 12px; font-weight: 400; color: var(--ink); white-space: nowrap; }
+    .polarity button {
+      border: 1px solid rgba(0,0,0,0.18); background: #fff; border-radius: 8px;
+      padding: 8px; text-align: left; display: grid; gap: 2px;
+    }
+    .polarity button.on.pass { border-color: var(--green); background: var(--green-soft); color: var(--green); }
+    .polarity button.on.block { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+    .polarity .t { font-weight: 700; font-size: 12px; }
+    .polarity .d { font-size: 10px; color: var(--muted); font-weight: 500; }
+    .polarity button.on .d { color: inherit; opacity: 0.75; }
+
+    .id-row { display: grid; grid-template-columns: 1fr 64px; gap: 8px; }
+    .id-row label, .pick-row label {
+      display: block; font-size: 11px; font-weight: 650; color: var(--muted); margin-bottom: 4px;
+    }
+    .id-row input, .id-row select, .pick-row select, .add-row select, .add-row input {
+      width: 100%; border: 1px solid var(--line); border-radius: 6px;
+      padding: 5px 8px; background: #fff; font-size: 12px;
+    }
+    .section {
+      border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; padding: 8px;
+      background: rgba(0,0,0,0.03); display: grid; gap: 6px;
+    }
+    .section h4 { margin: 0; font-size: 11px; font-weight: 650; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+    .section h4 .h4-spacer { flex: 1; }
+    .section h4 .sub { font-weight: 500; color: #aeaeb2; }
+    .when-dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+    .when-dates label { color: var(--muted); font-weight: 500; }
+    .when-dates input {
+      border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: #fff; width: 118px;
+    }
+    .empty-rules { font-size: 11px; color: var(--muted); font-style: italic; }
+    .match-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .match-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #3a3a3c; color: #f5f5f7; border-radius: 999px;
+      padding: 3px 6px 3px 8px; font-size: 10px; font-weight: 600;
+    }
+    .match-chip .mode { font-size: 8px; font-weight: 800; letter-spacing: 0.04em; opacity: 0.75; }
+    .match-chip .x { border: 0; background: transparent; color: #fff; padding: 0 2px; }
+    .add-row { display: grid; grid-template-columns: 92px 1fr auto; gap: 6px; }
+    .join-row { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 650; color: var(--muted); }
+    .join-row .spacer { flex: 1; }
+    .join-row .jlbl { font-weight: 500; }
+    .join-seg { display: inline-flex; gap: 4px; align-items: center; }
+    .join-seg button {
+      box-sizing: border-box;
+      height: var(--control-h);
+      border: 1px solid var(--line); background: #fff; border-radius: var(--control-r);
+      padding: 0 10px; font-size: 11px; font-weight: 600; color: var(--muted);
+      display: inline-flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    .join-seg button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .toggle {
+      width: 36px; height: var(--control-h); border-radius: 999px; border: 0; padding: 0;
+      background: #d1d1d6; position: relative; flex: none;
+    }
+    .toggle.on { background: var(--blue); }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+      border-radius: 50%; background: #fff; transition: transform 0.15s ease;
+    }
+    .toggle.on::after { transform: translateX(16px); }
+    .fields { display: flex; gap: 4px; flex-wrap: wrap; }
+    .fields button {
+      width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line);
+      background: #fff; font-size: 10px; font-weight: 700; color: var(--muted);
+    }
+    .fields button.on.pass { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .fields button.on.block { background: var(--red); border-color: var(--red); color: #fff; }
+    .hint { font-size: 11px; color: var(--muted); margin: 0; }
+    .include {
+      display: flex; align-items: flex-start; gap: 8px; font-size: 12px; font-weight: 600;
+      background: #fff; border: 1px dashed var(--line); border-radius: 8px; padding: 8px;
+    }
+    .include input { margin-top: 2px; }
+    .rule-actions { display: flex; align-items: center; gap: 8px; }
+    .rule-actions .hint { flex: 1; }
+
+    .toast {
+      position: absolute; left: 12px; right: 12px; bottom: 52px;
+      background: #1d1d1f; color: #f5f5f7; border-radius: 8px;
+      padding: 8px 12px; font-size: 12px; font-weight: 600; z-index: 5;
+    }
+    .state-dump {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; background: #1d1d1f; color: #f5f5f7; border-radius: 8px;
+      padding: 10px 12px; white-space: pre-wrap;
+    }
+    .switcher {
+      position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px; z-index: 50;
+      background: #1d1d1f; color: #f5f5f7; border-radius: 999px;
+      padding: 8px 10px; box-shadow: 0 10px 30px #00000040;
+      font-size: 12px; font-weight: 600;
+    }
+    .switcher button {
+      border: 0; background: #3a3a3c; color: #fff; border-radius: 999px;
+      width: 28px; height: 28px; font-size: 14px;
+    }
+    .switcher .label { min-width: 320px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <strong>Throwaway proto</strong> · Rule settings move to the right pane. Left stays the ask. Flip A/B/C/D.
+      <table>
+        <tr><th>Control</th><td>Beside Block | Allow. Three states: <span class="lean">With this decision</span>, <span class="lean">New rule</span>, <span class="lean">Update A</span>.</td></tr>
+        <tr><th>Decision</th><td>Allow saves a Pass for later mail. Block saves a Block. This get still follows the button you press.</td></tr>
+        <tr><th>A</th><td class="lean">Two controls. Apply includes the rule with Allow or Block. Settings › shows or hides the editor.</td></tr>
+        <tr><th>B</th><td>Three segments always in the footer. Mail preview stays underneath, shortened.</td></tr>
+        <tr><th>C</th><td>Subject and From each have a trailing icon-only <span class="lean">SecondaryAction</span> (hover expands label left as overlay: Add to rule / In rule). Selected = subtle white face + blue check. Email badges and Ask chips stay read-only. Right pane uses <span class="lean">New</span> / <span class="lean">Existing</span> like the create-rule sheet.</td></tr>
+        <tr><th>D</th><td><span class="lean">Same as C</span> — selected = solid blue fill + white icon/label (same language as field letter chips).</td></tr>
+      </table>
+    </div>
+    <div class="window">
+      <div class="titlebar">
+        <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        Email access request
+      </div>
+      <div class="ask" id="root"></div>
+    </div>
+    <pre class="state-dump" id="stateDump"></pre>
+  </div>
+  <div class="switcher" role="toolbar" aria-label="Prototype variants">
+    <button type="button" id="prevVar" aria-label="Previous variant">←</button>
+    <div class="label" id="varLabel">A</div>
+    <button type="button" id="nextVar" aria-label="Next variant">→</button>
+  </div>
+<script>
+const VARIANTS = {
+  A: { name: "Apply tick + show settings" },
+  B: { name: "Three segments, preview stays" },
+  C: { name: "Field buttons · subtle selected" },
+  D: { name: "Field buttons · solid selected" },
+  E: { name: "Field buttons · solid · --control-h (join-seg)" },
+  F: { name: "Field buttons · solid · track gap" },
+  G: { name: "Field buttons · unified flush chrome" },
+};
+const ORDER = ["A", "B", "C", "D", "E", "F", "G"];
+function isPickVariant() {
+  return state.variant === "C" || state.variant === "D"
+    || state.variant === "E" || state.variant === "F"
+    || state.variant === "G";
+}
+const NICKS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const ENVELOPE = {
+  subject: "1 new job based on your recent activity",
+  fromName: "Will Aylott",
+  fromEmail: "will@example.com",
+  toName: "Marek",
+  toEmail: "you@icloud.com",
+  date: "Thu, 8 Oct 2026",
+};
+const ASK = [
+  { key: "body", label: "Body" },
+  { key: "attachmentNames", label: "Attachment names" },
+  { key: "attachmentContent", label: "Attachment content" },
+];
+const FIELDS = [
+  { key: "subject", short: "S" },
+  { key: "from", short: "F" },
+  { key: "to", short: "T" },
+  { key: "cc", short: "Cc" },
+  { key: "date", short: "D" },
+  { key: "body", short: "B" },
+  { key: "attachmentNames", short: "N" },
+  { key: "attachmentContent", short: "C" },
+];
+const STATES = ["decision", "new", "update"];
+
+let rules = [
+  {
+    id: "rule-A", nick: "A", name: "job offers", polarity: "pass",
+    betweenJoin: "and", whenJoin: "and",
+    fromRules: [{ mode: "contains", value: "will@example.com" }],
+    subjectRules: [{ mode: "contains", value: "job" }],
+    when: null,
+    fields: { subject: true, from: true, body: true, attachmentNames: true, attachmentContent: false },
+  },
+  {
+    id: "rule-B", nick: "B", name: "payroll PDFs", polarity: "block",
+    betweenJoin: "and", whenJoin: "and",
+    fromRules: [{ mode: "ends", value: "@hr.example.com" }],
+    subjectRules: [{ mode: "contains", value: "payslip" }],
+    when: null,
+    fields: { body: true, attachmentContent: true },
+  },
+  {
+    id: "rule-C", nick: "C", name: "properties", polarity: "pass",
+    betweenJoin: "or", whenJoin: "and",
+    fromRules: [{ mode: "contains", value: "rightmove" }, { mode: "contains", value: "zoopla" }],
+    subjectRules: [],
+    when: null,
+    fields: { subject: true, from: true, body: true },
+  },
+  {
+    id: "rule-D", nick: "D", name: "recent invoices", polarity: "pass",
+    betweenJoin: "and", whenJoin: "and",
+    fromRules: [{ mode: "contains", value: "billing@" }],
+    subjectRules: [{ mode: "contains", value: "Invoice" }],
+    when: { after: "2026-01-01", before: "2026-12-31" },
+    fields: { subject: true, from: true, body: true, attachmentNames: true, attachmentContent: true },
+  },
+];
+
+const state = {
+  variant: "A",
+  // null = mail only. Otherwise one of the three button states.
+  mode: null,
+  include: false,
+  menuOpen: false,
+  intent: "new",
+  existingID: "rule-A",
+  name: "From this ask",
+  nick: "C",
+  polarity: "pass",
+  betweenJoin: "and",
+  whenJoin: "and",
+  fromRules: [],
+  subjectRules: [],
+  fromDraftMode: "contains",
+  fromDraftValue: ENVELOPE.fromEmail,
+  subjectDraftMode: "contains",
+  subjectDraftValue: "job",
+  whenOn: false,
+  whenAfter: "",
+  whenBefore: "",
+  picked: [],
+  detailOpen: false,
+  polarityTouched: false,
+  polarityOpen: false,
+  fields: Object.fromEntries(FIELDS.map(f => [f.key, ASK.some(a => a.key === f.key)])),
+  decision: null,
+  saved: null,
+  toast: "",
+};
+
+function matchLooksLikely(rule) {
+  if (!rule) return 0;
+  const from = ENVELOPE.fromEmail.toLowerCase();
+  const subject = ENVELOPE.subject.toLowerCase();
+  let score = 0;
+  for (const r of rule.fromRules || []) {
+    const v = (r.value || "").toLowerCase();
+    if (!v) continue;
+    if (r.mode === "exact" && from === v) score += 3;
+    else if (r.mode === "ends" && from.endsWith(v)) score += 2;
+    else if (r.mode === "starts" && from.startsWith(v)) score += 2;
+    else if (r.mode === "contains" && from.includes(v)) score += 1;
+  }
+  for (const r of rule.subjectRules || []) {
+    const v = (r.value || "").toLowerCase();
+    if (!v) continue;
+    if (r.mode === "exact" && subject === v) score += 3;
+    else if (r.mode === "ends" && subject.endsWith(v)) score += 2;
+    else if (r.mode === "starts" && subject.startsWith(v)) score += 2;
+    else if (r.mode === "contains" && subject.includes(v)) score += 1;
+  }
+  return score;
+}
+function sortedPool() {
+  return [...rules].sort((a, b) => matchLooksLikely(b) - matchLooksLikely(a) || a.nick.localeCompare(b.nick));
+}
+function likelyRule() {
+  return sortedPool()[0] || rules[0];
+}
+function nextNick() {
+  const used = new Set(rules.map(r => r.nick));
+  return NICKS.find(n => !used.has(n)) || "?";
+}
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function askFields() {
+  return Object.fromEntries(FIELDS.map(f => [f.key, ASK.some(a => a.key === f.key)]));
+}
+function resetNew() {
+  state.intent = "new";
+  state.name = "From this ask";
+  state.nick = nextNick();
+  state.polarity = "pass";
+  state.fromRules = [];
+  state.subjectRules = [];
+  state.fromDraftMode = "contains";
+  state.fromDraftValue = ENVELOPE.fromEmail;
+  state.subjectDraftMode = "contains";
+  state.subjectDraftValue = "job";
+  state.whenOn = false;
+  state.whenAfter = "";
+  state.whenBefore = "";
+  state.fields = askFields();
+}
+function loadExisting(rule) {
+  state.intent = "update";
+  state.existingID = rule.id;
+  state.name = rule.name;
+  state.nick = rule.nick;
+  state.polarity = rule.polarity;
+  state.polarityTouched = false;
+  state.polarityOpen = false;
+  state.betweenJoin = rule.betweenJoin;
+  state.whenJoin = rule.whenJoin;
+  state.fromRules = rule.fromRules.map(r => ({ ...r }));
+  state.subjectRules = rule.subjectRules.map(r => ({ ...r }));
+  state.fromDraftValue = "";
+  state.subjectDraftValue = "";
+  state.whenOn = !!rule.when;
+  state.whenAfter = rule.when?.after || "";
+  state.whenBefore = rule.when?.before || "";
+  state.fields = { ...askFields(), ...rule.fields };
+}
+function setMode(mode) {
+  state.mode = mode;
+  state.menuOpen = false;
+  if (!mode) state.include = false;
+  else if (mode === "decision") state.include = true;
+  else if (mode === "new") {
+    if (state.intent !== "new") resetNew();
+    state.intent = "new";
+  } else if (mode === "update") {
+    loadExisting(rules.find(r => r.id === state.existingID) || likelyRule());
+  }
+  render();
+}
+function settingsOpen() {
+  return state.mode === "new" || state.mode === "update";
+}
+function toggleSettings() {
+  if (settingsOpen()) {
+    state.mode = null;
+    render();
+    return;
+  }
+  const include = state.include;
+  setMode(state.intent === "update" ? "update" : "new");
+  if (state.include !== include) {
+    state.include = include;
+    render();
+  }
+}
+function modeLabel() {
+  if (state.mode === "decision") return { lab: "With this decision", sub: "Allow → Pass · Block → Block" };
+  if (state.mode === "new") return { lab: "New rule", sub: "Settings on the right" };
+  if (state.mode === "update") {
+    const r = rules.find(x => x.id === state.existingID) || likelyRule();
+    return { lab: `Update ${r.nick}`, sub: r.name };
+  }
+  return { lab: "Rule from this ask", sub: "Similar mail, next time" };
+}
+
+function generatedMatchers() {
+  return {
+    fromRules: [{ mode: "contains", value: ENVELOPE.fromEmail }],
+    subjectRules: [{ mode: "contains", value: "job" }],
+    fields: askFields(),
+  };
+}
+
+function commitWithDecision(kind) {
+  if (isPickVariant()) return commitPickedRule(kind);
+  const polarity = kind === "allow" ? "pass" : "block";
+  const settingsOpen = state.mode === "new" || state.mode === "update";
+  if (!state.include) return "";
+  if (!settingsOpen) {
+    const g = generatedMatchers();
+    const nick = nextNick();
+    const rule = {
+      id: "rule-" + nick, nick, name: "From this ask", polarity,
+      betweenJoin: "and", whenJoin: "and",
+      fromRules: g.fromRules, subjectRules: g.subjectRules, when: null, fields: g.fields,
+    };
+    rules.push(rule);
+    state.saved = { nick, kind: "saved", polarity, via: "decision" };
+    return `Saved rule ${nick} as ${polarity}`;
+  }
+  if ((state.mode === "new" || state.mode === "update") && state.include) {
+    const polarity = resolveCommitPolarity(kind);
+    const fromRules = state.fromRules.slice();
+    const subjectRules = state.subjectRules.slice();
+    if (!fromRules.length && state.fromDraftValue.trim()) {
+      fromRules.push({ mode: state.fromDraftMode, value: state.fromDraftValue.trim() });
+    }
+    if (!subjectRules.length && state.subjectDraftValue.trim()) {
+      subjectRules.push({ mode: state.subjectDraftMode, value: state.subjectDraftValue.trim() });
+    }
+    if (!fromRules.length && !subjectRules.length) return "No matcher — rule not saved";
+    if (state.mode === "update") {
+      const idx = rules.findIndex(r => r.id === state.existingID);
+      if (idx >= 0) {
+        rules[idx] = { ...rules[idx], name: state.name, nick: state.nick, polarity, fromRules, subjectRules, fields: { ...state.fields } };
+        state.saved = { nick: state.nick, kind: "updated", polarity, via: "decision" };
+        return `Updated rule ${state.nick}`;
+      }
+    } else {
+      const nick = state.nick || nextNick();
+      rules.push({
+        id: "rule-" + nick + "-" + Date.now().toString(36).slice(-3),
+        nick, name: state.name || "From this ask", polarity,
+        betweenJoin: state.betweenJoin, whenJoin: state.whenJoin,
+        fromRules, subjectRules, when: null, fields: { ...state.fields },
+      });
+      state.saved = { nick, kind: "saved", polarity, via: "decision" };
+      return `Saved rule ${nick} as ${polarity}`;
+    }
+  }
+  return "";
+}
+
+const PICK_META = {
+  subject: { label: "Subject", value: () => ENVELOPE.subject },
+  from: { label: "From", value: () => ENVELOPE.fromEmail },
+};
+
+function pickedSummary() {
+  return state.picked.map(key => `${PICK_META[key].label} is ${PICK_META[key].value()}`).join(" · ");
+}
+
+function prefillFromPicks() {
+  if (!isPickVariant()) return;
+  if (state.picked.includes("from")) {
+    if (!state.fromDraftValue.trim()) {
+      state.fromDraftMode = "exact";
+      state.fromDraftValue = ENVELOPE.fromEmail;
+    }
+  } else {
+    state.fromDraftValue = "";
+  }
+  if (state.picked.includes("subject")) {
+    if (!state.subjectDraftValue.trim()) {
+      state.subjectDraftMode = "exact";
+      state.subjectDraftValue = ENVELOPE.subject;
+    }
+  } else {
+    state.subjectDraftValue = "";
+  }
+}
+
+function applyPick(key, on) {
+  if (key === "from") {
+    if (on) {
+      state.fromDraftMode = "exact";
+      state.fromDraftValue = ENVELOPE.fromEmail;
+    } else {
+      state.fromDraftValue = "";
+    }
+  }
+  if (key === "subject") {
+    if (on) {
+      state.subjectDraftMode = "exact";
+      state.subjectDraftValue = ENVELOPE.subject;
+    } else {
+      state.subjectDraftValue = "";
+    }
+  }
+}
+
+function withDraft(list, mode, value) {
+  const next = list.map(r => ({ ...r }));
+  const v = (value || "").trim();
+  if (v && !next.some(r => r.mode === mode && r.value === v)) next.push({ mode, value: v });
+  return next;
+}
+
+function syncPickedDraft() {
+  state.mode = state.detailOpen ? (state.intent === "update" ? "update" : "new") : state.mode;
+  prefillFromPicks();
+  state.include = state.picked.length > 0;
+  if (!state.picked.length) {
+    state.detailOpen = false;
+    state.intent = "new";
+  }
+}
+
+function togglePick(key) {
+  const i = state.picked.indexOf(key);
+  const on = i < 0;
+  if (on) state.picked.push(key);
+  else state.picked.splice(i, 1);
+  applyPick(key, on);
+  if (on) state.detailOpen = true;
+  syncPickedDraft();
+  render();
+}
+
+function chooseRuleIntent(intent) {
+  if (intent === "update") {
+    const rule = likelyRule();
+    loadExisting(rule);
+    prefillFromPicks();
+    state.detailOpen = true;
+    state.mode = "update";
+  } else {
+    state.intent = "new";
+    state.name = "From this ask";
+    state.nick = nextNick();
+    state.fromRules = [];
+    state.subjectRules = [];
+    state.polarityTouched = false;
+    prefillFromPicks();
+    if (state.detailOpen) state.mode = "new";
+  }
+  render();
+}
+
+function resolveCommitPolarity(kind) {
+  if (state.polarityTouched) return state.polarity;
+  if (state.intent === "update") {
+    const current = rules.find(r => r.id === state.existingID);
+    return current?.polarity || state.polarity;
+  }
+  return kind === "allow" ? "pass" : "block";
+}
+
+function commitPickedRule(kind) {
+  const polarity = resolveCommitPolarity(kind);
+  const fromRules = withDraft(state.fromRules, state.fromDraftMode, state.fromDraftValue);
+  const subjectRules = withDraft(state.subjectRules, state.subjectDraftMode, state.subjectDraftValue);
+  if (!fromRules.length && !subjectRules.length && !state.whenOn) return "";
+  const when = state.whenOn
+    ? { after: state.whenAfter || undefined, before: state.whenBefore || undefined }
+    : null;
+  if (state.intent === "update") {
+    const idx = rules.findIndex(r => r.id === state.existingID);
+    if (idx < 0) return "";
+    const current = rules[idx];
+    rules[idx] = {
+      ...current,
+      name: state.name || current.name,
+      nick: state.nick || current.nick,
+      polarity,
+      fromRules,
+      subjectRules,
+      betweenJoin: state.betweenJoin,
+      whenJoin: state.whenJoin,
+      when,
+      fields: state.detailOpen ? { ...state.fields } : current.fields,
+    };
+    state.saved = { nick: rules[idx].nick, kind: "updated", polarity, via: "filters", filters: state.picked.slice() };
+    return `Updated rule ${rules[idx].nick} · ${pickedSummary()}`;
+  }
+  const nick = nextNick();
+  const rule = {
+    id: "rule-" + nick + "-" + Date.now().toString(36).slice(-3),
+    nick,
+    name: state.name || "From this ask",
+    polarity,
+    betweenJoin: state.betweenJoin,
+    whenJoin: state.whenJoin,
+    fromRules,
+    subjectRules,
+    when,
+    fields: { ...state.fields },
+  };
+  rules.push(rule);
+  state.saved = { nick, kind: "saved", polarity, via: "filters", filters: state.picked.slice() };
+  return `Saved rule ${nick} as ${polarity} · ${pickedSummary()}`;
+}
+
+function saveNow() {
+  const fromRules = state.fromRules.slice();
+  const subjectRules = state.subjectRules.slice();
+  if (!fromRules.length && !subjectRules.length) {
+    state.toast = "Press Add on From or Subject first";
+    render();
+    return;
+  }
+  if (state.mode === "update" || state.intent === "update") {
+    const idx = rules.findIndex(r => r.id === state.existingID);
+    if (idx < 0) return;
+    rules[idx] = {
+      ...rules[idx], name: state.name, nick: state.nick, polarity: state.polarity,
+      betweenJoin: state.betweenJoin, fromRules, subjectRules, fields: { ...state.fields },
+    };
+    state.saved = { nick: state.nick, kind: "updated", polarity: state.polarity, via: "save" };
+    state.toast = `Rule ${state.nick} updated · this get is still waiting`;
+  } else {
+    const nick = state.nick || nextNick();
+    rules.push({
+      id: "rule-" + nick, nick, name: state.name || "From this ask", polarity: state.polarity,
+      betweenJoin: state.betweenJoin, whenJoin: "and",
+      fromRules, subjectRules, when: null, fields: { ...state.fields },
+    });
+    state.saved = { nick, kind: "saved", polarity: state.polarity, via: "save" };
+    state.toast = `Rule ${nick} saved · press Allow or Block for this mail`;
+  }
+  render();
+}
+
+function decide(kind) {
+  const extra = commitWithDecision(kind);
+  state.decision = kind;
+  state.toast = (kind === "allow" ? "Allowed this mail" : "Blocked this mail") + (extra ? " · " + extra : "");
+  state.mode = null;
+  state.include = false;
+  state.menuOpen = false;
+  state.picked = [];
+  state.detailOpen = false;
+  state.polarityTouched = false;
+  state.polarityOpen = false;
+  render();
+}
+
+function mailHTML(cls) {
+  return `
+    <div class="mail ${cls || ""}">
+      <p>Hi Marek,</p>
+      <p>I wanted to follow up on the <strong>Automation Engineer, AMZL</strong> role.</p>
+      <p>Your <strong>Tapo</strong> order is ready. Tracking: <a href="#">ABC-123</a></p>
+      <ul>
+        <li>Item A</li>
+        <li>Item B</li>
+        <li>Item C — longer line for scroll testing</li>
+      </ul>
+      <p class="sign">— MailGent preview sample</p>
+    </div>`;
+}
+
+function summaryHTML() {
+  const g = generatedMatchers();
+  return `
+    <div class="summary">
+      <h3>Remember similar mail</h3>
+      <p>Built from this ask. Nothing is written until you press Allow or Block.</p>
+      <div class="kv"><span class="k">From</span><span>contains ${esc(g.fromRules[0].value)}</span></div>
+      <div class="kv"><span class="k">Subject</span><span>contains ${esc(g.subjectRules[0].value)}</span></div>
+      <div class="kv"><span class="k">Fields</span><span>${ASK.map(a => esc(a.label)).join(" · ")}</span></div>
+      <div class="follow">
+        <div class="allow">Allow → save a Pass</div>
+        <div class="block">Block → save a Block</div>
+      </div>
+      <p>Likely existing rule: <strong>${esc(likelyRule().nick)} · ${esc(likelyRule().name)}</strong>. Switch to Update if you would rather change that one.</p>
+    </div>`;
+}
+
+function chips(list, which) {
+  if (!list.length) return `<div class="empty-rules">No rules yet</div>`;
+  return `<div class="match-chips">${list.map((r, i) => `
+    <span class="match-chip"><span class="mode">${esc(r.mode.toUpperCase())}</span><span>${esc(r.value)}</span>
+    <button type="button" class="x" data-rm="${which}" data-idx="${i}">×</button></span>`).join("")}</div>`;
+}
+function sectionChips(list, which) {
+  // New (variant C): hide empty chip rows — drafts live in the Value inputs.
+  // Existing: always show chips for matchers already on the rule.
+  if (isPickVariant() && state.intent !== "update" && !list.length) return "";
+  return chips(list, which);
+}
+function modes(selected) {
+  return ["contains", "starts", "ends", "exact"].map(m =>
+    `<option ${m === selected ? "selected" : ""}>${m}</option>`).join("");
+}
+function existingListHTML() {
+  const pool = sortedPool();
+  const selected = rules.find(r => r.id === state.existingID);
+  const hit = matchLooksLikely(selected) > 0;
+  const options = pool.map(r => {
+    const mark = r.polarity === "pass" ? "✓" : "✗";
+    const likely = matchLooksLikely(r) > 0 ? " · likely" : "";
+    const label = `${r.nick} ${mark} ${r.name}${likely}`;
+    return `<option value="${esc(r.id)}" ${r.id === state.existingID ? "selected" : ""}>${esc(label)}</option>`;
+  }).join("");
+  return `
+    <div class="pick-row">
+      <label for="existingPick">Rule</label>
+      <select id="existingPick" aria-label="Existing rules">${options}</select>
+      <p class="hint">${hit
+        ? `<span class="hit">Likely match</span> for this message · shared pool, likely first`
+        : "Shared rules pool · likely matches listed first"}</p>
+    </div>`;
+}
+function editorHTML() {
+  const p = state.polarity;
+  const rule = rules.find(r => r.id === state.existingID) || likelyRule();
+  const options = rules.map(r =>
+    `<option value="${esc(r.id)}" ${r.id === state.existingID ? "selected" : ""}>${esc(r.nick)} · ${esc(r.name)}${r.id === likelyRule().id ? " · likely" : ""}</option>`
+  ).join("");
+  const fieldBtns = FIELDS.map(f =>
+    `<button type="button" class="${state.fields[f.key] ? "on " + p : ""}" data-field="${f.key}" title="${f.key}">${f.short}</button>`
+  ).join("");
+  const showInclude = state.variant !== "A" && !isPickVariant();
+  const updating = state.intent === "update" || state.mode === "update";
+  const identityRow = `
+    <div class="id-row">
+      <div><label for="ruleName">Name</label><input id="ruleName" value="${esc(state.name)}"></div>
+      <div><label for="ruleNick">Nick</label><select id="ruleNick">${NICKS.map(n => `<option ${n === state.nick ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    </div>`;
+  const polarityHighlight = (want) => {
+    if (state.polarityTouched) return state.polarity === want;
+    // Existing: show the rule’s type as the default selection.
+    if (updating) return state.polarity === want;
+    return false;
+  };
+  const polarityFoldLabel = (() => {
+    if (state.polarityTouched) {
+      return state.polarity === "pass" ? "Pass, unless you change it" : "Block, unless you change it";
+    }
+    if (updating) {
+      return state.polarity === "pass" ? "Keeps Pass" : "Keeps Block";
+    }
+    return "Allow or Block sets Pass or Block";
+  })();
+  const polarityFoldSub = (() => {
+    if (state.polarityOpen) {
+      return updating
+        ? "Pick one to override the original rule type"
+        : "Pick one to override the decision buttons";
+    }
+    return updating
+      ? "Open only if this rule should change Pass or Block"
+      : "Open only if this rule should not follow the button";
+  })();
+  const polarityBlock = `
+    <button type="button" class="polarity-fold" id="polarityToggle" aria-expanded="${state.polarityOpen}">
+      <span>${polarityFoldLabel}<span class="sub">${polarityFoldSub}</span></span>
+      <span class="chev">${state.polarityOpen ? "⌄" : "›"}</span>
+    </button>
+    ${state.polarityOpen ? `<div class="polarity">
+      <button type="button" class="${polarityHighlight("pass") ? "on pass" : ""}" data-pol="pass"><span class="t">Pass</span><span class="d">Green-light fields on match</span></button>
+      <button type="button" class="${polarityHighlight("block") ? "on block" : ""}" data-pol="block"><span class="t">Block</span><span class="d">Withhold fields on match</span></button>
+    </div>` : ""}`;
+  const pickedSummaryBlock = isPickVariant() ? `
+    <div class="summary">
+      <h3>${updating ? "Update rule" : "New rule"}</h3>
+      <p>${esc(pickedSummary())}</p>
+      <p>${updating
+        ? "Matchers already on the rule stay. A value box is saved too when it is not empty."
+        : "Value boxes that still have text are saved with Allow or Block. An empty box is left out."}</p>
+    </div>` : "";
+  const matcherBody = `
+    <div class="section">
+      <h4>✉ From</h4>
+      ${sectionChips(state.fromRules, "from")}
+      <div class="add-row">
+        <select id="fromDraftMode">${modes(state.fromDraftMode)}</select>
+        <input id="fromDraftValue" value="${esc(state.fromDraftValue)}">
+        <button type="button" class="btn small" id="addFrom">Add</button>
+      </div>
+    </div>
+    <div class="join-row"><span>Between From and Subject</span><span class="spacer"></span>
+      <div class="join-seg">
+        <button type="button" data-join-key="betweenJoin" data-op="and" class="${state.betweenJoin === "and" ? "on" : ""}">AND</button>
+        <button type="button" data-join-key="betweenJoin" data-op="or" class="${state.betweenJoin === "or" ? "on" : ""}">OR</button>
+      </div>
+    </div>
+    <div class="section">
+      <h4>☰ Subject</h4>
+      ${sectionChips(state.subjectRules, "subject")}
+      <div class="add-row">
+        <select id="subjectDraftMode">${modes(state.subjectDraftMode)}</select>
+        <input id="subjectDraftValue" value="${esc(state.subjectDraftValue)}">
+        <button type="button" class="btn small" id="addSubject">Add</button>
+      </div>
+    </div>
+    <div class="join-row"><span>Between matchers and When</span><span class="spacer"></span><span class="jlbl">Join</span>
+      <div class="join-seg">
+        <button type="button" data-join-key="whenJoin" data-op="and" class="${state.whenJoin === "and" ? "on" : ""}">AND</button>
+        <button type="button" data-join-key="whenJoin" data-op="or" class="${state.whenJoin === "or" ? "on" : ""}">OR</button>
+      </div>
+    </div>
+    <div class="section">
+      <h4>When <span class="sub">(optional time window)</span><span class="h4-spacer"></span><button type="button" class="toggle ${state.whenOn ? "on" : ""}" id="whenToggle" aria-label="When"></button></h4>
+      ${state.whenOn ? `
+        <div class="when-dates">
+          <label>After</label><input type="date" id="whenAfter" value="${esc(state.whenAfter)}">
+          <label>Before</label><input type="date" id="whenBefore" value="${esc(state.whenBefore)}">
+        </div>
+        <p class="hint">Joined to From/Subject with AND|OR above. Empty side = open-ended.</p>
+      ` : ""}
+    </div>
+    <div>
+      <div class="hint" style="margin-bottom:6px">${p === "pass" ? "Reveal" : "Withhold"} · ask fields start on</div>
+      <div class="fields">${fieldBtns}</div>
+    </div>`;
+
+  if (isPickVariant()) {
+    // Same New / Existing order as prototype-ask-create-rule.html ruleSheet.
+    return `
+      ${intentSwitchHTML()}
+      ${updating
+        ? existingListHTML()
+        : `<p class="hint">Name + Nick on one row · Value boxes save with Allow or Block when not empty</p>
+           ${identityRow}`}
+      ${polarityBlock}
+      ${updating ? identityRow : ""}
+      ${matcherBody}
+      <p class="hint">${updating
+        ? "Allow or Block updates this rule. Pass or Block stays as on the original unless you override it."
+        : "Allow or Block writes this rule and sets Pass or Block."}</p>
+      ${pickedSummaryBlock}`;
+  }
+
+  return `
+    ${state.variant !== "B" ? `
+      <div class="mode-seg">
+        <button type="button" data-mode="new" class="${state.mode === "new" ? "on" : ""}">New</button>
+        <button type="button" data-mode="update" class="${state.mode === "update" ? "on" : ""}">Update ${esc(rule.nick)}</button>
+      </div>` : ""}
+    ${state.mode === "update" ? `
+      <div class="pick-row"><label>Existing rule</label>
+        <select id="existingPick">${options}</select>
+        <p class="hint">A matches this From and a subject word. Shared pool.</p>
+      </div>` : `
+      <p class="hint">Drafts are filled from this ask. Press Add before Save. Allow or Block can include a draft if the tick is on.</p>`}
+    ${polarityBlock}
+    ${identityRow}
+    ${matcherBody}
+    ${showInclude ? `
+      <label class="include"><input type="checkbox" id="includeIn" ${state.include ? "checked" : ""}> Add to this decision — Allow or Block also saves the rule</label>` : `
+      <p class="hint">${state.include ? "Tick is on · Allow or Block also saves this." : "Tick is off · Save writes the rule now. Allow or Block only decides this mail."}</p>`}
+    <div class="rule-actions">
+      <span class="hint">${state.mode === "update" ? "Updates" : "Saves"} the shared rule. Does not decide this mail.</span>
+      <button type="button" class="btn primary" id="saveNow">${state.mode === "update" ? "Update rule" : "Save rule"}</button>
+    </div>`;
+}
+
+function intentSwitchHTML() {
+  return `
+    <div class="mode-seg" role="tablist" aria-label="Rule intent">
+      <button type="button" data-rule-intent="new" class="${state.intent !== "update" ? "on" : ""}">New</button>
+      <button type="button" data-rule-intent="update" class="${state.intent === "update" ? "on" : ""}">Existing</button>
+    </div>`;
+}
+
+function ruleFateHTML() {
+  const armed = isPickVariant()
+    ? state.picked.length > 0
+    : state.variant === "A"
+      ? state.include
+      : state.variant === "B" && (state.mode === "decision" || ((state.mode === "new" || state.mode === "update") && state.include));
+  if (!armed) return "";
+  const updating = state.intent === "update" || state.mode === "update";
+  return `<span class="rule-fate">${updating ? "+ update rule" : "+ add rule"}</span>`;
+}
+
+/** docs/ui-inventory.md → SecondaryAction icons (SF Symbol-like). */
+function actionIcon(name) {
+  if (name === "eye") {
+    return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M8 3.2C4.4 3.2 1.5 5.6.4 8c1.1 2.4 4 4.8 7.6 4.8S14.5 10.4 15.6 8C14.5 5.6 11.6 3.2 8 3.2Zm0 8a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Zm0-1.8a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Z"/>
+    </svg>`;
+  }
+  if (name === "openInMail") {
+    return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="currentColor">
+      <path d="M6.2 3.2H3.6A1.6 1.6 0 0 0 2 4.8v7.6A1.6 1.6 0 0 0 3.6 14h7.6a1.6 1.6 0 0 0 1.6-1.6v-2.6H11.6v2.4H3.8V5h2.4V3.2Zm3.2 0V4.8H12l-5.2 5.2 1.2 1.2L13.2 6v2.6H14.8V3.2H9.4Z"/>
+    </svg>`;
+  }
+  if (name === "plus") {
+    return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="currentColor">
+      <path d="M7.25 2.5h1.5v4.75H13.5v1.5H8.75V13.5h-1.5V8.75H2.5v-1.5h4.75V2.5Z"/>
+    </svg>`;
+  }
+  if (name === "checkmark") {
+    return `<svg class="sa-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="currentColor">
+      <path d="M6.4 11.6 2.8 8l1.05-1.05L6.4 9.5l5.75-5.75L13.2 4.8 6.4 11.6Z"/>
+    </svg>`;
+  }
+  return "";
+}
+
+/** Shared SecondaryAction — docs/ui-inventory.md */
+function secondaryActionHtml(opts) {
+  const {
+    label, icon, attrs = "", id = "", title = label,
+    on = false, alwaysExpanded = false
+  } = opts;
+  const idAttr = id ? ` id="${esc(id)}"` : "";
+  const cls = [
+    "secondary-action",
+    alwaysExpanded ? "always-expanded" : "",
+    on ? "on" : ""
+  ].filter(Boolean).join(" ");
+  return `<button type="button" class="${cls}"${idAttr} title="${esc(title)}" aria-label="${esc(label)}" ${attrs}><span class="sa-face">${actionIcon(icon)}<span class="sa-label">${esc(label)}</span></span></button>`;
+}
+
+function filterButton(key) {
+  if (!isPickVariant()) return "";
+  // Icon-only SecondaryAction in a fixed slot; label overlays left on hover.
+  let control;
+  if (!key) {
+    control = `<span class="secondary-action sa-ph" aria-hidden="true"><span class="sa-face">${actionIcon("plus")}<span class="sa-label">Add to rule</span></span></span>`;
+  } else {
+    const on = state.picked.includes(key);
+    const field = PICK_META[key].label;
+    control = secondaryActionHtml({
+      label: on ? "In rule" : "Add to rule",
+      icon: on ? "checkmark" : "plus",
+      on,
+      alwaysExpanded: false,
+      title: on ? `Remove ${field} from the new rule` : `Add ${field} to a new rule`,
+      attrs: `data-pick="${key}" aria-pressed="${on}"`
+    });
+  }
+  return `<span class="sa-slot">${control}</span>`;
+}
+
+function leftHTML() {
+  return `
+    <div class="head">
+      <div class="q">?</div>
+      <div class="copy">Cursor wants access to the email below <button type="button" class="more">More</button></div>
+    </div>
+    <div class="card">
+      <div class="id-line">Cursor <span class="muted">· iCloud / INBOX</span></div>
+      <div class="msg-head"><span>✉ Message</span><span class="spacer"></span>
+        ${secondaryActionHtml({ label: "Preview", icon: "eye", id: "showMail", alwaysExpanded: true })}
+        ${secondaryActionHtml({ label: "Open in Apple Mail", icon: "openInMail", alwaysExpanded: true })}
+      </div>
+      <div class="env">
+        <div class="row ${isPickVariant() ? "can-pick" : ""}"><span class="lbl">Subject</span><span>${esc(ENVELOPE.subject)}</span>${filterButton("subject")}</div>
+        <div class="row ${isPickVariant() ? "can-pick" : ""}"><span class="lbl">From</span><span>${esc(ENVELOPE.fromName)} <span class="badge">${esc(ENVELOPE.fromEmail)}</span></span>${filterButton("from")}</div>
+        <div class="row ${isPickVariant() ? "can-pick" : ""}"><span class="lbl">To</span><span>${esc(ENVELOPE.toName)} <span class="badge">${esc(ENVELOPE.toEmail)}</span></span>${filterButton(null)}</div>
+        <div class="row ${isPickVariant() ? "can-pick" : ""}"><span class="lbl">Date</span><span>${esc(ENVELOPE.date)}</span>${filterButton(null)}</div>
+      </div>
+      <div class="ask-row"><span class="lbl">Ask</span>${ASK.map(a => `<span class="chip-ask">${esc(a.label)}</span>`).join("")}</div>
+    </div>
+    <div class="field-card"><span class="fl">Attachment names</span><span>(empty)</span></div>
+    <div class="field-card"><span class="fl">Attachment content</span><span>(empty)</span></div>
+    <div class="field-card tall"><div class="fl">Body</div><div class="fv">Hi Marek, I wanted to follow up on the Automation Engineer, AMZL role. Your Tapo order is ready. Tracking: ABC-123 Item A Item B Item C — longer line for scroll testing — MailGent preview sample</div></div>
+    <div class="footer ${state.variant === "B" ? "stack" : ""}">
+      ${state.variant === "B" ? footerControl() : ""}
+      <div class="row">
+        <button type="button" class="btn" id="blockBtn">Block</button>
+        ${state.variant === "A" || isPickVariant()
+          ? `<button type="button" class="btn primary" id="allowBtn">Allow</button>${ruleFateHTML()}<span class="spacer"></span>${footerControl()}`
+          : `<span class="spacer"></span>${state.variant === "B" ? "" : footerControl()}<button type="button" class="btn primary" id="allowBtn">Allow</button>${ruleFateHTML()}`}
+      </div>
+      ${state.menuOpen ? menuHTML() : ""}
+    </div>
+    ${state.toast ? `<div class="toast">${esc(state.toast)}</div>` : ""}`;
+}
+
+function footerControl() {
+  const m = modeLabel();
+  const on = state.mode || state.include;
+  if (state.variant === "A") {
+    const open = settingsOpen();
+    const armed = state.include || open;
+    return `
+      <div class="rule-group ${armed ? "on" : ""}" role="group" aria-label="Rule from this ask">
+        <span class="rule-tag">Rule</span>
+        <label class="apply-ctrl ${state.include ? "on" : ""}" title="Also save this rule when you Allow or Block">
+          <input type="checkbox" id="tickBtn" ${state.include ? "checked" : ""}>
+          Apply
+        </label>
+        <button type="button" class="settings-ctrl ${open ? "on" : ""}" id="settingsBtn" title="${open ? "Hide rule settings" : "Show rule settings"}">
+          ${open ? "Hide" : "Settings"}
+          <span class="chev">${open ? "⌄" : "›"}</span>
+        </button>
+      </div>`;
+  }
+  if (state.variant === "B") {
+    const seg = (id, lab, sub) =>
+      `<button type="button" data-mode="${id}" class="${state.mode === id ? "on" : ""}">${lab}<span class="s">${sub}</span></button>`;
+    return `<div class="tri" role="tablist">
+      ${seg("decision", "Decision", "with Allow")}
+      ${seg("new", "New", "rule")}
+      ${seg("update", "Update", likelyRule().nick)}
+    </div>`;
+  }
+  if (isPickVariant()) {
+    if (!state.picked.length) return "";
+    return `<button type="button" class="btn" id="editRuleBtn">${state.detailOpen ? "Close rule edit" : "Edit rule ›"}</button>`;
+  }
+  return `
+    <button type="button" class="menu-btn ${on ? "on" : ""}" id="menuBtn">
+      <span class="lab">${esc(m.lab)}<span class="sub">${esc(m.sub)}</span></span>
+      <span class="chev">${state.menuOpen ? "⌃" : "›"}</span>
+    </button>`;
+}
+
+function menuHTML() {
+  const row = (id, title, desc) => `
+    <button type="button" data-mode="${id}" class="${state.mode === id ? "on" : ""}">
+      <span class="mark">${state.mode === id ? "✓" : ""}</span>
+      <span><span class="t">${title}</span><span class="d">${desc}</span></span>
+    </button>`;
+  return `<div class="menu" id="menu">
+    ${row("decision", "With this decision", "Allow saves a Pass. Block saves a Block. No extra form.")}
+    ${row("new", "New rule settings", "Edit the rule this ask suggests, on the right.")}
+    ${row("update", `Update ${likelyRule().nick} · ${likelyRule().name}`, "This From and subject already look like rule A.")}
+    <button type="button" data-mode=""><span class="mark"></span><span><span class="t">Just this mail</span><span class="d">Back to the preview. Allow or Block only.</span></span></button>
+  </div>`;
+}
+
+function rightHTML() {
+  if (isPickVariant()) return rightC();
+  if (state.variant === "B") return rightB();
+  return rightA();
+}
+function rightA() {
+  if (!settingsOpen()) return mailHTML();
+  const title = state.mode === "new" ? "New rule" : "Update rule";
+  return `
+    <div class="pane-head">${title}<span class="spacer"></span>
+      <button type="button" class="btn-ghost" id="showMail">Show mail</button></div>
+    <div class="pane-scroll">${state.mode === "decision" ? summaryHTML() : editorHTML()}</div>`;
+}
+function rightB() {
+  const body = !state.mode
+    ? `<div class="pane-scroll"><p class="hint">Pick a state beside Allow. The preview stays on this side.</p></div>`
+    : `<div class="pane-scroll">${state.mode === "decision" ? summaryHTML() : editorHTML()}</div>`;
+  return `
+    <div class="pane-head">${state.mode ? modeLabel().lab : "Mail"}<span class="hint">${state.mode ? " · rule" : ""}</span>
+      <span class="spacer"></span>
+      ${state.mode ? `<button type="button" class="btn-ghost" data-mode="">Mail only</button>` : ""}
+    </div>
+    ${body}
+    <div class="peek"><div class="lbl">PREVIEW</div>
+      Hi Marek, — follow up on the Automation Engineer role. Tapo order ABC-123. Item A · Item B · Item C.
+    </div>`;
+}
+function rightC() {
+  if (!state.detailOpen) return mailHTML();
+  return `
+    <div class="pane-head">Edit rule<span class="spacer"></span>
+      <button type="button" class="btn-ghost" id="closeDetail">Close</button></div>
+    <div class="pane-scroll">${editorHTML()}</div>`;
+}
+
+function render() {
+  document.documentElement.dataset.variant = state.variant;
+  document.getElementById("root").innerHTML = `<div class="left">${leftHTML()}</div><div class="right">${rightHTML()}</div>`;
+  const m = modeLabel();
+  document.getElementById("varLabel").textContent = `${state.variant} — ${VARIANTS[state.variant].name}`;
+  const includeNote = state.include ? "yes" : "no";
+  const ruleLine = rules.map(r => `${r.nick} ${r.polarity} “${r.name}”`).join("\n  ");
+  document.getElementById("stateDump").textContent =
+    `variant ${state.variant}\nmode ${state.mode || "mail"}\ninclude in decision ${includeNote}\npicked ${state.picked.join(", ") || "—"}\nbutton “${m.lab}”\ndecision ${state.decision || "—"}\nsaved ${state.saved ? JSON.stringify(state.saved) : "—"}\nrules\n  ${ruleLine}`;
+  bind();
+}
+
+function bind() {
+  const $ = (id) => document.getElementById(id);
+  $("allowBtn").onclick = () => decide("allow");
+  $("blockBtn").onclick = () => decide("block");
+  document.querySelectorAll("[data-mode]").forEach(el => {
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const mode = el.dataset.mode || null;
+      if (state.variant === "B" && state.mode === mode) setMode(null);
+      else setMode(mode);
+    };
+  });
+  if ($("tickBtn")) $("tickBtn").onchange = () => {
+    state.include = $("tickBtn").checked;
+    render();
+  };
+  if ($("settingsBtn")) $("settingsBtn").onclick = () => toggleSettings();
+  if ($("menuBtn")) $("menuBtn").onclick = () => { state.menuOpen = !state.menuOpen; render(); };
+  document.querySelectorAll("#showMail").forEach(el => {
+    el.onclick = () => {
+      if (state.variant === "A") { state.mode = null; render(); }
+      else setMode(null);
+    };
+  });
+  const name = $("ruleName");
+  if (name) name.oninput = () => { state.name = name.value; };
+  const nick = $("ruleNick");
+  if (nick) nick.onchange = () => { state.nick = nick.value; render(); };
+  const pick = $("existingPick");
+  if (pick) pick.onchange = () => {
+    const rule = rules.find(r => r.id === pick.value);
+    if (rule) {
+      loadExisting(rule);
+      if (isPickVariant()) {
+        state.detailOpen = true;
+        prefillFromPicks();
+      } else {
+        state.mode = "update";
+      }
+      render();
+    }
+  };
+  document.querySelectorAll("[data-pol]").forEach(el => {
+    el.onclick = () => {
+      state.polarity = el.dataset.pol;
+      state.polarityTouched = true;
+      state.polarityOpen = true;
+      render();
+    };
+  });
+  if ($("polarityToggle")) $("polarityToggle").onclick = () => {
+    state.polarityOpen = !state.polarityOpen;
+    render();
+  };
+  document.querySelectorAll("[data-rule-intent]").forEach(el => {
+    el.onclick = () => chooseRuleIntent(el.dataset.ruleIntent);
+  });
+  document.querySelectorAll("[data-join-key]").forEach(el => {
+    el.onclick = () => { state[el.dataset.joinKey] = el.dataset.op; render(); };
+  });
+  document.querySelectorAll("[data-field]").forEach(el => {
+    el.onclick = () => { state.fields[el.dataset.field] = !state.fields[el.dataset.field]; render(); };
+  });
+  document.querySelectorAll("[data-rm]").forEach(el => {
+    el.onclick = () => {
+      const list = el.dataset.rm === "from" ? state.fromRules : state.subjectRules;
+      list.splice(Number(el.dataset.idx), 1);
+      render();
+    };
+  });
+  const add = (which) => {
+    const mode = $(which === "from" ? "fromDraftMode" : "subjectDraftMode").value;
+    const value = $(which === "from" ? "fromDraftValue" : "subjectDraftValue").value.trim();
+    if (!value) return;
+    const list = which === "from" ? state.fromRules : state.subjectRules;
+    list.push({ mode, value });
+    if (which === "from") state.fromDraftValue = "";
+    else state.subjectDraftValue = "";
+    render();
+  };
+  if ($("addFrom")) $("addFrom").onclick = () => add("from");
+  if ($("addSubject")) $("addSubject").onclick = () => add("subject");
+  if ($("fromDraftMode")) $("fromDraftMode").onchange = (e) => { state.fromDraftMode = e.target.value; };
+  if ($("subjectDraftMode")) $("subjectDraftMode").onchange = (e) => { state.subjectDraftMode = e.target.value; };
+  if ($("fromDraftValue")) $("fromDraftValue").oninput = (e) => { state.fromDraftValue = e.target.value; };
+  if ($("subjectDraftValue")) $("subjectDraftValue").oninput = (e) => { state.subjectDraftValue = e.target.value; };
+  if ($("whenToggle")) $("whenToggle").onclick = () => {
+    state.whenOn = !state.whenOn;
+    if (state.whenOn && !state.whenAfter && !state.whenBefore) state.whenAfter = "2026-01-01";
+    render();
+  };
+  if ($("whenAfter")) $("whenAfter").onchange = (e) => { state.whenAfter = e.target.value; };
+  if ($("whenBefore")) $("whenBefore").onchange = (e) => { state.whenBefore = e.target.value; };
+  if ($("includeIn")) $("includeIn").onchange = (e) => { state.include = e.target.checked; render(); };
+  if ($("saveNow")) $("saveNow").onclick = () => saveNow();
+  document.querySelectorAll("[data-pick]").forEach(el => {
+    el.onclick = () => togglePick(el.dataset.pick);
+  });
+  if ($("editRuleBtn")) $("editRuleBtn").onclick = () => {
+    state.detailOpen = !state.detailOpen;
+    if (state.detailOpen) syncPickedDraft();
+    render();
+  };
+  if ($("closeDetail")) $("closeDetail").onclick = () => {
+    state.detailOpen = false;
+    render();
+  };
+}
+
+function setVariant(key) {
+  state.variant = key;
+  state.mode = null;
+  state.include = false;
+  state.menuOpen = false;
+  state.picked = [];
+  if (key === "C" || key === "D") prefillFromPicks();
+  else {
+    state.fromDraftMode = "contains";
+    state.fromDraftValue = ENVELOPE.fromEmail;
+    state.subjectDraftMode = "contains";
+    state.subjectDraftValue = "job";
+  }
+  state.detailOpen = false;
+  state.polarityTouched = false;
+  state.polarityOpen = false;
+  state.toast = "";
+  const url = new URL(location.href);
+  url.searchParams.set("variant", key);
+  history.replaceState(null, "", url);
+  render();
+}
+document.getElementById("prevVar").onclick = () => {
+  const i = ORDER.indexOf(state.variant);
+  setVariant(ORDER[(i + ORDER.length - 1) % ORDER.length]);
+};
+document.getElementById("nextVar").onclick = () => {
+  const i = ORDER.indexOf(state.variant);
+  setVariant(ORDER[(i + 1) % ORDER.length]);
+};
+document.addEventListener("keydown", (e) => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  if (e.key === "ArrowLeft") document.getElementById("prevVar").click();
+  if (e.key === "ArrowRight") document.getElementById("nextVar").click();
+});
+
+const initial = new URL(location.href).searchParams.get("variant");
+if (ORDER.includes(initial)) state.variant = initial;
+if (isPickVariant()) prefillFromPicks();
+render();
+</script>
+</body>
+</html>

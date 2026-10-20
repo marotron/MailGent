@@ -191,14 +191,20 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     /// Each request gets its own `HostedWindow`. MenuBarExtra `hide` / `orderOut` cannot flash-dismiss it.
     func runConditionalAsk(
         request: ConditionalAccessPromptRequest,
-        accountLabel: String
+        accountLabel: String,
+        ruleSupport: ConditionalAccessAskRuleSupport? = nil
     ) async -> ConditionalAccessDecision {
-        await presentConditionalAsk(request: request, accountLabel: accountLabel)
+        await presentConditionalAsk(
+            request: request,
+            accountLabel: accountLabel,
+            ruleSupport: ruleSupport
+        )
     }
 
     private func presentConditionalAsk(
         request: ConditionalAccessPromptRequest,
-        accountLabel: String
+        accountLabel: String,
+        ruleSupport: ConditionalAccessAskRuleSupport?
     ) async -> ConditionalAccessDecision {
         await withCheckedContinuation { continuation in
             AskQueueIndicator.shared.register(
@@ -216,6 +222,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 onBlock: { [weak self] in
                     self?.finishAsk(id: request.id, decision: .block)
                 },
+                ruleSupport: ruleSupport,
                 showOpenInMail: request.context.mailURL != nil,
                 onOpenInMail: {
                     if let mailURL = request.context.mailURL {
@@ -282,12 +289,15 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     #if DEBUG
     /// Temp layout sandbox — sample Ask UI without blocking MCP / the real Ask queue.
+    /// Rule save stays in memory so the editor can be exercised without writing rules.json.
     func showAskLayoutSandbox(longBody: Bool = false) {
+        let request = AskLayoutSandboxSamples.request(longBody: longBody)
         let dialog = ConditionalAccessPromptDialog(
-            request: AskLayoutSandboxSamples.request(longBody: longBody),
+            request: request,
             accountLabel: "iCloud",
             onAllow: { [weak self] in self?.dismissAskLayoutSandbox() },
             onBlock: { [weak self] in self?.dismissAskLayoutSandbox() },
+            ruleSupport: AskSandboxRuleBox.support(for: request.context),
             showOpenInMail: true,
             onOpenInMail: {},
             onPreviewVisibilityChange: { [weak self] visible in
@@ -317,6 +327,42 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             askLayoutSandbox?.styleMask.remove(.miniaturizable)
         }
         bringForward(askLayoutSandbox)
+    }
+
+    private final class AskSandboxRuleBox: @unchecked Sendable {
+        static let shared = AskSandboxRuleBox()
+        private let lock = NSLock()
+        private var rules: [GrantRule] = []
+
+        func allRules() -> [GrantRule] {
+            lock.lock()
+            defer { lock.unlock() }
+            return rules
+        }
+
+        func save(_ rule: GrantRule) {
+            lock.lock()
+            if let index = rules.firstIndex(where: { $0.id == rule.id }) {
+                rules[index] = rule
+            } else {
+                rules.append(rule)
+            }
+            lock.unlock()
+            MailGentLog.trace("ask sandbox rule \(rule.nick) id=\(rule.id) matchers=\(rule.fromRules.count + rule.subjectRules.count)")
+        }
+
+        static func support(for context: ConditionalAccessPromptContext) -> ConditionalAccessAskRuleSupport {
+            let box = shared
+            return ConditionalAccessAskRuleSupport(
+                allRules: { box.allRules() },
+                nextNick: {
+                    let used = Set(box.allRules().map(\.nick))
+                    return (65...90).compactMap { UnicodeScalar($0).map(String.init) }.first { !used.contains($0) } ?? "Z"
+                },
+                messageProbe: context.matcherProbeMessage(),
+                onSave: { box.save($0) }
+            )
+        }
     }
 
     private func dismissAskLayoutSandbox() {

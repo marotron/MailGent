@@ -11,14 +11,16 @@ Ship optional **Rules-from-Ask** on the conditional Ask dialog (create **or upda
 - Ask today: `ConditionalAccessPromptDialog` + `DetachedWindowHost.runConditionalAsk` → binary `ConditionalAccessDecision`.
 - Rules today: Grant Desk Rules tab → `rules.json` + enablements via `AgentBridge` / `RuleEngine`.
 - Spec: [`spec.md`](spec.md).
-- Proto: [`examples/prototype-ask-create-rule.html`](examples/prototype-ask-create-rule.html).
+- Proto (ship UI): [`examples/prototype-ask-rule-right.html?variant=G`](examples/prototype-ask-rule-right.html) · also [`examples/prototype-ask-create-rule.html`](examples/prototype-ask-create-rule.html) · [`examples/prototype-ask-cache.html`](examples/prototype-ask-cache.html) · [`examples/prototype-ask-redact.html`](examples/prototype-ask-redact.html).
 
 ## Decisions so far
 
 - Product lock captured in [`spec.md`](spec.md) (ship order, optional rule, fail-closed close, reuse `GrantRule`, redact one-shot).
-- Ask can **New** or **Existing** (edit shared `rules.json` rule in place); disclosure copy → “Also manage a rule…”.
+- 2026-10-19: [#21](https://github.com/marotron/MailGent/issues/21), [#22](https://github.com/marotron/MailGent/issues/22), and [#41](https://github.com/marotron/MailGent/issues/41) share seams with custom endpoints [#32](https://github.com/marotron/MailGent/issues/32) — `agentID` identity, overlays before cache, rule save does not write the cache, redact stays one-shot. See spec **Cross-feature seams**.
+- Ask can **New** or **Existing** (edit shared `rules.json` rule in place).
+- 2026-10-20: UI lock → variant **G** (Subject/From picks · right editor · commit on Allow/Block). Variant A (left disclosure) was 0.12.0.
 - Future / deferred tickets mirror to **GitHub Issues** (QuotAI pattern: labels `roadmap` / `fog` / `next-version`) — see `docs/agents/issue-tracker.md`.
-- Rules-from-Ask → [#21](https://github.com/marotron/MailGent/issues/21) · [issues/01-rules-from-ask.md](issues/01-rules-from-ask.md) — prototype in progress (claim).
+- Rules-from-Ask → [#21](https://github.com/marotron/MailGent/issues/21) · [issues/01-rules-from-ask.md](issues/01-rules-from-ask.md) — G lock / next ship (0.12.0 was A).
 - Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md) — deferred (`next-version`); blocked on 01 / #21.
 
 ## Fog

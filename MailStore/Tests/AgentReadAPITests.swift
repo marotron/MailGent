@@ -214,6 +214,50 @@ struct AgentReadAPITests {
         #expect(message.leakGuardAccess?.bodyAccess == .granted)
     }
 
+    @Test func passOverlaySkipsAskPromptForUpgradedField() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var fields: [String] = []
+        }
+        let capture = PromptCapture()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask,
+                attachmentMetadataMode: .off,
+                attachmentContentMode: .off
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                capture.fields = context.requestedFields
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        env.rules.upsert(
+            GrantRule(
+                id: "p1",
+                name: "Invoices",
+                nick: "A",
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true)
+            )
+        )
+        env.rules.setEnabled(true, ruleID: "p1", agentID: env.agentID, accountID: env.accountID, placement: "INBOX")
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(!capture.fields.contains("Body"))
+    }
+
     @Test func matchingPassUpgradesBodyOnGet() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: false)

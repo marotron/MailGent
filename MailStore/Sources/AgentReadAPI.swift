@@ -45,6 +45,7 @@ public struct ConditionalMessageEnvelope: Equatable, Sendable {
 
 /// Context for an Ask (conditional) prompt on MCP get.
 public struct ConditionalAccessPromptContext: Equatable, Sendable {
+    public let agentID: String
     public let agentName: String
     public let accountID: String
     public let placement: String
@@ -59,6 +60,7 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
     public let envelope: ConditionalMessageEnvelope
 
     public init(
+        agentID: String,
         agentName: String,
         accountID: String,
         placement: String,
@@ -69,6 +71,7 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
         htmlBody: String? = nil,
         envelope: ConditionalMessageEnvelope = ConditionalMessageEnvelope()
     ) {
+        self.agentID = agentID
         self.agentName = agentName
         self.accountID = accountID
         self.placement = placement
@@ -82,6 +85,22 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
 
     public var mailURL: URL? {
         AppleMailHandoff.messageURL(internetMessageID: internetMessageID)
+    }
+
+    /// Message shape for rule matcher ranking in the Ask rule editor (From/Subject/When).
+    public func matcherProbeMessage(body: String = "") -> IndexedMessage {
+        IndexedMessage(
+            id: messageID,
+            accountID: accountID,
+            placement: placement,
+            from: envelope.from,
+            to: envelope.to,
+            cc: envelope.cc,
+            date: envelope.date,
+            subject: envelope.subject,
+            body: body,
+            isPartial: false
+        )
     }
 }
 
@@ -221,6 +240,7 @@ public struct AgentReadAPI {
     /// `limitingAskTo` restricts which Ask fields are prompted (e.g. Attachment content only on `get_attachment`).
     private func resolveConditionalFields(
         _ fields: GrantFields,
+        agentID: String,
         agentName: String,
         message: ReadMessage,
         limitingAskTo: Set<String>? = nil
@@ -273,6 +293,7 @@ public struct AgentReadAPI {
         }
 
         let context = ConditionalAccessPromptContext(
+            agentID: agentID,
             agentName: agentName,
             accountID: message.accountID,
             placement: message.placement,
@@ -460,6 +481,7 @@ public struct AgentReadAPI {
             }
             let resolution = await resolveConditionalFields(
                 fields,
+                agentID: agentID,
                 agentName: agentName,
                 message: message,
                 limitingAskTo: ["Attachment content"]
@@ -670,6 +692,7 @@ public struct AgentReadAPI {
             let rawFields = grant.fields
             let resolution = await resolveConditionalFields(
                 rawFields,
+                agentID: agent.id,
                 agentName: agent.name,
                 message: message
             )

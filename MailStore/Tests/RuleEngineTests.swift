@@ -727,6 +727,27 @@ struct RuleEngineTests {
         )
         #expect(applied.isEmpty)
     }
+
+    @Test func matchesMatchersOnlyIgnoresEnablement() {
+        let message = sampleMessage(from: "payroll@example.com", subject: "Invoice due")
+        let rule = GrantRule(
+            id: "p1",
+            name: "Invoices",
+            nick: "A",
+            fromRules: [MatchRule(value: "payroll@example.com", mode: .exact)],
+            subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+            fields: GrantFields(envelope: false, body: true)
+        )
+        #expect(RuleEngine.matchesMatchersOnly(rule, message: message))
+        #expect(
+            !RuleEngine.matches(
+                rule,
+                message: message,
+                agentID: "agent-1",
+                enablements: []
+            )
+        )
+    }
 }
 
 private func sampleMessage(from: String, subject: String, date: String = "2024-01-01T00:00:00Z") -> IndexedMessage {

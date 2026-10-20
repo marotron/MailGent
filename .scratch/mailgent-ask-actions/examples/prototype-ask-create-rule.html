@@ -4,6 +4,9 @@
 
   Question: Where does optional rule authoring sit without crowding Allow/Block?
   Also: New rule vs edit Existing from the shared pool.
+  Seam strip (not a fourth layout): Save enables the prompting agentID only;
+  Allow/Block writes the Ask cache; a later get applies overlays before cache.
+  Open: open .scratch/mailgent-ask-actions/examples/prototype-ask-create-rule.html
 
   Visual lock: recycle Grant Desk → Rules editor patterns
     (Pass/Block cards, RuleNickChip, Name+Chip, From/Subject chip blocks,
@@ -90,6 +93,14 @@
       display: flex; flex-direction: column; gap: 8px;
     }
     .right h3 { margin: 0; font-size: 11px; font-weight: 650; color: var(--muted); letter-spacing: 0.02em; }
+    .seam { display: grid; gap: 8px; }
+    .seam .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .seam button.on { background: var(--sel); border-color: #7eb6ff; }
+    .seam .mini {
+      margin: 0; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #fafafa; border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+      white-space: pre-wrap; color: var(--ink);
+    }
     .right .body {
       flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 12px;
       background: #fafafa; color: var(--ink); font-size: 12px; line-height: 1.5;
@@ -414,6 +425,7 @@
         <tr><th>A</th><td class="lean">Collapsed disclosure above footer (plan default)</td></tr>
         <tr><th>B</th><td>Strip under Ask chips → expands in place</td></tr>
         <tr><th>C</th><td>“Manage rule…” beside Block → sheet</td></tr>
+        <tr><th>Seam</th><td>Right strip · Save enables this <span class="lean">agentID</span> only · Allow/Block writes cache · get applies overlay first</td></tr>
       </table>
     </div>
 
@@ -450,7 +462,14 @@ const ENVELOPE = {
   date: "12 Apr 2026, 09:14",
 };
 const ASK_FIELDS = ["Body", "Attachment metadata"];
-const AGENT = { name: "Cursor", account: "Work", accountID: "ABCD-1234", placement: "INBOX" };
+const AGENTS = [
+  { id: "agent-cursor", name: "Cursor", account: "Work", accountID: "ABCD-1234", placement: "INBOX" },
+  { id: "agent-grok", name: "Grok", account: "Work", accountID: "ABCD-1234", placement: "INBOX" },
+];
+const MESSAGE_ID = "msg-payslip-2026-04";
+const ASK_KEYS = ["body", "attachmentMetadata"];
+const enablements = {};
+const cacheEntries = [];
 const FIELD_KEYS = [
   { key: "subject", short: "S", tip: "Subject" },
   { key: "from", short: "F", tip: "From" },
@@ -520,6 +539,8 @@ let rulesPool = [
 
 const state = {
   variant: "A",
+  agentID: "agent-cursor",
+  lastGet: null,
   open: false,
   intent: "new",
   existingID: "rule-B",
@@ -542,6 +563,39 @@ const state = {
   decision: null,
   toast: "",
 };
+
+function agent() {
+  return AGENTS.find(a => a.id === state.agentID) || AGENTS[0];
+}
+
+function enableForPrompting(ruleId) {
+  if (!enablements[ruleId]) enablements[ruleId] = [];
+  if (!enablements[ruleId].includes(state.agentID)) enablements[ruleId].push(state.agentID);
+}
+
+function resolveGet(agentID) {
+  const overlay = {};
+  for (const rule of rulesPool) {
+    if (!(enablements[rule.id] || []).includes(agentID)) continue;
+    if (matchLooksLikely(rule) <= 0) continue;
+    for (const key of ASK_KEYS) {
+      if (!rule.fields?.[key]) continue;
+      overlay[key] = rule.polarity === "block" ? "off" : "on";
+    }
+  }
+  const overlaySkipped = ASK_KEYS.filter(k => overlay[k]).map(field => ({
+    field, via: overlay[field], cacheRead: false,
+  }));
+  const reused = [];
+  const prompt = [];
+  for (const field of ASK_KEYS.filter(k => !overlay[k])) {
+    const hit = cacheEntries.find(c =>
+      c.agentID === agentID && c.messageID === MESSAGE_ID && c.field === field);
+    if (hit) reused.push({ field, decision: hit.decision });
+    else prompt.push(field);
+  }
+  return { agentID, messageID: MESSAGE_ID, overlaySkipped, reused, prompt };
+}
 
 function askDefaultFields() {
   return Object.fromEntries(FIELD_KEYS.map(f => [f.key, ASK_DEFAULT_KEYS.has(f.key)]));
@@ -660,9 +714,9 @@ function draftRule() {
       : null,
     fields: { ...state.fields },
     enablement: {
-      agent: AGENT.name,
-      accountID: AGENT.accountID,
-      placement: AGENT.placement,
+      agentID: agent().id,
+      accountID: agent().accountID,
+      placement: agent().placement,
     },
   };
 }
@@ -695,8 +749,9 @@ function saveRule() {
       when: draft.when,
       fields: draft.fields,
     };
+    enableForPrompting(rulesPool[idx].id);
     state.lastAction = { nick: draft.nick, kind: "updated" };
-    state.toast = `Rule ${draft.nick} updated · enabled for ${AGENT.name} / ${AGENT.placement}`;
+    state.toast = `Rule ${draft.nick} updated · enabled for ${agent().id} only`;
   } else {
     const nick = state.nick || nextNick();
     const rule = {
@@ -712,18 +767,39 @@ function saveRule() {
       fields: draft.fields,
     };
     rulesPool.push(rule);
+    enableForPrompting(rule.id);
     state.lastAction = { nick, kind: "saved" };
-    state.toast = `Rule ${nick} saved · enabled for ${AGENT.name} / ${AGENT.placement}`;
+    state.toast = `Rule ${nick} saved · enabled for ${agent().id} only`;
   }
   render();
 }
 
 function decide(kind) {
+  const before = resolveGet(state.agentID);
+  for (const field of before.prompt) {
+    cacheEntries.push({
+      agentID: state.agentID,
+      messageID: MESSAGE_ID,
+      field,
+      decision: kind,
+    });
+  }
   state.decision = kind;
+  state.lastGet = { ...resolveGet(state.agentID), wroteCache: before.prompt.map(field => ({ field, decision: kind })) };
   const tag = state.lastAction
     ? ` · rule ${state.lastAction.nick} ${state.lastAction.kind} for later`
     : "";
-  state.toast = (kind === "allow" ? "Allow · this get only" : "Block · this get withheld") + tag;
+  const cached = before.prompt.length ? ` · cache ${before.prompt.join(", ")}` : " · cache unchanged";
+  state.toast = (kind === "allow" ? "Allow · this get only" : "Block · this get withheld") + cached + tag;
+  render();
+}
+
+function simulateGet() {
+  state.lastGet = resolveGet(state.agentID);
+  state.decision = null;
+  state.toast = state.lastGet.prompt.length
+    ? `Ask · ${state.lastGet.prompt.join(", ")}`
+    : "No Ask · overlay and cache covered this get";
   render();
 }
 
@@ -904,7 +980,7 @@ function ruleEditorHTML() {
     </div>
 
     <div class="rule-actions">
-      <span class="hint">${state.intent === "existing" ? "Updates" : "Saves to"} rules.json · enables ${esc(AGENT.name)} / ${esc(AGENT.placement)}. Does not Allow or Block this read.</span>
+      <span class="hint">${state.intent === "existing" ? "Updates" : "Saves to"} rules.json · enables ${esc(agent().id)} only. Does not write the Ask cache.</span>
       <button type="button" class="btn primary" id="saveRule">${esc(saveLabel)}</button>
     </div>
   `;
@@ -914,11 +990,13 @@ function messageCardHTML() {
   return `
     <div class="card">
       <div class="id-line">
-        <span class="agent">${esc(AGENT.name)}</span>
+        <span class="agent">${esc(agent().name)}</span>
         <span class="sep">·</span>
-        <span class="muted">${esc(AGENT.account)}</span>
+        <span class="muted">${esc(agent().id)}</span>
+        <span class="sep">·</span>
+        <span class="muted">${esc(agent().account)}</span>
         <span class="sep">/</span>
-        <span class="muted">${esc(AGENT.placement)}</span>
+        <span class="muted">${esc(agent().placement)}</span>
       </div>
       <div class="msg-head">
         <span>✉ Message</span>
@@ -1039,6 +1117,7 @@ function render() {
       <div class="toast ${state.toast ? "show" : ""}">${esc(state.toast)}</div>
     </div>
     <div class="right">
+      ${seamHTML()}
       <h3>IN-APP PREVIEW</h3>
       <div class="body">
         <strong>${esc(ENVELOPE.subject)}</strong><br><br>
@@ -1051,6 +1130,29 @@ function render() {
 
   bind();
   dump();
+}
+
+function seamHTML() {
+  const live = resolveGet(state.agentID);
+  const other = AGENTS.find(a => a.id !== state.agentID);
+  return `
+    <div class="seam">
+      <h3>SEAM · agentID + cache</h3>
+      <div class="row">
+        ${AGENTS.map(a => `
+          <button type="button" class="btn small ${a.id === state.agentID ? "on" : ""}" data-agent="${a.id}">${esc(a.name)}</button>
+        `).join("")}
+        <button type="button" class="btn small" id="btnGet">get as ${esc(agent().name)}</button>
+      </div>
+      <p class="hint">Shared rule, enablement for ${esc(state.agentID)} only. ${esc(other.name)} does not inherit it. Overlay runs before cache.</p>
+      <pre class="mini">${esc(JSON.stringify({
+        prompting: state.agentID,
+        thisGet: live,
+        enablements,
+        cache: cacheEntries,
+      }, null, 2))}</pre>
+    </div>
+  `;
 }
 
 function addMatch(which) {
@@ -1067,6 +1169,15 @@ function addMatch(which) {
 function bind() {
   document.getElementById("btnAllow")?.addEventListener("click", () => decide("allow"));
   document.getElementById("btnBlock")?.addEventListener("click", () => decide("block"));
+  document.getElementById("btnGet")?.addEventListener("click", simulateGet);
+  document.querySelectorAll("[data-agent]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.agentID = btn.getAttribute("data-agent");
+      state.decision = null;
+      state.toast = `Prompting ${agent().name} · ${state.agentID}`;
+      render();
+    });
+  });
 
   const disc = document.getElementById("ruleDisclosure");
   if (disc) {
@@ -1188,13 +1299,17 @@ function bind() {
 function dump() {
   document.getElementById("stateDump").textContent = JSON.stringify({
     variant: state.variant,
+    promptingAgentID: state.agentID,
     panelOpen: state.open,
     intent: state.intent,
     decision: state.decision,
     lastAction: state.lastAction,
+    lastGet: state.lastGet || resolveGet(state.agentID),
     draft: draftRule(),
     rulesPool,
-    note: "Editor recycles Grant Desk Rules. Save/Update ≠ Allow/Block.",
+    enablements,
+    cache: cacheEntries,
+    note: "Save/Update writes rules.json + enablement for this agentID. Allow/Block writes cache. get applies overlay before cache.",
   }, null, 2);
 }
 

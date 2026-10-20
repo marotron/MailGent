@@ -532,6 +532,23 @@ final class AgentBridge {
         noteRulesChanged()
     }
 
+    func upsertRule(
+        _ rule: GrantRule,
+        enableForAgentID: String,
+        accountID: String,
+        placement: String
+    ) {
+        rules.upsert(rule)
+        rules.setEnabled(
+            true,
+            ruleID: rule.id,
+            agentID: enableForAgentID,
+            accountID: accountID,
+            placement: placement
+        )
+        noteRulesChanged()
+    }
+
     func deleteRule(id: String) {
         rules.removeRule(id: id)
         noteRulesChanged()
@@ -893,7 +910,7 @@ final class AgentBridge {
                 allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
                 conditionalAccessPrompter: { @MainActor [weak self] context in
                     guard let self else { return .block }
-                    return await self.conditionalAccessPrompt.requestDecision(context: context)
+                    return await self.askDecision(for: context)
                 }
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
@@ -1403,7 +1420,7 @@ final class AgentBridge {
             allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
             conditionalAccessPrompter: { @MainActor [weak self] context in
                 guard let self else { return .block }
-                return await self.conditionalAccessPrompt.requestDecision(context: context)
+                return await self.askDecision(for: context)
             }
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
@@ -1415,6 +1432,26 @@ final class AgentBridge {
 
     func applyConditionalAccessPreference() {
         refreshGatewayLeakGuard()
+    }
+
+    private func askDecision(for context: ConditionalAccessPromptContext) async -> ConditionalAccessDecision {
+        let support = ConditionalAccessAskRuleSupport(
+            allRules: { [rules] in rules.allRules() },
+            nextNick: { [weak self] in self?.nextRuleNick() ?? "A" },
+            messageProbe: context.matcherProbeMessage(),
+            onSave: { [weak self] rule in
+                self?.upsertRule(
+                    rule,
+                    enableForAgentID: context.agentID,
+                    accountID: context.accountID,
+                    placement: context.placement
+                )
+            }
+        )
+        return await conditionalAccessPrompt.requestDecision(
+            context: context,
+            ruleSupport: support
+        )
     }
 
     /// Keep Cursor's local MCP entry aligned with the Cursor Bearer (machine-local only).

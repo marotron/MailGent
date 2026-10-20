@@ -723,26 +723,15 @@ private struct ScrollableLinkAwareBodyText: NSViewRepresentable {
 }
 
 /// Bordered icon+label control for non-destructive handoffs (see `docs/ui-inventory.md` → SecondaryAction).
-/// Height-locked to Access Log `Formatted` (small segmented); leading SF Symbol + regular label.
+/// Ask G flush family: 20pt height, 11pt label, 6pt radius, no track gutter.
 @MainActor
 enum SecondaryActionMetrics {
-    /// Same outer height as Access Log mode chrome (small segmented metrics).
-    static let controlHeight: CGFloat = {
-        let control = NSSegmentedControl(
-            labels: ["Formatted"],
-            trackingMode: .selectOne,
-            target: nil,
-            action: nil
-        )
-        control.controlSize = .small
-        control.segmentStyle = .rounded
-        control.sizeToFit()
-        return control.fittingSize.height
-    }()
-
-    static let labelFont = Font(
-        NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
-    )
+    static let controlHeight: CGFloat = 20
+    static let cornerRadius: CGFloat = 6
+    static let labelFont = Font.system(size: 11, weight: .regular)
+    /// Subtle selected fill (include-in-rule `.on`).
+    static let selectedFill = Color(red: 214 / 255, green: 233 / 255, blue: 255 / 255)
+    static let selectedBorder = Color(red: 126 / 255, green: 182 / 255, blue: 255 / 255)
 
     static let expandAnimation = Animation.spring(response: 0.34, dampingFraction: 0.86)
 }
@@ -752,6 +741,10 @@ struct SecondaryActionButton: View {
     let action: () -> Void
     /// When true, label stays visible (Ask dialog). Default: icon-only until hover.
     var alwaysExpanded: Bool = false
+    /// Subtle selected chrome (include-in-rule).
+    var isOn: Bool = false
+    /// Fixed-width slot; label expands left as overlay (no envelope value reflow).
+    var expandLeadingOverlay: Bool = false
     private let icon: AnyView
 
     @State private var isHovered = false
@@ -762,47 +755,51 @@ struct SecondaryActionButton: View {
         title: String,
         systemImage: String,
         alwaysExpanded: Bool = false,
+        isOn: Bool = false,
+        expandLeadingOverlay: Bool = false,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.action = action
         self.alwaysExpanded = alwaysExpanded
+        self.isOn = isOn
+        self.expandLeadingOverlay = expandLeadingOverlay
         self.icon = AnyView(SecondaryActionSystemGlyph(systemImage: systemImage))
     }
 
     init(
         title: String,
         alwaysExpanded: Bool = false,
+        isOn: Bool = false,
+        expandLeadingOverlay: Bool = false,
         action: @escaping () -> Void,
         @ViewBuilder icon: () -> some View
     ) {
         self.title = title
         self.action = action
         self.alwaysExpanded = alwaysExpanded
+        self.isOn = isOn
+        self.expandLeadingOverlay = expandLeadingOverlay
         self.icon = AnyView(icon())
     }
 
     private var showsLabel: Bool { alwaysExpanded || isHovered }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 0) {
-                icon
-                    .frame(width: 12, height: 11)
-                Text(title)
-                    .font(SecondaryActionMetrics.labelFont)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: true)
-                    .padding(.leading, showsLabel ? 4 : 0)
-                    .opacity(showsLabel ? 1 : 0)
-                    .frame(maxWidth: showsLabel ? 280 : 0, alignment: .leading)
-                    .clipped()
-            }
-            .padding(.horizontal, showsLabel ? 5 : 4)
-            .padding(.vertical, 2)
-            .frame(minWidth: SecondaryActionMetrics.controlHeight - 2, maxHeight: .infinity)
+        if expandLeadingOverlay {
+            slotOverlayBody
+        } else {
+            standardBody
         }
-        .buttonStyle(SecondaryActionButtonStyle())
+    }
+
+    private var standardBody: some View {
+        Button(action: action) {
+            faceContent
+                .padding(.horizontal, showsLabel ? 8 : 4)
+                .frame(minWidth: SecondaryActionMetrics.controlHeight - 2, maxHeight: .infinity)
+        }
+        .buttonStyle(SecondaryActionButtonStyle(isOn: isOn))
         .frame(height: SecondaryActionMetrics.controlHeight)
         .fixedSize(horizontal: true, vertical: true)
         .onHover { hovering in
@@ -813,6 +810,58 @@ struct SecondaryActionButton: View {
         }
         .help(title)
         .accessibilityLabel(title)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    /// Icon-only footprint; hovered label grows to the left over neighbors.
+    private var slotOverlayBody: some View {
+        ZStack(alignment: .trailing) {
+            Color.clear
+                .frame(
+                    width: SecondaryActionMetrics.controlHeight,
+                    height: SecondaryActionMetrics.controlHeight
+                )
+            Button(action: action) {
+                faceContent
+                    .padding(.horizontal, showsLabel ? 8 : 4)
+                    .frame(
+                        minWidth: SecondaryActionMetrics.controlHeight - 2,
+                        maxHeight: .infinity
+                    )
+            }
+            .buttonStyle(SecondaryActionButtonStyle(isOn: isOn))
+            .frame(height: SecondaryActionMetrics.controlHeight)
+            .fixedSize(horizontal: true, vertical: true)
+            .zIndex(showsLabel ? 4 : 1)
+        }
+        .frame(
+            width: SecondaryActionMetrics.controlHeight,
+            height: SecondaryActionMetrics.controlHeight,
+            alignment: .trailing
+        )
+        .onHover { hovering in
+            withAnimation(SecondaryActionMetrics.expandAnimation) {
+                isHovered = hovering
+            }
+        }
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private var faceContent: some View {
+        HStack(spacing: showsLabel ? 5 : 0) {
+            icon
+                .frame(width: 11, height: 11)
+                .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+            Text(title)
+                .font(SecondaryActionMetrics.labelFont)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: true)
+                .opacity(showsLabel ? 1 : 0)
+                .frame(maxWidth: showsLabel ? 280 : 0, alignment: .leading)
+                .clipped()
+        }
     }
 }
 
@@ -827,29 +876,78 @@ struct SecondaryActionSystemGlyph: View {
     }
 }
 
+/// Flush AND/OR (or similar) chip matching Ask G control height / radius.
+struct AskFlushSegmentButton: View {
+    let title: String
+    var isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 10)
+                .frame(height: SecondaryActionMetrics.controlHeight)
+                .foregroundStyle(isOn ? Color.white : Color.secondary)
+                .background(
+                    RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+                        .fill(isOn ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            isOn ? Color.accentColor : Color.secondary.opacity(0.32),
+                            lineWidth: 1
+                        )
+                }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Ghost Close / secondary text button in the Ask flush family.
+struct AskFlushGhostButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .padding(.horizontal, 8)
+                .frame(height: SecondaryActionMetrics.controlHeight)
+                .foregroundStyle(Color.primary)
+                .background(
+                    RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+                        .strokeBorder(Color.secondary.opacity(0.32), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct SecondaryActionButtonStyle: ButtonStyle {
+    var isOn: Bool = false
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let border = isOn
+            ? SecondaryActionMetrics.selectedBorder
+            : Color.secondary.opacity(configuration.isPressed ? 0.42 : 0.32)
+        let fill = isOn
+            ? SecondaryActionMetrics.selectedFill
+            : Color(nsColor: .controlBackgroundColor)
+        return configuration.label
             .background {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color(nsColor: .controlColor))
-                    .shadow(
-                        color: Color.black.opacity(configuration.isPressed ? 0.04 : 0.10),
-                        radius: configuration.isPressed ? 0 : 1,
-                        y: configuration.isPressed ? 0 : 0.5
-                    )
+                RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+                    .fill(fill)
             }
-            .padding(1)
-            .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(
-                                Color.secondary.opacity(configuration.isPressed ? 0.42 : 0.32),
-                                lineWidth: 1
-                            )
-                    }
+            .overlay {
+                RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+                    .strokeBorder(border, lineWidth: 1)
             }
             .opacity(configuration.isPressed ? 0.92 : 1)
     }

@@ -11,6 +11,11 @@ struct MailGentApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuBarStatus(session: session)
+                .onAppear {
+                    #if DEBUG
+                    AskSandboxLaunch.openIfRequested()
+                    #endif
+                }
         } label: {
             MenuBarIconLabel(agents: session.agents, source: session.source)
         }
@@ -30,3 +35,18 @@ struct MailGentApp: App {
         }
     }
 }
+
+#if DEBUG
+@MainActor
+private enum AskSandboxLaunch {
+    private static var opened = false
+
+    static func openIfRequested() {
+        guard !opened, ProcessInfo.processInfo.environment["MAILGENT_SHOW_ASK_SANDBOX"] == "1" else { return }
+        opened = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            DetachedWindowHost.shared.showAskLayoutSandbox()
+        }
+    }
+}
+#endif

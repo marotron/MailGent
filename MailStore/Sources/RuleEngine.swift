@@ -224,6 +224,11 @@ public enum RuleEngine {
         applies(rule, to: message, agentID: agentID, enablements: enablements)
     }
 
+    /// Matcher + When only (no enablement). Used to rank rules in the Ask rule picker.
+    public static func matchesMatchersOnly(_ rule: GrantRule, message: IndexedMessage) -> Bool {
+        matchesMatchers(rule, message: message)
+    }
+
     private static func applies(
         _ rule: GrantRule,
         to message: IndexedMessage,

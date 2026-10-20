@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.12.0] - 2026-10-20
+
+### Added
+
+- Ask dialog can optionally **create or update a Pass/Block rule** from Subject / From **Add to rule** picks. The right pane swaps to the rule editor; **Allow** or **Block** writes the shared rule when armed and enables it for the prompting agent on that account and placement only. Closing the window still blocks this read without writing a rule.
+
 ## [0.11.7] - 2026-10-19
 
 ### Fixed
