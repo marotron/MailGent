@@ -817,7 +817,8 @@ struct ConditionalAccessPromptDialog: View {
     ) -> some View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let addresses = MailAddressParts.parseList(trimmed)
-        return HStack(alignment: .center, spacing: 8) {
+        // Top-align so the + stays on the first line when name/email stacks.
+        return HStack(alignment: .top, spacing: 8) {
             envelopeLabel(label)
             Group {
                 if trimmed.isEmpty {
@@ -831,6 +832,7 @@ struct ConditionalAccessPromptDialog: View {
                         .lineLimit(3)
                 } else {
                     FlowAddressBadges(addresses: addresses)
+                        .font(.caption2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -891,27 +893,47 @@ private struct AskPrimaryFooterButtonStyle: ButtonStyle {
     }
 }
 
-/// Wraps name + grey email badges onto following lines when the pane is narrow.
+/// Name + grey email badge side-by-side when they fit; otherwise name on line 1, email on line 2.
+/// Callers set `.font(...)` (envelope uses caption2; field cards use caption).
 private struct FlowAddressBadges: View {
     let addresses: [MailAddressParts]
 
     var body: some View {
-        // Simple wrapping HStack is enough for Ask’s typical 1–2 recipients.
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
-                HStack(spacing: 6) {
-                    if let name = parts.name {
-                        Text(name)
-                            .font(.caption2)
-                            .textSelection(.enabled)
-                    }
-                    if let email = parts.email {
-                        AddressBadge(email: email)
-                            .font(.caption2)
-                    }
+                addressBlock(parts)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func addressBlock(_ parts: MailAddressParts) -> some View {
+        switch (parts.name, parts.email) {
+        case let (name?, email?):
+            // Horizontal candidate must refuse to wrap so ViewThatFits can fall back.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(name)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    AddressBadge(email: email, lineLimit: 1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .textSelection(.enabled)
+                    AddressBadge(email: email)
                 }
             }
-            Spacer(minLength: 0)
+        case let (name?, nil):
+            Text(name)
+                .textSelection(.enabled)
+        case let (nil, email?):
+            AddressBadge(email: email)
+        case (nil, nil):
+            EmptyView()
         }
     }
 }
@@ -1076,20 +1098,8 @@ private struct ConditionalAskFieldPreviewCard: View {
                     .font(.caption)
                     .textSelection(.enabled)
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
-                        HStack(spacing: 6) {
-                            if let name = parts.name {
-                                Text(name)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
-                            }
-                            if let email = parts.email {
-                                AddressBadge(email: email)
-                            }
-                        }
-                    }
-                }
+                FlowAddressBadges(addresses: addresses)
+                    .font(.caption)
             }
         }
     }

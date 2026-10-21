@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.14.0] - 2026-10-21
+
+### Changed
+
+- Ask envelope **From** / **To** / **Cc**: when the display name and address badge do not fit on one line, stack them (name on the first line, address on the second). The **Add to rule** control stays aligned with the first line.
+
 ## [0.13.0] - 2026-10-20
 
 ### Added

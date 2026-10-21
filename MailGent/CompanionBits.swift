@@ -34,10 +34,13 @@ struct PartialBadge: View {
 
 struct AddressBadge: View {
     let email: String
+    /// When set (e.g. `1` for a ViewThatFits side-by-side candidate), the badge refuses to wrap.
+    var lineLimit: Int? = nil
 
     var body: some View {
         Text(email)
             .textSelection(.enabled)
+            .lineLimit(lineLimit)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
