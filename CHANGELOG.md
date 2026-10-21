@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
-## [0.14.0] - 2026-10-21
+## [0.13.1] - 2026-10-21
 
 ### Changed
 
