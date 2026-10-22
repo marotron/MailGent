@@ -8,7 +8,7 @@
 
 ## Screenshots
 
-Captured in **v0.8.2** — UI has changed since then, especially around Ask, the access log, and Settings.
+Gallery still shows **v0.8.2** captures for core surfaces. Ask, Access requests, Remember Ask, and Settings have moved since then — re-capture with `make screenshots` when you next refresh the set. Extra stills (Settings, About, Companion Read, Access Log Formatted) are linked below.
 
 <table>
   <tr>
@@ -25,11 +25,19 @@ Captured in **v0.8.2** — UI has changed since then, especially around Ask, the
   </tr>
   <tr>
     <td><img src="docs/screenshots/access-log.png" alt="Access log"><br><b>Access Log</b> <i>(v0.8.2)</i> — every agent call, with leak-guard and rule hit counts.</td>
-    <td><img src="docs/screenshots/access-log-json-pretty.png" alt="Access log JSON response"><br><b>Access Log · JSON</b> <i>(v0.8.2)</i> — the exact response the agent received.</td>
+    <td><img src="docs/screenshots/access-log-formatted.png" alt="Access log Formatted response"><br><b>Access Log · Formatted</b> <i>(v0.8.2)</i> — truth-first card of what the agent received (Preview / Open in Apple Mail).</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/access-log-json-pretty.png" alt="Access log JSON Pretty"><br><b>Access Log · JSON Pretty</b> <i>(v0.8.2)</i> — exact response the agent received.</td>
+    <td><img src="docs/screenshots/settings-general.png" alt="Settings General"><br><b>Settings · General</b> <i>(v0.8.2)</i> — loopback port, agent open-in-Mail, conditional Ask (Remember Ask is newer).</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/settings-access.png" alt="Settings Access"><br><b>Settings · Access</b> <i>(v0.8.2)</i> — mail folder / Full Disk Access, purge access log.</td>
+    <td><img src="docs/screenshots/about.png" alt="About MailGent"><br><b>About</b> <i>(v0.8.2)</i> — version + bundled changelog.</td>
   </tr>
 </table>
 
-More in [`docs/screenshots/`](docs/screenshots/). Personal data in the screenshots (addresses, account IDs, search terms) is replaced with sample values.
+More in [`docs/screenshots/`](docs/screenshots/) (including Companion Read and JSON Raw). Personal data in the screenshots (addresses, account IDs, search terms) is replaced with sample values.
 
 ## Features
 
@@ -47,13 +55,17 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 ### Agents (MCP)
 
 - Pair **Cursor** and/or **Grok Bot** as separate machine-local agents (each gets its own Bearer)
-- Loopback only: `http://127.0.0.1:8788/mcp` (port 8787 reserved for Cursor OAuth callbacks)
+- Loopback only: `http://127.0.0.1:8788/mcp` — change the port in Settings → General (avoid 8787; reserved for Cursor OAuth callbacks)
+- Control Center agent cards: Show / Hide MCP config, Copy Bearer / Copy MCP config, revoke with confirmation; paired agents show as glyphs in the menu bar
 - Agents talk to MailGent over MCP; MailGent has no built-in AI
+- Optional Settings → General → **Allow agents to open messages in Apple Mail** (off by default) enables MCP `open_in_mail`
+- MCP `get` returns `mailURL` (`message://…`) and `internetMessageID` when the message has an RFC Message-ID (fail closed when missing)
 
 ### Grants — what each agent may see
 
 - Per agent: which mailboxes, From/To/date filters, deny carve-outs
 - Per field: Subject, From, To, Cc, Date, Body, attachments — each **Off**, **Ask**, or **On** (cycle chips through all three)
+- When **Allow conditional access prompts** is off, Ask fields show and act as Off; saved Ask choices return when you turn it back on
 - Attachment Names Off clears Attachment Content; Content On turns Names On
 - Attachment content: when On, `get_attachment` can write a local temp file for the agent (25 MiB cap); when Ask, the same tool prompts Allow / Block for that message
 
@@ -74,7 +86,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Ask rule editor **Enable on**: This mailbox (default) or This account · all mailboxes for that agent
 - Pass/Block field defaults from Ask keep Attachment content when names were already On on Scope (names ride along as the carrier bit)
 - Long From / To / Cc lines stack display name then address badge when they do not fit side-by-side; **Add to rule** stays on the first line
-- Optional **Remember Ask decisions** (Settings): reuse Allow / Block per field for the same message for a short window (this agent only by default, or all agents). Not a standing grant — new Ask fields still prompt; Pass/Block rules still win first
+- Optional **Remember Ask decisions** (Settings; shown when conditional prompts are on): reuse Allow / Block per field for the same message for **15 minutes**, **1 hour**, **24 hours**, or **until MailGent quits**. Default share is this agent only; optional All agents. Not a standing grant — new Ask fields still prompt; Pass/Block rules still win first. Forgetting an agent clears its cache entries (in memory only; not written to disk)
 
 ### Rules (Pass / Block)
 
@@ -91,9 +103,15 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 ### Access log
 
 - Every agent call is logged with exactly what the agent received (sanitized / withheld overlays)
-- List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log
+- Request / Response modes: **Formatted** (default), **JSON Pretty**, or **JSON Raw**
+- List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log (Companion Read and Access Log use the same Open in Apple Mail handoff when Message-ID is present)
 - Attachment **Preview** still opens for you when the agent was denied or the file is too large; the note under the card is about agent delivery, not your preview
-- Agents cannot edit the log; you can delete entries in Settings
+- Agents cannot edit the log; you can delete all entries, or entries older than 24 hours, in Settings
+
+### Companion
+
+- About MailGent (app menu / menu item) with bundled changelog; menu-bar version label opens the changelog
+- Companion Read: Open in Apple Mail for the selected message when it has an RFC Message-ID
 
 ### Drafts
 
@@ -163,11 +181,11 @@ git push origin v0.1.8
 
 ## Pair agents
 
-In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL; each agent gets its own Bearer. Grok Bot shows a copyable MCP snippet for the host to wire itself. Grants are independent per agent in Grant Desk.
+In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL (Settings → General for the port); each agent gets its own Bearer. Control Center cards expose Show MCP config, Copy Bearer / Copy MCP config, and revoke. Grok Bot shows a copyable MCP snippet for the host to wire itself. Grants are independent per agent in Grant Desk.
 
 On first launch with no saved pairing, MailGent pairs **Cursor** automatically. If `~/.cursor/mcp.json` exists, MailGent writes (and on revoke removes) a `mailgent` entry with the loopback URL and Cursor's Bearer. A new agent has no grants, so it sees no mail until you allow mailboxes in Grant Desk.
 
-Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `get_attachment`, `open_in_mail`, `create_draft`, `update_draft`, `status`, `update`, `set_source` (`open_in_mail` and source switch are off unless Settings allows them).
+Tools: `search`, `list`, `list_new`, `list_placements`, `get`, `get_attachment`, `open_in_mail`, `create_draft`, `update_draft`, `status`, `update`, `set_source`. `get` may include `mailURL` / `internetMessageID` when Message-ID is present. `open_in_mail` and `set_source` stay off unless Settings allows them.
 
 ## License
 

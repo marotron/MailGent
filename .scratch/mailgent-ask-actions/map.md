@@ -20,22 +20,27 @@ Ship optional **Rules-from-Ask** on the conditional Ask dialog (create **or upda
 - Ask can **New** or **Existing** (edit shared `rules.json` rule in place).
 - 2026-10-20: UI lock → variant **G** (Subject/From picks · right editor · commit on Allow/Block). Variant A (left disclosure) was 0.12.0.
 - Future / deferred tickets mirror to **GitHub Issues** (QuotAI pattern: labels `roadmap` / `fog` / `next-version`) — see `docs/agents/issue-tracker.md`.
-- Rules-from-Ask → [#21](https://github.com/marotron/MailGent/issues/21) · [issues/01-rules-from-ask.md](issues/01-rules-from-ask.md) — G lock / next ship (0.12.0 was A).
-- Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md) — deferred (`next-version`); blocked on 01 / #21.
+- Rules-from-Ask → [#21](https://github.com/marotron/MailGent/issues/21) closed · [issues/01-rules-from-ask.md](issues/01-rules-from-ask.md) — shipped 0.12.1 (G) + 0.13.2 Enable on.
+- Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md) — deferred (`next-version`).
 
 ## Fog
 
 Active grilling lives on GitHub (prefer links over duplicating questions here):
 
-- Rules-from-Ask open questions → [#21](https://github.com/marotron/MailGent/issues/21) (`roadmap`, `fog`)
-- Cache Ask Allow/Block (Settings on/off + TTL; per-agent default vs All/Selected share) → [#41](https://github.com/marotron/MailGent/issues/41) (`roadmap`, `fog`, `next-version`)
+- Ask cache **Selected agents** share (deferred from #41 close) — open a follow-up if needed
+- Access log mark Ask cache reuse → [#43](https://github.com/marotron/MailGent/issues/43) (`roadmap`, `next-version`)
+
+## Shipped (closeout)
+
+- Rules-from-Ask → [#21](https://github.com/marotron/MailGent/issues/21) closed · 0.12.1 (G) + 0.13.2 Enable on · [issues/01-rules-from-ask.md](issues/01-rules-from-ask.md)
+- Cache Ask Allow/Block → [#41](https://github.com/marotron/MailGent/issues/41) closed · 0.13.0 Remember Ask · [issues/05-cache-ask-for-same-message.md](issues/05-cache-ask-for-same-message.md) (Selected share still deferred)
 
 ## Deferred
 
-- Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) (`roadmap`, `next-version`) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md) — blocked on 01 / #21
+- Manual redact then Allow → [#22](https://github.com/marotron/MailGent/issues/22) (`roadmap`, `next-version`) · [issues/02-manual-redact-then-allow.md](issues/02-manual-redact-then-allow.md)
 - Ask button pointer cursor on hover → [#23](https://github.com/marotron/MailGent/issues/23) (`bug`, `next-version`) · [issues/03-ask-button-cursor.md](issues/03-ask-button-cursor.md)
 - Ask help-row equal clearance → [#24](https://github.com/marotron/MailGent/issues/24) (`enhancement`, `next-version`) · [issues/04-ask-info-row-clearance.md](issues/04-ask-info-row-clearance.md)
-- Cache Ask for same agent + message → [#41](https://github.com/marotron/MailGent/issues/41) (`roadmap`, `fog`, `next-version`) · [issues/05-cache-ask-for-same-message.md](issues/05-cache-ask-for-same-message.md)
+- Access log Ask cache chip → [#43](https://github.com/marotron/MailGent/issues/43)
 - Traffic-sign Pass/Block marks (consume from Ask too) → [#26](https://github.com/marotron/MailGent/issues/26) · [../mailgent-ui-icons/](../mailgent-ui-icons/)
 - Unify icons/colors app-wide → [#27](https://github.com/marotron/MailGent/issues/27)
 
