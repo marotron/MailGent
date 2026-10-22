@@ -1,18 +1,44 @@
 import SwiftUI
 import MailStore
 
+/// Where the Ask rule attaches for the prompting agent.
+public enum AskRuleEnableScope: String, CaseIterable, Identifiable, Sendable {
+    /// Ask `accountID` + `placement` (default).
+    case thisMailbox
+    /// Ask `accountID` with `placement: nil` (all mailboxes on that account).
+    case thisAccount
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .thisMailbox: return "This mailbox"
+        case .thisAccount: return "This account · all mailboxes"
+        }
+    }
+
+    public func placement(forAskPlacement askPlacement: String) -> String? {
+        switch self {
+        case .thisMailbox: return askPlacement
+        case .thisAccount: return nil
+        }
+    }
+}
+
 /// Rule save hooks for the Ask rule editor (prompting agent only).
 public struct ConditionalAccessAskRuleSupport {
     public let allRules: () -> [GrantRule]
     public let nextNick: () -> String
     public let messageProbe: IndexedMessage
-    public let onSave: (GrantRule) -> Void
+    /// Persists the rule and enables it for the prompting agent at `placement`
+    /// (`nil` = account-wide).
+    public let onSave: (GrantRule, String?) -> Void
 
     public init(
         allRules: @escaping () -> [GrantRule],
         nextNick: @escaping () -> String,
         messageProbe: IndexedMessage,
-        onSave: @escaping (GrantRule) -> Void
+        onSave: @escaping (GrantRule, String?) -> Void
     ) {
         self.allRules = allRules
         self.nextNick = nextNick
@@ -55,6 +81,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
     @Published var whenBefore = ""
     @Published var whenJoin: JoinOp = .and
     @Published var fields: GrantFields = .none
+    @Published var enableScope: AskRuleEnableScope = .thisMailbox
     @Published var fromDraftMode: MatchMode = .exact
     @Published var fromDraftValue = ""
     @Published var subjectDraftMode: MatchMode = .exact
@@ -73,6 +100,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
         selectedRuleID = nil
         polarityTouched = false
         polarityOpen = false
+        enableScope = .thisMailbox
         bootstrapNewRule(context: context, support: support)
     }
 
@@ -160,7 +188,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
                 whenJoin: whenJoin,
                 fields: detailOpen ? fields : current.fields
             )
-            support.onSave(rule)
+            support.onSave(rule, enableScope.placement(forAskPlacement: context.placement))
             return true
         }
 
@@ -176,7 +204,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
             whenJoin: whenJoin,
             fields: fields
         )
-        support.onSave(rule)
+        support.onSave(rule, enableScope.placement(forAskPlacement: context.placement))
         return true
     }
 
@@ -194,6 +222,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
         whenBefore = ""
         whenJoin = .and
         fields = Self.defaultFields(for: context.requestedFields, polarity: .pass)
+        enableScope = .thisMailbox
         fromDraftMode = .exact
         fromDraftValue = ""
         subjectDraftMode = .exact
@@ -318,11 +347,16 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
         return next
     }
 
-    static func defaultFields(for requested: [String], polarity: RulePolarity) -> GrantFields {
-        let grant = polarity == .pass
+    /// Pass reveals / Block withholds: requested Ask labels start On in the overlay mask.
+    /// Attachment content requires names On as the `GrantFields` carrier bit (init strips
+    /// content when names are Off) — same coupling Grant Desk applies via reconcile.
+    nonisolated static func defaultFields(for requested: [String], polarity: RulePolarity) -> GrantFields {
+        _ = polarity
         func mode(_ label: String) -> FieldAccessMode {
-            requested.contains(label) ? (grant ? .on : .off) : .off
+            requested.contains(label) ? .on : .off
         }
+        let wantsContent = requested.contains("Attachment content")
+        let namesOn = requested.contains("Attachment names") || wantsContent
         return GrantFields(
             subjectMode: mode("Subject"),
             fromMode: mode("From"),
@@ -330,8 +364,8 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
             ccMode: mode("Cc"),
             dateMode: mode("Date"),
             bodyMode: mode("Body"),
-            attachmentMetadataMode: mode("Attachment names"),
-            attachmentContentMode: mode("Attachment content")
+            attachmentMetadataMode: namesOn ? .on : .off,
+            attachmentContentMode: wantsContent ? .on : .off
         )
     }
 
@@ -405,6 +439,7 @@ struct ConditionalAccessAskRulePanel: View {
             betweenRow(label: "Between matchers and When", join: $draft.whenJoin)
             whenSection
             fieldOverlaySection
+            enableOnSection
             Text(
                 draft.intent == .existing
                     ? "Allow or Block updates this rule. Pass or Block stays as on the original unless you override it."
@@ -716,6 +751,59 @@ struct ConditionalAccessAskRulePanel: View {
                 draft.fields[keyPath: modeKeyPath] = current == .on ? .off : .on
                 draft.fields.reconcileAttachmentModes(changed: modeKeyPath)
             }
+        }
+    }
+
+    private var enableOnSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Enable on")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            VStack(spacing: 6) {
+                ForEach(AskRuleEnableScope.allCases) { scope in
+                    let on = draft.enableScope == scope
+                    Button {
+                        draft.enableScope = scope
+                    } label: {
+                        Text(scope.title)
+                            .font(.caption.weight(on ? .semibold : .regular))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(
+                                on ? Color.accentColor.opacity(0.12) : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(
+                                        on ? Color.accentColor : Color.secondary.opacity(0.25),
+                                        lineWidth: 1
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(enableOnCaption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var enableOnCaption: String {
+        switch draft.enableScope {
+        case .thisMailbox:
+            return "Attaches for this agent on \(context.placement) only."
+        case .thisAccount:
+            return "Attaches for this agent on every mailbox of this account."
         }
     }
 

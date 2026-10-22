@@ -538,7 +538,7 @@ final class AgentBridge {
         _ rule: GrantRule,
         enableForAgentID: String,
         accountID: String,
-        placement: String
+        placement: String?
     ) {
         rules.upsert(rule)
         rules.setEnabled(
@@ -1451,12 +1451,12 @@ final class AgentBridge {
             allRules: { [rules] in rules.allRules() },
             nextNick: { [weak self] in self?.nextRuleNick() ?? "A" },
             messageProbe: context.matcherProbeMessage(),
-            onSave: { [weak self] rule in
+            onSave: { [weak self] rule, placement in
                 self?.upsertRule(
                     rule,
                     enableForAgentID: context.agentID,
                     accountID: context.accountID,
-                    placement: context.placement
+                    placement: placement
                 )
             }
         )

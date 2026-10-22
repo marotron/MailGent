@@ -360,7 +360,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                     return (65...90).compactMap { UnicodeScalar($0).map(String.init) }.first { !used.contains($0) } ?? "Z"
                 },
                 messageProbe: context.matcherProbeMessage(),
-                onSave: { box.save($0) }
+                onSave: { rule, _ in box.save(rule) }
             )
         }
     }

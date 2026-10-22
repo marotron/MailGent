@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.13.2] - 2026-10-22
+
+### Fixed
+
+- Ask → Pass/Block field defaults keep **Attachment content** when Attachment names were already On on Scope (and therefore not in the Ask label list). Names are set On on the rule mask as the required carrier bit so a later matching `get` does not prompt again for content.
+
+### Added
+
+- Ask **Edit rule** pane: **Enable on** — This mailbox (default) or This account · all mailboxes — so the written rule attaches where you expect for that agent.
+
 ## [0.13.1] - 2026-10-21
 
 ### Changed

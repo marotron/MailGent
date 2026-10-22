@@ -60,3 +60,9 @@ Mirrored to GitHub [#21](https://github.com/marotron/MailGent/issues/21) (`enhan
 ### 2026-10-20
 
 Locked ship UI to variant **G** (field picks · right editor · commit on decision). 0.12.0 remains the variant A ship.
+
+### 2026-10-21
+
+**Attachment-content strip on Pass-from-Ask:** `defaultFields` built overlay modes only from Ask labels. When Scope already had Attachment names On, Ask often requested `["Body", "Attachment content"]` only. `GrantFields` init then forced content Off because names were Off on the rule mask → saved Pass had Body only → next matching `get` still Asked for Attachment content. Fix: if content is requested, also set names On on the Pass/Block mask (Grant Desk carrier coupling). Do not change global `GrantFields` init.
+
+**Enable on in Ask Edit rule:** Backend already enabled via `upsertRule(…, placement:)` for the Ask mailbox. Surface **Enable on** — This mailbox (default) · This account · all mailboxes (`placement: nil`) — so Existing updates can re-enable too. No version bump until ship.

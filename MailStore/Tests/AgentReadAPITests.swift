@@ -258,6 +258,87 @@ struct AgentReadAPITests {
         #expect(!capture.fields.contains("Body"))
     }
 
+    /// Ask often requests Body + Attachment content while names are already On.
+    /// Pass overlays must keep names On as the content carrier, or a second matching
+    /// get still prompts for Attachment content (the Rules-from-Ask strip bug).
+    @Test func passOverlayFromAskBodyAndAttachmentContentSkipsSecondAsk() async throws {
+        final class PromptCapture: @unchecked Sendable {
+            var prompts: [[String]] = []
+        }
+        let capture = PromptCapture()
+        let env = try AgentReadFixture(
+            rfc822: """
+            From: Info <info@jobs.totaljobsmail.com>
+            To: Bob <bob@example.com>
+            Subject: New roles this week
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Apply today
+            """,
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask,
+                attachmentMetadataMode: .on,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                capture.prompts.append(context.requestedFields)
+                return .allow
+            }
+        )
+        defer { env.remove() }
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.prompts == [["Body", "Attachment content"]])
+
+        // Same field defaults Ask → Pass must produce when content is requested
+        // without names in the Ask label list (names already On on Scope).
+        env.rules.upsert(
+            GrantRule(
+                id: "rule-from-ask",
+                name: "From this ask",
+                nick: "E",
+                fromRules: [MatchRule(value: "info@jobs.totaljobsmail.com", mode: .exact)],
+                fields: GrantFields(
+                    subject: false,
+                    from: false,
+                    to: false,
+                    cc: false,
+                    date: false,
+                    body: true,
+                    attachmentMetadata: true,
+                    attachmentContent: true
+                )
+            )
+        )
+        env.rules.setEnabled(
+            true,
+            ruleID: "rule-from-ask",
+            agentID: env.agentID,
+            accountID: env.accountID,
+            placement: "INBOX"
+        )
+
+        _ = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(capture.prompts.count == 1)
+    }
+
     @Test func matchingPassUpgradesBodyOnGet() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(envelope: true, body: false)
