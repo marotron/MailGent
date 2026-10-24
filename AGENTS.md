@@ -28,6 +28,11 @@ Ship tags must be **signed**: `git tag -s vX.Y.Z -m "…"`, then `git verify-tag
 
 After bumping version, run `python3 ../scripts/update-dev-index.py` (from repo root: `python3 ~/dev/scripts/update-dev-index.py`) to refresh `~/dev/INDEX.md`.
 
+### CI/CD
+
+PR and `main` run `make test`; tag `v*` strips screenshot helpers, then test → DMG → GitHub pre-release. See `docs/agents/ci-cd.md`.
+
 ### Screenshots
 
 Local fixture capture; Release CI strips helpers before DMG. See `docs/agents/screenshots.md`.
+

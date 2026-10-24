@@ -27,6 +27,9 @@ jobs:
       - name: Strip screenshot demo policy
         run: Scripts/release/strip-screenshot-demo-policy.sh
 
+      - name: Test
+        run: make test
+
       - name: Build DMG
         env:
           RELEASE_TAG: ${{ github.ref_name }}

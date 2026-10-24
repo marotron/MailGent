@@ -50,12 +50,13 @@ Marked `SCREENSHOT_DEMO_POLICY` — kept so the next docs pass is cheap:
 
 Fixture mail itself (`CompanionFixture`, `MailSourceID.fixture`) is general DEBUG, not screenshot-only. Release binaries already omit fixture via `#if DEBUG`.
 
-## Release CI (strip, then DMG)
+## Release CI (strip, then test, then DMG)
 
-On tag push, [`.github/workflows/release.yml`](../../.github/workflows/release.yml):
+On tag push, [`.github/workflows/release.yml`](../../.github/workflows/release.yml) (full CI/CD map: [`ci-cd.md`](ci-cd.md)):
 
 1. `Scripts/release/strip-screenshot-demo-policy.sh` — deletes demo-policy sources/scripts and scrubs marked `#if DEBUG` blocks from the **runner checkout only**
-2. `make dmg` — Release package (no screenshot scaffolding in that build tree)
+2. `make test`
+3. `make dmg` — Release package (no screenshot scaffolding in that build tree)
 
 The helpers remain on `main` / the tag commit for the next local screenshot pass. The strip does not rewrite git history.
 
