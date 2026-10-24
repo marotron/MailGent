@@ -132,7 +132,9 @@ make screenshots     # DEBUG: fixture + demo grants/rules (capture locally)
 make screenshots-ci  # DEBUG: same, auto-write PNGs under dist/screenshots/
 ```
 
-Capture README / `docs/screenshots/` images **locally** with fixture fake data (`make screenshots`). Release tags strip screenshot-only scaffolding before the DMG. Full workflow: [`docs/agents/screenshots.md`](docs/agents/screenshots.md).
+**CI:** pull requests and pushes to `main` run `make test` on GitHub Actions ([workflow](.github/workflows/ci.yml)). Full where/when map (tests + Release): [`docs/agents/ci-cd.md`](docs/agents/ci-cd.md).
+
+Capture README / `docs/screenshots/` images **locally** with fixture fake data (`make screenshots`). Release tags strip screenshot-only scaffolding before the DMG. Full screenshot workflow: [`docs/agents/screenshots.md`](docs/agents/screenshots.md).
 
 For Gatekeeper-safe distribution, set before `make dmg`:
 
@@ -141,7 +143,8 @@ export MAILGENT_SIGN_IDENTITY='Developer ID Application: …'
 export MAILGENT_NOTARY_PROFILE='mailgent-notary'   # `xcrun notarytool store-credentials`
 ```
 
-**GitHub Release:** push tag `vX.Y.Z` matching `MARKETING_VERSION` (e.g. `v0.1.8` for `0.1.8`). The [Release workflow](.github/workflows/release.yml) builds the DMG, publishes a **pre-release** titled **`X.Y.Z alpha`**, and attaches the disk image. Notes start with that version’s section from `CHANGELOG.md`, then the install text in [`.github/RELEASE_BODY.md`](.github/RELEASE_BODY.md). Optional repo secrets: `MAILGENT_SIGN_IDENTITY`, `MAILGENT_NOTARY_PROFILE`.
+**GitHub Release:** push tag `vX.Y.Z` matching `MARKETING_VERSION` (e.g. `v0.1.8` for `0.1.8`). The [Release workflow](.github/workflows/release.yml) strips screenshot helpers, runs `make test`, builds the DMG, publishes a **pre-release** titled **`X.Y.Z alpha`**, and attaches the disk image. Notes start with that version’s section from `CHANGELOG.md`, then the install text in [`.github/RELEASE_BODY.md`](.github/RELEASE_BODY.md). Optional repo secrets: `MAILGENT_SIGN_IDENTITY`, `MAILGENT_NOTARY_PROFILE`.
+
 
 ```bash
 git tag -s v0.1.8 -m "0.1.8 alpha"   # signed annotated tag → GitHub Verified
