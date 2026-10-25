@@ -3,17 +3,17 @@
 **Pre-release alpha** — not a stable or beta build. Version in the app bundle is semver (`@VERSION@`); GitHub release title and About show **`@VERSION@ alpha`**.
 
 1. Download `MailGent-*.dmg` below.
-2. Open the disk image and drag **MailGent** to **Applications**.
-3. Launch from Applications (menu bar only — no Dock icon).
+2. Open the disk image — the window shows drag-to-Applications plus Gatekeeper notes.
+3. Drag **MailGent** to **Applications**, then open it from Applications. If Gatekeeper blocks first launch, follow the optional steps on the background.
 
 ## macOS Gatekeeper warning
 
-**This DMG is unsigned/ad-hoc unless the release workflow had `MAILGENT_SIGN_IDENTITY` and `MAILGENT_NOTARY_PROFILE` repository secrets set.** On other Macs, Gatekeeper may block or warn on first open (*“cannot be opened because the developer cannot be verified”* or similar).
+**This DMG is unsigned/ad-hoc unless the release workflow had `MAILGENT_SIGN_IDENTITY` and `MAILGENT_NOTARY_PROFILE` repository secrets set.** On other Macs, Gatekeeper may show *“MailGent Not Opened”* / *“was blocked to protect your Mac”* on first launch.
 
-To open anyway:
+**On the DMG window:**
 
-- **System Settings → Privacy & Security → Open Anyway**, or
-- Right-click **MailGent** in Applications → **Open** → confirm **Open** once.
+1. Drag **MailGent** → **Applications**, then open MailGent from Applications
+2. If blocked (optional): click **Done** → **System Settings** → **Privacy & Security** → **Open Anyway** → confirm → **Touch ID** / **password**
 
 Notarized builds (Developer ID + Apple notarization on the personal Apple Developer account) will remove this step when signing secrets are configured.
 
