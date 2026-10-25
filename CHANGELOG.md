@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.16.2] - 2026-10-25
+
+### Fixed
+
+- DMG install row: align **Open MailGent** icon slot with the drag-row icons (matched padding/border; Finder overlay Y)
+
 ## [0.16.1] - 2026-10-25
 
 ### Fixed
