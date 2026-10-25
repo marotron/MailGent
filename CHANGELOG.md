@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.16.4] - 2026-10-25
+
+### Changed
+
+- Access Log field badges: live Ask uses `questionmark.circle.fill` (not plain `?`); remembered clock mark sized/padded to match
+
 ## [0.16.3] - 2026-10-25
 
 ### Added
