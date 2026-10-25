@@ -293,6 +293,81 @@ struct AccessLogFormatTests {
 
         #expect(AccessLogFormat.conditionalAskAllowedCount(for: entry) == 2)
         #expect(AccessLogFormat.conditionalAskBlockedCount(for: entry) == 1)
+        #expect(AccessLogFormat.conditionalAskAllowedLiveCount(for: entry) == 2)
+        #expect(AccessLogFormat.conditionalAskAllowedRememberedCount(for: entry) == 0)
+        #expect(AccessLogFormat.conditionalAskBlockedLiveCount(for: entry) == 1)
+        #expect(AccessLogFormat.conditionalAskBlockedRememberedCount(for: entry) == 0)
+    }
+
+    @Test func conditionalAskRememberedCountsSplitLiveVsCache() {
+        let entry = AuditEntry(
+            kind: .get,
+            agentID: "a",
+            agentName: "Cursor",
+            messages: [
+                AuditMessageRef(
+                    accountID: "acc",
+                    placement: "INBOX",
+                    id: "1",
+                    subject: "A",
+                    from: "a@example.com",
+                    date: "2024-01-01T00:00:00Z",
+                    conditionalFields: GrantFields(envelope: false, body: true, attachmentMetadata: true),
+                    conditionalBlockedFields: GrantFields(
+                        subject: true,
+                        from: false,
+                        to: false,
+                        cc: false,
+                        date: false,
+                        body: false
+                    ),
+                    conditionalCachedFields: GrantFields(envelope: false, body: true)
+                )
+            ]
+        )
+
+        #expect(AccessLogFormat.conditionalAskAllowedLiveCount(for: entry) == 1)
+        #expect(AccessLogFormat.conditionalAskAllowedRememberedCount(for: entry) == 1)
+        #expect(AccessLogFormat.conditionalAskBlockedLiveCount(for: entry) == 1)
+        #expect(AccessLogFormat.conditionalAskBlockedRememberedCount(for: entry) == 0)
+        #expect(AccessLogFormat.conditionalAskAllowedCount(for: entry) == 2)
+    }
+
+    @Test func conditionalAskFullyRememberedDoesNotInflateLiveCount() {
+        // Agent JSON still lists conditionalAccessFields with no cache bit — must not
+        // reappear as a live ? chip when message refs say all fields were remembered.
+        let entry = AuditEntry(
+            kind: .get,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"id":"1","accountID":"acc","placement":"INBOX","bodyAccess":"granted","bodyAccessReason":"conditional","conditionalAccessFields":["Body","Attachment names","Attachment content"]}"#,
+            messages: [
+                AuditMessageRef(
+                    accountID: "acc",
+                    placement: "INBOX",
+                    id: "1",
+                    subject: "A",
+                    from: "a@example.com",
+                    date: "2024-01-01T00:00:00Z",
+                    conditionalFields: GrantFields(
+                        envelope: false,
+                        body: true,
+                        attachmentMetadata: true,
+                        attachmentContent: true
+                    ),
+                    conditionalCachedFields: GrantFields(
+                        envelope: false,
+                        body: true,
+                        attachmentMetadata: true,
+                        attachmentContent: true
+                    )
+                )
+            ]
+        )
+
+        #expect(AccessLogFormat.conditionalAskAllowedLiveCount(for: entry) == 0)
+        #expect(AccessLogFormat.conditionalAskAllowedRememberedCount(for: entry) == 3)
+        #expect(AccessLogFormat.conditionalAskAllowedCount(for: entry) == 3)
     }
 
     @Test func conditionalAskCountsFromResponseSummaryFallback() {

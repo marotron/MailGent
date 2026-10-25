@@ -111,6 +111,40 @@ struct AuditLogTests {
         #expect(status.requestSummary == "{}")
     }
 
+    @Test func messageRefRoundTripsConditionalCachedFields() throws {
+        let ref = AuditMessageRef(
+            accountID: "acc",
+            placement: "INBOX",
+            id: "1",
+            subject: "Invoice",
+            from: "a@example.com",
+            date: "2024-01-01T00:00:00Z",
+            conditionalFields: GrantFields(envelope: false, body: true),
+            conditionalCachedFields: GrantFields(envelope: false, body: true)
+        )
+        let data = try JSONEncoder().encode(ref)
+        let decoded = try JSONDecoder().decode(AuditMessageRef.self, from: data)
+        #expect(decoded.conditionalConfirmedFields.body == true)
+        #expect(decoded.conditionalRememberedFields.body == true)
+
+        let legacy = """
+        {
+          "accountID":"acc",
+          "placement":"INBOX",
+          "id":"1",
+          "subject":"Invoice",
+          "from":"a@example.com",
+          "date":"2024-01-01T00:00:00Z",
+          "bodyAccess":"granted",
+          "fields":{"subject":true,"from":true,"to":true,"cc":true,"date":true,"body":true,"attachmentMetadata":false,"attachmentContent":false},
+          "conditionalFields":{"subject":false,"from":false,"to":false,"cc":false,"date":false,"body":true,"attachmentMetadata":false,"attachmentContent":false}
+        }
+        """.data(using: .utf8)!
+        let decodedLegacy = try JSONDecoder().decode(AuditMessageRef.self, from: legacy)
+        #expect(decodedLegacy.conditionalConfirmedFields.body == true)
+        #expect(decodedLegacy.conditionalRememberedFields.hasAnyGranted == false)
+    }
+
     @Test func messageRefRoundTripsAppliedRules() throws {
         let ref = AuditMessageRef(
             accountID: "acc",

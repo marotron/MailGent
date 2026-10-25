@@ -114,7 +114,10 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | Chip | Job | Chrome | Swift |
 |---|---|---|---|
 | Kind | Tool/kind (`get`, `search`, …) | Blue compact kind badge | `AuditKindBadge` |
-| Ask allow / block | Request showed Ask popup; user result | `questionmark.circle.fill` (pass-green / block-red); count when >1 fields | `AccessLogConditionalAskBadge` |
+| Ask allow / block | Live Ask popup; user result | `questionmark.circle.fill` (pass-green / block-red); count when >1 fields | `AccessLogConditionalAskBadge` |
+| Ask remembered | Remember Ask reuse (no popup on this get) | `clock.arrow.circlepath` (pass-green / block-red); count when >1 fields | `AccessLogConditionalAskBadge(remembered: true)` |
+| Field badge Ask mark | Per-field Ask tint in Access Log | Live: `?` text; remembered: `clock.arrow.circlepath` | `GrantFieldBadgeRow(conditionalRemembered:)` |
+| Formatted Ask chip | Per-field mark in Formatted card | Live: `?` + “user allowed”; remembered: clock + “user allowed (cached)” | `ConditionalFieldMarkChip(remembered:)` |
 | Leak | Leak-guard hits | Shield `L` (+ count) | `AccessLogLeakHitBadge` |
 | Pass / Block rule | Effectful rule applications | `checkmark.circle.fill` / `xmark.circle.fill` (pass-green / block-red); count when >1 hits | `AccessLogRuleHitBadge` |
 
