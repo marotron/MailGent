@@ -6,12 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
-## [0.12.0] - 2026-10-25
+## [0.14.0] - 2026-10-25
 
 ### Added
 
 - Pretty DMG install window: drag **MailGent** → **Applications**, plus short Gatekeeper text (no helper shortcuts / screenshot frags)
 - Install / Gatekeeper docs in README and release notes match the DMG steps (`docs/agents/pretty-dmg.md`)
+
+### Changed
+
+- Retagged this ship as **0.14.0** (retracted a colliding `v0.12.0` on `main`; `0.12.1`–`0.13.2` already existed on `feat/rules-from-ask`)
 
 ## [0.11.5] - 2026-10-15
 
