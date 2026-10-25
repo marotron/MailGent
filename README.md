@@ -1,6 +1,6 @@
 # MailGent
 
-**0.11.5 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.12.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -92,6 +92,11 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Agents can create/update drafts in a MailGent-owned ledger (in memory)
 - Drafts are **not** written into Mail.app; no send from MailGent; drafts show in the Access Log
 
+### Install (DMG)
+
+- Pretty Finder install window: drag to Applications, plus short Gatekeeper instructions (text only)
+- Background is Retina-scaled so the guide fills the DMG window on HiDPI displays
+
 ## Not working yet
 
 Do not advertise these as shipped:
@@ -152,7 +157,12 @@ git verify-tag v0.1.8
 git push origin v0.1.8
 ```
 
-**Gatekeeper:** without Developer ID signing and notarization, macOS may warn or block the app on first open on other machines. Use **Open Anyway** in Privacy & Security, or right-click → **Open**. GitHub Release pages include this warning in the release notes (see [`.github/RELEASE_BODY.md`](.github/RELEASE_BODY.md)).
+**Gatekeeper** (unsigned / ad-hoc DMGs on other Macs):
+
+1. Drag **MailGent** → **Applications**, then open MailGent from Applications
+2. If *Not Opened* (optional): click **Done** → **System Settings** → **Privacy & Security** → **Open Anyway** → confirm → Touch ID / password
+
+The DMG window shows the same steps. GitHub Release notes repeat them ([`.github/RELEASE_BODY.md`](.github/RELEASE_BODY.md)). Agent notes: [`docs/agents/pretty-dmg.md`](docs/agents/pretty-dmg.md).
 
 `make prototype-accounts` is a **dev CLI**, not part of the `.app`.
 

@@ -3,6 +3,8 @@
 
 # macOS
 .DS_Store
+# Exception: Finder layout blob for headless CI DMG builds
+!Scripts/release/dmg-assets/DS_Store
 
 # Xcode
 build/
