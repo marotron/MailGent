@@ -3,29 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <title>MailGent DMG background</title>
-  <!-- Logical canvas: 460×412 (content-fit). Live icons: MailGent.app + Applications only. -->
+  <!-- Logical canvas: fit content. Live icons: MailGent.app + Applications + Open MailGent alias. -->
   <style>
     :root {
       --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
-      --w: 460px;
-      --h: 412px;
       --ink: #2c333a;
       --mute: #5a6570;
       --card: rgba(255,255,255,.92);
       --accent: #007aff;
       --opt: #8a6d3b;
+      --col: 520px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width: var(--w);
-      height: var(--h);
+      width: fit-content;
+      height: fit-content;
       overflow: hidden;
       font-family: var(--font);
       background: transparent;
     }
     .bg {
-      width: var(--w);
-      height: var(--h);
+      width: fit-content;
+      height: fit-content;
       background:
         radial-gradient(ellipse 90% 70% at 50% 0%, #f7f9fb 0%, #e4ebf2 45%, #d2dbe5 100%);
       color: var(--ink);
@@ -77,23 +76,28 @@
     .flow {
       display: flex;
       flex-direction: column;
-      align-items: center;
       gap: 10px;
       margin-top: 6px;
     }
+    .install-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 10px;
+      width: var(--col);
+      align-items: stretch;
+    }
     .zone-drag {
       position: relative;
-      width: 100%;
       border-radius: 10px;
-      padding: 28px 12px 28px;
+      padding: 28px 10px 22px;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 28px;
-      min-height: 148px;
+      gap: 16px;
+      min-height: 142px;
+      min-width: 0;
       border: 1.5px dashed rgba(90, 101, 112, 0.28);
       background: rgba(255,255,255,.35);
-      flex-shrink: 0;
     }
     .zone-drag .step-badge {
       position: absolute;
@@ -101,30 +105,34 @@
       top: 8px;
     }
     .zone-drag .arrow {
-      flex: 0 0 56px;
-      width: 56px;
+      flex: 0 0 40px;
+      width: 40px;
       height: 24px;
       opacity: 0.5;
     }
     .zone-drag .arrow svg { width: 100%; height: 100%; display: block; }
-    .zone-open {
+    .open-step {
       position: relative;
-      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 28px 8px 12px;
+      background: var(--card);
+      border: 1px solid rgba(0,0,0,.06);
       border-radius: 10px;
-      padding: 10px 12px;
-      border: 1.5px dashed rgba(90, 101, 112, 0.28);
-      background: rgba(255,255,255,.45);
-      flex-shrink: 0;
+      box-shadow: 0 3px 12px rgba(0,0,0,.06);
     }
-    .zone-open .step-badge {
-      font-weight: 600;
-    }
-    .zone-open .hint {
-      font-weight: 400;
-      color: var(--mute);
+    .open-step .step-badge {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      right: 8px;
     }
     .panel {
-      width: 100%;
+      width: var(--col);
       height: fit-content;
       background: rgba(255, 248, 235, 0.72);
       border: 1px solid rgba(138, 109, 59, 0.28);
@@ -153,23 +161,22 @@
   <div class="bg" id="canvas">
     <div class="flow-title">Install MailGent</div>
     <div class="flow">
-      <div class="zone-drag">
-        <div class="step-badge"><span class="n">1</span> Drag MailGent → Applications</div>
-        <div class="icon-slot" data-slot="app" aria-hidden="true"></div>
-        <div class="arrow" aria-hidden="true">
-          <svg viewBox="0 0 120 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 18h88" stroke="#4a5560" stroke-width="4" stroke-linecap="round"/>
-            <path d="M86 6l22 12-22 12" stroke="#4a5560" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+      <div class="install-row">
+        <div class="zone-drag">
+          <div class="step-badge"><span class="n">1</span> Drag MailGent → Applications</div>
+          <div class="icon-slot" data-slot="app" aria-hidden="true"></div>
+          <div class="arrow" aria-hidden="true">
+            <svg viewBox="0 0 120 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 18h88" stroke="#4a5560" stroke-width="4" stroke-linecap="round"/>
+              <path d="M86 6l22 12-22 12" stroke="#4a5560" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="icon-slot" data-slot="apps" aria-hidden="true"></div>
         </div>
-        <div class="icon-slot" data-slot="apps" aria-hidden="true"></div>
-      </div>
 
-      <div class="zone-open">
-        <div class="step-badge">
-          <span class="n">2</span>
-          Open MailGent from Applications
-          <span class="hint">(menu bar — no Dock icon by default)</span>
+        <div class="open-step">
+          <div class="step-badge"><span class="n">2</span> Open MailGent</div>
+          <div class="icon-slot" data-slot="open" aria-hidden="true"></div>
         </div>
       </div>
 

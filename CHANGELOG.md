@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.15.0] - 2026-10-25
+
+### Added
+
+- DMG **Open MailGent** Finder alias (launches the app from Applications after drag-install)
+
+### Changed
+
+- DMG install row: drag → Applications (2/3) beside Open MailGent (1/3)
+
 ## [0.14.0] - 2026-10-25
 
 ### Added

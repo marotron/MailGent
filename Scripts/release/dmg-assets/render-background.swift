@@ -1,9 +1,9 @@
 #!/usr/bin/env swift
 // Renders export.html → background.png for the Finder DMG window.
 //
-// Logical canvas is 460×412 (matches icon coords / window content).
+// Logical size is measured from #canvas (fit content).
 // On Retina, Finder draws the background at 1 CSS-px ≈ 2 device-px, so the
-// PNG must be 2× (920×824) @ 144 DPI — a 1× PNG appears at ~¼ size.
+// PNG must be 2× @ 144 DPI — a 1× PNG appears at ~¼ size.
 //
 // Usage: swift Scripts/release/dmg-assets/render-background.swift
 import AppKit
@@ -11,11 +11,10 @@ import Foundation
 import WebKit
 
 final class Renderer: NSObject, WKNavigationDelegate {
-  let logicalW: CGFloat = 460
-  let logicalH: CGFloat = 412
+  /// Large enough that fit-content export.html can lay out fully before measure.
+  let frameW: CGFloat = 900
+  let frameH: CGFloat = 900
   let scale: CGFloat = 2
-  var pixelW: Int { Int(logicalW * scale) }
-  var pixelH: Int { Int(logicalH * scale) }
 
   let webView: WKWebView
   let outURL: URL
@@ -24,7 +23,7 @@ final class Renderer: NSObject, WKNavigationDelegate {
   init(htmlURL: URL, outURL: URL) {
     self.outURL = outURL
     let wv = WKWebView(
-      frame: NSRect(x: 0, y: 0, width: logicalW, height: logicalH),
+      frame: NSRect(x: 0, y: 0, width: frameW, height: frameH),
       configuration: WKWebViewConfiguration()
     )
     wv.setValue(false, forKey: "drawsBackground")
@@ -46,21 +45,49 @@ final class Renderer: NSObject, WKNavigationDelegate {
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
       let measureJS = """
-        Array.from(document.querySelectorAll('[data-slot]')).map(el => {
-          const r = el.getBoundingClientRect();
-          return el.dataset.slot + ' ' + Math.round(r.left + r.width/2) + ' ' + Math.round(r.top + r.height/2);
-        }).join('\\n');
+        (() => {
+          const canvas = document.getElementById('canvas');
+          const r = canvas.getBoundingClientRect();
+          const w = Math.ceil(r.width);
+          const h = Math.ceil(r.height);
+          const slots = Array.from(document.querySelectorAll('[data-slot]')).map(el => {
+            const sr = el.getBoundingClientRect();
+            return el.dataset.slot + ' ' + Math.round(sr.left + sr.width/2) + ' ' + Math.round(sr.top + sr.height/2);
+          }).join('\\n');
+          return JSON.stringify({ w, h, slots });
+        })()
         """
-      webView.evaluateJavaScript(measureJS) { result, _ in
-        if let text = result as? String, !text.isEmpty {
-          fputs("icon-slot centers (for dmg.sh):\n\(text)\n", stderr)
+      webView.evaluateJavaScript(measureJS) { result, error in
+        if let error {
+          self.finish(code: 1, message: "error: measure failed: \(error)\n")
+          return
         }
+        guard let json = result as? String,
+              let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let widthNum = obj["w"] as? NSNumber,
+              let heightNum = obj["h"] as? NSNumber else {
+          self.finish(code: 1, message: "error: could not measure canvas size\n")
+          return
+        }
+        let logicalW = CGFloat(truncating: widthNum)
+        let logicalH = CGFloat(truncating: heightNum)
+        guard logicalW > 0, logicalH > 0 else {
+          self.finish(code: 1, message: "error: canvas size is zero\n")
+          return
+        }
+        if let slots = obj["slots"] as? String, !slots.isEmpty {
+          fputs("icon-slot centers (for dmg.sh):\n\(slots)\n", stderr)
+        }
+        fputs("canvas size: \(Int(logicalW))×\(Int(logicalH)) logical\n", stderr)
+
+        let pixelW = Int(logicalW * self.scale)
+        let pixelH = Int(logicalH * self.scale)
 
         let config = WKSnapshotConfiguration()
-        config.rect = NSRect(x: 0, y: 0, width: self.logicalW, height: self.logicalH)
-        // Prefer an explicit 2× snapshot so output is stable across displays.
+        config.rect = NSRect(x: 0, y: 0, width: logicalW, height: logicalH)
         if #available(macOS 10.15, *) {
-          config.snapshotWidth = NSNumber(value: Double(self.logicalW * self.scale))
+          config.snapshotWidth = NSNumber(value: Double(logicalW * self.scale))
         }
         webView.takeSnapshot(with: config) { image, error in
           if let error {
@@ -72,11 +99,10 @@ final class Renderer: NSObject, WKNavigationDelegate {
             return
           }
 
-          // Rasterize into an exact 920×824 bitmap (Finder Retina background).
           let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: self.pixelW,
-            pixelsHigh: self.pixelH,
+            pixelsWide: pixelW,
+            pixelsHigh: pixelH,
             bitsPerSample: 8,
             samplesPerPixel: 4,
             hasAlpha: true,
@@ -85,11 +111,11 @@ final class Renderer: NSObject, WKNavigationDelegate {
             bytesPerRow: 0,
             bitsPerPixel: 0
           )!
-          rep.size = NSSize(width: self.logicalW, height: self.logicalH)
+          rep.size = NSSize(width: logicalW, height: logicalH)
           NSGraphicsContext.saveGraphicsState()
           NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
           image.draw(
-            in: NSRect(x: 0, y: 0, width: self.logicalW, height: self.logicalH),
+            in: NSRect(x: 0, y: 0, width: logicalW, height: logicalH),
             from: .zero,
             operation: .copy,
             fraction: 1
@@ -105,11 +131,10 @@ final class Renderer: NSObject, WKNavigationDelegate {
               .appendingPathComponent("background-raw.png")
             try png.write(to: tmp)
 
-            // Force pixel size + 144 DPI so Finder treats it as a 2× Retina asset.
             let sipsSize = Process()
             sipsSize.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
             sipsSize.arguments = [
-              "-z", "\(self.pixelH)", "\(self.pixelW)",
+              "-z", "\(pixelH)", "\(pixelW)",
               tmp.path,
               "--out", self.outURL.path,
             ]
@@ -134,7 +159,11 @@ final class Renderer: NSObject, WKNavigationDelegate {
               return
             }
             fputs(
-              "Wrote \(self.outURL.path) (\(self.pixelW)×\(self.pixelH) @ 144 DPI = \(Int(self.logicalW))×\(Int(self.logicalH)) logical)\n",
+              "Wrote \(self.outURL.path) (\(pixelW)×\(pixelH) @ 144 DPI = \(Int(logicalW))×\(Int(logicalH)) logical)\n",
+              stderr
+            )
+            fputs(
+              "Set dmg.sh WIN_W=\(Int(logicalW)) WIN_H=\(Int(logicalH) + 28)\n",
               stderr
             )
             self.finish(code: 0)
