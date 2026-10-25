@@ -2053,6 +2053,9 @@ struct GrantFieldBadgeRow: View {
                 || tint == .conditionalAllowed || tint == .conditionalBlocked
                 || mode != .off)
             ? .medium : .regular
+        let sidePad: CGFloat = labelMode == .icon ? 5 : 4
+        let showsAskMark = tint == .conditionalAllowed || tint == .conditionalBlocked
+        let showsRememberedAsk = showsAskMark && conditionalRemembered[keyPath: item.keyPath]
         return HStack(spacing: 2) {
             Image(systemName: item.systemImage)
                 .font(.system(size: 8, weight: weight))
@@ -2063,19 +2066,24 @@ struct GrantFieldBadgeRow: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .strikethrough(mode == .off, color: ink.opacity(tint == .off ? 0.45 : 0.55))
             }
-            if tint == .conditionalAllowed || tint == .conditionalBlocked {
-                if conditionalRemembered[keyPath: item.keyPath] {
+            if showsAskMark {
+                if showsRememberedAsk {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 7, weight: .bold))
+                        .font(.system(size: 8, weight: .semibold))
                         .symbolRenderingMode(.monochrome)
+                        .offset(y: -0.5)
                 } else {
-                    Text("?")
-                        .font(.system(size: 7, weight: .bold))
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .symbolRenderingMode(.monochrome)
+                        .offset(y: -0.5)
                 }
             }
         }
         .foregroundStyle(ink)
-        .padding(.horizontal, labelMode == .icon ? 5 : 4)
+        .padding(.leading, sidePad)
+        // Live Ask mark sits tight (1); clock glyph needs a bit more trailing room.
+        .padding(.trailing, showsAskMark ? (showsRememberedAsk ? 3 : 2) : sidePad)
         .frame(height: 14)
         .background(
             Capsule()
