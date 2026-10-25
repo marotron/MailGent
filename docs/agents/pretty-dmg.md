@@ -30,12 +30,13 @@ rm -f Scripts/release/dmg-assets/DS_Store   # force Finder layout regen
 make dmg
 ```
 
-CI uses the checked-in `DS_Store` when AppleScript/Finder cannot run.
+CI uses the checked-in `DS_Store` when AppleScript/Finder cannot run. `dmg.sh` keeps the staged `Open MailGent` bookmark unless `/Applications/MailGent.app` exists so a remake can succeed — never delete-then-fail (that emptied step 2 on `0.15.0` CI).
 
 ## Do not
 
 - Ship helper applets / Settings shortcuts on the DMG (unsigned helpers hit Gatekeeper too)
 - Stage the Open alias with plain `cp` (strips `fapa`/`MACS` → opens as text)
+- Delete the staged Open alias before a remake is confirmed (CI has no `/Applications/MailGent.app`)
 - Ship a 1× background on Retina — it draws at ~¼ size
 - Leave `.background` / `.fseventsd` icons in the visible window (park off-canvas)
 - Document a different Gatekeeper path than the DMG graphic

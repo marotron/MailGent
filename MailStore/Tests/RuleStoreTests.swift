@@ -168,6 +168,28 @@ struct RuleStoreTests {
         #expect(!migrated.enablements.contains { $0.agentID.isEmpty })
     }
 
+    @Test func upsertRoundTripAndEnablementIsPerAgent() {
+        let store = RuleStore()
+        let rule = GrantRule(
+            id: "r1",
+            name: "Payroll",
+            nick: "A",
+            subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+            fields: GrantFields(envelope: false, body: true)
+        )
+        store.upsert(rule)
+        store.setEnabled(true, ruleID: "r1", agentID: "agent-a", accountID: "acc-1", placement: "INBOX")
+        #expect(store.allRules().count == 1)
+        #expect(store.isEnabled(ruleID: "r1", agentID: "agent-a", accountID: "acc-1", placement: "INBOX"))
+        #expect(!store.isEnabled(ruleID: "r1", agentID: "agent-b", accountID: "acc-1", placement: "INBOX"))
+
+        var updated = rule
+        updated.name = "Payroll (updated)"
+        store.upsert(updated)
+        #expect(store.allRules()[0].name == "Payroll (updated)")
+        #expect(store.isEnabled(ruleID: "r1", agentID: "agent-a", accountID: "acc-1", placement: "INBOX"))
+    }
+
     @Test func removeEnablementsDropsOnlyThatAgent() {
         let store = RuleStore()
         store.setEnabled(true, ruleID: "r1", agentID: "a1", accountID: "acc-1", placement: "INBOX")

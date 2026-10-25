@@ -45,6 +45,7 @@ public struct ConditionalMessageEnvelope: Equatable, Sendable {
 
 /// Context for an Ask (conditional) prompt on MCP get.
 public struct ConditionalAccessPromptContext: Equatable, Sendable {
+    public let agentID: String
     public let agentName: String
     public let accountID: String
     public let placement: String
@@ -59,6 +60,7 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
     public let envelope: ConditionalMessageEnvelope
 
     public init(
+        agentID: String,
         agentName: String,
         accountID: String,
         placement: String,
@@ -69,6 +71,7 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
         htmlBody: String? = nil,
         envelope: ConditionalMessageEnvelope = ConditionalMessageEnvelope()
     ) {
+        self.agentID = agentID
         self.agentName = agentName
         self.accountID = accountID
         self.placement = placement
@@ -82,6 +85,22 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
 
     public var mailURL: URL? {
         AppleMailHandoff.messageURL(internetMessageID: internetMessageID)
+    }
+
+    /// Message shape for rule matcher ranking in the Ask rule editor (From/Subject/When).
+    public func matcherProbeMessage(body: String = "") -> IndexedMessage {
+        IndexedMessage(
+            id: messageID,
+            accountID: accountID,
+            placement: placement,
+            from: envelope.from,
+            to: envelope.to,
+            cc: envelope.cc,
+            date: envelope.date,
+            subject: envelope.subject,
+            body: body,
+            isPartial: false
+        )
     }
 }
 
@@ -174,7 +193,9 @@ public struct AgentReadAPI {
     public let rules: RuleStore
     public let audit: AuditLog?
     public let attachmentContentAskCache: AttachmentContentAskCache
+    public let fieldAskDecisionCache: FieldAskDecisionCache
     public var allowConditionalAccessPrompts: Bool
+    public var askDecisionCachePolicy: AskDecisionCachePolicy
     public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)?
 
     public init(
@@ -185,7 +206,9 @@ public struct AgentReadAPI {
         rules: RuleStore = RuleStore(),
         audit: AuditLog? = nil,
         attachmentContentAskCache: AttachmentContentAskCache = AttachmentContentAskCache(),
+        fieldAskDecisionCache: FieldAskDecisionCache = FieldAskDecisionCache(),
         allowConditionalAccessPrompts: Bool = false,
+        askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
     ) {
         self.read = read
@@ -195,7 +218,9 @@ public struct AgentReadAPI {
         self.rules = rules
         self.audit = audit
         self.attachmentContentAskCache = attachmentContentAskCache
+        self.fieldAskDecisionCache = fieldAskDecisionCache
         self.allowConditionalAccessPrompts = allowConditionalAccessPrompts
+        self.askDecisionCachePolicy = askDecisionCachePolicy
         self.conditionalAccessPrompter = conditionalAccessPrompter
     }
 
@@ -221,6 +246,7 @@ public struct AgentReadAPI {
     /// `limitingAskTo` restricts which Ask fields are prompted (e.g. Attachment content only on `get_attachment`).
     private func resolveConditionalFields(
         _ fields: GrantFields,
+        agentID: String,
         agentName: String,
         message: ReadMessage,
         limitingAskTo: Set<String>? = nil
@@ -251,63 +277,132 @@ public struct AgentReadAPI {
         }
 
         let askLabels = collectAskFields(fields).filter { limitingAskTo?.contains($0) ?? true }
-        guard !askLabels.isEmpty, let prompter = conditionalAccessPrompter else {
-            // No Ask fields or no prompter → allow all Ask fields (fallback; not user-confirmed).
-            return ConditionalFieldResolution(
-                fields: GrantFields(
-                    subjectMode: isAsk(fields.subjectMode, label: "Subject") ? .on : fields.subjectMode,
-                    fromMode: isAsk(fields.fromMode, label: "From") ? .on : fields.fromMode,
-                    toMode: isAsk(fields.toMode, label: "To") ? .on : fields.toMode,
-                    ccMode: isAsk(fields.ccMode, label: "Cc") ? .on : fields.ccMode,
-                    dateMode: isAsk(fields.dateMode, label: "Date") ? .on : fields.dateMode,
-                    bodyMode: isAsk(fields.bodyMode, label: "Body") ? .on : fields.bodyMode,
-                    attachmentMetadataMode: isAsk(fields.attachmentMetadataMode, label: "Attachment names")
-                        ? .on : fields.attachmentMetadataMode,
-                    attachmentContentMode: isAsk(fields.attachmentContentMode, label: "Attachment content")
-                        ? .on : fields.attachmentContentMode
-                ),
-                confirmed: .none,
-                blocked: .none,
-                prompted: .none
-            )
+        guard !askLabels.isEmpty else {
+            return ConditionalFieldResolution(fields: fields, confirmed: .none, blocked: .none, prompted: .none)
         }
 
-        let context = ConditionalAccessPromptContext(
-            agentName: agentName,
-            accountID: message.accountID,
-            placement: message.placement,
-            messageID: message.id,
-            internetMessageID: message.internetMessageID,
-            requestedFields: askLabels,
-            fieldPreviews: Self.fieldPreviews(message: message, askLabels: askLabels),
-            // Raw HTML for Ask message preview (not prettyHTMLBody — prefix heuristic can nil it).
-            htmlBody: message.htmlBody,
-            envelope: ConditionalMessageEnvelope(
-                subject: message.subject,
-                from: message.from,
-                to: message.to,
-                cc: message.cc,
-                date: message.date
-            )
-        )
-        let decision = await prompter(context)
-        let resolvedMode: FieldAccessMode = decision == .allow ? .on : .off
+        var cachedAllow: Set<String> = []
+        var cachedBlock: Set<String> = []
+        var needPrompt: [String] = []
+        let policy = askDecisionCachePolicy
+        for label in askLabels {
+            if let cached = fieldAskDecisionCache.decision(
+                agentID: agentID,
+                accountID: message.accountID,
+                placement: message.placement,
+                messageID: message.id,
+                field: label,
+                policy: policy
+            ) {
+                if cached == .allow {
+                    cachedAllow.insert(label)
+                } else {
+                    cachedBlock.insert(label)
+                }
+            } else {
+                needPrompt.append(label)
+            }
+        }
+
+        var promptedAllow: Set<String> = []
+        var promptedBlock: Set<String> = []
+        if !needPrompt.isEmpty {
+            if let prompter = conditionalAccessPrompter {
+                let context = ConditionalAccessPromptContext(
+                    agentID: agentID,
+                    agentName: agentName,
+                    accountID: message.accountID,
+                    placement: message.placement,
+                    messageID: message.id,
+                    internetMessageID: message.internetMessageID,
+                    requestedFields: needPrompt,
+                    fieldPreviews: Self.fieldPreviews(message: message, askLabels: needPrompt),
+                    // Raw HTML for Ask message preview (not prettyHTMLBody — prefix heuristic can nil it).
+                    htmlBody: message.htmlBody,
+                    envelope: ConditionalMessageEnvelope(
+                        subject: message.subject,
+                        from: message.from,
+                        to: message.to,
+                        cc: message.cc,
+                        date: message.date
+                    )
+                )
+                let decision = await prompter(context)
+                if policy.enabled {
+                    for label in needPrompt {
+                        fieldAskDecisionCache.store(
+                            decision,
+                            agentID: agentID,
+                            accountID: message.accountID,
+                            placement: message.placement,
+                            messageID: message.id,
+                            field: label
+                        )
+                    }
+                }
+                if decision == .allow {
+                    promptedAllow = Set(needPrompt)
+                } else {
+                    promptedBlock = Set(needPrompt)
+                }
+            } else {
+                // No prompter → allow remaining Ask fields (fallback; not user-confirmed).
+                promptedAllow = Set(needPrompt)
+            }
+        }
+
+        let allowLabels = cachedAllow.union(promptedAllow)
+        let blockLabels = cachedBlock.union(promptedBlock)
+        let promptedLabels = promptedAllow.union(promptedBlock)
         return ConditionalFieldResolution(
-            fields: GrantFields(
-                subjectMode: isAsk(fields.subjectMode, label: "Subject") ? resolvedMode : fields.subjectMode,
-                fromMode: isAsk(fields.fromMode, label: "From") ? resolvedMode : fields.fromMode,
-                toMode: isAsk(fields.toMode, label: "To") ? resolvedMode : fields.toMode,
-                ccMode: isAsk(fields.ccMode, label: "Cc") ? resolvedMode : fields.ccMode,
-                dateMode: isAsk(fields.dateMode, label: "Date") ? resolvedMode : fields.dateMode,
-                bodyMode: isAsk(fields.bodyMode, label: "Body") ? resolvedMode : fields.bodyMode,
-                attachmentMetadataMode: isAsk(fields.attachmentMetadataMode, label: "Attachment names")
-                    ? resolvedMode : fields.attachmentMetadataMode,
-                attachmentContentMode: isAsk(fields.attachmentContentMode, label: "Attachment content")
-                    ? resolvedMode : fields.attachmentContentMode
+            fields: Self.applyingAskDecisions(
+                fields,
+                allowLabels: allowLabels,
+                blockLabels: blockLabels,
+                limitingAskTo: limitingAskTo
             ),
-            confirmed: decision == .allow ? askMask : .none,
-            blocked: decision == .block ? askMask : .none,
-            prompted: askMask
+            confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+            blocked: Self.mask(forLabels: blockLabels, in: askMask),
+            prompted: Self.mask(forLabels: promptedLabels, in: askMask)
+        )
+    }
+
+    private static func applyingAskDecisions(
+        _ fields: GrantFields,
+        allowLabels: Set<String>,
+        blockLabels: Set<String>,
+        limitingAskTo: Set<String>?
+    ) -> GrantFields {
+        func resolve(_ mode: FieldAccessMode, label: String) -> FieldAccessMode {
+            guard mode == .ask, limitingAskTo?.contains(label) ?? true else { return mode }
+            if allowLabels.contains(label) { return .on }
+            if blockLabels.contains(label) { return .off }
+            return .off
+        }
+        return GrantFields(
+            subjectMode: resolve(fields.subjectMode, label: "Subject"),
+            fromMode: resolve(fields.fromMode, label: "From"),
+            toMode: resolve(fields.toMode, label: "To"),
+            ccMode: resolve(fields.ccMode, label: "Cc"),
+            dateMode: resolve(fields.dateMode, label: "Date"),
+            bodyMode: resolve(fields.bodyMode, label: "Body"),
+            attachmentMetadataMode: resolve(fields.attachmentMetadataMode, label: "Attachment names"),
+            attachmentContentMode: resolve(fields.attachmentContentMode, label: "Attachment content")
+        )
+    }
+
+    private static func mask(forLabels labels: Set<String>, in askMask: GrantFields) -> GrantFields {
+        GrantFields(
+            subjectMode: labels.contains("Subject") && askMask.subject ? .on : .off,
+            fromMode: labels.contains("From") && askMask.from ? .on : .off,
+            toMode: labels.contains("To") && askMask.to ? .on : .off,
+            ccMode: labels.contains("Cc") && askMask.cc ? .on : .off,
+            dateMode: labels.contains("Date") && askMask.date ? .on : .off,
+            bodyMode: labels.contains("Body") && askMask.body ? .on : .off,
+            attachmentMetadataMode: labels.contains("Attachment names") && askMask.attachmentMetadata
+                ? .on : .off,
+            attachmentContentMode: labels.contains("Attachment content") && askMask.attachmentContent
+                ? .on : .off
         )
     }
 
@@ -460,6 +555,7 @@ public struct AgentReadAPI {
             }
             let resolution = await resolveConditionalFields(
                 fields,
+                agentID: agentID,
                 agentName: agentName,
                 message: message,
                 limitingAskTo: ["Attachment content"]
@@ -670,6 +766,7 @@ public struct AgentReadAPI {
             let rawFields = grant.fields
             let resolution = await resolveConditionalFields(
                 rawFields,
+                agentID: agent.id,
                 agentName: agent.name,
                 message: message
             )
@@ -681,12 +778,13 @@ public struct AgentReadAPI {
             let fields = resolution.fields
             let granted = message.applying(fields)
             var (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
-            if resolution.prompted.subject {
+            // Prompted and cache-reuse both count as conditional (cache is silent — no second dialog).
+            if resolution.confirmed.subject || resolution.blocked.subject {
                 subjectField = subjectField.markingConditionalPrompt(
                     allowed: resolution.confirmed.subject
                 )
             }
-            if resolution.prompted.body {
+            if resolution.confirmed.body || resolution.blocked.body {
                 bodyField = bodyField.markingConditionalPrompt(
                     allowed: resolution.confirmed.body
                 )

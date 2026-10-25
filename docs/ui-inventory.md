@@ -24,9 +24,11 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | Field | Value |
 |---|---|
 | **Job** | Non-destructive handoff / open / preview |
-| **Chrome** | Height-locked to Access Log `Formatted` (small segmented metrics); track + raised face; icon-only by default |
-| **Hover** | Expands to icon + regular-weight small-control label; border/icon → accent blue |
+| **Chrome** | Ask G flush family: height **20pt**, label **11pt**, radius **6pt**, border + fill (no track gutter); icon-only by default |
+| **Hover** | Expands to icon + 11pt label; border/icon → accent blue |
+| **Selected (`.on`)** | Subtle selected fill + blue icon/border (include-in-rule); not solid D/E/F |
 | **Always expanded** | `alwaysExpanded: true` keeps icon + label (Ask dialog message actions) |
+| **Fixed slot / expand-left** | Envelope include-in-rule: fixed 20pt slot; label expands **left as overlay** (no value reflow) |
 | **Swift** | `SecondaryActionButton` in `CompanionBits.swift` |
 | **HTML** | `.secondary-action` (+ optional `.secondary-action-row`) |
 | **Icons** | Always shown; label appears on hover / focus; see [Action catalogue](#action-catalogue) |
@@ -120,11 +122,26 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 
 | Field | Value |
 |---|---|
-| **Job** | Show how many Ask prompts are open or queued |
+| **Job** | Show how many access-request windows are open |
 | **Menu bar** | Red capsule + white count overlaid top-trailing on `MenuBarIconLabel` |
 | **Dock** | `NSApp.dockTile.badgeLabel` (visible when activation policy is `.regular`) |
-| **Count** | Open dialog + waiters (`AskQueueIndicator`) |
-| **Swift** | `AskQueueIndicator` + overlay in `MenuBarIcon.swift`; depth updated from `DetachedWindowHost` |
+| **Count** | One per open Ask window (`AskQueueIndicator.pending`) |
+| **Swift** | `AskQueueIndicator` + overlay in `MenuBarIcon.swift`; register / resolve from `DetachedWindowHost` |
+| **Copy** | Icon accessibility: “1 access request” / “N access requests” |
+| **Menu click** | Opens the status dropdown and raises every pending Ask with `orderFrontRegardless` (no key while the menu is open). Close leaves the selected Ask in front |
+
+### `AccessRequestsSection`
+
+| Field | Value |
+|---|---|
+| **Job** | Review and decide pending access requests from the status menu |
+| **Visibility** | Hidden at zero, including its lower separator |
+| **Header** | Disclosure **Access requests**, trailing count, chevron. Collapsed until opened |
+| **Row** | Truncated `agent · subject`. 16pt **?** mark only (no row highlight, no trailing dot). Unselected: 1px `#8e8e93` outline and `?`. Selected: `#8e8e93` disc, `?` knocked out |
+| **Quick controls** | **Block** `#f8d0d0` / `#c41212`. **Allow** `#dff4e4` / `#166a2d`. Each decides only that request |
+| **Row click** | Raises that window. Does not Allow or Block |
+| **Swift** | `AccessRequestMenu` projection + `AccessRequestMenuRow` in `MenuBarStatus.swift` |
+| **Prototype** | `.scratch/mailgent-ask-queue/examples/prototype-menu-surfaces-ask.html` |
 
 ### `AskPreviewZoomControls`
 
@@ -162,6 +179,17 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | **Body HTML-only** | Orange outline capsule `HTML only` beside **Body** |
 | **Swift** | `ConditionalFieldPreviewLine.badge` + `ConditionalAskFieldPreviewCard.titleLabel` |
 
+### Ask envelope read-only vs interactive
+
+| Surface | Role | Type |
+|---|---|---|
+| Address / value `.badge` | Read-only metadata | Chip — not clickable |
+| Ask field `.chip-ask` | Read-only “fields being asked” | Chip — not clickable |
+| Preview / Open in Apple Mail | Handoff | `SecondaryAction` (`alwaysExpanded` in Ask) |
+| Include envelope line in rule | Toggle on Subject / From | `SecondaryAction` icon-only; hover/focus expands label **left as overlay** (value text does not reflow). Labels: **Add to rule** / **In rule**. **G** = ship look — unified flush chrome with Preview · Open in Mail · AND/OR · Close (same height / 11px / 6px radius / no track gutter; subtle `.on`). Trials C–F remain in proto only. Never a capsule `+ Rule` pill; not `alwaysExpanded` |
+
+**Do not** reuse `RuleFieldMarkChip` / Access Log rule badges for this toggle — those are status, not controls.
+
 ---
 
 ## Action catalogue
@@ -173,6 +201,7 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | `openMessageInMail` | Open in Apple Mail | `OpenInMailGlyph` (`arrow.up.right.square`) | Trailing right on message/search chip-row (Companion Read: under body) | Message in focus (`get`, search card, Companion Read) |
 | `openParentMessageInMail` | Open message in Apple Mail | `OpenInMailGlyph` (`arrow.up.right.square`) | Trailing right on `attach-for` (“for [subject]”) | Attachment in focus (`get_attachment`) — opens **parent email**, not the file |
 | `openAttachmentSystem` | (row / Preview) | `paperclip` / `eye` | Companion Read attachment row; Access Log Preview | Re-export bytes → `NSWorkspace.open` / Quick Look |
+| `includeEnvelopeInRule` | Add to rule → In rule | `plus` → `checkmark` | Trailing on Ask envelope Subject / From rows | Toggle: include that envelope value in the new/updated rule. Icon-only `SecondaryAction`; label expands left as overlay on hover/focus (no layout shift). **G** ship look: flush chrome shared with Preview · Open in Mail · AND/OR · Close (20pt / 11px / 6px / no track gutter; subtle selected). Proto: `prototype-ask-rule-right.html?variant=G` |
 
 ### Attachment entry — decided solution
 
@@ -227,6 +256,9 @@ SecondaryActionRow
 
 | Date | Change |
 |---|---|
+| 2026-10-20 | Ask Rules-from-Ask UI lock → variant **G** (picks · right editor · commit on Allow/Block). `SecondaryAction` chrome → flush 20pt / 11pt / 6pt family. |
+| 2026-10-20 | Ask envelope: include-in-rule is icon-only `SecondaryAction` (`includeEnvelopeInRule`; label expands left as overlay on hover); email badges and Ask chips stay read-only. No capsule `+ Rule` pill. |
+| 2026-10-19 | Status menu `AccessRequestsSection`: one row per concurrent Ask, ? selection mark, Block / Allow. Menu open raises every Ask window without taking key. |
 | 2026-10-14 | FileCard Preview opens the file for the user even when agent access is denied / too large; the under-card note now explains the agent-side restriction instead of saying Preview stays closed. Missing still shows reason only. |
 | 2026-10-12 | Ask preview canvas: floating sticky `AskPreviewZoomControls` (− \| +); default 75% page zoom; plain Ask body uses `NSTextView.scrollableTextView()`. |
 | 2026-10-12 | Ask: title `Email access request`; centered larger `?` + callout “{agent} wants access…” + More/Less; popup capped (~560); Body `HTML only` title badge. |

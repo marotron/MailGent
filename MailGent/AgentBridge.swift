@@ -34,6 +34,8 @@ final class AgentBridge {
     let rules = RuleStore()
     let ledger = DraftLedger()
     let conditionalAccessPrompt = ConditionalAccessPromptCoordinator()
+    let attachmentContentAskCache = AttachmentContentAskCache()
+    let fieldAskDecisionCache = FieldAskDecisionCache()
 
     private(set) var pairedAgents: [PairedAgentCredential] = []
     private(set) var selectedAgentID: String?
@@ -532,6 +534,23 @@ final class AgentBridge {
         noteRulesChanged()
     }
 
+    func upsertRule(
+        _ rule: GrantRule,
+        enableForAgentID: String,
+        accountID: String,
+        placement: String?
+    ) {
+        rules.upsert(rule)
+        rules.setEnabled(
+            true,
+            ruleID: rule.id,
+            agentID: enableForAgentID,
+            accountID: accountID,
+            placement: placement
+        )
+        noteRulesChanged()
+    }
+
     func deleteRule(id: String) {
         rules.removeRule(id: id)
         noteRulesChanged()
@@ -890,10 +909,13 @@ final class AgentBridge {
                 leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
                 rules: rules,
                 audit: audit,
+                attachmentContentAskCache: attachmentContentAskCache,
+                fieldAskDecisionCache: fieldAskDecisionCache,
                 allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
+                askDecisionCachePolicy: MailGentPreferences.askDecisionCachePolicy,
                 conditionalAccessPrompter: { @MainActor [weak self] context in
                     guard let self else { return .block }
-                    return await self.conditionalAccessPrompt.requestDecision(context: context)
+                    return await self.askDecision(for: context)
                 }
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
@@ -986,6 +1008,7 @@ final class AgentBridge {
         let removed = pairedAgents[index]
         pairing.revoke(agentID: agentID)
         grants.revokeAll(agentID: agentID)
+        fieldAskDecisionCache.removeAll(forAgentID: agentID)
         pairedAgents.remove(at: index)
 
         if selectedAgentID == agentID {
@@ -1399,11 +1422,13 @@ final class AgentBridge {
             leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
             rules: rules,
             audit: existing.audit,
-            attachmentContentAskCache: existing.attachmentContentAskCache,
+            attachmentContentAskCache: attachmentContentAskCache,
+            fieldAskDecisionCache: fieldAskDecisionCache,
             allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
+            askDecisionCachePolicy: MailGentPreferences.askDecisionCachePolicy,
             conditionalAccessPrompter: { @MainActor [weak self] context in
                 guard let self else { return .block }
-                return await self.conditionalAccessPrompt.requestDecision(context: context)
+                return await self.askDecision(for: context)
             }
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
@@ -1415,6 +1440,30 @@ final class AgentBridge {
 
     func applyConditionalAccessPreference() {
         refreshGatewayLeakGuard()
+    }
+
+    func applyAskDecisionCachePreference() {
+        refreshGatewayLeakGuard()
+    }
+
+    private func askDecision(for context: ConditionalAccessPromptContext) async -> ConditionalAccessDecision {
+        let support = ConditionalAccessAskRuleSupport(
+            allRules: { [rules] in rules.allRules() },
+            nextNick: { [weak self] in self?.nextRuleNick() ?? "A" },
+            messageProbe: context.matcherProbeMessage(),
+            onSave: { [weak self] rule, placement in
+                self?.upsertRule(
+                    rule,
+                    enableForAgentID: context.agentID,
+                    accountID: context.accountID,
+                    placement: placement
+                )
+            }
+        )
+        return await conditionalAccessPrompt.requestDecision(
+            context: context,
+            ruleSupport: support
+        )
     }
 
     /// Keep Cursor's local MCP entry aligned with the Cursor Bearer (machine-local only).

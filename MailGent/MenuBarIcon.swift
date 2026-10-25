@@ -2,18 +2,122 @@ import AppKit
 import MailStore
 import SwiftUI
 
-/// Pending Ask prompts (open dialog + queued). Drives menu-bar bubble and Dock `badgeLabel`.
+struct PendingAskSummary: Equatable, Sendable {
+    let id: String
+    let agent: String
+    let subject: String
+}
+
+/// Concurrent access requests in stable registration order. No windows or continuations.
+struct PendingAskState: Equatable, Sendable {
+    private(set) var summaries: [PendingAskSummary] = []
+    private(set) var selectedID: String?
+
+    var count: Int { summaries.count }
+
+    mutating func register(id: String, agent: String, subject: String) {
+        let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        summaries.append(
+            PendingAskSummary(
+                id: id,
+                agent: agent,
+                subject: trimmed.isEmpty ? "(no subject)" : trimmed
+            )
+        )
+        if selectedID == nil {
+            selectedID = id
+        }
+    }
+
+    /// Raises one request in the list. Does not Allow or Block it.
+    mutating func select(id: String) -> ConditionalAccessDecision? {
+        guard summaries.contains(where: { $0.id == id }) else { return nil }
+        selectedID = id
+        return nil
+    }
+
+    /// Removes one request and returns the decision. A second call for the same id does nothing.
+    mutating func resolve(id: String, with decision: ConditionalAccessDecision) -> ConditionalAccessDecision? {
+        guard let index = summaries.firstIndex(where: { $0.id == id }) else { return nil }
+        summaries.remove(at: index)
+        if selectedID == id {
+            selectedID = summaries.first?.id
+        }
+        return decision
+    }
+
+    /// Traffic-light close is fail-closed Block for that request only.
+    mutating func close(id: String) -> ConditionalAccessDecision? {
+        resolve(id: id, with: .block)
+    }
+}
+
+/// Status-menu Access requests section. Hidden when nothing is pending.
+struct AccessRequestMenu: Equatable, Sendable {
+    struct Row: Equatable, Sendable {
+        let id: String
+        let label: String
+        let isSelected: Bool
+    }
+
+    let isVisible: Bool
+    let count: Int
+    let rows: [Row]
+    /// Spoken count, e.g. "1 access request". Nil when the section is hidden.
+    let accessibilityPhrase: String?
+
+    static func project(_ state: PendingAskState) -> AccessRequestMenu {
+        let rows = state.summaries.map { summary in
+            Row(
+                id: summary.id,
+                label: "\(summary.agent) · \(summary.subject)",
+                isSelected: summary.id == state.selectedID
+            )
+        }
+        return AccessRequestMenu(
+            isVisible: state.count > 0,
+            count: state.count,
+            rows: rows,
+            accessibilityPhrase: phrase(for: state.count)
+        )
+    }
+
+    static func phrase(for count: Int) -> String? {
+        switch count {
+        case ..<1: return nil
+        case 1: return "1 access request"
+        default: return "\(count) access requests"
+        }
+    }
+}
+
+/// Pending access requests. Drives the menu section, menu-bar bubble, and Dock `badgeLabel`.
 @MainActor
 final class AskQueueIndicator: ObservableObject {
     static let shared = AskQueueIndicator()
 
-    @Published private(set) var depth: Int = 0
+    @Published private(set) var pending = PendingAskState()
 
-    func setDepth(_ depth: Int) {
-        let next = max(0, depth)
-        guard self.depth != next else { return }
-        self.depth = next
-        NSApp.dockTile.badgeLabel = next > 0 ? Self.badgeText(next) : nil
+    func register(id: String, agent: String, subject: String) {
+        pending.register(id: id, agent: agent, subject: subject)
+        syncDockBadge()
+    }
+
+    @discardableResult
+    func select(id: String) -> ConditionalAccessDecision? {
+        pending.select(id: id)
+    }
+
+    @discardableResult
+    func resolve(id: String, with decision: ConditionalAccessDecision) -> ConditionalAccessDecision? {
+        let applied = pending.resolve(id: id, with: decision)
+        if applied != nil { syncDockBadge() }
+        return applied
+    }
+
+    private func syncDockBadge() {
+        let count = pending.count
+        NSApp.dockTile.badgeLabel = count > 0 ? Self.badgeText(count) : nil
         NSApp.dockTile.display()
     }
 
@@ -118,7 +222,7 @@ struct MenuBarIconLabel: View {
 
     var body: some View {
         let appearance = MenuBarIconAppearance.resolve(source: source, pulse: agents.iconPulse.kind)
-        let askDepth = askQueue.depth
+        let askDepth = askQueue.pending.count
         ZStack(alignment: .topTrailing) {
             Image(nsImage: Self.image(appearance))
             if askDepth > 0 {
@@ -137,9 +241,10 @@ struct MenuBarIconLabel: View {
     }
 
     private static func accessibilityLabel(appearance: MenuBarIconAppearance, askDepth: Int) -> String {
-        guard askDepth > 0 else { return appearance.accessibilityLabel }
-        let asks = askDepth == 1 ? "1 Ask pending" : "\(askDepth) Asks pending"
-        return "\(appearance.accessibilityLabel), \(asks)"
+        guard let phrase = AccessRequestMenu.phrase(for: askDepth) else {
+            return appearance.accessibilityLabel
+        }
+        return "\(appearance.accessibilityLabel), \(phrase)"
     }
 
     private static func image(_ appearance: MenuBarIconAppearance) -> NSImage {

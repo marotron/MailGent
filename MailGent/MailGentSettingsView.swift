@@ -1,3 +1,4 @@
+import MailStore
 import SwiftUI
 
 struct MailGentSettingsView: View {
@@ -5,6 +6,11 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
     @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
     @AppStorage(MailGentPreferences.allowConditionalAccessPromptsKey) private var allowConditionalAccessPrompts = false
+    @AppStorage(MailGentPreferences.askDecisionCacheEnabledKey) private var askDecisionCacheEnabled = false
+    @AppStorage(MailGentPreferences.askDecisionCacheTTLSecondsKey) private var askDecisionCacheTTLSeconds =
+        MailGentPreferences.defaultAskDecisionCacheTTLSeconds
+    @AppStorage(MailGentPreferences.askDecisionCacheShareScopeKey) private var askDecisionCacheShareScopeRaw =
+        AskDecisionCacheShareScope.perAgent.rawValue
     @AppStorage(MailGentPreferences.loopbackPortKey) private var loopbackPort =
         Int(MailGentPreferences.defaultLoopbackPort)
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
@@ -26,6 +32,15 @@ struct MailGentSettingsView: View {
         }
         .onChange(of: allowConditionalAccessPrompts) { _, _ in
             session.agents.applyConditionalAccessPreference()
+        }
+        .onChange(of: askDecisionCacheEnabled) { _, _ in
+            session.agents.applyAskDecisionCachePreference()
+        }
+        .onChange(of: askDecisionCacheTTLSeconds) { _, _ in
+            session.agents.applyAskDecisionCachePreference()
+        }
+        .onChange(of: askDecisionCacheShareScopeRaw) { _, _ in
+            session.agents.applyAskDecisionCachePreference()
         }
         .onChange(of: loopbackPort) { _, newValue in
             let normalized = Int(MailGentPreferences.normalizedLoopbackPort(newValue))
@@ -93,6 +108,33 @@ struct MailGentSettingsView: View {
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)
+                }
+                if allowConditionalAccessPrompts {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Remember Ask decisions", isOn: $askDecisionCacheEnabled)
+                        Text(
+                            "Off by default. When on, Allow / Block for an Ask field on a message is reused for later gets within the validity window — not a standing grant. New Ask fields still prompt. Pass/Block rules still win first."
+                        )
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                    }
+                    if askDecisionCacheEnabled {
+                        Picker("Remember for", selection: $askDecisionCacheTTLSeconds) {
+                            Text("15 minutes").tag(900)
+                            Text("1 hour").tag(3_600)
+                            Text("24 hours").tag(86_400)
+                            Text("Until MailGent quits").tag(0)
+                        }
+                        Picker("Share with", selection: $askDecisionCacheShareScopeRaw) {
+                            Text("This agent only").tag(AskDecisionCacheShareScope.perAgent.rawValue)
+                            Text("All agents").tag(AskDecisionCacheShareScope.allAgents.rawValue)
+                        }
+                        Text(
+                            "This agent only keeps Cursor and Grok separate (MCP and CLI on one pairing still share). All agents lets any paired agent reuse the same message decision."
+                        )
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                    }
                 }
                 TextField("Loopback MCP port", value: $loopbackPort, format: .number.grouping(.never))
                 Text(session.agents.loopbackURL)

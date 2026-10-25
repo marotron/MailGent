@@ -1,0 +1,1253 @@
+<!doctype html>
+<!-- CAMPAIGN CANDIDATE: MailGent explainer + interactive demo (website seed).
+     Facts mirror 0.8.2 alpha code; see pitch.md for the claims checklist.
+     Self-contained except assets/ (icon + redacted screenshots copied
+     from docs/screenshots/ — recopy if those change). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent — let AI help with your email, without handing over your inbox</title>
+  <meta name="description" content="MailGent is a small macOS menu-bar companion for Apple Mail. You choose exactly which mail an AI agent can see, secrets are hidden before anything leaves your Mac, and every request is logged.">
+  <link rel="icon" href="assets/mailgent-icon.png">
+  <style>
+    :root {
+      --ink: #24170e;
+      --ink-soft: #5c4636;
+      --muted: #8a7462;
+      --paper: #fffaf3;
+      --cream: #f6ecdf;
+      --sand: #ecdcc6;
+      --line: #e2cfb6;
+      --brown: #6b3f1f;
+      --brown-deep: #2b1a0f;
+      --amber: #c98a4b;
+      --amber-soft: #f7e3c9;
+      --green: #2f8a4a;
+      --green-soft: #e3f3e7;
+      --red: #c2412d;
+      --red-soft: #fbe7e3;
+      --leak: #7a3db8;
+      --leak-soft: #f1e6fb;
+      --blue: #1f6fd1;
+      --radius: 14px;
+      --shadow: 0 18px 50px rgba(43, 26, 15, 0.16), 0 2px 6px rgba(43, 26, 15, 0.08);
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    a { color: inherit; }
+    button { font: inherit; cursor: pointer; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 88px 0; }
+    h1, h2, h3 { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; letter-spacing: -0.02em; margin: 0; }
+    h2 { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; }
+    h3 { font-size: 19px; }
+    .eyebrow { text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px; font-weight: 700; color: var(--amber); margin-bottom: 12px; }
+    .lede { font-size: 19px; color: var(--ink-soft); max-width: 680px; margin: 16px 0 0; }
+    .center { text-align: center; }
+    .center .lede { margin-left: auto; margin-right: auto; }
+
+    /* ---------- nav ---------- */
+    nav.top {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(43, 26, 15, 0.86);
+      backdrop-filter: saturate(160%) blur(14px);
+      -webkit-backdrop-filter: saturate(160%) blur(14px);
+      color: #f6ecdf;
+    }
+    nav.top .wrap { display: flex; align-items: center; gap: 24px; height: 56px; }
+    nav.top .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; }
+    nav.top .brand img { width: 28px; height: 28px; }
+    nav.top .links { display: flex; gap: 20px; margin-left: auto; font-size: 14px; }
+    nav.top .links a { text-decoration: none; opacity: 0.8; }
+    nav.top .links a:hover { opacity: 1; }
+    @media (max-width: 760px) { nav.top .links a:not(.cta) { display: none; } }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 20px; border-radius: 999px; border: 0;
+      font-weight: 600; text-decoration: none; font-size: 15px;
+    }
+    .btn.primary { background: var(--amber); color: var(--brown-deep); }
+    .btn.primary:hover { background: #d99a5a; }
+    .btn.ghost { background: rgba(255,255,255,0.08); color: #f6ecdf; box-shadow: inset 0 0 0 1px rgba(246,236,223,0.3); }
+    .btn.ghost:hover { background: rgba(255,255,255,0.14); }
+    .btn.small { padding: 7px 14px; font-size: 13px; }
+
+    /* ---------- hero ---------- */
+    header.hero {
+      background:
+        radial-gradient(1100px 500px at 80% -10%, rgba(201,138,75,0.45), transparent 60%),
+        linear-gradient(180deg, #3a2414 0%, #2b1a0f 100%);
+      color: #f6ecdf;
+      padding: 72px 0 96px;
+      overflow: hidden;
+    }
+    .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; }
+    @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } }
+    .hero .badge {
+      display: inline-flex; gap: 8px; align-items: center;
+      font-size: 13px; padding: 5px 12px; border-radius: 999px;
+      background: rgba(246,236,223,0.1); box-shadow: inset 0 0 0 1px rgba(246,236,223,0.25);
+    }
+    .hero .badge b { color: var(--amber); }
+    .hero h1 { font-size: clamp(38px, 6vw, 62px); line-height: 1.04; margin: 20px 0 0; }
+    .hero h1 em { font-style: normal; color: var(--amber); }
+    .hero p.sub { font-size: 20px; color: rgba(246,236,223,0.82); max-width: 560px; margin: 20px 0 32px; }
+    .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero .fine { font-size: 13px; color: rgba(246,236,223,0.6); margin-top: 18px; }
+
+    /* menu-bar mock */
+    .desk { position: relative; }
+    .menubar {
+      height: 30px; border-radius: 10px 10px 0 0;
+      background: rgba(246,236,223,0.14);
+      display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+      padding: 0 14px; font-size: 13px; color: rgba(246,236,223,0.85);
+    }
+    .menubar .tray { width: 18px; height: 18px; border-radius: 4px; background: url(assets/mailgent-icon.png) center/cover; box-shadow: 0 0 0 3px rgba(201,138,75,0.5); }
+    .dropdown {
+      margin: 8px 0 0 auto; width: 320px; max-width: 100%;
+      background: rgba(255, 250, 243, 0.97); color: var(--ink);
+      border-radius: 12px; box-shadow: var(--shadow); padding: 10px 8px; font-size: 13.5px;
+    }
+    .dropdown .head { display: flex; justify-content: space-between; align-items: baseline; padding: 0 8px 6px; }
+    .dropdown .head b { font-size: 15px; }
+    .dropdown .head span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .dropdown .row { display: grid; grid-template-columns: 118px 1fr; gap: 8px; padding: 2px 8px; }
+    .dropdown .row .k { color: var(--muted); }
+    .dropdown .ok { color: var(--green); }
+    .dropdown .chip { display: inline-block; font-size: 11.5px; padding: 0 6px; border-radius: 5px; background: var(--sand); font-variant-numeric: tabular-nums; }
+    .dropdown hr { border: 0; border-top: 1px solid var(--line); margin: 6px 8px; }
+    .dropdown .act { padding: 4px 8px; border-radius: 6px; }
+    .dropdown .act:hover { background: var(--blue); color: #fff; }
+    .pulse { animation: pulse 2.4s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(201,138,75,0.5); } 50% { box-shadow: 0 0 0 7px rgba(47,138,74,0.35); } }
+
+    /* ---------- problem ---------- */
+    .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px; }
+    @media (max-width: 860px) { .cards3 { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 24px; box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset;
+    }
+    .card .ico { font-size: 26px; margin-bottom: 12px; }
+    .card p { color: var(--ink-soft); margin: 8px 0 0; font-size: 15px; }
+    .problem { background: var(--cream); }
+    .versus { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 32px; }
+    @media (max-width: 760px) { .versus { grid-template-columns: 1fr; } }
+    .versus .card h3 { display: flex; gap: 8px; align-items: center; }
+    .versus ul { margin: 12px 0 0; padding-left: 20px; color: var(--ink-soft); font-size: 15px; }
+    .versus .bad { border-color: #efc4bb; background: #fff8f6; }
+    .versus .good { border-color: #b9dcc3; background: #f6fcf7; }
+
+    /* ---------- how it works ---------- */
+    .flow { display: grid; grid-template-columns: 1fr auto 1.2fr auto 1fr; gap: 16px; align-items: stretch; margin-top: 48px; }
+    @media (max-width: 900px) { .flow { grid-template-columns: 1fr; } .flow .arrow { transform: rotate(90deg); justify-self: center; } }
+    .node { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+    .node.gate { background: linear-gradient(180deg, #3a2414, #2b1a0f); color: #f6ecdf; border: 0; box-shadow: var(--shadow); }
+    .node.gate p, .node.gate li { color: rgba(246,236,223,0.82); }
+    .node .tag { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .node.gate .tag { color: var(--amber); }
+    .node h3 { margin: 6px 0 8px; }
+    .node p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+    .node ul { margin: 10px 0 0; padding-left: 18px; font-size: 14.5px; }
+    .node li { margin: 4px 0; }
+    .arrow { display: flex; align-items: center; justify-content: center; color: var(--amber); font-size: 30px; }
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 40px; counter-reset: step; }
+    @media (max-width: 900px) { .steps { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
+    .step { padding: 18px; border-radius: var(--radius); background: var(--cream); }
+    .step::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--brown); color: #fff; font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+    .step b { display: block; margin-bottom: 4px; }
+    .step span { color: var(--ink-soft); font-size: 14.5px; }
+
+    /* ---------- demo: MailGent windows mirror the app; the agent window is the agent's own UI ---------- */
+    .demo { background: linear-gradient(180deg, var(--cream), var(--paper)); }
+    .demo-stage {
+      margin-top: 40px; padding: 28px; border-radius: 22px; border: 1px solid var(--line);
+      background: radial-gradient(900px 420px at 50% 0%, var(--amber-soft), var(--cream));
+    }
+    .demo-top { display: grid; grid-template-columns: minmax(0, 0.8fr) 58px minmax(0, 1.4fr) 58px minmax(0, 0.58fr); align-items: stretch; }
+    @media (max-width: 1100px) { .demo-top { grid-template-columns: 1fr; } }
+    .num { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--brown); color: #fff; font-size: 11px; letter-spacing: 0; }
+
+    .flow-steps { list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    @media (max-width: 860px) { .flow-steps { grid-template-columns: 1fr 1fr; } }
+    .flow-steps li { display: flex; gap: 8px; align-items: flex-start; padding: 9px 11px; border-radius: 12px; background: rgba(255,255,255,0.55); border: 1px solid var(--line); font-size: 13px; line-height: 1.3; color: var(--ink-soft); transition: 0.2s; }
+    .flow-steps li b { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--sand); color: var(--brown); font-size: 11.5px; }
+    .flow-steps li.done { color: var(--ink); }
+    .flow-steps li.done b { background: var(--brown); color: #fff; }
+    .flow-steps li.on { background: #fff; border-color: var(--amber); color: var(--ink); box-shadow: 0 0 0 3px rgba(201,138,75,0.22); }
+    .flow-steps li.on b { background: var(--amber); color: var(--brown-deep); }
+    .busy { box-shadow: 0 0 0 3px rgba(201,138,75,0.6), 0 22px 60px rgba(0,0,0,0.2) !important; transition: box-shadow 0.2s; }
+    .return-note { margin: 14px 0 0; display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 13.5px; color: var(--ink-soft); padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); transition: 0.2s; }
+    .return-note.on { border-style: solid; border-color: #7a5af5; background: #f3f0ff; color: var(--ink); }
+
+    .store-body { padding: 10px 12px 12px; }
+    .store-body > p { margin: 0 0 8px; }
+    .store-body code { font: 11px var(--mono); }
+    .sb-box { margin-top: 8px; }
+    .sb-head { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; color: var(--m-sec); padding: 0 2px 3px; }
+    .sb-head .ns { font-weight: 500; color: var(--m-red); }
+    .sb-row { padding: 4px 6px; border-radius: 6px; font-size: 11.5px; line-height: 1.25; transition: background 0.2s, box-shadow 0.2s; }
+    .sb-row b { display: block; font-size: 12px; }
+    .sb-row span { display: block; color: var(--m-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sb-box.locked .sb-row { opacity: 0.45; }
+    .sb-row.hit { background: rgba(0,122,255,0.12); box-shadow: inset 0 0 0 1px rgba(0,122,255,0.35); }
+    .demo-cap { white-space: nowrap; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px 4px; display: flex; gap: 8px; align-items: center; }
+    .demo-cap .tag { font-size: 11px; letter-spacing: 0; text-transform: none; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--amber-soft); color: var(--brown); }
+    .demo-cap .tag.ext { background: #e7e3f6; color: #4b3d8f; }
+    .demo-col { display: flex; flex-direction: column; min-width: 0; }
+    .demo-col > .mac, .demo-col > .agentwin { flex: 1; }
+    .demo-log { margin-top: 26px; }
+    .demo-foot { margin-top: 16px; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+    /* MCP link between the agent and MailGent */
+    .mcp-link { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding-top: 26px; }
+    .mcp-link .wire { position: absolute; top: 50%; left: -2px; right: -2px; height: 2px; background: repeating-linear-gradient(90deg, var(--amber) 0 6px, transparent 6px 11px); }
+    .mcp-link .pkt { position: absolute; top: calc(50% - 4px); width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px rgba(201,138,75,0.25); opacity: 0; }
+    .mcp-link.fwd .pkt { animation: pkt-r 0.5s ease-in-out both; }
+    .mcp-link.back .pkt { animation: pkt-l 0.5s ease-in-out both; background: #7a5af5; box-shadow: 0 0 0 4px rgba(122,90,245,0.25); }
+    @keyframes pkt-l { from { right: 6px; opacity: 1; } to { right: calc(100% - 16px); opacity: 1; } }
+    @keyframes pkt-r { from { left: 6px; opacity: 1; } to { left: calc(100% - 16px); opacity: 1; } }
+    .mcp-link .lbl { position: relative; z-index: 1; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 6px 6px; text-align: center; font-size: 11px; line-height: 1.25; color: var(--ink-soft); }
+    .mcp-link .lbl b { display: block; font-size: 12px; color: var(--brown); letter-spacing: 0.04em; }
+    @media (max-width: 1100px) {
+      .mcp-link { flex-direction: row; padding: 14px 0; }
+      .mcp-link .wire { top: 6px; bottom: 6px; left: 50%; right: auto; width: 2px; height: auto; background: repeating-linear-gradient(180deg, var(--amber) 0 6px, transparent 6px 11px); }
+      .mcp-link .pkt { display: none; }
+      .mcp-link .lbl { padding: 6px 12px; } .mcp-link .lbl b { display: inline; margin-right: 6px; }
+    }
+
+    /* macOS window chrome, values from the app */
+    .mac {
+      --m-ink: #1d1d1f; --m-sec: #6e6e73; --m-ter: #a1a1a6; --m-line: rgba(0,0,0,0.1);
+      --m-bg: #f5f5f5; --m-blue: #007aff; --m-green: #1f9d45; --m-red: #e5251b; --m-purple: #a14fd6;
+      background: var(--m-bg); color: var(--m-ink); border-radius: 12px; overflow: hidden; text-align: left;
+      box-shadow: 0 0 0 0.5px rgba(0,0,0,0.25), 0 22px 60px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.08);
+      font: 13px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    }
+    .mac button { font: inherit; }
+    .mac-title { position: relative; height: 36px; display: grid; place-items: center; font-weight: 700; font-size: 13.5px; color: #3a3a3c; border-bottom: 1px solid var(--m-line); }
+    .lights { position: absolute; left: 13px; top: 12px; display: flex; gap: 8px; }
+    .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.18); }
+    .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+    .mac-body { padding: 14px 16px 16px; }
+    .mac .sec { color: var(--m-sec); } .mac .ter { color: var(--m-ter); } .mac .small { font-size: 11.5px; }
+    .mac svg.i, .agentwin svg.i { width: 1em; height: 1em; flex: none; vertical-align: -0.12em; }
+    .mac-btn { border: 0; background: #fff; color: var(--m-ink); border-radius: 6px; padding: 3px 10px; font-size: 12.5px; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.22), 0 1px 1px rgba(0,0,0,0.08); }
+    .mac-btn:active { background: #eaeaea; }
+
+    .agent-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .agent-pick { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(0,0,0,0.055); }
+    .ag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 14px; font-weight: 600; color: #8e8e93; }
+    .ag.on { background: #fff; color: var(--m-ink); box-shadow: 0 1px 2px rgba(0,0,0,0.14); }
+    .vsep { width: 1px; height: 20px; background: var(--m-line); }
+    .agent-meta { margin-left: auto; font-size: 12px; }
+    img.mark { width: 14px; height: 14px; flex: none; object-fit: contain; }
+    img.mark.grok { border-radius: 22.37%; }
+    .shared-ic { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(0,0,0,0.08); }
+    .shared-ic svg.i { width: 10px; height: 10px; }
+    .tab-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .m-seg.tabs { width: 220px; }
+    .m-seg.tabs button { flex: 1; }
+    .edit-ctl { margin-left: auto; display: flex; gap: 6px; }
+    .mac-btn.primary { background: var(--m-blue); color: #fff; box-shadow: 0 1px 1px rgba(0,0,0,0.12); }
+    .lock-hint { margin: 2px 0 0; }
+    #grantWin.editing .lock-hint { display: none; }
+    #grantWin:not(.editing) #paneScope :is(.pl, .m-switch), #grantWin:not(.editing) #fieldSeg { pointer-events: none; }
+    #grantWin:not(.editing) #paneScope :is(.pl input, .m-switch span), #grantWin:not(.editing) #fieldSeg { opacity: 0.5; }
+
+    .m-card { border-radius: 9px; background: rgba(0,0,0,0.028); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.07); padding: 10px 12px; margin-bottom: 10px; }
+    .m-card.row { display: flex; align-items: center; gap: 12px; }
+    .m-card.row > div { flex: 1; min-width: 0; }
+    .m-card b { font-size: 13.5px; }
+    .m-group { border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.07); background: rgba(0,0,0,0.018); margin-bottom: 10px; overflow: hidden; }
+    .m-group-head { padding: 7px 12px; font-size: 12px; font-weight: 700; background: rgba(0,0,0,0.045); }
+    .m-group-body { padding: 8px 12px 10px; }
+    .m-label { font-size: 12px; font-weight: 700; margin: 2px 0 6px; }
+
+    .m-switch { position: relative; width: 38px; height: 22px; flex: none; }
+    .m-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .m-switch span { position: absolute; inset: 0; border-radius: 999px; background: rgba(0,0,0,0.12); transition: 0.15s; cursor: pointer; }
+    .m-switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: 0.15s; }
+    .m-switch input:checked + span { background: var(--m-blue); }
+    .m-switch input:checked + span::after { transform: translateX(16px); }
+    .m-switch input:focus-visible + span { outline: 2px solid var(--m-blue); outline-offset: 2px; }
+
+    .m-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 7px; background: rgba(0,0,0,0.06); }
+    .m-seg button { border: 0; background: transparent; padding: 2px 12px; border-radius: 5px; font-size: 12.5px; color: var(--m-ink); }
+    .m-seg button.on { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.06); }
+    .preset-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+    .pl { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; cursor: pointer; }
+    .pl input { margin: 0; accent-color: var(--m-blue); width: 14px; height: 14px; }
+    .pl.acct { font-weight: 700; }
+    .pl.sub { padding-left: 20px; grid-template-columns: 16px minmax(0, 1fr) auto; }
+    .pl.off span.nm { color: var(--m-sec); }
+    .pl .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pl-caps { display: inline-flex; align-items: center; gap: 4px; }
+
+    .fb-row { display: inline-flex; gap: 2px; }
+    .fb { display: inline-flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px; border-radius: 999px; font-size: 9.5px; font-weight: 500;
+      color: var(--m-blue); background: rgba(0,122,255,0.12); box-shadow: inset 0 0 0 0.5px rgba(0,122,255,0.4); }
+    .fb svg.i { width: 9px; height: 9px; }
+    .fb.off { color: rgba(60,60,67,0.42); background: rgba(60,60,67,0.06); box-shadow: inset 0 0 0 0.5px rgba(60,60,67,0.2); font-weight: 400; text-decoration: line-through; }
+    .lg { display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 5px; border-radius: 999px; font-size: 9.5px; font-weight: 600;
+      color: rgba(60,60,67,0.42); background: rgba(60,60,67,0.06); box-shadow: inset 0 0 0 0.5px rgba(60,60,67,0.2); }
+    .lg.on { color: var(--m-purple); background: rgba(175,82,222,0.15); box-shadow: inset 0 0 0 0.5px rgba(175,82,222,0.45); }
+    .lg svg.i { width: 10px; height: 10px; }
+    /* Access log */
+    .log-toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--m-line); font-size: 12.5px; }
+    .log-toolbar .count { margin-left: auto; color: #e08a2c; }
+    .log-split { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); height: 420px; }
+    @media (max-width: 820px) { .log-split { grid-template-columns: 1fr; height: auto; } .log-list { max-height: 260px; } }
+    .log-list { overflow: auto; padding: 6px; background: rgba(0,0,0,0.035); border-right: 1px solid var(--m-line); }
+    .log-detail { overflow: auto; padding: 14px 16px; }
+    .lr { width: 100%; display: grid; grid-template-columns: 8px auto 13px minmax(0, 1fr) auto 36px; gap: 7px; align-items: center; text-align: left;
+      border: 0; background: transparent; padding: 4px 8px; border-radius: 6px; font-size: 12px; color: var(--m-ink); animation: rise 0.3s ease both; }
+    .lr:hover { background: rgba(0,0,0,0.04); }
+    .lr.sel { background: rgba(0,0,0,0.1); }
+    .lr .t { text-align: right; font-variant-numeric: tabular-nums; }
+    .lr .sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lr .tags { display: inline-flex; align-items: center; gap: 3px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #28c840; }
+    .dot.zero { background: #8e8e93; }
+    .kb { display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 6px; border-radius: 5px; font-size: 11px; color: var(--m-blue); background: rgba(0,122,255,0.12); box-shadow: inset 0 0 0 0.5px rgba(0,122,255,0.35); }
+    .kb svg.i { width: 10px; height: 10px; }
+    .n { font-size: 11.5px; font-weight: 700; }
+    .n.leak { color: var(--m-purple); }
+    .m-empty { padding: 28px 16px; text-align: center; color: var(--m-ter); font-size: 12.5px; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .d-head { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+    .d-head .st { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font: 12px var(--mono); }
+    .d-head .st.ok { color: var(--m-green); }
+    .d-label { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--m-sec); }
+    .d-card { background: #fff; border-radius: 8px; box-shadow: 0 0 0 1px rgba(0,0,0,0.09); padding: 8px 10px; margin-bottom: 8px; font-size: 12.5px; animation: rise 0.3s ease both; }
+    .d-card > b { display: block; margin-bottom: 3px; }
+    .kv { margin: 2px 0; } .kv .sec { margin-right: 4px; }
+    .kind { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .kind svg.i { color: var(--m-sec); }
+    .note { margin: 0 0 8px; font-size: 11.5px; color: #3a8fa8; }
+    .note.red { color: var(--m-red); }
+    .meta-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; font-size: 11.5px; }
+    .gchip { display: inline-block; padding: 0 7px; border-radius: 4px; background: rgba(0,0,0,0.08); font-size: 12px; }
+    .chips { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .d-sub { display: flex; justify-content: space-between; margin: 8px 0 4px; padding-top: 8px; border-top: 1px solid var(--m-line); font-size: 11.5px; font-weight: 600; color: var(--m-sec); }
+    .bodybox { padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,0.035); white-space: pre-wrap; font-size: 12px; }
+    .bodybox.leak { background: rgba(175,82,222,0.1); }
+    .hatch { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 4px; font-size: 11px; color: rgba(229,37,27,0.75);
+      background: repeating-linear-gradient(135deg, rgba(255,59,48,0.06) 0 4px, rgba(255,59,48,0.2) 4px 5px); }
+    .redact { font: 11px var(--mono); color: var(--m-red); padding: 0 4px; border-radius: 3px; box-shadow: inset 0 0 0 0.5px rgba(255,59,48,0.45);
+      background: repeating-linear-gradient(135deg, rgba(255,59,48,0.08) 0 3px, rgba(255,59,48,0.22) 3px 4px); }
+    .leaked { font: 11px var(--mono); color: var(--m-red); background: #ffe1db; padding: 0 4px; border-radius: 3px; }
+    .file-card { display: flex; align-items: center; gap: 8px; }
+    .file-card svg.i { width: 18px; height: 18px; color: var(--m-sec); }
+
+    /* agent window: the agent's own UI, not MailGent */
+    .agentwin { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: #1c1c21; color: #e8e8ed; text-align: left;
+      box-shadow: 0 0 0 0.5px rgba(0,0,0,0.5), 0 22px 60px rgba(0,0,0,0.25); font: 13.5px/1.45 -apple-system, BlinkMacSystemFont, sans-serif; }
+    .agentwin .mac-title { color: #c7c7cc; border-bottom-color: rgba(255,255,255,0.08); font-weight: 600; }
+    .agentwin .aw-body { flex: 1; display: flex; flex-direction: column; padding: 14px; gap: 12px; min-height: 380px; }
+    .aw-chat { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .aw-hint { color: #8e8e93; font-size: 12.5px; margin: 0; }
+    .bubble { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; animation: rise 0.3s ease both; }
+    .bubble.you { align-self: flex-end; background: #3a3a44; color: #fff; }
+    .bubble.agent { align-self: flex-start; background: transparent; padding-left: 0; padding-right: 0; }
+    .bubble.agent.warn { color: #ffb4a8; }
+    .toolcall { align-self: flex-start; max-width: 100%; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; overflow-wrap: anywhere; padding: 4px 9px; border-radius: 7px; font: 11.5px var(--mono);
+      color: #b8b8c2; background: rgba(255,255,255,0.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); animation: rise 0.3s ease both; }
+    .toolcall b { color: #e3c08f; font-weight: 600; }
+    .toolcall .r { color: #8e8e93; }
+    .thinking { display: inline-flex; gap: 4px; }
+    .thinking i { width: 6px; height: 6px; border-radius: 50%; background: #8e8e93; animation: blink 1s infinite; }
+    .thinking i:nth-child(2) { animation-delay: 0.15s; } .thinking i:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+    .prompts { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .prompt { border: 0; border-radius: 999px; padding: 6px 12px; font-size: 13px; color: #e8e8ed; background: rgba(255,255,255,0.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); }
+    .prompt:hover { background: rgba(255,255,255,0.14); }
+    .prompt.active { background: #e8e8ed; color: #1c1c21; }
+    .aw-mcp { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #8e8e93; }
+    .aw-mcp i { width: 7px; height: 7px; border-radius: 50%; background: #30d158; }
+    /* ---------- tour ---------- */
+    .tour-grid { display: grid; grid-template-columns: 290px 1fr; gap: 28px; margin-top: 40px; align-items: start; }
+    @media (max-width: 960px) { .tour-grid { grid-template-columns: 1fr; } }
+    .tour-tabs { display: grid; gap: 4px; }
+    @media (max-width: 960px) { .tour-tabs { display: flex; overflow-x: auto; gap: 8px; padding-bottom: 6px; } .tour-tabs button { flex: none; width: auto; } }
+    .tour-tabs button { width: 100%; text-align: left; border: 1px solid transparent; background: transparent; padding: 10px 14px; border-radius: 12px; color: var(--ink); }
+    .tour-tabs button b { display: block; font-size: 15px; }
+    .tour-tabs button span { display: block; font-size: 13px; color: var(--muted); }
+    .tour-tabs button:hover { background: var(--cream); }
+    .tour-tabs button.on { background: #fff; border-color: var(--line); box-shadow: 0 6px 18px rgba(43, 26, 15, 0.08); }
+    .tour-tabs button.on b { color: var(--brown); }
+    .tour-stage { margin: 0; border-radius: 18px; padding: 20px 20px 24px; background: radial-gradient(700px 360px at 50% 0%, var(--amber-soft), var(--cream)); border: 1px solid var(--line); text-align: center; }
+    .tour-stage .frame { display: grid; place-items: center; min-height: 560px; }
+    .tour-stage img { max-width: 100%; max-height: 640px; height: auto; }
+    .tour-stage figcaption { margin: 10px auto 0; max-width: 640px; color: var(--ink-soft); font-size: 15.5px; }
+    .tour-stage figcaption b { color: var(--ink); }
+    .tour-note { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+    /* ---------- benefits ---------- */
+    .grid-benefits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 44px; }
+    @media (max-width: 900px) { .grid-benefits { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px) { .grid-benefits { grid-template-columns: 1fr; } }
+
+    /* ---------- personas ---------- */
+    .personas { background: var(--brown-deep); color: #f6ecdf; }
+    .personas .lede { color: rgba(246,236,223,0.78); }
+    .persona-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
+    @media (max-width: 960px) { .persona-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .persona-grid { grid-template-columns: 1fr; } }
+    .persona { background: rgba(246,236,223,0.06); border: 1px solid rgba(246,236,223,0.14); border-radius: var(--radius); padding: 20px; }
+    .persona .who { font-size: 13px; color: var(--amber); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+    .persona .ask { margin: 10px 0; font-size: 16px; font-style: italic; }
+    .persona .how { font-size: 14px; color: rgba(246,236,223,0.72); }
+
+    /* ---------- is / isn't ---------- */
+    .isnt { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 36px; }
+    @media (max-width: 760px) { .isnt { grid-template-columns: 1fr; } }
+    .isnt ul { list-style: none; padding: 0; margin: 12px 0 0; }
+    .isnt li { padding: 8px 0 8px 30px; position: relative; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--ink-soft); }
+    .isnt li:last-child { border-bottom: 0; }
+    .isnt .yes li::before { content: "✓"; position: absolute; left: 4px; color: var(--green); font-weight: 700; }
+    .isnt .no li::before { content: "✕"; position: absolute; left: 4px; color: var(--red); font-weight: 700; }
+
+    /* ---------- start / roadmap / faq ---------- */
+    .start { background: var(--cream); }
+    .start ol { counter-reset: s; list-style: none; padding: 0; margin: 36px 0 0; display: grid; gap: 12px; }
+    .start li { counter-increment: s; display: grid; grid-template-columns: 40px 1fr; gap: 14px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+    .start li::before { content: counter(s); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--amber); color: var(--brown-deep); font-weight: 700; }
+    .start li b { display: block; }
+    .start li span { color: var(--ink-soft); font-size: 15px; }
+    .req { margin-top: 20px; font-size: 14px; color: var(--muted); }
+    .road { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 36px; }
+    @media (max-width: 760px) { .road { grid-template-columns: 1fr; } }
+    .road h3 { display: flex; align-items: center; gap: 8px; }
+    .road .now h3::after { content: "in 0.8.2 alpha"; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+    .road .next h3::after { content: "planned"; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--amber-soft); color: var(--brown); }
+    .road ul { margin: 12px 0 0; padding-left: 20px; color: var(--ink-soft); font-size: 15px; }
+    .road li { margin: 6px 0; }
+    details { border-bottom: 1px solid var(--line); padding: 16px 0; }
+    details summary { font-weight: 600; cursor: pointer; font-size: 17px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+    details summary::after { content: "+"; color: var(--amber); font-size: 22px; line-height: 1; }
+    details[open] summary::after { content: "−"; }
+    details p { color: var(--ink-soft); margin: 10px 0 0; font-size: 15.5px; }
+    .faq { max-width: 780px; margin: 32px auto 0; }
+
+    footer { background: var(--brown-deep); color: rgba(246,236,223,0.7); padding: 48px 0; font-size: 14px; }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+    footer .brand { display: flex; gap: 10px; align-items: center; color: #f6ecdf; font-weight: 700; }
+    footer img { width: 32px; height: 32px; }
+    footer p { margin: 6px 0 0; max-width: 560px; }
+
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+  </style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/mailgent-icon.png" alt=""> MailGent</a>
+    <div class="links">
+      <a href="#how">How it works</a>
+      <a href="#demo">Try it</a>
+      <a href="#tour">Screens</a>
+      <a href="#why">Why</a>
+      <a href="#start">Get started</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn primary small cta" href="https://github.com/marotron/MailGent">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="badge"><b>0.8.2 alpha</b> · macOS 14+ · free &amp; open source</span>
+      <h1>Let AI help with your email. <em>Without handing over your inbox.</em></h1>
+      <p class="sub">MailGent is a small menu-bar app that sits beside Apple Mail. You choose exactly which mail an AI agent can see, it hides secrets before anything leaves your Mac, and it shows you every request the agent makes.</p>
+      <div class="ctas">
+        <a class="btn primary" href="#demo">Try the demo ↓</a>
+        <a class="btn ghost" href="https://github.com/marotron/MailGent/releases">Download the alpha</a>
+      </div>
+      <p class="fine">Runs on your Mac. No MailGent cloud. No built-in AI — bring the agent you already use.</p>
+    </div>
+    <div class="desk" aria-hidden="true">
+      <div class="menubar"><span>Wi‑Fi</span><span>Mon 13:52</span><span class="tray pulse"></span></div>
+      <div class="dropdown">
+        <div class="head"><b>MailGent</b><span>v0.8.2</span></div>
+        <div class="row"><span class="k">Access</span><span class="ok">Granted</span></div>
+        <div class="row"><span class="k">Last ingest</span><span><span class="chip">13:51</span> <span class="chip">1m ago</span></span></div>
+        <div class="row"><span class="k">Changes</span><span><span class="chip">+12 new</span></span></div>
+        <div class="row"><span class="k">Source</span><span>Apple Mail</span></div>
+        <div class="row"><span class="k">Connected agent</span><span>Cursor</span></div>
+        <div class="row"><span class="k">Last agent call</span><span><span class="chip">13:52</span> <span class="chip">now</span></span></div>
+        <hr>
+        <div class="act">Open Companion</div>
+        <div class="act">Open Grant Desk</div>
+        <div class="act">Open Access Log</div>
+        <hr>
+        <div class="act">Settings…</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="problem">
+  <div class="wrap">
+    <div class="eyebrow">The problem</div>
+    <h2>AI agents are great at email. Giving them your email is the scary part.</h2>
+    <p class="lede">Today, connecting an assistant to your mail is usually all-or-nothing: one sign-in and it can read every message, every attachment, from every year — and you never see what it looked at.</p>
+    <div class="cards3">
+      <div class="card"><div class="ico">📬</div><h3>Everything, or nothing</h3><p>You wanted help with this week's bills. The agent got your bank statements, medical letters and family email too.</p></div>
+      <div class="card"><div class="ico">🔑</div><h3>Secrets ride along</h3><p>Passwords, API keys and login links sitting in old email go wherever the agent goes.</p></div>
+      <div class="card"><div class="ico">🙈</div><h3>No receipt</h3><p>There's no simple way to see what the agent actually read, or to stop it with one click.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>A gatekeeper between your mail and your AI.</h2>
+    <p class="lede">Keep using Apple Mail exactly as you do now. MailGent reads the mail Apple Mail has already downloaded, and answers your agent's questions — only with what you've allowed.</p>
+    <div class="flow">
+      <div class="node">
+        <div class="tag">Your mail</div>
+        <h3>Apple Mail</h3>
+        <p>Stays your everyday mail app. MailGent only reads it — it never changes, moves or deletes your messages.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node gate">
+        <div class="tag">On your Mac</div>
+        <h3>MailGent</h3>
+        <ul>
+          <li><b>Grant Desk</b> — which mailboxes, senders and dates the agent may see</li>
+          <li><b>Field caps</b> — headers only, full text, attachments</li>
+          <li><b>Leak guard</b> — hides passwords, API keys and tokens</li>
+          <li><b>Access Log</b> — every request, exactly as the agent received it</li>
+        </ul>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="tag">Your agent</div>
+        <h3>Cursor · Grok Bot</h3>
+        <p>Your AI asks MailGent to search, read, or draft. It only ever gets your slice — and can't send anything.</p>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step"><b>Install &amp; allow access</b><span>MailGent lives in the menu bar and builds a private search index on your Mac.</span></div>
+      <div class="step"><b>Pair your agent</b><span>Cursor is set up for you. Grok Bot gets a copy-paste snippet. Each has its own key.</span></div>
+      <div class="step"><b>Choose what it sees</b><span>Tick the mailboxes and fields. New agents start with nothing until you allow it.</span></div>
+      <div class="step"><b>Ask, then check</b><span>Ask your agent as usual. The Access Log shows exactly what it received.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="demo" id="demo">
+  <div class="wrap">
+    <div class="eyebrow">Try it</div>
+    <h2>Change the rules, then ask the agent.</h2>
+    <p class="lede">Your AI agent is a separate app. It asks MailGent over MCP, MailGent checks the request against your rules, reads only what's needed from its local copy of Apple Mail, filters it, hands back the result, and logs the whole exchange. Change a setting, ask a question, and watch each step.</p>
+
+    <div class="demo-stage">
+      <ol class="flow-steps" id="flowSteps">
+        <li data-s="1"><b>1</b><span>Agent sends a request over MCP</span></li>
+        <li data-s="2"><b>2</b><span>MailGent checks it against your Grant desk</span></li>
+        <li data-s="3"><b>3</b><span>Reads only what's needed from its local copy of Apple Mail</span></li>
+        <li data-s="4"><b>4</b><span>Filters, redacts and returns what's allowed</span></li>
+        <li data-s="5"><b>✓</b><span>Logs every call</span></li>
+      </ol>
+
+      <div class="demo-top">
+        <div class="demo-col">
+          <div class="demo-cap"><b class="num">1</b> Your agent <span class="tag ext">separate app</span></div>
+          <div class="agentwin">
+            <div class="mac-title"><span class="lights"><i></i><i></i><i></i></span>Cursor — Agent</div>
+            <div class="aw-body">
+              <div class="aw-mcp"><i></i><span>MCP server <b>mailgent</b> · connected</span></div>
+              <div class="aw-chat" id="chat"><p class="aw-hint">Pick a question below. The agent only knows what MailGent hands back over MCP.</p></div>
+              <div class="prompts" id="prompts"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mcp-link" id="linkMcp" aria-hidden="true">
+          <span class="wire"></span><span class="pkt"></span>
+          <span class="lbl"><b>MCP</b>loopback<br>127.0.0.1</span>
+        </div>
+
+        <div class="demo-col">
+          <div class="demo-cap"><b class="num">2</b> MailGent <span class="tag">Grant desk</span></div>
+          <div class="mac" id="grantWin">
+            <div class="mac-title"><span class="lights"><i></i><i></i><i></i></span>Grant desk</div>
+            <div class="mac-body">
+              <div class="agent-bar">
+                <span class="sec">Agent</span>
+                <div class="agent-pick">
+                  <span class="ag on" id="agCursor"></span>
+                  <span class="ag" id="agGrok" title="Not used in this demo"></span>
+                </div>
+                <span class="vsep"></span>
+                <span class="ag" id="agShared" title="Not used in this demo"></span>
+                <span class="agent-meta sec">Cursor · machine-local</span>
+              </div>
+
+              <div class="tab-bar">
+                <div class="m-seg tabs" id="tabSeg">
+                  <button data-tab="scope" class="on">Scope</button>
+                  <button data-tab="access">Access</button>
+                </div>
+                <span class="edit-ctl" id="editCtl"></span>
+              </div>
+
+              <div id="paneScope">
+                <div class="m-card row">
+                  <div><b>Leak guard master</b><div class="sec small">Scans subject and body on this Mac before an MCP response leaves MailGent.</div></div>
+                  <label class="m-switch" title="Leak guard"><input type="checkbox" id="leakToggle" checked><span></span></label>
+                </div>
+
+                <div class="m-group">
+                  <div class="m-group-head">Allowed placements</div>
+                  <div class="m-group-body">
+                    <p class="sec small" style="margin:0 0 6px">Tick mailboxes to allow. Unticked mail does not exist for the agent. Badges show which fields it may read.</p>
+                    <div id="placements"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="paneAccess" hidden>
+                <div class="m-card">
+                  <div class="preset-row">
+                    <span class="m-label" style="margin:0">Presets</span>
+                    <div class="m-seg" id="fieldSeg">
+                      <button data-v="headers">Headers only</button>
+                      <button data-v="read" class="on">Read mail</button>
+                      <button data-v="full">Full</button>
+                    </div>
+                  </div>
+                  <div class="sec small" id="fieldNote" style="margin-top:6px"></div>
+                </div>
+              </div>
+              <p class="sec small lock-hint" id="lockHint">Click <b>Edit</b> to change grants.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mcp-link" id="linkStore" aria-hidden="true">
+          <span class="wire"></span><span class="pkt"></span>
+          <span class="lbl"><b>READ</b>local<br>index</span>
+        </div>
+
+        <div class="demo-col">
+          <div class="demo-cap"><b class="num">3</b> Apple Mail <span class="tag ext">cached</span></div>
+          <div class="mac store" id="storeWin">
+            <div class="mac-title"><span class="lights"><i></i><i></i><i></i></span>Apple Mail</div>
+            <div class="store-body">
+              <p class="sec small">MailGent indexes <code>~/Library/Mail</code> into its own on-device database. It never changes Apple Mail.</p>
+              <div id="store"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="return-note" id="returnNote"><b class="num">4</b> MailGent sends the filtered result back to the agent over the same MCP link.</div>
+
+      <div class="demo-log">
+        <div class="demo-cap"><b class="num">✓</b> MailGent <span class="tag">Access log</span> <span style="text-transform:none;letter-spacing:0;font-weight:500">keeps a record of every call</span></div>
+        <div class="mac">
+          <div class="mac-title"><span class="lights"><i></i><i></i><i></i></span>Access log</div>
+          <div class="log-toolbar">
+            <span class="sec">Every MCP call, newest first. Select one to see exactly what the agent received.</span>
+            <span class="count" id="logCount">0 entries</span>
+            <button class="mac-btn" id="clearLog">Clear</button>
+          </div>
+          <div class="log-split">
+            <div class="log-list" id="log"></div>
+            <div class="log-detail" id="logDetail"></div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-foot">Simulated mail, nothing leaves this page. Simplified for illustration; the real Access log also shows the raw JSON of every request and response.</div>
+    </div>
+  </div>
+</section>
+
+<section id="tour">
+  <div class="wrap">
+    <div class="eyebrow">The real app</div>
+    <h2>See the real app.</h2>
+    <p class="lede">These are screenshots of MailGent 0.8.2 alpha running on a real Mac, with an inbox spread over several Apple Mail accounts.</p>
+    <div class="tour-grid">
+      <div class="tour-tabs" id="tourTabs" role="tablist" aria-label="Screens"></div>
+      <figure class="tour-stage">
+        <div class="frame"><img id="tourImg" src="assets/screenshots/menu-bar.png" alt="MailGent menu-bar status"></div>
+        <figcaption id="tourCap"></figcaption>
+      </figure>
+    </div>
+    <p class="tour-note">Personal details in these screenshots, such as addresses, account IDs, postcodes and search terms, have been replaced with sample values.</p>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="eyebrow">Why people use it</div>
+    <h2>The help of an AI assistant, with the caution of a good assistant.</h2>
+    <div class="grid-benefits">
+      <div class="card"><div class="ico">🍎</div><h3>Keep Apple Mail</h3><p>Nothing to migrate and no new inbox to learn. Works with the accounts already in Apple Mail.</p></div>
+      <div class="card"><div class="ico">✂️</div><h3>Share a slice, not the inbox</h3><p>Pick mailboxes, senders, date ranges and fields. Carve out exceptions with Pass and Block rules.</p></div>
+      <div class="card"><div class="ico">🛡️</div><h3>Secrets stay home</h3><p>Leak guard scans subject and body on your Mac and redacts keys, tokens and passwords — or withholds the whole field.</p></div>
+      <div class="card"><div class="ico">🧾</div><h3>A receipt for every request</h3><p>The Access Log shows each search, read and draft, exactly as the agent received it, with what was hidden and why.</p></div>
+      <div class="card"><div class="ico">✍️</div><h3>Drafts, never sends</h3><p>Agents can write drafts inside MailGent. This alpha cannot send, move or delete email at all.</p></div>
+      <div class="card"><div class="ico">🔌</div><h3>Your agent, your Mac</h3><p>No MailGent server and no built-in AI. Agents connect on this Mac only, each with its own key you can revoke anytime.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="personas">
+  <div class="wrap">
+    <div class="eyebrow">Made for real inboxes</div>
+    <h2>One app, very different slices.</h2>
+    <p class="lede">You decide the slice per agent. Here's what that looks like in practice.</p>
+    <div class="persona-grid">
+      <div class="persona"><div class="who">Freelancer</div><p class="ask">“Which invoices are still unpaid this month?”</p><p class="how">Allow the Invoices mailbox, Read mail. Personal mail stays off.</p></div>
+      <div class="persona"><div class="who">Developer</div><p class="ask">“Summarise today's CI alerts.”</p><p class="how">Allow mail from your CI domain with leak guard on, so deploy keys come through as <code>[REDACTED]</code>.</p></div>
+      <div class="persona"><div class="who">Busy parent</div><p class="ask">“What do I need to bring to school this week?”</p><p class="how">Allow mail from the school's domain only, for the last 30 days.</p></div>
+      <div class="persona"><div class="who">Traveller</div><p class="ask">“When is my flight and where's the boarding pass?”</p><p class="how">Full access to bookings, so the agent can open the PDF. Bank mail is blocked.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Straight talk</div>
+    <h2>What MailGent is — and isn't.</h2>
+    <div class="isnt">
+      <div class="card yes"><h3>It is</h3><ul>
+        <li>A companion beside Apple Mail, in your menu bar</li>
+        <li>A permission layer for AI agents you already use</li>
+        <li>On-device: index, rules and logs stay on your Mac</li>
+        <li>Open source (Apache-2.0)</li>
+      </ul></div>
+      <div class="card no"><h3>It isn't</h3><ul>
+        <li>A new mail app — keep using Apple Mail</li>
+        <li>An AI assistant — it has no AI of its own</li>
+        <li>Able to send, move or delete mail (not in this alpha)</li>
+        <li>A finished product — it's an early alpha, provided as is</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="start" id="start">
+  <div class="wrap">
+    <div class="eyebrow">Get started</div>
+    <h2>Five minutes to your first safe question.</h2>
+    <ol>
+      <li><div><b>Download the alpha</b><span>Grab <code>MailGent-0.8.2.dmg</code> from GitHub Releases and drag MailGent to Applications.</span></div></li>
+      <li><div><b>Open it once</b><span>The alpha isn't notarized yet, so macOS may warn you. Use System Settings → Privacy &amp; Security → Open Anyway, or right-click → Open.</span></div></li>
+      <li><div><b>Let it read Apple Mail</b><span>Give Full Disk Access, or use “Choose Mail Folder…”. MailGent builds its search index on your Mac.</span></div></li>
+      <li><div><b>Pair your agent</b><span>Cursor is paired for you on first launch. For Grok Bot, click Pair and paste the snippet into its settings.</span></div></li>
+      <li><div><b>Allow a mailbox and ask</b><span>Open Grant Desk, tick one mailbox, pick “Read mail”, then ask your agent. Check the Access Log afterwards.</span></div></li>
+    </ol>
+    <p class="req">Needs macOS 14 or later and Apple Mail with your mail already downloaded.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Roadmap</div>
+    <h2>What works today, and what's next.</h2>
+    <div class="road">
+      <div class="card now"><h3>Today</h3><ul>
+        <li>Reads Apple Mail on your Mac, with private full-text search</li>
+        <li>Cursor and Grok Bot, each with separate permissions</li>
+        <li>Grant Desk: mailboxes, senders, dates, fields, exceptions</li>
+        <li>Pass / Block rules and on-device leak guard</li>
+        <li>Attachments on request (when you allow them)</li>
+        <li>Access Log and “Open in Apple Mail”</li>
+        <li>Agent drafts kept inside MailGent (not saved after quitting)</li>
+      </ul></div>
+      <div class="card next"><h3>Next</h3><ul>
+        <li>Sign in to Gmail and Yahoo directly</li>
+        <li>Approval queue: agent proposes send / move / archive, you approve</li>
+        <li>Move to Trash and permanent delete — always with your approval</li>
+        <li>Saved drafts with a draft view</li>
+        <li>Notarized builds, then a Homebrew cask</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="problem" id="faq">
+  <div class="wrap">
+    <div class="eyebrow center">FAQ</div>
+    <h2 class="center">Questions people ask</h2>
+    <div class="faq">
+      <details><summary>Does MailGent send my email anywhere?</summary><p>No. MailGent has no server. It reads Apple Mail's files on your Mac to build a local search index. The only mail that leaves MailGent is what you've allowed, going to an agent you paired on this Mac.</p></details>
+      <details><summary>What happens to mail once my agent receives it?</summary><p>Then the agent's own privacy practices apply — MailGent can't control what an agent does with what you shared. That's why the defaults are tight and the Access Log shows every hand-off. Choose agents you trust.</p></details>
+      <details><summary>Does it work with Gmail, iCloud or Outlook accounts?</summary><p>If the account is in Apple Mail and its mail is downloaded, MailGent can read it. Signing in to Gmail and Yahoo directly is planned.</p></details>
+      <details><summary>Which AI agents work with it?</summary><p>Cursor and Grok Bot have built-in pairing today. Both connect over MCP, the standard protocol AI tools use to talk to apps.</p></details>
+      <details><summary>Can the agent send or delete email?</summary><p>No. In this alpha, agents can search, read what you allowed, and write drafts inside MailGent. MailGent never writes to Apple Mail. Sending and deleting will come later, and only with your approval each time.</p></details>
+      <details><summary>Is it free?</summary><p>Yes. The source is Apache-2.0 licensed on GitHub. The MailGent name and icon are trademarks, so forks need their own name.</p></details>
+      <details><summary>Is it safe to use?</summary><p>It's an early alpha, provided as is, without warranty. It only reads Apple Mail and never changes it, but treat it as a preview and keep your usual backups.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <div class="brand"><img src="assets/mailgent-icon.png" alt=""> MailGent</div>
+      <p>An agent-safe companion for Apple Mail. 0.8.2 alpha · Apache-2.0 · provided as is.</p>
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap">
+      <a class="btn ghost small" href="https://github.com/marotron/MailGent">Source on GitHub</a>
+      <a class="btn ghost small" href="https://github.com/marotron/MailGent/blob/main/PRIVACY.md">Privacy</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const ACCOUNT = "sam@example.com";
+  const MAILBOXES = [
+    { id: "INBOX", on: true },
+    { id: "Bills", on: true },
+    { id: "Work", on: true },
+    { id: "Personal", on: false }
+  ];
+
+  const MAIL = [
+    { id: "m1", uid: 48211, box: "Bills", from: "Ovo Energy <billing@ovoenergy.example>", subject: "Your October bill is ready", date: "Mon 5 Oct 2026 at 08:12",
+      body: "Hi Sam, your October bill is £84.20 and will be collected by direct debit on 12 October.", file: "bill-october.pdf" },
+    { id: "m2", uid: 48177, box: "Bills", from: "Thames Water <noreply@thameswater.example>", subject: "Payment reminder", date: "Sat 3 Oct 2026 at 17:40",
+      body: "A payment of £42.10 is due on 9 October. Pay online or by phone." },
+    { id: "m3", uid: 48230, box: "Work", from: "Priya Shah <priya@acme.example>", subject: "Can we move Thursday's review?", date: "Mon 5 Oct 2026 at 09:03",
+      body: "Hi Sam — something came up. Would Friday at 10:00 work for the design review instead?" },
+    { id: "m4", uid: 48226, box: "Work", from: "Deploy Bot <ci@acme.example>", subject: "Staging credentials rotated", date: "Mon 5 Oct 2026 at 08:47",
+      body: "Staging was redeployed.\nNew deploy key: sk-live_8f2Kq9xT3mZ1pL0v\npassword: Winter2026!\nUpdate your local .env before Thursday." },
+    { id: "m5", uid: 48150, box: "INBOX", from: "SkyLine Air <booking@skyline.example>", subject: "Your flight to Lisbon — booking K7Q2PD", date: "Fri 2 Oct 2026 at 19:21",
+      body: "Flight SL214 departs Gatwick on Fri 16 Oct at 07:45. Bag drop closes 06:55. Seat 14C.", file: "boarding-pass.pdf" },
+    { id: "m6", uid: 48102, box: "Personal", from: "Northbank <alerts@northbank.example>", subject: "Your September statement", date: "Thu 1 Oct 2026 at 06:00",
+      body: "Current account ending 4421. Closing balance £2,315.40." },
+    { id: "m7", uid: 48190, box: "Personal", from: "Mum <mum@family.example>", subject: "Sunday lunch?", date: "Sun 4 Oct 2026 at 12:15",
+      body: "Are you coming on Sunday? Dad's making his lasagne." }
+  ];
+
+  const PROMPTS = [
+    { id: "bills", text: "What bills do I need to pay?", query: "bill OR payment", match: m => m.box === "Bills" },
+    { id: "work", text: "Any work email I should reply to?", query: "from:acme.example", match: m => m.box === "Work" },
+    { id: "flight", text: "When is my flight to Lisbon?", query: "flight Lisbon", match: m => m.id === "m5" },
+    { id: "bank", text: "What's my bank balance?", query: "statement balance", match: m => m.id === "m6" }
+  ];
+
+  const FIELDS = [
+    { k: "s", letter: "S", short: "Subj", title: "Subject", icon: "lines" },
+    { k: "f", letter: "F", short: "From", title: "From", icon: "env" },
+    { k: "t", letter: "T", short: "To", title: "To", icon: "tray" },
+    { k: "cc", letter: "Cc", short: "Cc", title: "Cc", icon: "people" },
+    { k: "d", letter: "D", short: "Date", title: "Date & Time", icon: "cal" },
+    { k: "b", letter: "B", short: "Body", title: "Body", icon: "page" },
+    { k: "a", letter: "A", short: "Att", title: "Attachment names", icon: "clip" },
+    { k: "c", letter: "C", short: "File", title: "Attachment content", icon: "doc" }
+  ];
+  const PRESETS = {
+    headers: ["s", "f", "t", "cc", "d"],
+    read: ["s", "f", "t", "cc", "d", "b"],
+    full: ["s", "f", "t", "cc", "d", "b", "a", "c"]
+  };
+  const FIELD_NOTES = {
+    headers: "Subject, sender, recipients and date. Good for triage; the agent can't read the message text.",
+    read: "Headers plus message text. Attachments stay on your Mac.",
+    full: "Headers, text and attachments. The agent can open files such as PDFs."
+  };
+
+  const ICON = {
+    lines: '<path d="M2 3h8M2 6h8M2 9h5"/>',
+    env: '<rect x="1.5" y="2.5" width="9" height="7" rx="1"/><path d="M2 3.5l4 3 4-3"/>',
+    tray: '<path d="M1.8 7.2v2.6h8.4V7.2M6 1.8v5.4M3.9 5.1L6 7.2l2.1-2.1"/>',
+    people: '<circle cx="4.4" cy="4.3" r="1.7"/><circle cx="8.4" cy="4.7" r="1.3"/><path d="M1.6 10c.3-1.8 1.4-2.8 2.8-2.8s2.5 1 2.8 2.8M7.9 7.4c1.3 0 2.2.9 2.5 2.4"/>',
+    cal: '<rect x="1.5" y="2.5" width="9" height="8" rx="1.2"/><path d="M1.5 5h9M4 1.3v2.2M8 1.3v2.2"/>',
+    page: '<rect x="2.5" y="1.5" width="7" height="9" rx="1"/><path d="M4.2 4h3.6M4.2 6h3.6M4.2 8h2.4"/>',
+    clip: '<path d="M8.6 4.4L5.1 7.9a1.3 1.3 0 01-1.9-1.9l3.9-3.9a2.1 2.1 0 013 3L6.3 9"/>',
+    doc: '<path d="M3 1.5h4l2.5 2.5v6.5H3z"/><path d="M7 1.5V4h2.5"/>',
+    search: '<circle cx="5" cy="5" r="3.2"/><path d="M7.4 7.4l3.1 3.1"/>',
+    pencil: '<path d="M2 10l.6-2.6L8 2l2 2-5.4 5.4z"/>',
+    check: '<circle cx="6" cy="6" r="4.8"/><path d="M3.8 6.1l1.5 1.5 2.9-3.1"/>',
+    x: '<circle cx="6" cy="6" r="4.8"/><path d="M4.3 4.3l3.4 3.4M7.7 4.3L4.3 7.7"/>',
+    lock: '<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 014 0v1.5"/>',
+    shield: '<path d="M6 1.2l4 1.5v3c0 2.6-1.8 4.3-4 5.1-2.2-.8-4-2.5-4-5.1v-3z" fill="currentColor" stroke="none"/>'
+  };
+  const icon = n => `<svg class="i" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
+  const CUBE = '<img class="mark" src="assets/cursor-mark.svg" alt="">';
+  const GROK = '<img class="mark grok" src="assets/grok-mark.png" alt="">';
+
+  const state = { fields: "read", leak: true, editing: false, active: null };
+  let saved = null;
+  const entries = [];
+  let sel = -1;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const LEAK_PATTERNS = [
+    { re: /\b(sk-[a-zA-Z0-9_-]{8,}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{20,})\b/g, tag: "apiKeys" },
+    { re: /\b(?:password|passwd|secret|token)\s*[:=]\s*\S+/gi, tag: "passwordCtx" }
+  ];
+
+  function badges(fields, { short = false } = {}) {
+    return `<span class="fb-row">${FIELDS.map(f => {
+      const tint = fields.includes(f.k) ? "" : "off";
+      return `<span class="fb ${tint}" title="${f.title}">${icon(f.icon)}${short ? f.short : f.letter}</span>`;
+    }).join("")}</span>`;
+  }
+  const shieldChip = () => `<span class="lg ${state.leak ? "on" : ""}" title="Leak guard">${icon("shield")}</span>`;
+
+  function renderChrome() {
+    $("agCursor").innerHTML = `${CUBE} Cursor`;
+    $("agGrok").innerHTML = `${GROK} Grok Bot`;
+    $("agShared").innerHTML = `<span class="shared-ic">${icon("people")}</span> Shared`;
+  }
+
+  function renderEdit() {
+    $("grantWin").classList.toggle("editing", state.editing);
+    $("editCtl").innerHTML = state.editing
+      ? `<button class="mac-btn" data-act="cancel">Cancel</button><button class="mac-btn primary" data-act="save">Save</button>`
+      : `<button class="mac-btn" data-act="edit" title="Unlock to change grants">Edit</button>`;
+    document.querySelectorAll("#paneScope input, #fieldSeg button").forEach(el => { el.disabled = !state.editing; });
+  }
+
+  function renderPlacements() {
+    const fields = PRESETS[state.fields];
+    const caps = `<span class="pl-caps">${badges(fields)}${shieldChip()}</span>`;
+    const all = MAILBOXES.every(b => b.on), some = MAILBOXES.some(b => b.on);
+    const lock = state.editing ? "" : "disabled";
+    $("placements").innerHTML =
+      `<label class="pl acct"><input type="checkbox" id="acctBox" ${all ? "checked" : ""} ${lock}><span class="nm">${ACCOUNT}</span>${some ? caps : "<span></span>"}</label>` +
+      MAILBOXES.map(b => `<label class="pl sub ${b.on ? "" : "off"}"><input type="checkbox" data-box="${b.id}" ${b.on ? "checked" : ""} ${lock}><span class="nm">${b.id}</span>${b.on ? caps : "<span></span>"}</label>`).join("");
+    $("acctBox").indeterminate = some && !all;
+    $("acctBox").addEventListener("change", e => { MAILBOXES.forEach(b => { b.on = e.target.checked; }); renderPlacements(); renderStore(); rerun(); });
+    $("placements").querySelectorAll("input[data-box]").forEach(input => input.addEventListener("change", e => {
+      MAILBOXES.find(b => b.id === e.target.dataset.box).on = e.target.checked;
+      renderPlacements();
+      renderStore();
+      rerun();
+    }));
+  }
+
+  function renderStore(hits = []) {
+    $("store").innerHTML = MAILBOXES.map(b => {
+      const mail = MAIL.filter(m => m.box === b.id);
+      return `<div class="sb-box ${b.on ? "" : "locked"}"><div class="sb-head"><span>${b.id}</span>${b.on ? `<span>${mail.length}</span>` : `<span class="ns">not shared</span>`}</div>
+        ${mail.map(m => `<div class="sb-row ${hits.includes(m.id) ? "hit" : ""}"><b>${esc(m.from.replace(/\s*<.*$/, ""))}</b><span>${esc(m.subject)}</span></div>`).join("")}</div>`;
+    }).join("");
+  }
+
+  function renderPrompts() {
+    $("prompts").innerHTML = PROMPTS.map(p =>
+      `<button class="prompt ${state.active === p.id ? "active" : ""}" data-id="${p.id}">${p.text}</button>`).join("");
+    $("prompts").querySelectorAll("button").forEach(b => b.addEventListener("click", () => ask(b.dataset.id)));
+  }
+
+  function allowed(m) { return MAILBOXES.find(b => b.id === m.box).on; }
+  function redact(text) {
+    if (!state.leak) {
+      let html = esc(text), exposed = 0;
+      LEAK_PATTERNS.forEach(p => { html = html.replace(p.re, s => { exposed++; return `<span class="leaked">${s}</span>`; }); });
+      return { html, hits: 0, exposed };
+    }
+    let out = text, hits = 0;
+    LEAK_PATTERNS.forEach(p => { out = out.replace(p.re, () => { hits++; return `\u0000${p.tag}\u0001`; }); });
+    const html = esc(out).replace(/\u0000(\w+)\u0001/g, (_, tag) => `<span class="redact">[REDACTED:${tag}]</span>`);
+    return { html, hits, exposed: 0 };
+  }
+
+  // What MailGent hands the agent for one message under the current grant.
+  function deliver(m) {
+    const fields = PRESETS[state.fields];
+    const body = !fields.includes("b") ? { access: "not_granted" } : { access: "granted", ...redact(m.body) };
+    const file = !m.file ? null : { name: m.file, access: fields.includes("c") ? "granted" : "not_granted" };
+    return { m, body, file, fields };
+  }
+
+  function answer(promptID, got) {
+    const has = id => got.find(g => g.m.id === id);
+    const readable = g => g && g.body.access === "granted";
+    if (promptID === "bills") {
+      if (!got.length) return "I can't see any bills. The Bills mailbox isn't shared with me.";
+      if (!got.some(readable)) return `I can see ${got.length} bills (Ovo Energy and Thames Water), but not the amounts. I'm only allowed headers; switch to “Read mail” if you want details.`;
+      let s = "You have two bills: Ovo Energy £84.20, collected by direct debit on 12 Oct, and Thames Water £42.10, due 9 Oct.";
+      if (has("m1")?.file?.access === "granted") s += " I've also opened bill-october.pdf for you.";
+      return s;
+    }
+    if (promptID === "work") {
+      if (!got.length) return "I can't see any work email. The Work mailbox isn't shared with me.";
+      if (!got.some(readable)) return "Two work emails: Priya asks to move Thursday's review, and Deploy Bot rotated staging credentials. I can only see subjects, not the text.";
+      let s = "Priya wants to move Thursday's review to Friday 10:00. I've drafted a reply saying yes, for you to check (nothing was sent).";
+      const ci = has("m4");
+      if (ci && readable(ci)) s += state.leak
+        ? " Deploy Bot rotated the staging credentials; MailGent redacted the key and password, so I don't have them."
+        : " ⚠️ Deploy Bot's email also gave me the new deploy key and password in plain text.";
+      return s;
+    }
+    if (promptID === "flight") {
+      if (!got.length) return "I can't find a flight. Your INBOX isn't shared with me.";
+      const g = got[0];
+      if (!readable(g)) return "There's a SkyLine Air booking for Lisbon (K7Q2PD), but I can only see the subject line, not the times.";
+      let s = "Flight SL214 leaves Gatwick on Fri 16 Oct at 07:45. Bag drop closes at 06:55, and you're in seat 14C.";
+      s += g.file.access === "granted" ? " I've got the boarding pass PDF ready." : " There's a boarding pass attached, but attachments aren't shared with me.";
+      return s;
+    }
+    if (promptID === "bank") {
+      if (!got.length) return "I can't see any bank email. That isn't shared with me.";
+      const g = got[0];
+      if (!readable(g)) return "There's a September statement from Northbank, but I can only see the subject line.";
+      return "Your Northbank account ending 4421 closed September at £2,315.40.";
+    }
+    return "";
+  }
+
+  const kv = (k, v, chip = false) => `<div class="kv"><span class="sec">${k}:</span>${chip ? `<span class="gchip">${esc(v)}</span>` : esc(v)}</div>`;
+  const KIND_ICON = { search: "search", get: "env", get_attachment: "clip", create_draft: "pencil" };
+  const kindBadge = kind => `<span class="kb">${icon(KIND_ICON[kind])}${kind}</span>`;
+
+  function getResponse(g) {
+    const { m, body, file, fields } = g;
+    const bodyHTML = body.access === "granted"
+      ? `<div class="bodybox ${body.hits ? "leak" : ""}">${body.html}</div>`
+      : `<div class="hatch">${icon("lock")} Locked. Grant does not allow the agent to read this field.</div>`;
+    const bodyTag = body.hits ? `<span class="n leak">${body.hits} redacted</span>` : "";
+    const fileHTML = !file ? "" : `<div class="d-sub">Attachments</div>` + (fields.includes("a")
+      ? `<div class="file-card">${icon("doc")}<span>${esc(file.name)}</span></div>`
+      : `<div class="hatch">${icon("lock")} Attachment names not granted</div>`);
+    return `<div class="kind">${icon("env")} Message</div>
+      <div class="meta-line"><span class="ter">${m.date}</span>${badges(fields, { short: true })}${body.hits ? `<span class="lg on">${icon("shield")} leak</span><span class="n leak">${body.hits}</span>` : ""}</div>
+      ${body.exposed ? `<p class="note red">Leak guard is off, so the key and password went out as plain text.</p>` : ""}
+      <div class="d-card">
+        <div class="chips"><span class="gchip">${ACCOUNT}</span><span class="sec">${m.box}</span></div>
+        ${kv("Subject", m.subject)}${kv("From", m.from, true)}${kv("To", ACCOUNT, true)}${kv("Date & Time", m.date)}
+        <div class="d-sub"><span>Body</span>${bodyTag}</div>${bodyHTML}${fileHTML}
+      </div>`;
+  }
+
+  function stamp() {
+    const d = new Date();
+    return {
+      hm: d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      full: `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} at ${d.toLocaleTimeString("en-GB")} · ${(0.1 + Math.random() * 0.4).toFixed(2)} s`
+    };
+  }
+
+  function addEntries(list, focus) {
+    list.forEach(e => { Object.assign(e, stamp()); entries.unshift(e); });
+    sel = entries.indexOf(focus || list[list.length - 1]);
+    renderLog();
+  }
+
+  function renderLog() {
+    $("logCount").textContent = `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`;
+    $("log").innerHTML = entries.length ? entries.map((e, i) => `<button class="lr ${i === sel ? "sel" : ""}" data-i="${i}">
+        <span class="dot ${e.status}"></span>${kindBadge(e.kind)}${CUBE}
+        <span class="sum"><span class="sec">${esc(e.summary)}</span> <span class="ter">→</span> ${esc(e.result)}</span>
+        <span class="tags">${e.leak ? `<span class="lg on">${icon("shield")}</span><span class="n leak">${e.leak}</span>` : ""}</span>
+        <span class="ter t">${e.hm}</span></button>`).join("")
+      : `<div class="m-empty">No agent calls yet. Ask your agent a question.</div>`;
+    const e = entries[sel];
+    $("logDetail").innerHTML = !e ? `<div class="m-empty">Select an entry to see the exact request and response.</div>`
+      : `<div class="d-head">${CUBE}<span class="sec">Cursor</span>${kindBadge(e.kind)}<span class="st ok">${icon("check")} ok</span></div>
+        <div class="ter small" style="margin-top:4px">${e.full}</div>
+        <div class="d-label">Request</div><div class="d-card">${e.request}</div>
+        <div class="d-label">Response</div>${e.response}`;
+  }
+
+  const chat = html => $("chat").insertAdjacentHTML("beforeend", html);
+  function pulse(id, dir) {
+    const link = $(id);
+    link.classList.remove("fwd", "back");
+    void link.offsetWidth;
+    link.classList.add(dir);
+  }
+  function step(n) {
+    $("flowSteps").querySelectorAll("li").forEach(li => {
+      const k = Number(li.dataset.s);
+      li.className = k === n ? "on" : k < n ? "done" : "";
+    });
+    $("grantWin").classList.toggle("busy", n === 2 || n === 4);
+    $("storeWin").classList.toggle("busy", n === 3);
+    $("returnNote").classList.toggle("on", n === 4);
+  }
+
+  let timers = [];
+  function ask(promptID) {
+    state.active = promptID;
+    renderPrompts();
+    const p = PROMPTS.find(x => x.id === promptID);
+    timers.forEach(clearTimeout);
+    timers = [];
+    $("chat").innerHTML = `<div class="bubble you">${p.text}</div>`;
+    chat(`<div class="toolcall" id="tc0">${icon("search")} <b>mailgent.search</b> “${esc(p.query)}” <span class="thinking"><i></i><i></i><i></i></span></div>`);
+    renderStore();
+    step(1);
+    pulse("linkMcp", "fwd");
+    const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+    later(550, () => step(2));
+    later(1150, () => { step(3); pulse("linkStore", "fwd"); renderStore(MAIL.filter(p.match).filter(allowed).map(m => m.id)); });
+    later(1750, () => { step(4); pulse("linkStore", "back"); });
+    later(2100, () => { pulse("linkMcp", "back"); respond(p); });
+  }
+
+  function respond(p) {
+    const hits = MAIL.filter(p.match).filter(allowed);
+    const got = hits.map(deliver);
+    $("tc0").innerHTML = `${icon("search")} <b>mailgent.search</b> “${esc(p.query)}” <span class="r">→ ${hits.length} message${hits.length === 1 ? "" : "s"}</span>`;
+
+    const rows = [{
+      kind: "search", status: hits.length ? "ok" : "zero", summary: p.query, result: `${hits.length} message${hits.length === 1 ? "" : "s"}`,
+      request: `<b>Search messages.</b>${kv("Query", p.query)}${kv("Limit", 30)}`,
+      response: `<div class="kind">${icon("lines")} Message list · ${hits.length}</div><p class="note">Headers only. Search never includes the body; the agent has to call get.</p>` +
+        (hits.length ? hits.map(m => `<div class="d-card"><div class="chips"><span class="gchip">${m.box}</span></div><b>${esc(m.subject)}</b>${kv("From", m.from)}${kv("Date", m.date)}${kv("Id", m.uid)}</div>`).join("")
+          : `<div class="d-card sec">No messages. Mail outside the grant doesn't exist as far as the agent is concerned.</div>`)
+    }];
+    const calls = [];
+    let focus = null;
+    got.forEach(g => {
+      const notes = [];
+      if (g.body.access === "not_granted") notes.push("body not granted");
+      if (g.body.hits) notes.push(`${g.body.hits} redacted`);
+      const e = { kind: "get", status: "ok", summary: g.m.subject, result: notes.join(", ") || "bodyAccess=granted",
+        leak: g.body.hits,
+        request: `<b>Fetch one message.</b>${kv("Account", ACCOUNT)}${kv("id", g.m.uid)}${kv("Placement", g.m.box)}`,
+        response: getResponse(g) };
+      rows.push(e);
+      if (!focus || g.body.hits || g.body.exposed) focus = e;
+      calls.push(`${icon("env")} <b>mailgent.get</b> ${g.m.uid} <span class="r">→ ${esc(e.result)}</span>`);
+      if (g.file && g.file.access === "granted") {
+        rows.push({ kind: "get_attachment", status: "ok", summary: g.file.name, result: "delivered",
+          request: `<b>Fetch one attachment.</b>${kv("Message id", g.m.uid)}${kv("File", g.file.name)}`,
+          response: `<div class="kind">${icon("clip")} Attachment</div><p class="sec small" style="margin:0 0 8px">for ${esc(g.m.subject)}</p>
+            <div class="d-card file-card">${icon("doc")}<div><b>${esc(g.file.name)}</b><div class="ter small">application/pdf · handed over as a local temp file</div></div></div>` });
+        calls.push(`${icon("clip")} <b>mailgent.get_attachment</b> ${esc(g.file.name)} <span class="r">→ delivered</span>`);
+      }
+    });
+    if (p.id === "work" && got.some(g => g.m.id === "m3" && g.body.access === "granted")) {
+      rows.push({ kind: "create_draft", status: "ok", summary: "Re: Can we move Thursday's review?", result: "draft saved",
+        request: `<b>Create a draft.</b>${kv("In reply to", 48230)}`,
+        response: `<div class="kind">${icon("pencil")} Draft</div><div class="d-card">${kv("To", "Priya Shah <priya@acme.example>", true)}${kv("Subject", "Re: Can we move Thursday's review?")}
+          <div class="d-sub">Body</div><div class="bodybox">Friday at 10:00 works for me. See you then.</div></div>
+          <p class="note">Kept in MailGent's draft ledger. Not sent, and not written to Apple Mail.</p>` });
+      calls.push(`${icon("pencil")} <b>mailgent.create_draft</b> <span class="r">→ saved in MailGent, not sent</span>`);
+    }
+
+    calls.forEach((c, i) => timers.push(setTimeout(() => chat(`<div class="toolcall">${c}</div>`), 250 * (i + 1))));
+    timers.push(setTimeout(() => {
+      const text = answer(p.id, got);
+      chat(`<div class="bubble agent ${got.some(g => g.body.exposed) ? "warn" : ""}">${esc(text)}</div>`);
+      step(5);
+    }, 250 * (calls.length + 1) + 150));
+    addEntries(rows, focus);
+  }
+
+  function rerun() { if (state.active) ask(state.active); }
+
+  $("fieldSeg").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    state.fields = b.dataset.v;
+    $("fieldSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    $("fieldNote").textContent = FIELD_NOTES[state.fields];
+    renderPlacements();
+    rerun();
+  }));
+  $("leakToggle").addEventListener("change", e => { state.leak = e.target.checked; renderPlacements(); rerun(); });
+  $("tabSeg").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    $("tabSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    $("paneScope").hidden = b.dataset.tab !== "scope";
+    $("paneAccess").hidden = b.dataset.tab !== "access";
+  }));
+  $("editCtl").addEventListener("click", e => {
+    const act = e.target.closest("button")?.dataset.act;
+    if (!act) return;
+    if (act === "edit") saved = { fields: state.fields, leak: state.leak, boxes: MAILBOXES.map(b => b.on) };
+    if (act === "cancel") {
+      state.fields = saved.fields;
+      state.leak = saved.leak;
+      MAILBOXES.forEach((b, i) => { b.on = saved.boxes[i]; });
+      $("fieldSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.v === state.fields));
+      $("fieldNote").textContent = FIELD_NOTES[state.fields];
+      $("leakToggle").checked = state.leak;
+    }
+    state.editing = act === "edit";
+    renderPlacements();
+    renderEdit();
+    if (act === "cancel") { renderStore(); rerun(); }
+  });
+  $("log").addEventListener("click", e => {
+    const b = e.target.closest(".lr");
+    if (b) { sel = Number(b.dataset.i); renderLog(); }
+  });
+  $("clearLog").addEventListener("click", () => { entries.length = 0; sel = -1; renderLog(); });
+
+  $("fieldNote").textContent = FIELD_NOTES[state.fields];
+  renderChrome();
+  renderPlacements();
+  renderEdit();
+  renderStore();
+  renderPrompts();
+  renderLog();
+})();
+
+(() => {
+  const SHOTS = [
+    { file: "menu-bar", title: "Menu bar", short: "Status at a glance",
+      text: "MailGent lives in the menu bar. One glance shows whether it can read Apple Mail, when it last indexed, how many agents are paired and what the last agent asked for." },
+    { file: "control-center", title: "Control center", short: "Health and pairing",
+      text: "Access health, indexing stats and one card per agent. Each agent has its own key, and <b>Revoke credential</b> cuts it off straight away." },
+    { file: "grant-desk-scope", title: "Grant Desk · Scope", short: "Which mailboxes",
+      text: "Tick the accounts and mailboxes an agent may see; everything unticked is invisible to it. Blue badges are the fields it may read, the purple shield means leak guard is on." },
+    { file: "grant-desk-access", title: "Grant Desk · Access", short: "Which fields",
+      text: "Per mailbox: subject, sender, recipients, date, message text, attachment names and contents. The preview shows a sample message as the agent would get it, with secrets redacted." },
+    { file: "grant-desk-rules", title: "Pass & Block rules", short: "Exceptions by sender or subject",
+      text: "Rules adjust what's shared from mail that's already allowed. Here, job alerts, itineraries and household bills reveal their text and attachments; everything else keeps the mailbox's normal limits." },
+    { file: "grant-desk-privacy", title: "Leak guard", short: "Secrets stay home",
+      text: "Built-in detectors for API keys, tokens, private keys, passwords, card numbers and more, plus your own filters, such as a name you never want shared." },
+    { file: "access-log", title: "Access Log", short: "A receipt for every request",
+      text: "Every search and read an agent made. The purple shield counts what leak guard redacted; the green tick counts rule matches." },
+    { file: "access-log-formatted", title: "What the agent saw", short: "Request and response",
+      text: "Each entry shows the agent's request and the response it got back. Search results carry headers only; the agent has to ask again to read a message." },
+    { file: "access-log-json-pretty", title: "…as raw JSON", short: "Nothing hidden from you",
+      text: "Switch to JSON Pretty or Raw to see the exact data the agent was handed." },
+    { file: "companion-read", title: "Companion Read", short: "Open the message",
+      text: "Preview any message from the log inside MailGent, or open it in Apple Mail." },
+    { file: "settings-general", title: "Settings", short: "Port and log retention",
+      text: "The local port agents connect to, how long the Access Log keeps entries, and whether agents may switch mail source (off by default)." }
+  ];
+  const tabs = document.getElementById("tourTabs");
+  const img = document.getElementById("tourImg");
+  const cap = document.getElementById("tourCap");
+  tabs.innerHTML = SHOTS.map((s, i) =>
+    `<button role="tab" data-i="${i}"><b>${s.title}</b><span>${s.short}</span></button>`).join("");
+  function show(i) {
+    const s = SHOTS[i];
+    img.src = `assets/screenshots/${s.file}.png`;
+    img.alt = `MailGent — ${s.title}`;
+    cap.innerHTML = `<b>${s.title}.</b> ${s.text}`;
+    tabs.querySelectorAll("button").forEach((b, j) => {
+      b.classList.toggle("on", j === i);
+      b.setAttribute("aria-selected", j === i);
+    });
+  }
+  tabs.addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (b) show(Number(b.dataset.i));
+  });
+  show(0);
+})();
+</script>
+</body>
+</html>

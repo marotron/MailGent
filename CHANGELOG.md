@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.16.0] - 2026-10-25
+
+### Added
+
+- Land Ask line on `main`: concurrent Ask windows, status-menu Access requests, rules-from-Ask (variant G), Remember Ask decisions, Ask address stack / Enable on / Attachment-content rule defaults (shipped earlier as 0.11.6–0.13.2 on `feat/rules-from-ask`)
+
+### Fixed
+
+- DMG **Open MailGent** alias survives CI: do not delete the staged bookmark before remaking when `/Applications/MailGent.app` is missing (empty step 2 on 0.15.0)
+
+### Changed
+
+- Latest binary includes Ask product work together with pretty DMG + Open MailGent (0.14.0–0.15.0)
+
 ## [0.15.0] - 2026-10-25
 
 ### Added
@@ -26,6 +40,53 @@ Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called o
 ### Changed
 
 - Retagged this ship as **0.14.0** (retracted a colliding `v0.12.0` on `main`; `0.12.1`–`0.13.2` already existed on `feat/rules-from-ask`)
+
+## [0.13.2] - 2026-10-22
+
+### Fixed
+
+- Ask → Pass/Block field defaults keep **Attachment content** when Attachment names were already On on Scope (and therefore not in the Ask label list). Names are set On on the rule mask as the required carrier bit so a later matching `get` does not prompt again for content.
+
+### Added
+
+- Ask **Edit rule** pane: **Enable on** — This mailbox (default) or This account · all mailboxes — so the written rule attaches where you expect for that agent.
+
+## [0.13.1] - 2026-10-21
+
+### Changed
+
+- Ask envelope **From** / **To** / **Cc**: when the display name and address badge do not fit on one line, stack them (name on the first line, address on the second). The **Add to rule** control stays aligned with the first line.
+
+## [0.13.0] - 2026-10-20
+
+### Added
+
+- **Remember Ask decisions** in Settings (off by default; shown when conditional prompts are on). Reuses Allow / Block per field for the same message within a validity window (15 minutes / 1 hour / 24 hours / until quit). Default share is this agent only; optional All agents. New Ask fields still prompt. Pass/Block overlays still win first. Forgetting an agent clears its cache entries.
+
+## [0.12.1] - 2026-10-20
+
+### Added
+
+- Ask dialog can optionally **create or update a Pass/Block rule** from Subject / From **Add to rule** picks. The right pane swaps to the rule editor; **Allow** or **Block** writes the shared rule when armed and enables it for the prompting agent on that account and placement only. Closing the window still blocks this read without writing a rule.
+
+## [0.11.7] - 2026-10-19
+
+### Fixed
+
+- Leak guard no longer quits the app when a redaction match follows an emoji or other character that uses more than one UTF-16 unit. The match is still redacted in place.
+
+## [0.11.6] - 2026-10-19
+
+### Added
+
+- Status menu **Access requests** while prompts are waiting: the count, one agent / subject row per request, and **Block** / **Allow** on each row. A circular **?** is the only selection mark. Clicking the rest of the row raises that window and does not decide it.
+
+### Changed
+
+- Concurrent Ask prompts each open their own **Email access request** window. Allow, Block, or closing one window decides only that request.
+- Opening the menu-bar icon raises every pending access-request window without taking focus. Closing the menu leaves the selected window in front.
+- The menu-bar icon accessibility label counts “access request” / “access requests”.
+
 
 ## [0.11.5] - 2026-10-15
 

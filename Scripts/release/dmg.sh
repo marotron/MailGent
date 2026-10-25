@@ -172,6 +172,18 @@ chflags nohidden "$VOLUME/.background" 2>/dev/null || true
 
 DS_STORE_SRC="$ASSETS_DIR/DS_Store"
 LAYOUT_OK=0
+# Remake a live Finder alias only when the post-install target exists. On CI
+# /Applications/MailGent.app is usually missing — deleting the staged bookmark
+# first left step 2 empty (0.15.0). Keep staged unless remake succeeds.
+OPEN_ALIAS_TARGET="/Applications/${APP_NAME}.app"
+REMAKE_OPEN_ALIAS=0
+if [[ -d "$OPEN_ALIAS_TARGET" ]]; then
+  REMAKE_OPEN_ALIAS=1
+  echo "→ will remake Open alias → ${OPEN_ALIAS_TARGET}"
+else
+  echo "→ keep staged Open alias (no ${OPEN_ALIAS_TARGET}; typical CI)"
+fi
+
 # Prefer live Finder layout; fall back to checked-in DS_Store for headless CI.
 # Support folders parked off-canvas for Show Hidden Files (Cmd+Shift+.).
 if osascript <<EOF
@@ -192,14 +204,19 @@ tell application "Finder"
     set background picture of viewOptions to file ".background:background.png"
     set position of item "${APP_NAME}.app" of container window to {$ICON_APP_X, $ICON_APP_Y}
     set position of item "Applications" of container window to {$ICON_APPS_X, $ICON_APPS_Y}
-    -- Prefer a Finder-made alias (typed fapa/MACS). Staged bookmark is a fallback for CI.
+    -- Remake only when target exists. Never delete staged until remake works.
+    if $REMAKE_OPEN_ALIAS is 1 then
+      try
+        make new alias file at container window to (POSIX file "$OPEN_ALIAS_TARGET") with properties {name:"${OPEN_ALIAS_NAME}.new"}
+        try
+          if exists item "$OPEN_ALIAS_NAME" then
+            delete item "$OPEN_ALIAS_NAME"
+          end if
+        end try
+        set name of item "${OPEN_ALIAS_NAME}.new" to "$OPEN_ALIAS_NAME"
+      end try
+    end if
     try
-      if exists item "$OPEN_ALIAS_NAME" then
-        delete item "$OPEN_ALIAS_NAME"
-      end if
-    end try
-    try
-      make new alias file at container window to (POSIX file "/Applications/${APP_NAME}.app") with properties {name:"$OPEN_ALIAS_NAME"}
       set position of item "$OPEN_ALIAS_NAME" of container window to {$ICON_OPEN_X, $ICON_OPEN_Y}
     end try
     try
@@ -233,6 +250,13 @@ if [[ "$LAYOUT_OK" -eq 0 ]]; then
     exit 1
   fi
 fi
+
+if [[ ! -e "$VOLUME/$OPEN_ALIAS_NAME" ]]; then
+  echo "error: missing ${OPEN_ALIAS_NAME} on volume after layout (step 2 would be empty)" >&2
+  hdiutil detach "$VOLUME" -force 2>/dev/null || hdiutil detach "$DEVICE" -force 2>/dev/null || true
+  exit 1
+fi
+echo "→ Open alias present: ${VOLUME}/${OPEN_ALIAS_NAME}"
 
 chflags hidden "$VOLUME/.background" "$VOLUME/.fseventsd" 2>/dev/null || true
 
