@@ -35,20 +35,29 @@ No new rule engine. Use [`GrantRule`](../../MailStore/Sources/RuleEngine.swift):
 
 ### Rules-from-Ask UI lock
 
-- Optional disclosure: **“Also manage a rule…”** — collapsed by default so the dialog stays clean.
-- Inside the panel: segmented **New** | **Existing**.
-  - **New** — Name + Nick on one row; prefill From/Subject into the Add Value fields (not as chips); user must press **Add** to commit a matcher — Save does not auto-add draft values; default nick = next free shared letter; append on save.
-  - **Existing** — pick a rule from the shared pool (picker; prefer surfacing likely matches for this From/Subject); load into the same compact editor; update in place on save.
-- User can edit match value + match mode, polarity (Pass/Block), optional When (After/Before), and field chips.
-- Field overlay default on **New**: the Ask fields on this prompt (Pass grants them; Block withholds them). On **Existing**: keep the rule’s current field overlay until the user tweaks it.
-- **Save rule** / **Update rule** persists + enables for current agent + account + placement without dismissing Allow/Block (toast / chip “Rule A saved” / “Rule B updated”).
-- Primary footer unchanged: **Block** | **Allow**.
+Locked to proto **variant G** (`examples/prototype-ask-rule-right.html?variant=G`) — field picks · right-pane editor · commit on Allow/Block. Variant A (left disclosure + separate Save) shipped in 0.12.0 and is historical.
+
+- Envelope **Subject** / **From** trailing toggles: **Add to rule** ↔ **In rule** (`plus` → `checkmark`). To/Date keep inert placeholder slots for alignment.
+- First pick opens the right editor; clearing all picks closes it and resets intent to New. Left column stays ask-only (no “Also manage a rule…” disclosure).
+- Right pane: mail preview **or** rule editor (`Edit rule ›` / Close). Editor: segmented **New** | **Existing**.
+  - **New** — Name + Nick on one row; draft From/Subject values prefill from picks (exact email / Subject text); non-empty drafts save with Allow/Block (no separate in-panel Save).
+  - **Existing** — pick a rule from the shared pool (likely matches first); update in place on Allow/Block.
+- User can edit matchers, optional When, field chips, and (folded) Pass/Block override. Polarity defaults from the decision (Allow→Pass, Block→Block) unless overridden; Existing keeps original polarity unless overridden.
+- Footer: **Block** | **Allow** + fate `+ add rule` / `+ update rule` when picks non-empty; **Edit rule ›** / **Close rule edit** when armed.
+- **Allow/Block commits the rule** when armed (`commitPickedRule`) + enables for prompting agent + account + placement. Closing Ask without Allow/Block still fail-closes this read; **no** rule write.
+- Chrome (G): shared Ask auxiliary family — Preview, Open in Apple Mail, include-in-rule, AND/OR join, Close — height **20px**, font **11px**, radius **6px**, flush fill (no track gutter), subtle selected for include-in-rule.
 
 ### Redact product lock (spec only until Phase 3)
 
 - Optional mode on Body preview: select span(s) → replace with a fixed mask (e.g. `[redacted]`).
 - Allow then returns a **one-shot body override** for this `get` only (extend decision payload later); leak guard still runs after.
 - Does **not** invent a persistent leak-guard rule unless the user later asks for “save as custom filter.”
+
+## Cross-feature seams
+
+[#21](https://github.com/marotron/MailGent/issues/21), [#22](https://github.com/marotron/MailGent/issues/22), [#32](https://github.com/marotron/MailGent/issues/32), and [#41](https://github.com/marotron/MailGent/issues/41) ship in any order. Identity is pairing `agentID` ([#31](https://github.com/marotron/MailGent/issues/31)): MCP and CLI on one endpoint share grants, rule enablements, and the Ask cache; another endpoint does not.
+
+On every `get`: Scope grant → Pass/Block overlays → Ask only for fields still on Ask. Cache is per field for that `agentID` + message, and only for fields still on Ask. A rule save does not write the cache. A redacted Allow stays one-shot until the cache entry can carry an optional body override.
 
 ## Current seams
 

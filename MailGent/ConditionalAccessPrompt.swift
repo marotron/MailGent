@@ -26,20 +26,19 @@ public struct ConditionalAccessPromptRequest: Identifiable, Sendable {
 /// Coordinator for showing conditional access prompts and waiting for user decisions.
 /// Lives on AgentBridge (main actor) and is called from MCP get via MainActor hop.
 ///
-/// Presents via `DetachedWindowHost.runConditionalAsk` (HostedWindow) so MenuBarExtra
-/// hide / orderOut cannot flash-dismiss the Ask dialog or other MailGent windows.
+/// Each request is its own `DetachedWindowHost` window. Pending rows live on
+/// `AskQueueIndicator`, not a single coordinator request.
 @MainActor
 public final class ConditionalAccessPromptCoordinator: ObservableObject {
-    @Published public var pendingRequest: ConditionalAccessPromptRequest?
-
     public init() {}
 
-    /// Request a decision from the user. Suspends until Allow / Block.
-    /// Concurrent gets queue behind the open Ask (Host serializes); never auto-Blocks a prior prompt.
+    /// Request a decision from the user. Suspends until Allow / Block for this request.
+    /// Concurrent gets each open their own dialog; one decision never resolves another.
     /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
     public func requestDecision(
         context: ConditionalAccessPromptContext,
-        accountLabel: String? = nil
+        accountLabel: String? = nil,
+        ruleSupport: ConditionalAccessAskRuleSupport? = nil
     ) async -> ConditionalAccessDecision {
         let request = ConditionalAccessPromptRequest(context: context)
         let mailboxLabel = accountLabel.flatMap { $0.isEmpty ? nil : $0 } ?? context.accountID
@@ -48,28 +47,13 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         let decision = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
             accountLabel: mailboxLabel,
-            onPresent: { [weak self] in
-                self?.pendingRequest = request
-            }
+            ruleSupport: ruleSupport
         )
 
-        if pendingRequest?.id == request.id {
-            pendingRequest = nil
-        }
         MailGentLog.trace(
             "conditional access \(decision == .allow ? "allow" : "block") agent=\(context.agentName) fields=\(fieldsText)"
         )
         return decision
-    }
-
-    /// User chose Allow (SwiftUI path, if any).
-    public func allow() {
-        pendingRequest = nil
-    }
-
-    /// User chose Block or dismissed (SwiftUI path, if any).
-    public func block() {
-        pendingRequest = nil
     }
 }
 
@@ -367,6 +351,7 @@ struct ConditionalAccessPromptDialog: View {
     let accountLabel: String
     let onAllow: () -> Void
     let onBlock: () -> Void
+    var ruleSupport: ConditionalAccessAskRuleSupport? = nil
     var showOpenInMail: Bool = false
     var onOpenInMail: (() -> Void)? = nil
     /// Outer inset; off when a parent owns the padding.
@@ -384,8 +369,12 @@ struct ConditionalAccessPromptDialog: View {
     @State private var whyThisWindowExpanded = false
     @State private var leftScrollContentHeight: CGFloat = 0
     @State private var whyHelpHeight: CGFloat = ConditionalAskLayout.whyHelpCollapsedHeight
+    @StateObject private var ruleDraft = ConditionalAccessAskRuleDraft()
 
     private var envelope: ConditionalMessageEnvelope { request.context.envelope }
+    private var rightShowsRuleEditor: Bool {
+        ruleSupport != nil && ruleDraft.detailOpen && ruleDraft.isArmed
+    }
 
     private var requestedFieldsSummary: String {
         let labels = request.requestedFields
@@ -437,9 +426,15 @@ struct ConditionalAccessPromptDialog: View {
             messagePreviewVisible = showsMessagePreview
             onPreviewVisibilityChange?(messagePreviewVisible && showsMessagePreview)
             leftScrollReset &+= 1
+            if let ruleSupport {
+                ruleDraft.reset(for: request.context, support: ruleSupport)
+            }
         }
         .onChange(of: request.id) { _, _ in
             leftScrollReset &+= 1
+            if let ruleSupport {
+                ruleDraft.reset(for: request.context, support: ruleSupport)
+            }
         }
     }
 
@@ -529,20 +524,7 @@ struct ConditionalAccessPromptDialog: View {
                 }
             }
 
-            HStack(spacing: ConditionalAskLayout.gap) {
-                Button("Block") {
-                    onBlock()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Spacer()
-
-                Button("Allow") {
-                    onAllow()
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-            }
+            askFooter
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onPreferenceChange(AskWhyHelpHeightKey.self) { height in
@@ -650,15 +632,15 @@ struct ConditionalAccessPromptDialog: View {
                     }
                 }
 
-                envelopeRow(label: "Subject", value: envelope.subject)
-                envelopeAddressRow(label: "From", raw: envelope.from)
+                envelopeRow(label: "Subject", value: envelope.subject, pick: ruleSupport != nil ? .subject : nil)
+                envelopeAddressRow(label: "From", raw: envelope.from, pick: ruleSupport != nil ? .from : nil)
                 if !envelope.to.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    envelopeAddressRow(label: "To", raw: envelope.to)
+                    envelopeAddressRow(label: "To", raw: envelope.to, pick: nil, showPickSlot: ruleSupport != nil)
                 }
                 if !envelope.cc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    envelopeAddressRow(label: "Cc", raw: envelope.cc)
+                    envelopeAddressRow(label: "Cc", raw: envelope.cc, pick: nil, showPickSlot: ruleSupport != nil)
                 }
-                envelopeRow(label: "Date", value: envelope.date)
+                envelopeRow(label: "Date", value: envelope.date, pick: nil, showPickSlot: ruleSupport != nil)
 
                 Divider().opacity(0.35)
 
@@ -710,16 +692,94 @@ struct ConditionalAccessPromptDialog: View {
     }
 
     private var messagePreviewColumn: some View {
-        ConditionalAccessInAppPreview(context: request.context)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        Group {
+            if rightShowsRuleEditor, let ruleSupport {
+                ConditionalAccessAskRulePanel(
+                    context: request.context,
+                    support: ruleSupport,
+                    draft: ruleDraft,
+                    onClose: {
+                        withAnimation(SecondaryActionMetrics.expandAnimation) {
+                            ruleDraft.setDetailOpen(false, context: request.context)
+                        }
+                    }
+                )
+            } else {
+                ConditionalAccessInAppPreview(context: request.context)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var askFooter: some View {
+        HStack(spacing: 8) {
+            Button("Block") {
+                resolveDecision(.block)
+            }
+            .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+            .keyboardShortcut(.cancelAction)
+
+            Button("Allow") {
+                resolveDecision(.allow)
+            }
+            .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
+            .keyboardShortcut(.defaultAction)
+
+            if ruleSupport != nil, ruleDraft.isArmed {
+                Text(ruleDraft.fateLabel)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .fixedSize()
+            }
+
+            Spacer(minLength: 8)
+
+            if ruleSupport != nil, ruleDraft.isArmed {
+                Button(ruleDraft.detailOpen ? "Close rule edit" : "Edit rule ›") {
+                    withAnimation(SecondaryActionMetrics.expandAnimation) {
+                        if !ruleDraft.detailOpen {
+                            ensurePreviewColumnVisible()
+                        }
+                        ruleDraft.setDetailOpen(!ruleDraft.detailOpen, context: request.context)
+                    }
+                }
+                .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+            }
+        }
+    }
+
+    private func resolveDecision(_ decision: ConditionalAccessDecision) {
+        if let ruleSupport, ruleDraft.isArmed {
+            _ = ruleDraft.commit(
+                decision: decision,
+                context: request.context,
+                support: ruleSupport
+            )
+        }
+        switch decision {
+        case .allow: onAllow()
+        case .block: onBlock()
+        }
     }
 
     private func togglePreview() {
+        if rightShowsRuleEditor {
+            withAnimation(SecondaryActionMetrics.expandAnimation) {
+                ruleDraft.setDetailOpen(false, context: request.context)
+            }
+            return
+        }
         let next = !messagePreviewVisible
         withAnimation(SecondaryActionMetrics.expandAnimation) {
             messagePreviewVisible = next
         }
         onPreviewVisibilityChange?(next)
+    }
+
+    private func ensurePreviewColumnVisible() {
+        guard showsMessagePreview, !messagePreviewVisible else { return }
+        messagePreviewVisible = true
+        onPreviewVisibilityChange?(true)
     }
 
     private static let envelopeLabelWidth: CGFloat = 52
@@ -732,61 +792,148 @@ struct ConditionalAccessPromptDialog: View {
             .textSelection(.enabled)
     }
 
-    private func envelopeRow(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+    private func envelopeRow(
+        label: String,
+        value: String,
+        pick: AskEnvelopePick? = nil,
+        showPickSlot: Bool = false
+    ) -> some View {
+        HStack(alignment: .center, spacing: 8) {
             envelopeLabel(label)
             Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "—" : value)
                 .font(.caption2)
                 .textSelection(.enabled)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            envelopePickControl(pick: pick, showSlot: showPickSlot || pick != nil)
         }
     }
 
-    private func envelopeAddressRow(label: String, raw: String) -> some View {
+    private func envelopeAddressRow(
+        label: String,
+        raw: String,
+        pick: AskEnvelopePick? = nil,
+        showPickSlot: Bool = false
+    ) -> some View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let addresses = MailAddressParts.parseList(trimmed)
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+        // Top-align so the + stays on the first line when name/email stacks.
+        return HStack(alignment: .top, spacing: 8) {
             envelopeLabel(label)
-            if trimmed.isEmpty {
-                Text("—")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            } else if addresses.isEmpty {
-                Text(trimmed)
-                    .font(.caption2)
-                    .textSelection(.enabled)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                FlowAddressBadges(addresses: addresses)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if trimmed.isEmpty {
+                    Text("—")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if addresses.isEmpty {
+                    Text(trimmed)
+                        .font(.caption2)
+                        .textSelection(.enabled)
+                        .lineLimit(3)
+                } else {
+                    FlowAddressBadges(addresses: addresses)
+                        .font(.caption2)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            envelopePickControl(pick: pick, showSlot: showPickSlot || pick != nil)
+        }
+    }
+
+    @ViewBuilder
+    private func envelopePickControl(pick: AskEnvelopePick?, showSlot: Bool) -> some View {
+        if !showSlot {
+            EmptyView()
+        } else if let pick, let ruleSupport {
+            let on = ruleDraft.picked.contains(pick)
+            SecondaryActionButton(
+                title: on ? "In rule" : "Add to rule",
+                systemImage: on ? "checkmark" : "plus",
+                isOn: on,
+                expandLeadingOverlay: true
+            ) {
+                withAnimation(SecondaryActionMetrics.expandAnimation) {
+                    ensurePreviewColumnVisible()
+                    ruleDraft.togglePick(pick, context: request.context, support: ruleSupport)
+                }
+            }
+        } else {
+            Color.clear
+                .frame(
+                    width: SecondaryActionMetrics.controlHeight,
+                    height: SecondaryActionMetrics.controlHeight
+                )
+                .accessibilityHidden(true)
         }
     }
 }
 
-/// Wraps name + grey email badges onto following lines when the pane is narrow.
+/// Compact Block / Allow chrome toward proto padding (5×8).
+private struct AskPrimaryFooterButtonStyle: ButtonStyle {
+    var prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: prominent ? .semibold : .medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .foregroundStyle(prominent ? Color.white : Color.primary)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(prominent ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(
+                        prominent ? Color.accentColor : Color.secondary.opacity(0.32),
+                        lineWidth: 1
+                    )
+            }
+            .opacity(configuration.isPressed ? 0.9 : 1)
+    }
+}
+
+/// Name + grey email badge side-by-side when they fit; otherwise name on line 1, email on line 2.
+/// Callers set `.font(...)` (envelope uses caption2; field cards use caption).
 private struct FlowAddressBadges: View {
     let addresses: [MailAddressParts]
 
     var body: some View {
-        // Simple wrapping HStack is enough for Ask’s typical 1–2 recipients.
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
-                HStack(spacing: 6) {
-                    if let name = parts.name {
-                        Text(name)
-                            .font(.caption2)
-                            .textSelection(.enabled)
-                    }
-                    if let email = parts.email {
-                        AddressBadge(email: email)
-                            .font(.caption2)
-                    }
+                addressBlock(parts)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func addressBlock(_ parts: MailAddressParts) -> some View {
+        switch (parts.name, parts.email) {
+        case let (name?, email?):
+            // Horizontal candidate must refuse to wrap so ViewThatFits can fall back.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(name)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    AddressBadge(email: email, lineLimit: 1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .textSelection(.enabled)
+                    AddressBadge(email: email)
                 }
             }
-            Spacer(minLength: 0)
+        case let (name?, nil):
+            Text(name)
+                .textSelection(.enabled)
+        case let (nil, email?):
+            AddressBadge(email: email)
+        case (nil, nil):
+            EmptyView()
         }
     }
 }
@@ -951,20 +1098,8 @@ private struct ConditionalAskFieldPreviewCard: View {
                     .font(.caption)
                     .textSelection(.enabled)
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
-                        HStack(spacing: 6) {
-                            if let name = parts.name {
-                                Text(name)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
-                            }
-                            if let email = parts.email {
-                                AddressBadge(email: email)
-                            }
-                        }
-                    }
-                }
+                FlowAddressBadges(addresses: addresses)
+                    .font(.caption)
             }
         }
     }
@@ -1065,6 +1200,7 @@ enum AskLayoutSandboxSamples {
             fields.append(ConditionalFieldPreviewLine(label: "Attachment content", value: "(empty)"))
         }
         return ConditionalAccessPromptContext(
+            agentID: "sandbox-agent",
             agentName: "Cursor",
             accountID: "19DAAEEB-B0A9-4C37-820B-A55EC8B979CB",
             placement: "INBOX",

@@ -87,8 +87,11 @@ enum SpanFinder {
         let nsText = text as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
         let matches = regex.matches(in: text, options: [], range: fullRange)
-        return matches.map { match in
-            (match.range.location, match.range.location + match.range.length)
+        return matches.compactMap { match in
+            guard let range = Range(match.range, in: text) else { return nil }
+            let start = text.distance(from: text.startIndex, to: range.lowerBound)
+            let end = text.distance(from: text.startIndex, to: range.upperBound)
+            return (start, end)
         }
     }
 }

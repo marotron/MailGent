@@ -1,0 +1,509 @@
+<!doctype html>
+<!-- PROTOTYPE — look locked 2026-10-19. Visual source for the app.
+     Selected mark: full #8e8e93 disc, ? knocked out (transparent).
+     Unselected mark: #8e8e93 outline and ?.
+     Block #f8d0d0 / #c41212. Allow #dff4e4 / #166a2d.
+     No trailing selection dot.
+     Open: http://127.0.0.1:8765/prototype-menu-surfaces-ask.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MailGent · prototype · menu surfaces Ask</title>
+<style>
+  :root {
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --line: rgba(0,0,0,.12);
+    --menu: #f4f4f6;
+    --green: #1f8a3b;
+    --red: #e02424;
+    --blue: #0a84ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    color: var(--ink);
+    background: #1c1c1e;
+  }
+  button { font: inherit; cursor: pointer; }
+  .desk {
+    position: relative;
+    height: calc(100% - 92px);
+    min-height: 640px;
+    overflow: hidden;
+    background:
+      radial-gradient(900px 420px at 15% 10%, rgba(255,255,255,.35), transparent 60%),
+      linear-gradient(160deg, #7eb6ff 0%, #5b7cfa 42%, #c9a27a 100%);
+  }
+  .menubar {
+    position: absolute; inset: 0 0 auto 0; height: 28px;
+    display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+    padding: 0 12px;
+    background: rgba(246,246,248,.72);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(0,0,0,.08);
+    z-index: 80;
+  }
+  .menubar .clock { font-variant-numeric: tabular-nums; font-size: 12px; }
+  .status {
+    position: relative;
+    border: 0; background: transparent;
+    width: 36px; height: 22px; border-radius: 5px;
+    display: grid; place-items: center;
+  }
+  .status:hover, .status.open { background: rgba(0,0,0,.08); }
+  .tray { width: 16px; height: 14px; }
+  .badge {
+    position: absolute; top: -1px; right: 1px;
+    min-width: 13px; height: 13px; padding: 0 3px;
+    border-radius: 99px; background: #ff3b30; color: #fff;
+    font-size: 9px; font-weight: 700; line-height: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .dropdown {
+    position: absolute; top: 32px; right: 10px; width: 320px;
+    background: var(--menu); color: var(--ink);
+    border-radius: 12px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.08);
+    padding: 8px 6px 8px;
+    z-index: 90;
+  }
+  .dropdown.hidden { display: none; }
+  .dd-head, .row, .action {
+    display: flex; align-items: center; gap: 8px;
+    padding: 3px 8px;
+  }
+  .dd-head b { font-size: 14px; }
+  .dd-head .ver { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .row { font-size: 13px; min-height: 22px; }
+  .row .k { width: 118px; color: var(--muted); flex: none; }
+  .row .v { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .pill { background: #e4e4e8; border-radius: 99px; padding: 1px 7px; font-size: 11px; color: #3a3a3c; }
+  .chip { background: #e7f1ff; color: #0a58c2; border-radius: 99px; padding: 1px 7px; font-size: 11px; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  hr { border: 0; border-top: 1px solid rgba(0,0,0,.1); margin: 6px 8px; }
+  .action {
+    width: 100%; border: 0; background: transparent; text-align: left;
+    border-radius: 6px; padding: 5px 8px; font-size: 13px;
+  }
+  .action:hover { background: var(--blue); color: #fff; }
+  .asks { display: none; }
+  .asks.on { display: block; }
+  .asks-toggle {
+    width: 100%; border: 0; background: transparent; text-align: left; color: inherit;
+    border-radius: 6px; padding: 6px 10px; font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .asks-toggle:hover, .ask-select:hover { background: rgba(0,0,0,.08); }
+  .asks-toggle .count {
+    margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .asks-toggle .chev {
+    width: 7px; height: 7px; flex: none; color: #6e6e73;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg); margin-right: 3px;
+  }
+  .asks.expanded .asks-toggle .chev { transform: rotate(45deg); margin-top: -3px; }
+  .ask-list { display: none; }
+  .ask-list.open { display: block; }
+  .ask-item {
+    width: 100%; border-radius: 6px; padding: 2px 4px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .ask-select {
+    min-width: 0; flex: 1; border: 0; background: transparent; color: inherit;
+    border-radius: 5px; padding: 3px 4px; text-align: left; font-size: 13px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .ask-mark {
+    width: 16px; height: 16px; border-radius: 50%; flex: none;
+    border: 1px solid #8e8e93; color: #8e8e93;
+    display: grid; place-items: center; font-size: 10px; font-weight: 600;
+  }
+  .ask-item.current .ask-mark {
+    border-color: transparent;
+    background: #8e8e93;
+    color: transparent;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><defs><mask id='q'><rect width='16' height='16' fill='white'/><text x='8' y='12.2' text-anchor='middle' font-family='sans-serif' font-size='11' font-weight='700' fill='black'>?</text></mask></defs><circle cx='8' cy='8' r='8' fill='white' mask='url(%23q)'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><defs><mask id='q'><rect width='16' height='16' fill='white'/><text x='8' y='12.2' text-anchor='middle' font-family='sans-serif' font-size='11' font-weight='700' fill='black'>?</text></mask></defs><circle cx='8' cy='8' r='8' fill='white' mask='url(%23q)'/></svg>");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+  .ask-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quick {
+    border: 0; border-radius: 5px; background: #e4e4e8;
+    padding: 3px 6px; color: #3a3a3c; font-size: 11px;
+  }
+  .quick.block { background: #f8d0d0; color: #c41212; }
+  .quick.allow { background: #dff4e4; color: #166a2d; }
+  .quick:hover { filter: brightness(.94); }
+  .win {
+    position: absolute; width: 460px; border-radius: 12px; overflow: hidden;
+    background: #f6f6f7; color: var(--ink);
+    box-shadow: 0 22px 50px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.12);
+  }
+  .win header {
+    height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 12px;
+    background: #ececee; font-size: 13px; font-weight: 600;
+  }
+  .win.key header { background: linear-gradient(#f7f7f8, #e7e7ea); }
+  .dots { display: flex; gap: 6px; margin-right: 8px; }
+  .dots i, .dots button {
+    width: 11px; height: 11px; border: 0; border-radius: 50%; display: block; padding: 0;
+  }
+  .dots :nth-child(1) { background: #ff5f57; }
+  .dots :nth-child(2) { background: #febc2e; }
+  .dots :nth-child(3) { background: #28c840; }
+  .win .body { padding: 16px 16px 14px; }
+  .safari { left: 280px; top: 90px; width: 520px; z-index: 3; }
+  .safari .fake { height: 150px; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+  .settings { left: 360px; top: 140px; width: 380px; z-index: 4; }
+  .settings.hidden, .ask.hidden { display: none; }
+  .ask { width: 500px; }
+  .ask.front { box-shadow: 0 26px 60px rgba(0,0,0,.34), 0 0 0 1px rgba(0,0,0,.12); }
+  .ask h1 { font-size: 17px; margin: 0 0 4px; }
+  .ask p { margin: 0; color: var(--muted); }
+  .q {
+    width: 28px; height: 28px; border-radius: 50%; background: #e7e7ea;
+    display: grid; place-items: center; font-weight: 700; float: left; margin: 0 10px 8px 0;
+  }
+  .card { margin-top: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 12px; }
+  .card b { display: block; margin-bottom: 4px; }
+  .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .btn { border-radius: 8px; border: 1px solid var(--line); background: #fff; padding: 6px 14px; }
+  .btn.go { background: #0a84ff; color: #fff; border-color: #0a84ff; }
+  .dock-mini {
+    position: absolute; left: 24px; bottom: 18px; z-index: 50;
+    background: rgba(255,255,255,.88); border-radius: 10px; padding: 8px 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2); font-size: 12px;
+  }
+  .dock-mini.hidden { display: none; }
+  .chrome {
+    height: 92px; background: #111; color: #f5f5f7;
+    display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    font-size: 12px;
+  }
+  .chrome b { font-size: 13px; }
+  .chrome .state { font-family: ui-monospace, Menlo, monospace; color: #d1d1d6; white-space: pre; }
+  .chrome button {
+    border: 1px solid #3a3a3c; background: #2c2c2e; color: #fff;
+    border-radius: 8px; padding: 6px 10px;
+  }
+  .hint { color: #98989d; max-width: 280px; }
+</style>
+</head>
+<body>
+<div class="desk" id="desk">
+  <div class="menubar">
+    <span class="clock">Mon 19 Oct 12:43</span>
+    <button class="status" id="status" type="button" aria-label="MailGent, 2 Asks pending">
+      <svg class="tray" viewBox="0 0 16 14" aria-hidden="true">
+        <path fill="currentColor" d="M1 3.2 8 8.2 15 3.2V12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3.2Zm0-1.4A1.2 1.2 0 0 1 2.2.6h11.6A1.2 1.2 0 0 1 15 1.8L8 6.8 1 1.8Z"/>
+      </svg>
+      <span class="badge" id="badge">2</span>
+    </button>
+  </div>
+
+  <section class="win safari" id="safari">
+    <header><span class="dots"><i></i><i></i><i></i></span>Safari — Inbox noise</header>
+    <div class="body"><div class="fake"></div><p>This window is covering the Ask dialog. The red 2 is the only hint it is waiting.</p></div>
+  </section>
+
+  <section class="win settings hidden" id="settings">
+    <header><span class="dots"><i></i><i></i><i></i></span>MailGent Settings</header>
+    <div class="body"><p>Opened from the menu. The Ask stays up, but this window is the one in front.</p></div>
+  </section>
+
+  <div id="ask-windows"></div>
+
+  <div class="dock-mini hidden" id="mini">Ask minimized — click the menu-bar icon</div>
+
+  <div class="dropdown hidden" id="menu" role="menu">
+    <div class="dd-head"><b>MailGent</b><span class="ver">v0.11.6</span></div>
+    <div class="row"><span class="k">Access</span><span class="v pos">Granted</span></div>
+    <div class="row"><span class="k">Last ingest</span><span class="v">12:40 <span class="pill">3m ago</span></span></div>
+    <div class="row"><span class="k">Changes</span><span class="v"><span class="pos">+53</span> <span class="neg">−65</span> → <span class="neg">−12</span></span></div>
+    <div class="row"><span class="k">Source</span><span class="v">Live Mail store</span></div>
+    <div class="row"><span class="k">Connected agent</span><span class="v">Cursor · Grok</span></div>
+    <div class="row"><span class="k">Last agent call</span><span class="v"><span class="chip">get</span> 12:42 <span class="pill">23s ago</span></span></div>
+    <hr>
+    <div class="asks" id="asks">
+      <button class="asks-toggle" id="asks-toggle" type="button">
+        <span>Access requests</span>
+        <span class="count" id="asks-count">2</span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <div class="ask-list" id="ask-list"></div>
+      <hr>
+    </div>
+    <button class="action" type="button" data-action="noop">Open Companion</button>
+    <button class="action" type="button" data-action="noop">Open Grant Desk</button>
+    <button class="action" type="button" data-action="noop">Open Access Log</button>
+    <hr>
+    <button class="action" type="button" data-action="settings">Settings…</button>
+    <hr>
+    <button class="action" type="button" data-action="noop">About MailGent</button>
+    <hr>
+    <button class="action" type="button" data-action="noop">Quit MailGent</button>
+  </div>
+</div>
+<div class="chrome">
+  <div>
+    <b>Prototype · menu click surfaces Ask</b>
+    <div class="state" id="state"></div>
+  </div>
+  <button type="button" id="bury">Bury behind Safari</button>
+  <button type="button" id="minimize">Minimize selected</button>
+  <button type="button" id="clear">No requests</button>
+  <button type="button" id="restore">Two requests</button>
+  <p class="hint">Open the tray to raise both windows without stealing focus. Expand Access requests; click a row to raise only, or use its Block / Allow control to resolve only that request.</p>
+</div>
+<script>
+  const askWindows = document.getElementById("ask-windows");
+  const menu = document.getElementById("menu");
+  const status = document.getElementById("status");
+  const settings = document.getElementById("settings");
+  const mini = document.getElementById("mini");
+  const stateEl = document.getElementById("state");
+
+  const seed = () => ([
+    { id: "a", agent: "Cursor", subject: "Payslip April", from: "payroll@example.com" },
+    { id: "b", agent: "Grok", subject: "Contract draft for Project Marigold with revised indemnity terms", from: "legal@example.com" }
+  ]);
+
+  const state = {
+    menuOpen: false,
+    windowsRaised: false,
+    keyRequest: null,
+    minimized: new Set(),
+    settingsOpen: false,
+    expanded: false,
+    asks: seed(),
+    selected: "a",
+    decisions: [],
+    last: "start — two independent request windows are buried"
+  };
+
+  const badge = document.getElementById("badge");
+  const asksBlock = document.getElementById("asks");
+  const askList = document.getElementById("ask-list");
+  const asksCount = document.getElementById("asks-count");
+
+  function paint() {
+    const n = state.asks.length;
+    const selected = state.asks.find((item) => item.id === state.selected) || state.asks[0];
+    menu.classList.toggle("hidden", !state.menuOpen);
+    status.classList.toggle("open", state.menuOpen);
+    badge.hidden = n === 0;
+    badge.textContent = String(n);
+    status.setAttribute("aria-label", n ? `MailGent, ${n} access ${n === 1 ? "request" : "requests"}` : "MailGent");
+    asksBlock.classList.toggle("on", n > 0);
+    asksBlock.classList.toggle("expanded", state.expanded && n > 0);
+    asksCount.textContent = String(n);
+    askList.classList.toggle("open", state.expanded && n > 0);
+    askList.replaceChildren(...state.asks.map((item) => {
+      const row = document.createElement("div");
+      row.className = "ask-item" + (item.id === state.selected ? " current" : "");
+      row.innerHTML =
+        `<button class="ask-select" type="button" data-raise="${item.id}">` +
+        `<span class="ask-mark">?</span><span class="ask-name"></span></button>` +
+        `<button class="quick block" type="button" data-decision="block" data-id="${item.id}">Block</button>` +
+        `<button class="quick allow" type="button" data-decision="allow" data-id="${item.id}">Allow</button>`;
+      row.querySelector(".ask-name").textContent = `${item.agent} · ${item.subject}`;
+      return row;
+    }));
+
+    askWindows.replaceChildren(...state.asks.map((item, index) => {
+      const window = document.createElement("section");
+      const isSelected = item.id === state.selected;
+      const isVisible = !state.minimized.has(item.id);
+      window.className = "win ask" +
+        (!isVisible ? " hidden" : "") +
+        (state.windowsRaised && isSelected ? " front" : "") +
+        (state.keyRequest === item.id ? " key" : "");
+      window.dataset.windowId = item.id;
+      window.style.left = `${120 + index * 54}px`;
+      window.style.top = `${105 + index * 46}px`;
+      window.style.zIndex = state.windowsRaised ? String(isSelected ? 42 : 40 + index) : String(1 + index);
+      window.innerHTML =
+        `<header><span class="dots"><button data-close="${item.id}" type="button" aria-label="Close and Block ${item.agent} request"></button><i></i><i></i></span>Email access request</header>` +
+        `<div class="body"><div class="q">?</div>` +
+        `<h1>${item.agent} wants access to the email below</h1>` +
+        `<p>This request has its own window and decision.</p>` +
+        `<div class="card"><b></b><span>From ${item.from} · Body and attachment are on Ask.</span></div>` +
+        `<div class="foot"><button class="btn" type="button" data-window-decision="block" data-id="${item.id}">Block</button>` +
+        `<button class="btn go" type="button" data-window-decision="allow" data-id="${item.id}">Allow</button></div></div>`;
+      window.querySelector(".card b").textContent = item.subject;
+      return window;
+    }));
+
+    settings.classList.toggle("hidden", !state.settingsOpen);
+    settings.classList.toggle("key", state.settingsOpen);
+    mini.classList.toggle("hidden", !(state.minimized.size > 0 && n > 0));
+    stateEl.textContent =
+      `pending: ${n}   section: ${n > 0 ? (state.expanded ? "expanded" : "collapsed") : "hidden"}   menu: ${state.menuOpen ? "open" : "closed"}\n` +
+      `selected: ${selected ? selected.subject : "—"}   key: ${state.keyRequest || "none"}   minimized: ${state.minimized.size}\n` +
+      `${state.last}${state.decisions.length ? `   decisions: ${state.decisions.join(", ")}` : ""}`;
+  }
+
+  function raiseRequest(id) {
+    state.selected = id;
+    state.minimized.delete(id);
+    state.windowsRaised = true;
+    state.keyRequest = state.menuOpen ? null : id;
+    const item = state.asks.find((row) => row.id === id);
+    state.last = `raised “${item.subject}” only — no decision emitted`;
+  }
+
+  function resolveRequest(id, decision, source) {
+    const item = state.asks.find((row) => row.id === id);
+    if (!item) return;
+    state.decisions.push(`${item.agent}:${decision}`);
+    state.asks = state.asks.filter((row) => row.id !== id);
+    state.minimized.delete(id);
+    if (state.selected === id) state.selected = state.asks[0]?.id || null;
+    if (state.keyRequest === id) state.keyRequest = null;
+    if (state.asks.length === 0) state.expanded = false;
+    state.last = `${source} → ${decision === "allow" ? "allowed" : "blocked"} only “${item.subject}”`;
+  }
+
+  function openMenu() {
+    state.menuOpen = true;
+    state.settingsOpen = false;
+    if (state.asks.length === 0) {
+      state.windowsRaised = false;
+      state.keyRequest = null;
+      state.last = "click — menu only (Access requests hidden, badge gone)";
+    } else {
+      state.asks.forEach((item) => state.minimized.delete(item.id));
+      state.windowsRaised = true;
+      state.keyRequest = null;
+      state.last = "click — all pending windows raised; selected ordered last; none is key";
+    }
+    paint();
+  }
+
+  function closeMenu(reason) {
+    if (!state.menuOpen && reason !== "settings") return;
+    state.menuOpen = false;
+    if (reason === "settings") {
+      state.settingsOpen = true;
+      state.keyRequest = null;
+      state.windowsRaised = true;
+      state.last = "Settings… — Settings is key; pending windows stay visible behind it";
+    } else if (reason === "outside") {
+      if (state.asks.length > 0) {
+        state.keyRequest = state.selected;
+        state.windowsRaised = true;
+        state.last = "menu dismissed — selected request stays in front and becomes key";
+      } else {
+        state.last = "menu dismissed — nothing pending";
+      }
+    }
+    paint();
+  }
+
+  status.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (state.menuOpen) closeMenu("outside");
+    else openMenu();
+  });
+
+  document.getElementById("asks-toggle").addEventListener("click", (event) => {
+    event.stopPropagation();
+    state.expanded = !state.expanded;
+    state.last = state.expanded ? "expanded Access requests" : "collapsed Access requests";
+    paint();
+  });
+
+  askList.addEventListener("click", (event) => {
+    const decision = event.target.closest("[data-decision]");
+    const raise = event.target.closest("[data-raise]");
+    if (!decision && !raise) return;
+    event.stopPropagation();
+    if (decision) resolveRequest(decision.dataset.id, decision.dataset.decision, "quick control");
+    else raiseRequest(raise.dataset.raise);
+    paint();
+  });
+
+  askWindows.addEventListener("click", (event) => {
+    const close = event.target.closest("[data-close]");
+    const decision = event.target.closest("[data-window-decision]");
+    const window = event.target.closest("[data-window-id]");
+    if (close) {
+      resolveRequest(close.dataset.close, "block", "traffic-light close");
+    } else if (decision) {
+      resolveRequest(decision.dataset.id, decision.dataset.windowDecision, "window button");
+    } else if (window) {
+      raiseRequest(window.dataset.windowId);
+      const item = state.asks.find((row) => row.id === window.dataset.windowId);
+      state.last = `entered “${item.subject}” — window is key; no decision emitted`;
+    }
+    paint();
+  });
+
+  menu.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-action]");
+    if (!action) return;
+    event.stopPropagation();
+    if (action.dataset.action === "settings") closeMenu("settings");
+    else closeMenu("outside");
+  });
+
+  document.getElementById("desk").addEventListener("click", (event) => {
+    if (event.target.closest("#menu") || event.target.closest("#status")) return;
+    if (state.menuOpen) closeMenu("outside");
+  });
+
+  document.getElementById("bury").addEventListener("click", () => {
+    state.menuOpen = false;
+    state.windowsRaised = false;
+    state.keyRequest = null;
+    state.minimized.clear();
+    state.settingsOpen = false;
+    state.last = "reset — both request windows buried behind Safari";
+    paint();
+  });
+
+  document.getElementById("clear").addEventListener("click", () => {
+    state.asks = [];
+    state.selected = null;
+    state.expanded = false;
+    state.minimized.clear();
+    state.windowsRaised = false;
+    state.keyRequest = null;
+    state.last = "no requests — badge, section, and separator are gone";
+    paint();
+  });
+
+  document.getElementById("restore").addEventListener("click", () => {
+    state.asks = seed();
+    state.selected = "a";
+    state.minimized.clear();
+    state.windowsRaised = false;
+    state.keyRequest = null;
+    state.settingsOpen = false;
+    state.decisions = [];
+    state.last = "two independent requests again — windows buried";
+    paint();
+  });
+
+  document.getElementById("minimize").addEventListener("click", () => {
+    if (!state.selected) return;
+    state.menuOpen = false;
+    state.minimized.add(state.selected);
+    state.windowsRaised = false;
+    state.keyRequest = null;
+    state.settingsOpen = false;
+    state.last = "selected request minimized — pending count is unchanged";
+    paint();
+  });
+
+  paint();
+</script>
+</body>
+</html>

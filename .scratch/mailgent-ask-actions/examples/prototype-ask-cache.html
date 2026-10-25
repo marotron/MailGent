@@ -1,0 +1,272 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — Ask cache per agentID + message + field.
+  Question: after Allow or Block, what does the next get do?
+  Open: open .scratch/mailgent-ask-actions/examples/prototype-ask-cache.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Ask cache proto</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0071e3;
+      --green: #248a3d;
+      --green-soft: rgba(36, 138, 61, 0.12);
+      --red: #d70015;
+      --red-soft: rgba(215, 0, 21, 0.1);
+      --amber: #b25e09;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 24px 16px 40px;
+      font: 13px/1.4 inherit;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    .page { max-width: 960px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note strong { font-weight: 650; }
+    .layout { display: grid; grid-template-columns: 280px 1fr; gap: 14px; }
+    @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+    .panel, .result {
+      background: #f5f5f7; border-radius: 10px; border: 1px solid #00000018;
+      box-shadow: 0 18px 50px #00000028; padding: 14px;
+    }
+    h2 { margin: 0 0 8px; font-size: 13px; }
+    .actions { display: flex; flex-direction: column; gap: 6px; }
+    .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      padding: 6px 10px; font-size: 12px; font-weight: 600; text-align: left;
+    }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn.danger { color: var(--red); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .result h1 { margin: 0 0 6px; font-size: 18px; }
+    .prompt {
+      border: 1px solid #f0d2a8; background: #fff6e8; color: var(--amber);
+      border-radius: 8px; padding: 10px 12px; margin: 8px 0;
+    }
+    .ok { background: var(--green-soft); color: var(--green); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+    .bad { background: var(--red-soft); color: var(--red); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+    .meta { color: var(--muted); font-size: 12px; margin: 0; }
+    pre.state {
+      margin: 0; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #1d1d1f; color: #f5f5f7; border-radius: 8px; padding: 12px;
+      white-space: pre-wrap; overflow: auto; max-height: 420px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <strong>Throwaway proto</strong> · After Allow or Block, what does the next <em>get</em> do?
+      Cache is per field for one <code>agentID</code> + message. MCP and CLI share it. Overlay runs first. A plain Allow does not store a redacted body.
+    </div>
+    <div class="layout">
+      <div class="panel">
+        <h2>Actions</h2>
+        <div class="actions" id="actions"></div>
+      </div>
+      <div>
+        <div class="result" id="result"></div>
+      </div>
+    </div>
+    <pre class="state" id="stateDump"></pre>
+  </div>
+<script>
+const MESSAGE = {
+  id: "msg-payslip-2026-04",
+  subject: "Your April payslip is ready",
+  body: "Net pay £3,240. Reference PAY-2026-04-118.",
+};
+const AGENTS = {
+  "agent-cursor": { name: "Cursor", channels: ["mcp", "cli"] },
+  "agent-grok": { name: "Grok", channels: ["mcp", "cli"] },
+};
+
+function fresh() {
+  return {
+    grants: {
+      "agent-cursor": { subject: "ask", body: "on" },
+      "agent-grok": { subject: "ask", body: "on" },
+    },
+    rules: [
+      { id: "rule-pass-subject", polarity: "pass", field: "subject", effect: "on" },
+      { id: "rule-block-body", polarity: "block", field: "body", effect: "off" },
+    ],
+    enablements: { "rule-pass-subject": [], "rule-block-body": [] },
+    cache: [],
+    lastPrompt: null,
+    lastResult: null,
+    focus: { agentID: "agent-cursor", channel: "mcp" },
+  };
+}
+
+let model = fresh();
+
+function cacheHit(agentID, field) {
+  return model.cache.find(c => c.agentID === agentID && c.messageID === MESSAGE.id && c.field === field);
+}
+
+function resolve(agentID) {
+  const grant = { ...model.grants[agentID] };
+  const overlay = {};
+  for (const rule of model.rules) {
+    if (!(model.enablements[rule.id] || []).includes(agentID)) continue;
+    if (grant[rule.field] === undefined) continue;
+    overlay[rule.field] = rule.effect;
+  }
+  const fields = [];
+  for (const field of ["subject", "body"]) {
+    if (overlay[field]) {
+      fields.push({ field, source: "overlay", value: overlay[field], cacheRead: false });
+      continue;
+    }
+    if (grant[field] !== "ask") {
+      fields.push({ field, source: "grant", value: grant[field], cacheRead: false });
+      continue;
+    }
+    const hit = cacheHit(agentID, field);
+    if (hit) fields.push({ field, source: "cache", decision: hit.decision, cacheRead: true });
+    else fields.push({ field, source: "ask", cacheRead: false });
+  }
+  return { agentID, fields };
+}
+
+function toolResult(agentID, resolved) {
+  const out = { agentID, messageID: MESSAGE.id, fields: {} };
+  for (const row of resolved.fields) {
+    if (row.source === "ask") continue;
+    if (row.value === "off" || row.decision === "block") {
+      out.fields[row.field] = { withheld: true, via: row.source };
+    } else {
+      out.fields[row.field] = { value: MESSAGE[row.field], via: row.source };
+    }
+  }
+  return out;
+}
+
+function get(agentID, channel) {
+  model.focus = { agentID, channel };
+  const resolved = resolve(agentID);
+  const asking = resolved.fields.filter(f => f.source === "ask").map(f => f.field);
+  if (asking.length) {
+    model.lastPrompt = { agentID, channel, fields: asking };
+    model.lastResult = null;
+  } else {
+    model.lastPrompt = null;
+    model.lastResult = toolResult(agentID, resolved);
+  }
+  render();
+}
+
+function decide(kind) {
+  if (!model.lastPrompt) return;
+  const { agentID, fields } = model.lastPrompt;
+  if (kind === "allow-redact") {
+    for (const field of fields) {
+      if (field === "body") continue;
+      model.cache.push({ agentID, messageID: MESSAGE.id, field, decision: "allow" });
+    }
+    const resolved = resolve(agentID);
+    const bodyAsking = fields.includes("body");
+    model.lastResult = toolResult(agentID, resolved);
+    if (bodyAsking) {
+      model.lastResult.fields.body = { value: "[redacted]", via: "this get only" };
+      model.lastResult.note = "Body cache refused · next get still asks Body";
+    }
+    model.lastPrompt = null;
+    render();
+    return;
+  }
+  for (const field of fields) {
+    model.cache.push({ agentID, messageID: MESSAGE.id, field, decision: kind });
+  }
+  model.lastPrompt = null;
+  model.lastResult = toolResult(agentID, resolve(agentID));
+  render();
+}
+
+function enable(ruleId) {
+  const id = model.focus.agentID;
+  const list = model.enablements[ruleId];
+  if (!list.includes(id)) list.push(id);
+  get(id, model.focus.channel);
+}
+
+function addBodyAsk() {
+  model.grants[model.focus.agentID].body = "ask";
+  get(model.focus.agentID, model.focus.channel);
+}
+
+function forgetCursor() {
+  model.cache = model.cache.filter(c => c.agentID !== "agent-cursor");
+  for (const ruleId of Object.keys(model.enablements)) {
+    model.enablements[ruleId] = model.enablements[ruleId].filter(id => id !== "agent-cursor");
+  }
+  model.lastPrompt = null;
+  model.lastResult = { note: "Forgot agent-cursor · Grok cache and enablements unchanged" };
+  render();
+}
+
+function render() {
+  const prompt = model.lastPrompt;
+  const actions = [
+    ["get Cursor MCP", () => get("agent-cursor", "mcp")],
+    ["get Cursor CLI", () => get("agent-cursor", "cli")],
+    ["get Grok MCP", () => get("agent-grok", "mcp")],
+    ["Allow", () => decide("allow"), !prompt],
+    ["Block", () => decide("block"), !prompt],
+    ["Allow with redact", () => decide("allow-redact"), !prompt || !prompt.fields.includes("body")],
+    ["Add Body as Ask", addBodyAsk, model.grants[model.focus.agentID].body === "ask"],
+    ["Save Pass rule for Subject", () => enable("rule-pass-subject")],
+    ["Save Block rule for Body", () => enable("rule-block-body")],
+    ["Forget Cursor", forgetCursor],
+    ["Reset", () => { model = fresh(); render(); }],
+  ];
+  document.getElementById("actions").innerHTML = actions.map((a, i) =>
+    `<button type="button" class="btn" data-i="${i}" ${a[2] ? "disabled" : ""}>${a[0]}</button>`
+  ).join("");
+  document.querySelectorAll("#actions button").forEach(btn => {
+    btn.addEventListener("click", () => actions[Number(btn.dataset.i)][1]());
+  });
+
+  const who = AGENTS[model.focus.agentID];
+  let body = `<h1>${who.name}</h1><p class="meta">${model.focus.agentID} · ${model.focus.channel} · ${MESSAGE.id}</p>`;
+  if (prompt) {
+    body += `<div class="prompt">Ask ${prompt.fields.join(" · ")} · ${prompt.channel}</div>`;
+  } else if (model.lastResult) {
+    const refused = model.lastResult.note;
+    body += `<div class="${refused ? "bad" : "ok"}">${refused || "No prompt · tool result"}</div>`;
+  } else {
+    body += `<p class="meta">Press a get.</p>`;
+  }
+  document.getElementById("result").innerHTML = body;
+
+  const resolved = resolve(model.focus.agentID);
+  document.getElementById("stateDump").textContent = JSON.stringify({
+    grants: model.grants,
+    rules: model.rules,
+    enablements: model.enablements,
+    cache: model.cache,
+    lastPrompt: model.lastPrompt,
+    lastResult: model.lastResult,
+    resolved,
+  }, null, 2);
+}
+
+render();
+</script>
+</body>
+</html>
