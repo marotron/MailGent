@@ -12,6 +12,10 @@ Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called o
 
 - Land Ask line on `main`: concurrent Ask windows, status-menu Access requests, rules-from-Ask (variant G), Remember Ask decisions, Ask address stack / Enable on / Attachment-content rule defaults (shipped earlier as 0.11.6–0.13.2 on `feat/rules-from-ask`)
 
+### Fixed
+
+- DMG **Open MailGent** alias survives CI: do not delete the staged bookmark before remaking when `/Applications/MailGent.app` is missing (empty step 2 on 0.15.0)
+
 ### Changed
 
 - Latest binary includes Ask product work together with pretty DMG + Open MailGent (0.14.0–0.15.0)

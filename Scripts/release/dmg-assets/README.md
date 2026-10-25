@@ -12,7 +12,7 @@ Used by `Scripts/release/dmg.sh` for the Finder install window (drag → Applica
 
 Live Finder icons on the volume: **MailGent.app**, **Applications**, and **Open MailGent**. No helper applets — unsigned helpers get Gatekeeper-blocked the same way as the app.
 
-**Alias caveat:** plain `cp` strips `FinderInfo` (`fapa`/`MACS`) so the file becomes a Document and opens as raw bookmark text. Stage with `ditto` + `SetFile`, and prefer remaking the alias via Finder AppleScript during layout.
+**Alias caveats:** plain `cp` strips `FinderInfo` (`fapa`/`MACS`) so the file becomes a Document and opens as raw bookmark text. Stage with `ditto` + `SetFile`. Remake via Finder AppleScript only when `/Applications/MailGent.app` exists; otherwise keep the staged bookmark (CI). Never delete the staged alias before remake succeeds.
 
 ## Install steps on the background
 
