@@ -121,12 +121,14 @@ mkdir -p "$STAGE_DIR"
 cp -R "$APP_PATH" "$STAGE_DIR/"
 ln -s /Applications "$STAGE_DIR/Applications"
 # Finder alias → /Applications/MailGent.app (post-install open shortcut).
-# Must preserve FinderInfo (type fapa / creator MACS); plain `cp` drops it and
-# double-click opens the bookmark bytes as a text document.
+# Git checkout drops FinderInfo. Restoring type/creator alone is not enough:
+# without the alias bit (-a A / FinderInfo 0x80) Finder shows a blank document
+# and "Item … is used by macOS and can't be opened" (0.16.0 CI DMGs).
+# plain `cp` also strips FinderInfo — always ditto + SetFile -a A -t fapa -c MACS.
 if [[ -f "$OPEN_ALIAS_SRC" ]]; then
   ditto "$OPEN_ALIAS_SRC" "$STAGE_DIR/$OPEN_ALIAS_NAME"
   if command -v SetFile >/dev/null 2>&1; then
-    SetFile -t fapa -c MACS "$STAGE_DIR/$OPEN_ALIAS_NAME"
+    SetFile -a A -t fapa -c MACS "$STAGE_DIR/$OPEN_ALIAS_NAME"
   fi
 else
   echo "warning: missing ${OPEN_ALIAS_SRC}; DMG will have no Open MailGent alias" >&2
@@ -257,6 +259,16 @@ if [[ ! -e "$VOLUME/$OPEN_ALIAS_NAME" ]]; then
   exit 1
 fi
 echo "→ Open alias present: ${VOLUME}/${OPEN_ALIAS_NAME}"
+if command -v GetFileInfo >/dev/null 2>&1; then
+  OPEN_ALIAS_ATTRS="$(GetFileInfo -a "$VOLUME/$OPEN_ALIAS_NAME" 2>/dev/null || true)"
+  # First flag char must be capital A (alias bit) — required for double-click.
+  if [[ "${OPEN_ALIAS_ATTRS:0:1}" != "A" ]]; then
+    echo "error: ${OPEN_ALIAS_NAME} missing alias bit (GetFileInfo -a → ${OPEN_ALIAS_ATTRS:-empty}); need SetFile -a A" >&2
+    hdiutil detach "$VOLUME" -force 2>/dev/null || hdiutil detach "$DEVICE" -force 2>/dev/null || true
+    exit 1
+  fi
+  echo "→ Open alias FinderInfo OK (${OPEN_ALIAS_ATTRS})"
+fi
 
 chflags hidden "$VOLUME/.background" "$VOLUME/.fseventsd" 2>/dev/null || true
 
