@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.16.1] - 2026-10-25
+
+### Fixed
+
+- DMG **Open MailGent** alias: set Finder alias bit (`SetFile -a A`) when staging so CI builds are double-clickable (0.16.0 showed a blank icon and “used by macOS”)
+
 ## [0.16.0] - 2026-10-25
 
 ### Added
