@@ -961,6 +961,7 @@ struct AgentReadAPITests {
                 dateMode: .on,
                 bodyMode: .ask
             ),
+            audit: true,
             allowConditionalAccessPrompts: true,
             askDecisionCachePolicy: AskDecisionCachePolicy(
                 enabled: true,
@@ -985,6 +986,9 @@ struct AgentReadAPITests {
         #expect(counter.count == 1)
         #expect(first.body == .text("Please pay"))
         #expect(first.leakGuardAccess?.conditionalAccessFields == ["Body"])
+        let firstGet = try #require(env.audit?.entries().last { $0.kind == .get })
+        #expect(firstGet.messages[0].conditionalConfirmedFields.body == true)
+        #expect(firstGet.messages[0].conditionalRememberedFields.body == false)
 
         let second = try await env.gateway.get(
             credential: env.credential,
@@ -996,6 +1000,9 @@ struct AgentReadAPITests {
         #expect(second.body == .text("Please pay"))
         #expect(second.leakGuardAccess?.conditionalAccessFields == ["Body"])
         #expect(second.leakGuardAccess?.bodyAccessReason == .conditional)
+        let secondGet = try #require(env.audit?.entries().last { $0.kind == .get })
+        #expect(secondGet.messages[0].conditionalConfirmedFields.body == true)
+        #expect(secondGet.messages[0].conditionalRememberedFields.body == true)
     }
 
     @Test func getReusesCachedAskBodyBlockWithoutSecondPrompt() async throws {
@@ -1012,6 +1019,7 @@ struct AgentReadAPITests {
                 dateMode: .on,
                 bodyMode: .ask
             ),
+            audit: true,
             allowConditionalAccessPrompts: true,
             askDecisionCachePolicy: AskDecisionCachePolicy(
                 enabled: true,
@@ -1040,6 +1048,9 @@ struct AgentReadAPITests {
         #expect(counter.count == 1)
         #expect(second.body == .notGranted)
         #expect(second.leakGuardAccess?.conditionalBlockedFields == ["Body"])
+        let secondGet = try #require(env.audit?.entries().last { $0.kind == .get })
+        #expect(secondGet.messages[0].conditionalUserBlockedFields.body == true)
+        #expect(secondGet.messages[0].conditionalRememberedFields.body == true)
     }
 
     @Test func getAskCacheTTLExpiryPromptsAgain() async throws {

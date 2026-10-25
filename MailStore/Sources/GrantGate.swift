@@ -232,6 +232,20 @@ public struct GrantFields: Equatable, Hashable, Sendable {
         )
     }
 
+    /// Bits on in both (Access Log: Ask allow/block ∩ Remember cache).
+    public func intersecting(_ other: GrantFields) -> GrantFields {
+        GrantFields(
+            subject: subject && other.subject,
+            from: from && other.from,
+            to: to && other.to,
+            cc: cc && other.cc,
+            date: date && other.date,
+            body: body && other.body,
+            attachmentMetadata: attachmentMetadata && other.attachmentMetadata,
+            attachmentContent: attachmentContent && other.attachmentContent
+        )
+    }
+
     public var hasAnyGranted: Bool {
         subject || from || to || cc || date || body || attachmentMetadata || attachmentContent
     }

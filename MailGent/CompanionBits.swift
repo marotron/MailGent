@@ -1979,6 +1979,8 @@ struct GrantFieldBadgeRow: View {
     var conditionalConfirmed: GrantFields = .none
     /// Fields the user Blocked on an Ask prompt for this get (Access Log tint).
     var conditionalBlocked: GrantFields = .none
+    /// Subset of Ask allow/block that came from Remember Ask (no popup on this get).
+    var conditionalRemembered: GrantFields = .none
     var onToggle: ((WritableKeyPath<GrantFields, FieldAccessMode>) -> Void)? = nil
 
     private struct Item: Identifiable {
@@ -2062,8 +2064,14 @@ struct GrantFieldBadgeRow: View {
                     .strikethrough(mode == .off, color: ink.opacity(tint == .off ? 0.45 : 0.55))
             }
             if tint == .conditionalAllowed || tint == .conditionalBlocked {
-                Text("?")
-                    .font(.system(size: 7, weight: .bold))
+                if conditionalRemembered[keyPath: item.keyPath] {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 7, weight: .bold))
+                        .symbolRenderingMode(.monochrome)
+                } else {
+                    Text("?")
+                        .font(.system(size: 7, weight: .bold))
+                }
             }
         }
         .foregroundStyle(ink)
@@ -2111,14 +2119,21 @@ struct GrantFieldBadgeRow: View {
     }
 
     private func helpText(_ item: Item, tint: Tint) -> String {
+        let remembered = conditionalRemembered[keyPath: item.keyPath]
         switch tint {
-        case .pass: "\(item.title) — revealed by Pass"
-        case .block: "\(item.title) — withheld by Block"
-        case .conditionalAllowed: "\(item.title) — user allowed after Ask"
-        case .conditionalBlocked: "\(item.title) — user blocked after Ask"
-        case .granted: "\(item.title) — On"
-        case .ask: "\(item.title) — Ask"
-        case .off: "\(item.title) — Off"
+        case .pass: return "\(item.title) — revealed by Pass"
+        case .block: return "\(item.title) — withheld by Block"
+        case .conditionalAllowed:
+            return remembered
+                ? "\(item.title) — user allowed (cached)"
+                : "\(item.title) — user allowed after Ask"
+        case .conditionalBlocked:
+            return remembered
+                ? "\(item.title) — user blocked (cached)"
+                : "\(item.title) — user blocked after Ask"
+        case .granted: return "\(item.title) — On"
+        case .ask: return "\(item.title) — Ask"
+        case .off: return "\(item.title) — Off"
         }
     }
 
@@ -2545,7 +2560,8 @@ struct MessageAccessCard: View {
                     passRevealed: ref.passRevealedFields,
                     blockWithheld: ref.blockWithheldFields,
                     conditionalConfirmed: ref.conditionalConfirmedFields,
-                    conditionalBlocked: ref.conditionalUserBlockedFields
+                    conditionalBlocked: ref.conditionalUserBlockedFields,
+                    conditionalRemembered: ref.conditionalRememberedFields
                 )
             }
             subjectPreview
@@ -2559,7 +2575,7 @@ struct MessageAccessCard: View {
                     ref.from,
                     false,
                     mark: ruleMark(for: \.from),
-                    conditional: conditionalOutcome(for: \.from)
+                    conditional: conditionalAskMark(for: \.from)
                 )
             }
             if ref.fields.to {
@@ -2572,7 +2588,7 @@ struct MessageAccessCard: View {
                     ref.to,
                     false,
                     mark: ruleMark(for: \.to),
-                    conditional: conditionalOutcome(for: \.to)
+                    conditional: conditionalAskMark(for: \.to)
                 )
             }
             if ref.fields.cc {
@@ -2585,7 +2601,7 @@ struct MessageAccessCard: View {
                     ref.cc,
                     false,
                     mark: ruleMark(for: \.cc),
-                    conditional: conditionalOutcome(for: \.cc)
+                    conditional: conditionalAskMark(for: \.cc)
                 )
             }
             previewRow(
@@ -2593,13 +2609,13 @@ struct MessageAccessCard: View {
                 AccessLogFormat.compactMailDate(ref.date) ?? ref.date,
                 ref.fields.date,
                 mark: ruleMark(for: \.date),
-                conditional: conditionalOutcome(for: \.date)
+                conditional: conditionalAskMark(for: \.date)
             )
             Divider()
             labeledSection(
                 "Body",
                 mark: bodyRuleMark,
-                conditional: conditionalOutcome(for: \.body)
+                conditional: conditionalAskMark(for: \.body)
             ) {
                 bodyPreview
             }
@@ -2609,7 +2625,7 @@ struct MessageAccessCard: View {
                     "Attachment Info",
                     granted: ref.fields.attachmentMetadata,
                     mark: attachmentInfoRuleMark,
-                    conditional: conditionalOutcome(for: \.attachmentMetadata)
+                    conditional: conditionalAskMark(for: \.attachmentMetadata)
                 ) {
                     if ref.attachments.isEmpty {
                         attachmentTile(detail: "none in this response")
@@ -2623,7 +2639,7 @@ struct MessageAccessCard: View {
                     "Attachment Content",
                     granted: attachmentContentCards != nil || ref.fields.attachmentContent,
                     mark: attachmentContentRuleMark,
-                    conditional: conditionalOutcome(for: \.attachmentContent)
+                    conditional: conditionalAskMark(for: \.attachmentContent)
                 ) {
                     if let cards = attachmentContentCards, !cards.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -2688,17 +2704,22 @@ struct MessageAccessCard: View {
         ref.appliedRuleMark(for: keyPath)
     }
 
-    private func conditionalOutcome(for keyPath: KeyPath<GrantFields, Bool>) -> ConditionalFieldOutcome? {
-        if ref.conditionalUserBlockedFields[keyPath: keyPath] { return .blocked }
-        if ref.conditionalConfirmedFields[keyPath: keyPath] { return .allowed }
+    private func conditionalAskMark(for keyPath: KeyPath<GrantFields, Bool>) -> ConditionalAskMark? {
+        let remembered = ref.conditionalRememberedFields[keyPath: keyPath]
+        if ref.conditionalUserBlockedFields[keyPath: keyPath] {
+            return ConditionalAskMark(outcome: .blocked, remembered: remembered)
+        }
+        if ref.conditionalConfirmedFields[keyPath: keyPath] {
+            return ConditionalAskMark(outcome: .allowed, remembered: remembered)
+        }
         return nil
     }
 
     @ViewBuilder
     private func fieldMarks(for keyPath: KeyPath<GrantFields, Bool>) -> some View {
         HStack(spacing: 4) {
-            if let outcome = conditionalOutcome(for: keyPath) {
-                ConditionalFieldMarkChip(outcome: outcome)
+            if let mark = conditionalAskMark(for: keyPath) {
+                ConditionalFieldMarkChip(outcome: mark.outcome, remembered: mark.remembered)
             }
             if let mark = ruleMark(for: keyPath) {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
@@ -2716,7 +2737,7 @@ struct MessageAccessCard: View {
             original: ref.subjectOriginal,
             deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject,
             mark: ruleMark(for: \.subject),
-            conditional: conditionalOutcome(for: \.subject)
+            conditional: conditionalAskMark(for: \.subject)
         )
     }
 
@@ -2728,7 +2749,7 @@ struct MessageAccessCard: View {
             HatchDeniedLabel(
                 placeholder: "Body / snippet",
                 fixedHeight: 112,
-                helpText: hatchHelp(for: conditionalOutcome(for: \.body))
+                helpText: hatchHelp(for: conditionalAskMark(for: \.body))
             )
                 .frame(maxWidth: .infinity)
                 .padding(10)
@@ -2759,7 +2780,7 @@ struct MessageAccessCard: View {
         case .notGranted:
             HatchDeniedLabel(
                 placeholder: "Body / snippet",
-                helpText: hatchHelp(for: conditionalOutcome(for: \.body))
+                helpText: hatchHelp(for: conditionalAskMark(for: \.body))
             )
         case .sanitized:
             SanitizedFieldText(
@@ -2804,7 +2825,7 @@ struct MessageAccessCard: View {
         original: String?,
         deniedPlaceholder: String,
         mark: AppliedGrantRule? = nil,
-        conditional: ConditionalFieldOutcome? = nil
+        conditional: ConditionalAskMark? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
@@ -2838,7 +2859,7 @@ struct MessageAccessCard: View {
                 }
             }
             if let conditional {
-                ConditionalFieldMarkChip(outcome: conditional)
+                ConditionalFieldMarkChip(outcome: conditional.outcome, remembered: conditional.remembered)
             }
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
@@ -2866,7 +2887,7 @@ struct MessageAccessCard: View {
     private func labeledSection<Content: View>(
         _ title: String,
         mark: AppliedGrantRule?,
-        conditional: ConditionalFieldOutcome? = nil,
+        conditional: ConditionalAskMark? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2878,7 +2899,7 @@ struct MessageAccessCard: View {
     private func sectionTitle(
         _ title: String,
         mark: AppliedGrantRule?,
-        conditional: ConditionalFieldOutcome? = nil
+        conditional: ConditionalAskMark? = nil
     ) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Text(title)
@@ -2886,7 +2907,7 @@ struct MessageAccessCard: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 4)
             if let conditional {
-                ConditionalFieldMarkChip(outcome: conditional)
+                ConditionalFieldMarkChip(outcome: conditional.outcome, remembered: conditional.remembered)
             }
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
@@ -2901,7 +2922,7 @@ struct MessageAccessCard: View {
         _ granted: Bool,
         empty: String = " ",
         mark: AppliedGrantRule? = nil,
-        conditional: ConditionalFieldOutcome? = nil
+        conditional: ConditionalAskMark? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
@@ -2918,7 +2939,7 @@ struct MessageAccessCard: View {
                 )
             }
             if let conditional {
-                ConditionalFieldMarkChip(outcome: conditional)
+                ConditionalFieldMarkChip(outcome: conditional.outcome, remembered: conditional.remembered)
             }
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
@@ -2927,15 +2948,15 @@ struct MessageAccessCard: View {
         .font(.caption)
     }
 
-    private func hatchHelp(for conditional: ConditionalFieldOutcome?) -> String? {
-        conditional == .blocked ? "Locked — user blocked after Ask" : nil
+    private func hatchHelp(for conditional: ConditionalAskMark?) -> String? {
+        conditional?.outcome == .blocked ? "Locked — user blocked after Ask" : nil
     }
 
     private func attachmentColumn<Content: View>(
         _ title: String,
         granted: Bool,
         mark: AppliedGrantRule? = nil,
-        conditional: ConditionalFieldOutcome? = nil,
+        conditional: ConditionalAskMark? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -3018,10 +3039,23 @@ enum ConditionalFieldOutcome {
         }
     }
 
+    func label(remembered: Bool) -> String {
+        remembered ? "\(label) (cached)" : label
+    }
+
     var helpText: String {
         switch self {
         case .allowed: "User allowed after Ask"
         case .blocked: "User blocked after Ask"
+        }
+    }
+
+    func helpText(remembered: Bool) -> String {
+        switch (self, remembered) {
+        case (.allowed, true): "User allowed (cached)"
+        case (.blocked, true): "User blocked (cached)"
+        case (.allowed, false): "User allowed after Ask"
+        case (.blocked, false): "User blocked after Ask"
         }
     }
 
@@ -3033,21 +3067,36 @@ enum ConditionalFieldOutcome {
     }
 }
 
+/// Ask outcome plus whether it came from Remember Ask reuse.
+struct ConditionalAskMark: Equatable {
+    var outcome: ConditionalFieldOutcome
+    var remembered: Bool = false
+}
+
 /// Compact mark for a field decided on an Ask (conditional) prompt.
 struct ConditionalFieldMarkChip: View {
     var outcome: ConditionalFieldOutcome = .allowed
+    /// True when the decision came from Remember Ask (no popup on this get).
+    var remembered: Bool = false
+
+    private var symbolName: String {
+        remembered ? "clock.arrow.circlepath" : "questionmark.circle.fill"
+    }
+
+    private var displayLabel: String { outcome.label(remembered: remembered) }
+    private var displayHelp: String { outcome.helpText(remembered: remembered) }
 
     var body: some View {
         HStack(spacing: 2) {
-            Image(systemName: "questionmark.circle.fill")
+            Image(systemName: symbolName)
                 .font(.system(size: RuleMarkStyle.circleFillIconSize, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
-            Text(outcome.label)
+            Text(displayLabel)
                 .font(.caption.weight(.bold))
         }
         .foregroundStyle(outcome.color)
-        .accessibilityLabel(outcome.helpText)
-        .help(outcome.helpText)
+        .accessibilityLabel(displayHelp)
+        .help(displayHelp)
     }
 }
 
@@ -3201,12 +3250,13 @@ struct AccessLogRuleHitBadge: View {
 
 // MARK: - Conditional Ask access log visuals
 
-/// List-row chip: Ask popup happened, plus allow (green) or block (red) result.
-/// Uses the same filled `?` circle as the Ask dialog / field mark (`questionmark.circle.fill`).
+/// List-row chip: Ask allow/block — live popup (`?`) or Remember Ask reuse (`clock.arrow.circlepath`).
 struct AccessLogConditionalAskBadge: View {
     let outcome: ConditionalFieldOutcome
     /// Fields decided with this outcome; shown when > 1.
     var count: Int = 1
+    /// True when the decision came from Remember Ask (no popup on this get).
+    var remembered: Bool = false
     @Environment(\.backgroundProminence) private var backgroundProminence
 
     private var onProminentBackground: Bool {
@@ -3215,8 +3265,17 @@ struct AccessLogConditionalAskBadge: View {
 
     private var color: Color { outcome.color }
 
+    private var symbolName: String {
+        remembered ? "clock.arrow.circlepath" : "questionmark.circle.fill"
+    }
+
     private var accessibilityText: String {
-        let base = outcome == .allowed ? "Ask: user allowed" : "Ask: user blocked"
+        let base: String
+        if remembered {
+            base = outcome == .allowed ? "Ask: remembered allow" : "Ask: remembered block"
+        } else {
+            base = outcome == .allowed ? "Ask: user allowed" : "Ask: user blocked"
+        }
         if count > 1 {
             return "\(base), \(count) fields"
         }
@@ -3226,7 +3285,7 @@ struct AccessLogConditionalAskBadge: View {
     var body: some View {
         let ink = onProminentBackground ? Color.white : color
         HStack(spacing: 3) {
-            Image(systemName: "questionmark.circle.fill")
+            Image(systemName: symbolName)
                 .font(.system(size: RuleMarkStyle.circleFillIconSize, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(ink)

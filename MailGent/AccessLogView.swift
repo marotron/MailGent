@@ -288,11 +288,25 @@ private struct AccessLogRow: View {
                 .lineLimit(1)
                 .layoutPriority(1)
             Spacer(minLength: 8)
-            if askAllowedCount > 0 {
-                AccessLogConditionalAskBadge(outcome: .allowed, count: askAllowedCount)
+            if askAllowedLiveCount > 0 {
+                AccessLogConditionalAskBadge(outcome: .allowed, count: askAllowedLiveCount)
             }
-            if askBlockedCount > 0 {
-                AccessLogConditionalAskBadge(outcome: .blocked, count: askBlockedCount)
+            if askAllowedRememberedCount > 0 {
+                AccessLogConditionalAskBadge(
+                    outcome: .allowed,
+                    count: askAllowedRememberedCount,
+                    remembered: true
+                )
+            }
+            if askBlockedLiveCount > 0 {
+                AccessLogConditionalAskBadge(outcome: .blocked, count: askBlockedLiveCount)
+            }
+            if askBlockedRememberedCount > 0 {
+                AccessLogConditionalAskBadge(
+                    outcome: .blocked,
+                    count: askBlockedRememberedCount,
+                    remembered: true
+                )
             }
             if leakHitCount > 0 {
                 AccessLogLeakHitBadge(count: leakHitCount, compact: true)
@@ -312,12 +326,20 @@ private struct AccessLogRow: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    private var askAllowedCount: Int {
-        AccessLogFormat.conditionalAskAllowedCount(for: entry)
+    private var askAllowedLiveCount: Int {
+        AccessLogFormat.conditionalAskAllowedLiveCount(for: entry)
     }
 
-    private var askBlockedCount: Int {
-        AccessLogFormat.conditionalAskBlockedCount(for: entry)
+    private var askAllowedRememberedCount: Int {
+        AccessLogFormat.conditionalAskAllowedRememberedCount(for: entry)
+    }
+
+    private var askBlockedLiveCount: Int {
+        AccessLogFormat.conditionalAskBlockedLiveCount(for: entry)
+    }
+
+    private var askBlockedRememberedCount: Int {
+        AccessLogFormat.conditionalAskBlockedRememberedCount(for: entry)
     }
 
     private var leakHitCount: Int {
@@ -370,15 +392,25 @@ private struct AccessLogRow: View {
         case .error: status = "failed"
         }
         var text = "\(entry.kind.badgeTitle) \(entry.agentName) \(requestValue) \(responseShort) \(status)"
-        if askAllowedCount > 0 {
-            text += askAllowedCount == 1
+        if askAllowedLiveCount > 0 {
+            text += askAllowedLiveCount == 1
                 ? ". Ask user allowed"
-                : ". Ask user allowed, \(askAllowedCount) fields"
+                : ". Ask user allowed, \(askAllowedLiveCount) fields"
         }
-        if askBlockedCount > 0 {
-            text += askBlockedCount == 1
+        if askAllowedRememberedCount > 0 {
+            text += askAllowedRememberedCount == 1
+                ? ". Ask remembered allow"
+                : ". Ask remembered allow, \(askAllowedRememberedCount) fields"
+        }
+        if askBlockedLiveCount > 0 {
+            text += askBlockedLiveCount == 1
                 ? ". Ask user blocked"
-                : ". Ask user blocked, \(askBlockedCount) fields"
+                : ". Ask user blocked, \(askBlockedLiveCount) fields"
+        }
+        if askBlockedRememberedCount > 0 {
+            text += askBlockedRememberedCount == 1
+                ? ". Ask remembered block"
+                : ". Ask remembered block, \(askBlockedRememberedCount) fields"
         }
         if leakHitCount > 0 {
             text += ". Leak guard \(leakHitCount) detection\(leakHitCount == 1 ? "" : "s")"
@@ -722,7 +754,8 @@ private struct AccessLogDetail: View {
                 passRevealed: ref.passRevealedFields,
                 blockWithheld: ref.blockWithheldFields,
                 conditionalConfirmed: ref.conditionalConfirmedFields,
-                conditionalBlocked: ref.conditionalUserBlockedFields
+                conditionalBlocked: ref.conditionalUserBlockedFields,
+                conditionalRemembered: ref.conditionalRememberedFields
             )
             .fixedSize(horizontal: true, vertical: false)
             if ref.leakDetectionCount > 0 {
@@ -915,7 +948,8 @@ private struct CollapsibleAuditMessage: View {
                                     passRevealed: ref.passRevealedFields,
                                     blockWithheld: ref.blockWithheldFields,
                                     conditionalConfirmed: ref.conditionalConfirmedFields,
-                                    conditionalBlocked: ref.conditionalUserBlockedFields
+                                    conditionalBlocked: ref.conditionalUserBlockedFields,
+                                    conditionalRemembered: ref.conditionalRememberedFields
                                 )
                                 .fixedSize(horizontal: true, vertical: false)
                                 if ref.leakDetectionCount > 0 {
@@ -934,7 +968,8 @@ private struct CollapsibleAuditMessage: View {
                                     passRevealed: ref.passRevealedFields,
                                     blockWithheld: ref.blockWithheldFields,
                                     conditionalConfirmed: ref.conditionalConfirmedFields,
-                                    conditionalBlocked: ref.conditionalUserBlockedFields
+                                    conditionalBlocked: ref.conditionalUserBlockedFields,
+                                    conditionalRemembered: ref.conditionalRememberedFields
                                 )
                                 .fixedSize(horizontal: true, vertical: false)
                                 if ref.leakDetectionCount > 0 {
@@ -1718,7 +1753,7 @@ enum AccessLogFormat {
         displayMessages(for: entry).reduce(0) { $0 + $1.blockApplicationCount }
     }
 
-    /// Fields the user Allowed on an Ask prompt for this entry.
+    /// Fields the user Allowed on an Ask prompt for this entry (live + remembered).
     static func conditionalAskAllowedCount(for entry: AuditEntry) -> Int {
         let fromMessages = displayMessages(for: entry).reduce(0) {
             $0 + $1.conditionalConfirmedFields.grantedCount
@@ -1727,13 +1762,59 @@ enum AccessLogFormat {
         return conditionalAskCountFromResponse(entry.responseSummary, blocked: false)
     }
 
-    /// Fields the user Blocked on an Ask prompt for this entry.
+    /// Fields the user Blocked on an Ask prompt for this entry (live + remembered).
     static func conditionalAskBlockedCount(for entry: AuditEntry) -> Int {
         let fromMessages = displayMessages(for: entry).reduce(0) {
             $0 + $1.conditionalUserBlockedFields.grantedCount
         }
         if fromMessages > 0 { return fromMessages }
         return conditionalAskCountFromResponse(entry.responseSummary, blocked: true)
+    }
+
+    /// Ask allow from a live popup (excludes Remember Ask reuse).
+    static func conditionalAskAllowedLiveCount(for entry: AuditEntry) -> Int {
+        let refs = displayMessages(for: entry)
+        // When refs exist, trust them even if live count is 0 (all fields remembered).
+        // Do not fall back to agent JSON — it has no cache bit and would re-count as live.
+        if !refs.isEmpty {
+            return refs.reduce(0) { partial, ref in
+                partial + ref.conditionalConfirmedFields
+                    .bitsNotIn(ref.conditionalRememberedFields)
+                    .grantedCount
+            }
+        }
+        return conditionalAskCountFromResponse(entry.responseSummary, blocked: false)
+    }
+
+    /// Ask allow reused via Remember Ask.
+    static func conditionalAskAllowedRememberedCount(for entry: AuditEntry) -> Int {
+        displayMessages(for: entry).reduce(0) { partial, ref in
+            partial + ref.conditionalConfirmedFields
+                .intersecting(ref.conditionalRememberedFields)
+                .grantedCount
+        }
+    }
+
+    /// Ask block from a live popup (excludes Remember Ask reuse).
+    static func conditionalAskBlockedLiveCount(for entry: AuditEntry) -> Int {
+        let refs = displayMessages(for: entry)
+        if !refs.isEmpty {
+            return refs.reduce(0) { partial, ref in
+                partial + ref.conditionalUserBlockedFields
+                    .bitsNotIn(ref.conditionalRememberedFields)
+                    .grantedCount
+            }
+        }
+        return conditionalAskCountFromResponse(entry.responseSummary, blocked: true)
+    }
+
+    /// Ask block reused via Remember Ask.
+    static func conditionalAskBlockedRememberedCount(for entry: AuditEntry) -> Int {
+        displayMessages(for: entry).reduce(0) { partial, ref in
+            partial + ref.conditionalUserBlockedFields
+                .intersecting(ref.conditionalRememberedFields)
+                .grantedCount
+        }
     }
 
     private static func conditionalAskCountFromResponse(_ responseSummary: String, blocked: Bool) -> Int {
@@ -1800,6 +1881,8 @@ enum AccessLogFormat {
             recorded: ref.conditionalBlockedFields,
             parsed: conditionalBlockedFields(from: obj)
         )
+        // Remember Ask bits are audit-only (not in agent JSON).
+        let mergedCached = ref.conditionalCachedFields
 
         let mergedRules: [String]?
         if let existing = ref.sanitizedRules, !existing.isEmpty {
@@ -1821,6 +1904,7 @@ enum AccessLogFormat {
             || mergedStealth == true
             || mergedConditional != nil
             || mergedBlocked != nil
+            || mergedCached != nil
         else { return ref }
 
         let recovered = Self.recoverStealthBodies(ref: ref, response: obj, stealth: mergedStealth == true)
@@ -1859,6 +1943,7 @@ enum AccessLogFormat {
             appliedRules: ref.appliedRules,
             conditionalFields: mergedConditional,
             conditionalBlockedFields: mergedBlocked,
+            conditionalCachedFields: mergedCached,
             isPartial: ref.isPartial || (obj["isPartial"] as? Bool ?? false)
         )
     }
@@ -1914,6 +1999,7 @@ enum AccessLogFormat {
             appliedRules: ref.appliedRules,
             conditionalFields: ref.conditionalFields,
             conditionalBlockedFields: ref.conditionalBlockedFields,
+            conditionalCachedFields: ref.conditionalCachedFields,
             isPartial: ref.isPartial || (obj["isPartial"] as? Bool ?? false)
         )
     }

@@ -791,6 +791,9 @@ public struct AgentReadAPI {
             }
             let conditionalLabels = Self.conditionalFieldLabels(resolution.confirmed)
             let blockedLabels = Self.conditionalFieldLabels(resolution.blocked)
+            let cachedFields = resolution.confirmed
+                .unioning(resolution.blocked)
+                .bitsNotIn(resolution.prompted)
             let access = ReadMessageAccess(
                 subject: subjectField,
                 body: bodyField,
@@ -813,7 +816,8 @@ public struct AgentReadAPI {
                         bodySanitized: bodyField,
                         appliedRules: grant.applied,
                         conditionalFields: resolution.confirmed,
-                        conditionalBlockedFields: resolution.blocked
+                        conditionalBlockedFields: resolution.blocked,
+                        conditionalCachedFields: cachedFields
                     )
                 ]
             )

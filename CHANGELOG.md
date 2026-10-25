@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.16.3] - 2026-10-25
+
+### Added
+
+- Access Log marks Remember Ask reuse with `clock.arrow.circlepath` (green allow / red block): list-row chip, field badges, and Formatted “user allowed (cached)” / “user blocked (cached)”; live Ask stays `?` / `questionmark.circle.fill`
+
 ## [0.16.2] - 2026-10-25
 
 ### Fixed
