@@ -206,6 +206,8 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | `openAttachmentSystem` | (row / Preview) | `paperclip` / `eye` | Companion Read attachment row; Access Log Preview | Re-export bytes → `NSWorkspace.open` / Quick Look |
 | `includeEnvelopeInRule` | Add to rule → In rule | `plus` → `checkmark` | Trailing on Ask envelope Subject / From rows | Toggle: include that envelope value in the new/updated rule. Icon-only `SecondaryAction`; label expands left as overlay on hover/focus (no layout shift). **G** ship look: flush chrome shared with Preview · Open in Mail · AND/OR · Close (20pt / 11px / 6px / no track gutter; subtle selected). Proto: `prototype-ask-rule-right.html?variant=G` |
 
+Grant Desk matcher chips (`FlowRuleTags`) may also carry chip-local trailing icons — pasteboard **Copy value** (`square.on.square`) and **Copy to another rule** (`arrow.right.square` Menu; plain mini chrome matching ×, indicator hidden) — same plain ~8pt chrome as × remove. Not `SecondaryAction`.
+
 ### Attachment entry — decided solution
 
 **Both**, with split roles (do not use a single “Open in Apple Mail” as the only affordance on an attach row):
@@ -259,6 +261,7 @@ SecondaryActionRow
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Grant Desk matcher chips: chip-local Copy value + Copy to another rule trailing icons (not `SecondaryAction`). |
 | 2026-10-20 | Ask Rules-from-Ask UI lock → variant **G** (picks · right editor · commit on Allow/Block). `SecondaryAction` chrome → flush 20pt / 11pt / 6pt family. |
 | 2026-10-20 | Ask envelope: include-in-rule is icon-only `SecondaryAction` (`includeEnvelopeInRule`; label expands left as overlay on hover); email badges and Ask chips stay read-only. No capsule `+ Rule` pill. |
 | 2026-10-19 | Status menu `AccessRequestsSection`: one row per concurrent Ask, ? selection mark, Block / Allow. Menu open raises every Ask window without taking key. |

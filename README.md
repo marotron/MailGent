@@ -1,6 +1,6 @@
 # MailGent
 
-**0.16.4 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.17.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -93,6 +93,8 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Shared Pass / Block overlays on mail that is already in scope (match From / Subject; optional When date window)
 - Enable a rule per agent on a placement in Grant Desk
 - From an Ask prompt, create or update a rule via envelope picks; enablement is the prompting agent plus that account and either the Ask mailbox or the whole account (Enable on)
+- Matcher chips in the rule editor: copy the value to the pasteboard, or append that matcher onto another Pass/Block rule (same From or Subject field); works in view and edit
+- Duplicate matchers in a rule (same mode + value) are flagged with orange chip chrome and a warning mark
 
 ### Leak guard
 

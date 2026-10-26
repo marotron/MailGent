@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.17.0] - 2026-10-26
+
+### Added
+
+- Grant Desk matcher chips: copy value to the pasteboard, or append the matcher onto another Pass/Block rule (same From or Subject field); available in view and edit
+- Grant Desk flags duplicate matchers in a rule (same mode + value) with orange chip chrome and a warning mark
+
 ## [0.16.4] - 2026-10-25
 
 ### Changed
