@@ -1082,6 +1082,12 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
+        let ttlPolicy = AskDecisionCachePolicy(
+            enabled: true,
+            ttlSeconds: 60,
+            persistAcrossLaunches: false,
+            shareScope: .perAgent
+        )
         let t0 = Date(timeIntervalSince1970: 1_000)
         cache.store(
             .allow,
@@ -1090,6 +1096,7 @@ struct AgentReadAPITests {
             placement: "INBOX",
             messageID: "1",
             field: "Body",
+            policy: ttlPolicy,
             now: t0
         )
         #expect(
@@ -1099,7 +1106,7 @@ struct AgentReadAPITests {
                 placement: "INBOX",
                 messageID: "1",
                 field: "Body",
-                policy: AskDecisionCachePolicy(enabled: true, ttlSeconds: 60, shareScope: .perAgent),
+                policy: ttlPolicy,
                 now: t0.addingTimeInterval(30)
             ) == .allow
         )
@@ -1110,7 +1117,7 @@ struct AgentReadAPITests {
                 placement: "INBOX",
                 messageID: "1",
                 field: "Body",
-                policy: AskDecisionCachePolicy(enabled: true, ttlSeconds: 60, shareScope: .perAgent),
+                policy: ttlPolicy,
                 now: t0.addingTimeInterval(61)
             ) == nil
         )

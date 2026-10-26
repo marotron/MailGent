@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.18.0] - 2026-10-26
+
+### Added
+
+- Remember Ask: **30 days**, **1 year**, and **forever** windows; timed and forever decisions persist in local `ask-decisions.json` across relaunches (Until MailGent quits stays memory-only). Forgetting an agent or clearing the cache rewrites the file
+
 ## [0.17.0] - 2026-10-26
 
 ### Added

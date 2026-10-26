@@ -1,6 +1,6 @@
 # MailGent
 
-**0.17.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.18.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -86,7 +86,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Ask rule editor **Enable on**: This mailbox (default) or This account · all mailboxes for that agent
 - Pass/Block field defaults from Ask keep Attachment content when names were already On on Scope (names ride along as the carrier bit)
 - Long From / To / Cc lines stack display name then address badge when they do not fit side-by-side; **Add to rule** stays on the first line
-- Optional **Remember Ask decisions** (Settings; shown when conditional prompts are on): reuse Allow / Block per field for the same message for **15 minutes**, **1 hour**, **24 hours**, or **until MailGent quits**. Default share is this agent only; optional All agents. Not a standing grant — new Ask fields still prompt; Pass/Block rules still win first. Forgetting an agent clears its cache entries (in memory only; not written to disk)
+- Optional **Remember Ask decisions** (Settings; shown when conditional prompts are on): reuse Allow / Block per field for the same message for **15 minutes**, **1 hour**, **24 hours**, **30 days**, **1 year**, **forever**, or **until MailGent quits**. Timed and forever answers persist locally in `ask-decisions.json` across relaunches; until quit stays in memory only. Default share is this agent only; optional All agents. Not a standing grant — new Ask fields still prompt; Pass/Block rules still win first. Forgetting an agent clears that agent’s entries from memory and disk
 
 ### Rules (Pass / Block)
 
