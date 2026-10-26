@@ -39,6 +39,12 @@ public struct RuleWhen: Equatable, Codable, Sendable {
     }
 }
 
+/// Which matcher list on a rule a chip belongs to (From vs Subject).
+public enum GrantMatcherField: Sendable {
+    case from
+    case subject
+}
+
 /// Field overlay on Scope-allowed messages: Pass grants denied fields; Block denies granted fields.
 public struct GrantRule: Identifiable, Equatable, Codable, Sendable {
     public var id: String
@@ -74,6 +80,23 @@ public struct GrantRule: Identifiable, Equatable, Codable, Sendable {
         self.when = when
         self.whenJoin = whenJoin
         self.fields = fields
+    }
+
+    /// Appends `matcher` to the given field when that list does not already contain an identical entry.
+    /// Returns `nil` on duplicate (same mode + value on that field).
+    public func appendingUniqueMatcher(_ matcher: MatchRule, to field: GrantMatcherField) -> GrantRule? {
+        switch field {
+        case .from:
+            guard !fromRules.contains(matcher) else { return nil }
+            var next = self
+            next.fromRules.append(matcher)
+            return next
+        case .subject:
+            guard !subjectRules.contains(matcher) else { return nil }
+            var next = self
+            next.subjectRules.append(matcher)
+            return next
+        }
     }
 }
 

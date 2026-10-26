@@ -748,6 +748,45 @@ struct RuleEngineTests {
             )
         )
     }
+
+    @Test func appendingUniqueMatcherAddsToFrom() {
+        let rule = GrantRule(
+            id: "r1",
+            name: "Jobs",
+            nick: "A",
+            fields: GrantFields(envelope: false, body: true)
+        )
+        let matcher = MatchRule(value: "donotreply@openrent.co.uk", mode: .exact)
+        let next = rule.appendingUniqueMatcher(matcher, to: .from)
+        #expect(next?.fromRules == [matcher])
+        #expect(next?.subjectRules.isEmpty == true)
+    }
+
+    @Test func appendingUniqueMatcherReturnsNilOnDuplicate() {
+        let matcher = MatchRule(value: "invoice", mode: .contains)
+        let rule = GrantRule(
+            id: "r1",
+            name: "Invoices",
+            nick: "A",
+            subjectRules: [matcher],
+            fields: GrantFields(envelope: false, body: true)
+        )
+        #expect(rule.appendingUniqueMatcher(matcher, to: .subject) == nil)
+    }
+
+    @Test func appendingUniqueMatcherFromAndSubjectAreIndependent() {
+        let matcher = MatchRule(value: "invoice", mode: .contains)
+        let rule = GrantRule(
+            id: "r1",
+            name: "Invoices",
+            nick: "A",
+            subjectRules: [matcher],
+            fields: GrantFields(envelope: false, body: true)
+        )
+        let next = rule.appendingUniqueMatcher(matcher, to: .from)
+        #expect(next?.fromRules == [matcher])
+        #expect(next?.subjectRules == [matcher])
+    }
 }
 
 private func sampleMessage(from: String, subject: String, date: String = "2024-01-01T00:00:00Z") -> IndexedMessage {

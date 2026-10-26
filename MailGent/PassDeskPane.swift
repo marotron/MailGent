@@ -1,3 +1,4 @@
+import AppKit
 import MailStore
 import SwiftUI
 
@@ -181,10 +182,17 @@ struct PassDeskPane: View {
                 PassEditorForm(
                     pass: pass,
                     isEditing: isEditing,
+                    otherRules: definitions.filter { $0.id != pass.id },
                     onChange: { session.agents.upsertRule($0) },
                     onDelete: {
                         session.agents.deleteRule(id: pass.id)
                         selectedPassID = session.agents.ruleDefinitions.first?.id
+                    },
+                    onCopyMatcherToRule: { matcher, field, targetID in
+                        guard let target = session.agents.ruleDefinitions.first(where: { $0.id == targetID }),
+                              let updated = target.appendingUniqueMatcher(matcher, to: field)
+                        else { return }
+                        session.agents.upsertRule(updated)
                     }
                 )
             } else {
@@ -315,8 +323,10 @@ private struct PassMatchSummary: View {
 private struct PassEditorForm: View {
     let pass: GrantRule
     var isEditing: Bool
+    var otherRules: [GrantRule]
     var onChange: (GrantRule) -> Void
     var onDelete: () -> Void
+    var onCopyMatcherToRule: (MatchRule, GrantMatcherField, String) -> Void
 
     @State private var name: String = ""
     @State private var nick: String = "A"
@@ -344,6 +354,7 @@ private struct PassEditorForm: View {
                 ruleBlock(
                     title: "From",
                     systemImage: "envelope",
+                    field: .from,
                     rules: $fromRules,
                     draftMode: $fromDraftMode,
                     draftValue: $fromDraftValue
@@ -356,6 +367,7 @@ private struct PassEditorForm: View {
                 ruleBlock(
                     title: "Subject",
                     systemImage: "text.alignleft",
+                    field: .subject,
                     rules: $subjectRules,
                     draftMode: $subjectDraftMode,
                     draftValue: $subjectDraftValue
@@ -592,6 +604,7 @@ private struct PassEditorForm: View {
     private func ruleBlock(
         title: String,
         systemImage: String,
+        field: GrantMatcherField,
         rules: Binding<[MatchRule]>,
         draftMode: Binding<MatchMode>,
         draftValue: Binding<String>
@@ -600,12 +613,24 @@ private struct PassEditorForm: View {
             Label(title, systemImage: systemImage)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            FlowRuleTags(rules: rules.wrappedValue, isEditing: isEditing) { index in
-                var next = rules.wrappedValue
-                next.remove(at: index)
-                rules.wrappedValue = next
-                commit()
-            }
+            FlowRuleTags(
+                rules: rules.wrappedValue,
+                isEditing: isEditing,
+                otherRules: otherRules,
+                onRemove: { index in
+                    var next = rules.wrappedValue
+                    next.remove(at: index)
+                    rules.wrappedValue = next
+                    commit()
+                },
+                onCopyValue: { matcher in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(matcher.value, forType: .string)
+                },
+                onCopyToRule: { matcher, targetID in
+                    onCopyMatcherToRule(matcher, field, targetID)
+                }
+            )
             if isEditing {
                 HStack(spacing: 6) {
                     Picker("Mode", selection: draftMode) {
@@ -704,7 +729,10 @@ private extension String {
 private struct FlowRuleTags: View {
     let rules: [MatchRule]
     var isEditing: Bool
+    var otherRules: [GrantRule] = []
     var onRemove: (Int) -> Void
+    var onCopyValue: (MatchRule) -> Void = { _ in }
+    var onCopyToRule: (MatchRule, String) -> Void = { _, _ in }
 
     var body: some View {
         if rules.isEmpty {
@@ -714,43 +742,107 @@ private struct FlowRuleTags: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(rules.enumerated()), id: \.offset) { index, rule in
-                    HStack(alignment: .top, spacing: 4) {
+                    let duplicated = isDuplicate(rule)
+                    HStack(alignment: .center, spacing: 4) {
                         Text(rule.mode.rawValue.uppercased())
                             .font(.system(size: 7, weight: .medium))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(Color.secondary, in: Capsule())
-                            .padding(.top, 2)
+                            .background(duplicated ? Color.orange : Color.secondary, in: Capsule())
                         Text(rule.value)
                             .font(.caption.weight(.semibold))
                             .multilineTextAlignment(.leading)
                             .padding(.vertical, 3)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        if isEditing {
-                            Button {
-                                onRemove(index)
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 5)
-                        }
+                        chipTrailingActions(rule: rule, index: index, duplicated: duplicated)
                     }
                     .padding(.leading, 4)
                     .padding(.trailing, 6)
                     .padding(.vertical, 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        Color.accentColor.opacity(0.1),
+                        (duplicated ? Color.orange : Color.accentColor).opacity(0.1),
                         in: RoundedRectangle(cornerRadius: 12)
                     )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(
+                                duplicated ? Color.orange.opacity(0.45) : Color.clear,
+                                lineWidth: 1
+                            )
+                    )
+                    .help(duplicated ? "Duplicate matcher — same mode and value appear more than once" : "")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func isDuplicate(_ rule: MatchRule) -> Bool {
+        rules.lazy.filter { $0 == rule }.count > 1
+    }
+
+    @ViewBuilder
+    private func chipTrailingActions(rule: MatchRule, index: Int, duplicated: Bool) -> some View {
+        HStack(alignment: .center, spacing: 4) {
+            if duplicated {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 10, height: 10)
+                    .help("Duplicate matcher")
+                    .accessibilityLabel("Duplicate matcher")
+            }
+
+            Button {
+                onCopyValue(rule)
+            } label: {
+                Image(systemName: "square.on.square")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 10, height: 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Copy value")
+
+            if !otherRules.isEmpty {
+                Menu {
+                    ForEach(otherRules) { target in
+                        Button("\(target.nick) · \(target.name)") {
+                            onCopyToRule(rule, target.id)
+                        }
+                    }
+                } label: {
+                    // Same chrome as Copy / × — Menu defaults blow up the glyph.
+                    Image(systemName: "arrow.right.square")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10, height: 10)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
+                .controlSize(.mini)
+                .fixedSize()
+                .help("Copy to another rule")
+            }
+
+            if isEditing {
+                Button {
+                    onRemove(index)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10, height: 10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
@@ -877,6 +969,14 @@ private struct PassJoinBadge: View {
             MatchRule(value: "Re:", mode: .starts),
         ],
         isEditing: true,
+        otherRules: [
+            GrantRule(
+                id: "r2",
+                name: "Jobs",
+                nick: "B",
+                fields: GrantFields(envelope: false, body: true)
+            )
+        ],
         onRemove: { _ in }
     )
     .padding()
