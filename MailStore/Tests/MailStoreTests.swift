@@ -439,6 +439,18 @@ struct MailStoreTests {
         )
     }
 
+    @Test func bodyLooksLikeHTMLSniffsCommonTags() {
+        #expect(MailMIME.bodyLooksLikeHTML("<p>Hi Alex,</p><p>Thanks</p>"))
+        #expect(MailMIME.bodyLooksLikeHTML("<div style=\"color:red\">Hello</div>"))
+        #expect(MailMIME.bodyLooksLikeHTML("Hi<br>there"))
+        #expect(MailMIME.bodyLooksLikeHTML("<HTML><BODY>x</BODY></HTML>"))
+        #expect(MailMIME.bodyLooksLikeHTML("  <table><tr><td>1</td></tr></table>  "))
+        #expect(!MailMIME.bodyLooksLikeHTML(""))
+        #expect(!MailMIME.bodyLooksLikeHTML("Hi Alex,\n\nFollowing up on INV-2041."))
+        #expect(!MailMIME.bodyLooksLikeHTML("Use a < b when a is smaller."))
+        #expect(!MailMIME.bodyLooksLikeHTML("Price is 3 < 5 dollars."))
+    }
+
     @Test func plainTextFromHTMLDropsStyleAndDecodesEntities() {
         let html = """
         <html><head><style>body {margin:0;padding:0; background:#f3f3f3;}</style></head>

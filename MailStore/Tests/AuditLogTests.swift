@@ -92,17 +92,19 @@ struct AuditLogTests {
         defer { env.remove() }
 
         _ = try env.gateway.list(credential: env.credential)
-        _ = try env.gateway.listPlacements(credential: env.credential)
+        _ = try env.gateway.listAccounts(credential: env.credential)
         _ = try env.gateway.freshness(credential: env.credential)
 
         let kinds = env.audit.entries().map(\.kind)
         #expect(kinds.contains(.list))
-        #expect(kinds.contains(.listPlacements))
+        #expect(kinds.contains(.listAccounts))
         #expect(kinds.contains(.status))
         let list = env.audit.entries().first { $0.kind == .list }!
         #expect(intValue(jsonObject(list.responseSummary)["count"]) == 1)
-        let placements = env.audit.entries().first { $0.kind == .listPlacements }!
-        #expect(placements.placements.count == 1)
+        let accounts = env.audit.entries().first { $0.kind == .listAccounts }!
+        #expect(accounts.placements.count == 1)
+        let accountsJSON = jsonObject(accounts.responseSummary)
+        #expect((accountsJSON["accounts"] as? [Any])?.count == 1)
         let status = env.audit.entries().first { $0.kind == .status }!
         let freshness = jsonObject(status.responseSummary)
         #expect(intValue(freshness["indexedCount"]) == 1)

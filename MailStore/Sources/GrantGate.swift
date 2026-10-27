@@ -441,7 +441,7 @@ public struct Grant: Equatable, Codable, Sendable {
         return true
     }
 
-    /// Placement-only coverage (ignores participant/date — used for listPlacements).
+    /// Placement-only coverage (ignores participant/date — used for list_accounts placements).
     public func covers(accountID: String, placement: String) -> Bool {
         self.accountID == accountID
             && (self.placement == nil || self.placement == placement)

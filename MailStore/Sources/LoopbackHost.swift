@@ -12,8 +12,15 @@ public final class LoopbackHost: @unchecked Sendable {
     private var indexUpdater: (any IndexUpdating)?
     private var sourceController: (any MailSourceControlling)?
     private var appleMailOpener: (any AppleMailOpening)?
+    private var mailOutgoingSender: (any MailOutgoingSending)?
     /// Off by default — agents may call MCP `open_in_mail` only when the companion enables it.
     private var agentMayOpenInMail = false
+    /// Off by default — agents may call MCP `propose_send` only when the companion enables it.
+    private var agentMayProposeSend = false
+    /// Off by default — `list_accounts` / `propose_send` sender catalog omit empty-placement identities.
+    private var revealAccountsWithNoPlacements = false
+    /// Suspends until the user chooses Send / Open in Mail / Cancel (or window close → Cancel).
+    private var sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)?
     private var indexState = LoopbackIndexSnapshot.notStarted
 
     public init(
@@ -68,6 +75,30 @@ public final class LoopbackHost: @unchecked Sendable {
         return agentMayOpenInMail
     }
 
+    public func readAgentMayProposeSend() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return agentMayProposeSend
+    }
+
+    public func readRevealAccountsWithNoPlacements() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return revealAccountsWithNoPlacements
+    }
+
+    public func readMailOutgoingSender() -> (any MailOutgoingSending)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return mailOutgoingSender
+    }
+
+    public func readSendProposalPrompter() -> (@Sendable (SendProposal) async -> SendProposalDecision)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return sendProposalPrompter
+    }
+
     public func setGateway(_ gateway: AgentReadAPI?, indexUpdater: (any IndexUpdating)?) {
         lock.lock()
         self.gateway = gateway
@@ -90,6 +121,32 @@ public final class LoopbackHost: @unchecked Sendable {
     public func setAgentMayOpenInMail(_ allowed: Bool) {
         lock.lock()
         agentMayOpenInMail = allowed
+        lock.unlock()
+    }
+
+    public func setAgentMayProposeSend(_ allowed: Bool) {
+        lock.lock()
+        agentMayProposeSend = allowed
+        lock.unlock()
+    }
+
+    public func setRevealAccountsWithNoPlacements(_ reveal: Bool) {
+        lock.lock()
+        revealAccountsWithNoPlacements = reveal
+        lock.unlock()
+    }
+
+    public func setMailOutgoingSender(_ sender: (any MailOutgoingSending)?) {
+        lock.lock()
+        mailOutgoingSender = sender
+        lock.unlock()
+    }
+
+    public func setSendProposalPrompter(
+        _ prompter: (@Sendable (SendProposal) async -> SendProposalDecision)?
+    ) {
+        lock.lock()
+        sendProposalPrompter = prompter
         lock.unlock()
     }
 

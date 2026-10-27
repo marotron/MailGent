@@ -4,6 +4,9 @@ import MailStore
 enum MailGentPreferences {
     static let agentMayChangeSourceKey = "agentMayChangeSource"
     static let agentMayOpenInMailKey = "agentMayOpenInMail"
+    static let agentMayProposeSendKey = "agentMayProposeSend"
+    /// When on, `list_accounts` includes identities with empty placements (off by default).
+    static let revealAccountsWithNoPlacementsKey = "revealAccountsWithNoPlacements"
     static let loopbackPortKey = "loopbackPort"
     static let auditMaxAgeSecondsKey = "auditMaxAgeSeconds"
     static let auditMaxCountKey = "auditMaxCount"
@@ -29,6 +32,14 @@ enum MailGentPreferences {
 
     static var agentMayOpenInMail: Bool {
         UserDefaults.standard.bool(forKey: agentMayOpenInMailKey)
+    }
+
+    static var agentMayProposeSend: Bool {
+        UserDefaults.standard.bool(forKey: agentMayProposeSendKey)
+    }
+
+    static var revealAccountsWithNoPlacements: Bool {
+        UserDefaults.standard.bool(forKey: revealAccountsWithNoPlacementsKey)
     }
 
     static var allowConditionalAccessPrompts: Bool {

@@ -60,9 +60,21 @@ enum AuditJSON {
         return payload
     }
 
-    static func placements(_ placements: [Placement]) -> [String: Any] {
+    static func accounts(_ accounts: [AgentAccount]) -> [String: Any] {
         [
-            "placements": placements.map { "\($0.accountID)/\($0.id)" }
+            "accounts": accounts.map { account -> [String: Any] in
+                var row: [String: Any] = [
+                    "accountID": account.accountID,
+                    "displayName": account.displayName,
+                    "placements": account.placements
+                ]
+                if let email = account.email {
+                    row["email"] = email
+                } else {
+                    row["email"] = NSNull()
+                }
+                return row
+            }
         ]
     }
 
@@ -218,10 +230,11 @@ extension AuditKind {
         case "search": self = .search
         case "list": self = .list
         case "list_new", "listNew": self = .listNew
-        case "list_placements", "listPlacements": self = .listPlacements
+        case "list_accounts", "listAccounts": self = .listAccounts
         case "get": self = .get
         case "get_attachment": self = .getAttachment
         case "open_in_mail", "openInMail": self = .openInMail
+        case "propose_send", "proposeSend": self = .proposeSend
         case "create_draft": self = .createDraft
         case "update_draft": self = .updateDraft
         case "status": self = .status

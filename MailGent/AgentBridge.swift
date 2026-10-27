@@ -108,8 +108,8 @@ final class AgentBridge {
 
     static func isAgentRequest(_ kind: AuditKind) -> Bool {
         switch kind {
-        case .search, .list, .listNew, .listPlacements, .get, .getAttachment, .openInMail, .createDraft,
-            .updateDraft, .updateIndex, .status, .setSource:
+        case .search, .list, .listNew, .listAccounts, .get, .getAttachment, .openInMail, .proposeSend,
+            .createDraft, .updateDraft, .updateIndex, .status, .setSource:
             return true
         case .pair, .revoke:
             return false
@@ -884,6 +884,16 @@ final class AgentBridge {
         makeLoopbackHost().setAgentMayOpenInMail(MailGentPreferences.agentMayOpenInMail)
     }
 
+    func applyAgentMayProposeSend() {
+        makeLoopbackHost().setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
+    }
+
+    func applyRevealAccountsWithNoPlacements() {
+        makeLoopbackHost().setRevealAccountsWithNoPlacements(
+            MailGentPreferences.revealAccountsWithNoPlacements
+        )
+    }
+
     func detachIndex(state: LoopbackIndexSnapshot) {
         let host = makeLoopbackHost()
         host.setGateway(nil, indexUpdater: nil)
@@ -958,6 +968,12 @@ final class AgentBridge {
         )
         host.setAppleMailOpener(WorkspaceAppleMailOpener())
         host.setAgentMayOpenInMail(MailGentPreferences.agentMayOpenInMail)
+        host.setMailOutgoingSender(AppleScriptMailOutgoingSender())
+        host.setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
+        host.setRevealAccountsWithNoPlacements(MailGentPreferences.revealAccountsWithNoPlacements)
+        host.setSendProposalPrompter { proposal in
+            await DetachedWindowHost.shared.runSendProposalConfirm(proposal: proposal)
+        }
         loopbackHost = host
         return host
     }

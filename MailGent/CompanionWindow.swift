@@ -34,7 +34,21 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
+    /// One propose-send confirm dialog per proposal id (not on the Ask queue).
+    private final class SendProposalRecord {
+        let window: NSWindow
+        var continuation: CheckedContinuation<SendProposalDecision, Never>?
+        var finished = false
+        let presentedAt = Date()
+
+        init(window: NSWindow, continuation: CheckedContinuation<SendProposalDecision, Never>) {
+            self.window = window
+            self.continuation = continuation
+        }
+    }
+
     private var asks: [String: AskRecord] = [:]
+    private var sendProposals: [String: SendProposalRecord] = [:]
     /// True while the status dropdown is on screen. Ask windows must not become key then.
     private var statusMenuIsOpen = false
     #if DEBUG
@@ -199,6 +213,41 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             accountLabel: accountLabel,
             ruleSupport: ruleSupport
         )
+    }
+
+    /// Present propose-send confirm until Send / Open in Mail / Cancel / traffic-light close.
+    func runSendProposalConfirm(proposal: SendProposal) async -> SendProposalDecision {
+        await withCheckedContinuation { continuation in
+            let dialog = SendProposalPromptDialog(
+                proposal: proposal,
+                onSend: { [weak self] in
+                    self?.finishSendProposal(id: proposal.id, decision: .send)
+                },
+                onOpenInMail: { [weak self] in
+                    self?.finishSendProposal(id: proposal.id, decision: .openInMail)
+                },
+                onCancel: { [weak self] in
+                    self?.finishSendProposal(id: proposal.id, decision: .cancel)
+                }
+            )
+            let size = SendProposalPromptDialog.windowSize
+            if !statusMenuIsOpen {
+                beginPresentation()
+            }
+            let window = makeWindow(
+                title: "Send proposed mail?",
+                size: size,
+                minSize: SendProposalPromptDialog.windowMinSize,
+                root: dialog
+            )
+            window.styleMask.remove(.miniaturizable)
+            window.maxSize = NSSize(width: 900, height: 900)
+            cascade(window, index: sendProposals.count)
+            sendProposals[proposal.id] = SendProposalRecord(window: window, continuation: continuation)
+            intendedVisible.insert(ObjectIdentifier(window))
+            claimActivation()
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     private func presentConditionalAsk(
@@ -466,6 +515,20 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         continuation?.resume(returning: decision)
     }
 
+    private func finishSendProposal(id: String, decision: SendProposalDecision) {
+        guard let record = sendProposals[id] else { return }
+        if record.finished {
+            MailGentLog.trace("send proposal finish ignored (already decided) id=\(id)")
+            return
+        }
+        record.finished = true
+        let continuation = record.continuation
+        record.continuation = nil
+        sendProposals[id] = nil
+        dismissAskWindow(record.window)
+        continuation?.resume(returning: decision)
+    }
+
     /// Hide one Ask window. Other pending requests stay up.
     private func dismissAskWindow(_ window: NSWindow) {
         intendedVisible.remove(ObjectIdentifier(window))
@@ -497,7 +560,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let selected = AskQueueIndicator.shared.pending.selectedID
         let others = asks.filter { $0.key != selected }.values.map(\.window)
         let selectedWindow = selected.flatMap { asks[$0]?.window }
-        return fixed + others + [selectedWindow].compactMap { $0 }
+        let sendWindows = sendProposals.values.map(\.window)
+        return fixed + others + [selectedWindow].compactMap { $0 } + sendWindows
     }
 
     /// MenuBarExtra `.window` tears down on the same turn as the click; wait one turn.
@@ -633,6 +697,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         // Each Ask ages on its own so a second prompt does not freeze the first close button.
         if let record = asks.first(where: { $0.value.window === sender })?.value {
             if Date().timeIntervalSince(record.presentedAt) < 2 { return false }
+        } else if let record = sendProposals.first(where: { $0.value.window === sender })?.value {
+            if Date().timeIntervalSince(record.presentedAt) < 2 { return false }
         } else if isRecentPresent {
             return false
         }
@@ -651,6 +717,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         if let id = asks.first(where: { $0.value.window === sender })?.key {
             // Traffic-light / ⌘W on this Ask → Block (fail-closed) for this request only.
             finishAsk(id: id, decision: .block)
+            return false
+        }
+        if let id = sendProposals.first(where: { $0.value.window === sender })?.key {
+            finishSendProposal(id: id, decision: .cancel)
             return false
         }
         #if DEBUG

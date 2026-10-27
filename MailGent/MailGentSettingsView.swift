@@ -5,6 +5,8 @@ struct MailGentSettingsView: View {
     @Bindable var session: CompanionSession
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
     @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
+    @AppStorage(MailGentPreferences.agentMayProposeSendKey) private var agentMayProposeSend = false
+    @AppStorage(MailGentPreferences.revealAccountsWithNoPlacementsKey) private var revealAccountsWithNoPlacements = false
     @AppStorage(MailGentPreferences.allowConditionalAccessPromptsKey) private var allowConditionalAccessPrompts = false
     @AppStorage(MailGentPreferences.askDecisionCacheEnabledKey) private var askDecisionCacheEnabled = false
     @AppStorage(MailGentPreferences.askDecisionCacheTTLSecondsKey) private var askDecisionCacheTTLSeconds =
@@ -29,6 +31,12 @@ struct MailGentSettingsView: View {
         .frame(width: 480, height: 600)
         .onChange(of: agentMayOpenInMail) { _, _ in
             session.agents.applyAgentMayOpenInMail()
+        }
+        .onChange(of: agentMayProposeSend) { _, _ in
+            session.agents.applyAgentMayProposeSend()
+        }
+        .onChange(of: revealAccountsWithNoPlacements) { _, _ in
+            session.agents.applyRevealAccountsWithNoPlacements()
         }
         .onChange(of: allowConditionalAccessPrompts) { _, _ in
             session.agents.applyConditionalAccessPreference()
@@ -97,6 +105,22 @@ struct MailGentSettingsView: View {
                     Toggle("Allow agents to open messages in Apple Mail", isOn: $agentMayOpenInMail)
                     Text(
                         "Off by default. When on, a paired agent may call MCP open_in_mail to open a granted message in Apple Mail."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Allow agents to propose sending mail", isOn: $agentMayProposeSend)
+                    Text(
+                        "Off by default. When on, a paired agent may call MCP propose_send; you confirm Send, Open in Mail, or Cancel before Apple Mail is touched."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Reveal accounts with no placements", isOn: $revealAccountsWithNoPlacements)
+                    Text(
+                        "Off by default. When off, agents do not see Mail identities without a read grant. When on, empty-placement accounts appear in list_accounts and may be used as propose_send From addresses."
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)

@@ -823,7 +823,7 @@ private struct AccessLogDetail: View {
             HStack(spacing: 8) {
                 Image(systemName: "folder")
                     .foregroundStyle(.secondary)
-                Text("Placement list · \(entry.placements.count)")
+                Text("Granted placements · \(entry.placements.count)")
                     .font(.callout.weight(.semibold))
             }
             ForEach(entry.placements, id: \.rowID) { ref in
@@ -1462,8 +1462,8 @@ enum AccessLogFormat {
         if let count = intValue(obj["count"]) {
             return "\(count) messages"
         }
-        if let placements = obj["placements"] as? [Any] {
-            return "\(placements.count) placements"
+        if let accounts = obj["accounts"] as? [Any] {
+            return "\(accounts.count) accounts"
         }
         if let bodyAccess = obj["bodyAccess"] as? String {
             // Ask outcome is shown as a list-row chip; keep the access verb only.
@@ -1496,8 +1496,8 @@ enum AccessLogFormat {
         switch entry.kind {
         case .search, .list, .listNew:
             return resultCount(for: entry) == 0
-        case .listPlacements:
-            return placementCount(for: entry) == 0
+        case .listAccounts:
+            return accountCatalogIsEmpty(for: entry)
         default:
             return false
         }
@@ -1518,13 +1518,13 @@ enum AccessLogFormat {
         return nil
     }
 
-    private static func placementCount(for entry: AuditEntry) -> Int? {
+    private static func accountCatalogIsEmpty(for entry: AuditEntry) -> Bool {
         if let obj = jsonObject(entry.responseSummary),
-           let placements = obj["placements"] as? [Any]
+           let accounts = obj["accounts"] as? [Any]
         {
-            return placements.count
+            return accounts.isEmpty
         }
-        return entry.placements.count
+        return entry.placements.isEmpty
     }
 
     private static func intValue(_ any: Any?) -> Int? {
@@ -1751,10 +1751,11 @@ enum AccessLogFormat {
         case .get: "Fetch one message."
         case .getAttachment: "Fetch one attachment’s file bytes."
         case .openInMail: "Open a message in Apple Mail."
+        case .proposeSend: "Propose sending a new message via Apple Mail."
         case .search: "Search messages."
         case .list: "List messages."
         case .listNew: "List new messages."
-        case .listPlacements: "List placements."
+        case .listAccounts: "List accounts and granted placements."
         case .status: "Read MailGent status."
         case .updateIndex: "Update the mail index."
         case .setSource: "Set the mail source."

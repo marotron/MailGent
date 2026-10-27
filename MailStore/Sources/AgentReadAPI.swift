@@ -181,6 +181,23 @@ public struct AttachmentAccessResult: Equatable, Sendable {
     }
 }
 
+/// One Mail account for agents: identity plus grant-filtered placement ids.
+/// Empty `placements` only appear when `listAccounts(..., includeEmptyPlacements: true)` —
+/// meaning the identity is known but this agent has no read grant.
+public struct AgentAccount: Equatable, Sendable {
+    public let accountID: String
+    public let displayName: String
+    public let email: String?
+    public let placements: [String]
+
+    public init(accountID: String, displayName: String, email: String?, placements: [String]) {
+        self.accountID = accountID
+        self.displayName = displayName
+        self.email = email
+        self.placements = placements
+    }
+}
+
 /// ReadAPI surface for paired agents. Every call requires proof of possession.
 /// Results are deny-filtered through GrantGate (no grants → empty / not_available).
 public struct AgentReadAPI {
@@ -194,6 +211,8 @@ public struct AgentReadAPI {
     public let audit: AuditLog?
     public let attachmentContentAskCache: AttachmentContentAskCache
     public let fieldAskDecisionCache: FieldAskDecisionCache
+    /// Optional Accounts*.sqlite overrides for identity resolution (tests).
+    public let accountsDatabases: [URL]?
     public var allowConditionalAccessPrompts: Bool
     public var askDecisionCachePolicy: AskDecisionCachePolicy
     public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)?
@@ -207,6 +226,7 @@ public struct AgentReadAPI {
         audit: AuditLog? = nil,
         attachmentContentAskCache: AttachmentContentAskCache = AttachmentContentAskCache(),
         fieldAskDecisionCache: FieldAskDecisionCache = FieldAskDecisionCache(),
+        accountsDatabases: [URL]? = nil,
         allowConditionalAccessPrompts: Bool = false,
         askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
@@ -219,6 +239,7 @@ public struct AgentReadAPI {
         self.audit = audit
         self.attachmentContentAskCache = attachmentContentAskCache
         self.fieldAskDecisionCache = fieldAskDecisionCache
+        self.accountsDatabases = accountsDatabases
         self.allowConditionalAccessPrompts = allowConditionalAccessPrompts
         self.askDecisionCachePolicy = askDecisionCachePolicy
         self.conditionalAccessPrompter = conditionalAccessPrompter
@@ -1038,29 +1059,57 @@ public struct AgentReadAPI {
         }
     }
 
-    public func listPlacements(credential: String?) throws -> [Placement] {
+    /// Lists Mail identities with grant-filtered placements.
+    /// - Parameter includeEmptyPlacements: When `false` (default), omit accounts with no
+    ///   granted placements. When `true`, include those identities with `placements: []`.
+    public func listAccounts(
+        credential: String?,
+        includeEmptyPlacements: Bool = false
+    ) throws -> [AgentAccount] {
         let started = Date()
         let agent = try authenticate(credential)
         do {
-            let placements = grants.filter(try read.listPlacements(), agentID: agent.id)
+            let identities = try MailAccountIdentityResolver.resolve(
+                in: read.index.store,
+                accountsDatabases: accountsDatabases
+            )
+            let granted = grants.filter(try read.listPlacements(), agentID: agent.id)
+            var placementsByAccount: [String: [String]] = [:]
+            for placement in granted {
+                placementsByAccount[placement.accountID, default: []].append(placement.id)
+            }
+            var accounts = identities.map { identity in
+                AgentAccount(
+                    accountID: identity.id,
+                    displayName: identity.displayName,
+                    email: identity.email,
+                    placements: (placementsByAccount[identity.id] ?? []).sorted {
+                        $0.localizedStandardCompare($1) == .orderedAscending
+                    }
+                )
+            }
+            if !includeEmptyPlacements {
+                accounts = accounts.filter { !$0.placements.isEmpty }
+            }
+            let flatPlacements = granted.map {
+                AuditPlacementRef(accountID: $0.accountID, placement: $0.id)
+            }
             record(
-                kind: .listPlacements,
+                kind: .listAccounts,
                 agent: agent,
                 started: started,
-                detail: "list_placements",
+                detail: "list_accounts",
                 requestSummary: AuditJSON.json([:] as [String: Any]),
-                responseSummary: AuditJSON.json(AuditJSON.placements(placements)),
-                placements: placements.map {
-                    AuditPlacementRef(accountID: $0.accountID, placement: $0.id)
-                }
+                responseSummary: AuditJSON.json(AuditJSON.accounts(accounts)),
+                placements: flatPlacements
             )
-            return placements
+            return accounts
         } catch {
             record(
-                kind: .listPlacements,
+                kind: .listAccounts,
                 agent: agent,
                 started: started,
-                detail: "list_placements",
+                detail: "list_accounts",
                 requestSummary: AuditJSON.json([:] as [String: Any]),
                 outcome: .error(String(describing: error))
             )

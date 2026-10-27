@@ -6,7 +6,17 @@ alwaysApply: true
 
 # Versioning
 
-MailGent is **0.1.x alpha** until v1. Follow global SemVer (`MAJOR.MINOR.PATCH`).
+MailGent is **0.x alpha** until v1. Follow global SemVer (`MAJOR.MINOR.PATCH`).
+
+## SemVer while alpha (`0.x`)
+
+| Change | Bump |
+|--------|------|
+| New user-facing feature / capability | MINOR |
+| Change, refinement, or fix *within* an existing feature | PATCH |
+| Docs / chore / internal-only | none |
+
+**MINOR** = something new (e.g. `propose_send` → `0.20.0`). **PATCH** = change to something that already shipped (e.g. hide empty-placement accounts by default → `0.20.1`). When unsure, prefer PATCH. Still use `### Breaking` in the CHANGELOG when defaults or APIs change; that alone does not force a MINOR bump in alpha.
 
 ## Version bump = CHANGELOG entry (same commit)
 

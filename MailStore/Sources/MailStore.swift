@@ -193,6 +193,15 @@ public enum MailMIME: Sendable {
         return collapsedPlain.hasPrefix(stripped)
     }
 
+    /// Tag sniff for propose-send Formatted preview — not a full HTML parser.
+    /// Matches common tags (`<html`, `<p`, `<br`, …). No space after `<`, so `3 < 5` / `a < b` stay plain.
+    public static func bodyLooksLikeHTML(_ body: String) -> Bool {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let pattern = #"(?i)</?(?:html|head|body|div|span|p|br|table|tr|td|th|ul|ol|li|h[1-6]|strong|em|b|i|a|img|style|font|center)\b"#
+        return trimmed.range(of: pattern, options: .regularExpression) != nil
+    }
+
     static func stripTags(_ html: String) -> String {
         var result = ""
         result.reserveCapacity(html.count)

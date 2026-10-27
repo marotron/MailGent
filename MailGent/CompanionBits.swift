@@ -1441,10 +1441,11 @@ extension AuditKind {
         case .search: "search"
         case .list: "list"
         case .listNew: "new"
-        case .listPlacements: "placements"
+        case .listAccounts: "accounts"
         case .get: "get"
         case .getAttachment: "attach"
         case .openInMail: "mail"
+        case .proposeSend: "send"
         case .createDraft: "create"
         case .updateDraft: "update"
         case .updateIndex: "ingest"
@@ -1460,10 +1461,11 @@ extension AuditKind {
         case .search: "magnifyingglass"
         case .list: "list.bullet"
         case .listNew: "envelope.badge"
-        case .listPlacements: "folder"
+        case .listAccounts: "folder"
         case .get: "envelope.open"
         case .getAttachment: "paperclip"
         case .openInMail: "arrow.up.right.square"
+        case .proposeSend: "paperplane"
         case .createDraft: "square.and.pencil"
         case .updateDraft: "pencil"
         case .updateIndex: "arrow.triangle.2.circlepath"
@@ -1717,8 +1719,32 @@ struct AccessLogModeHeader: View {
     }
 }
 
+/// Two-segment Access Log chrome: **Formatted** | **Raw** (no JSON Pretty/Raw).
+struct FormattedRawModeSegments: View {
+    @Binding var showRaw: Bool
+
+    var body: some View {
+        AccessLogModeSegmentTrack {
+            AccessLogModeSegmentButton(
+                title: "Formatted",
+                isOn: !showRaw
+            ) {
+                showRaw = false
+            }
+            AccessLogModeSegmentButton(
+                title: "Raw",
+                isOn: showRaw
+            ) {
+                showRaw = true
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Body preview mode")
+    }
+}
+
 /// Raised-face track shared by Formatted and JSON Pretty/Raw mode chrome.
-private struct AccessLogModeSegmentTrack<Content: View>: View {
+struct AccessLogModeSegmentTrack<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -1737,7 +1763,7 @@ private struct AccessLogModeSegmentTrack<Content: View>: View {
     }
 }
 
-private struct AccessLogModeSegmentButton: View {
+struct AccessLogModeSegmentButton: View {
     let title: String
     let isOn: Bool
     var compact: Bool = false
