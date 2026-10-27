@@ -6,6 +6,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.20.1] - 2026-10-27
+
+### Added
+
+- Settings → General → **Reveal accounts with no placements** (off by default). When on, `list_accounts` includes identities with empty `placements`, and those emails may be used as `propose_send` `sender`.
+
+### Breaking
+
+- By default, `list_accounts` omits accounts with no grant-filtered placements (no identity leak via empty placements). `propose_send` `sender` validation uses the same filtered catalog.
+
+## [0.20.0] - 2026-10-27
+
+### Added
+
+- MCP `propose_send` — agent proposes a plain new message (`to`, `subject`, `body`, optional `cc` / `bcc` / `sender`); Settings → General → **Allow agents to propose sending mail** (off by default). Confirm dialog (~560×620, resizable): envelope card fills to the footer; hover the body for Access Log–style **Formatted** | **Raw** (HTML-looking bodies render in Formatted; Raw is the exact string Mail will get). **Send** | **Open in Mail** | **Cancel** (window close = Cancel). Send / Open in Mail uses Apple Events into Mail.app (Automation permission) with plain `content:` (preview-only HTML). Returns `{ outcome: send | opened_in_mail | cancelled }`. No attachments or reply threading. `sender` must match a `list_accounts` email (case-insensitive), including accounts with empty placements.
+- MCP `list_accounts` — nested catalog of Mail identities (`accountID`, `displayName`, `email`) with grant-filtered `placements` per account; empty `placements` means no read grant for that agent (identity still disclosed so agents can pick a From address)
+
+### Breaking
+
+- MCP `list_placements` removed (no shim); use `list_accounts`. Response shape is `{ accounts: [{ accountID, displayName, email, placements }] }` instead of a flat placement list. Audit kind is `listAccounts`.
+
 ## [0.19.0] - 2026-10-27
 
 ### Added

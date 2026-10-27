@@ -49,7 +49,11 @@ public struct LoopbackMCPServer {
         indexUpdater: (any IndexUpdating)? = nil,
         sourceController: (any MailSourceControlling)? = nil,
         appleMailOpener: (any AppleMailOpening)? = nil,
-        agentMayOpenInMail: Bool = false
+        agentMayOpenInMail: Bool = false,
+        mailOutgoingSender: (any MailOutgoingSending)? = nil,
+        agentMayProposeSend: Bool = false,
+        revealAccountsWithNoPlacements: Bool = false,
+        sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)? = nil
     ) {
         let box = LoopbackHost(
             pairing: gateway.pairing,
@@ -61,6 +65,10 @@ public struct LoopbackMCPServer {
         box.setSourceController(sourceController)
         box.setAppleMailOpener(appleMailOpener)
         box.setAgentMayOpenInMail(agentMayOpenInMail)
+        box.setMailOutgoingSender(mailOutgoingSender)
+        box.setAgentMayProposeSend(agentMayProposeSend)
+        box.setRevealAccountsWithNoPlacements(revealAccountsWithNoPlacements)
+        box.setSendProposalPrompter(sendProposalPrompter)
         box.setIndexState(
             LoopbackIndexSnapshot(
                 phase: .ready,
@@ -114,7 +122,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.19.0"
+                        "version": "0.20.1"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -218,9 +226,12 @@ public struct LoopbackMCPServer {
                 cursor: cursor
             )
             return try jsonString(AuditJSON.page(page))
-        case "list_placements", "listPlacements":
-            let placements = try gateway.listPlacements(credential: credential)
-            return try jsonString(AuditJSON.placements(placements))
+        case "list_accounts", "listAccounts":
+            let accounts = try gateway.listAccounts(
+                credential: credential,
+                includeEmptyPlacements: host.readRevealAccountsWithNoPlacements()
+            )
+            return try jsonString(AuditJSON.accounts(accounts))
         case "get":
             guard
                 let accountID = arguments["accountID"] as? String,
@@ -298,6 +309,8 @@ public struct LoopbackMCPServer {
             return try jsonString(AuditJSON.version(version))
         case "open_in_mail", "openInMail":
             return try await openInMail(arguments: arguments, credential: credential)
+        case "propose_send", "proposeSend":
+            return try await proposeSend(arguments: arguments, credential: credential)
         case "set_source":
             return try await setSource(arguments: arguments, credential: credential)
         case "update":
@@ -423,6 +436,194 @@ public struct LoopbackMCPServer {
                 outcome: .error(error.description)
             )
         )
+    }
+
+    private func proposeSend(arguments: [String: Any], credential: String?) async throws -> String {
+        let agent = try host.authenticate(credential)
+        guard let to = Self.stringListArgument(arguments["to"]), !to.isEmpty else {
+            throw CallError.badArguments
+        }
+        guard let subject = arguments["subject"] as? String else {
+            throw CallError.badArguments
+        }
+        guard let body = arguments["body"] as? String else {
+            throw CallError.badArguments
+        }
+        let cc = Self.stringListArgument(arguments["cc"]) ?? []
+        let bcc = Self.stringListArgument(arguments["bcc"]) ?? []
+        let sender = (arguments["sender"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let proposal = SendProposal(
+            agentName: agent.name,
+            to: to,
+            subject: subject,
+            body: body,
+            cc: cc,
+            bcc: bcc,
+            sender: (sender?.isEmpty == false) ? sender : nil
+        )
+        var requestFields: [String: Any] = [
+            "to": to,
+            "subject": subject,
+            "body": body
+        ]
+        if !cc.isEmpty { requestFields["cc"] = cc }
+        if !bcc.isEmpty { requestFields["bcc"] = bcc }
+        if let sender = proposal.sender { requestFields["sender"] = sender }
+        let request = AuditJSON.request(requestFields)
+        let started = Date()
+        let detail = "\(subject) → \(to.joined(separator: ", "))"
+
+        guard host.readAgentMayProposeSend() else {
+            recordProposeSendFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: detail,
+                error: .proposeSendDenied
+            )
+            throw CallError.proposeSendDenied
+        }
+        if let sender = proposal.sender {
+            guard let gateway = host.readGateway() else {
+                throw CallError.indexNotReady
+            }
+            // Same filtered catalog as list_accounts for the reveal setting.
+            let accounts = try gateway.listAccounts(
+                credential: credential,
+                includeEmptyPlacements: host.readRevealAccountsWithNoPlacements()
+            )
+            let allowed = accounts.compactMap(\.email)
+            let matched = allowed.contains {
+                $0.caseInsensitiveCompare(sender) == .orderedSame
+            }
+            if !matched {
+                let error = CallError.unknownSender(allowed: allowed)
+                recordProposeSendFailure(
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: detail,
+                    error: error
+                )
+                throw error
+            }
+        }
+        guard let prompter = host.readSendProposalPrompter() else {
+            recordProposeSendFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: detail,
+                error: .prompterNotBound
+            )
+            throw CallError.prompterNotBound
+        }
+
+        let decision = await prompter(proposal)
+        switch decision {
+        case .cancel:
+            let payload: [String: Any] = ["outcome": "cancelled"]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "cancelled · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case .send, .openInMail:
+            let mode: MailOutgoingMode = decision == .send ? .send : .visibleCompose
+            let outcomeKey = decision == .send ? "send" : "opened_in_mail"
+            guard let sender = host.readMailOutgoingSender() else {
+                recordProposeSendFailure(
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: "\(outcomeKey) · \(detail)",
+                    error: .outgoingNotBound
+                )
+                throw CallError.outgoingNotBound
+            }
+            do {
+                try sender.deliver(proposal, mode: mode)
+            } catch {
+                let message = (error as? MailOutgoingError)?.description
+                    ?? String(describing: error)
+                recordProposeSendFailure(
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: "\(outcomeKey) · \(detail)",
+                    error: .outgoingFailed(message)
+                )
+                throw CallError.outgoingFailed(message)
+            }
+            let payload: [String: Any] = ["outcome": outcomeKey]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "\(outcomeKey) · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+        }
+    }
+
+    private func recordProposeSendFailure(
+        agent: PairedAgent,
+        started: Date,
+        request: String,
+        detail: String,
+        error: CallError
+    ) {
+        host.audit?.append(
+            AuditEntry(
+                kind: .proposeSend,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: detail,
+                at: started,
+                finishedAt: Date(),
+                requestSummary: request,
+                responseSummary: AuditJSON.json(["error": error.description]),
+                outcome: .error(error.description)
+            )
+        )
+    }
+
+    /// Coerce a string or string-array MCP argument into a non-empty trimmed list (empty entries dropped).
+    private static func stringListArgument(_ value: Any?) -> [String]? {
+        let raw: [String]
+        switch value {
+        case let s as String:
+            raw = [s]
+        case let arr as [String]:
+            raw = arr
+        case let arr as [Any]:
+            raw = arr.compactMap { $0 as? String }
+            if raw.count != arr.count { return nil }
+        case nil:
+            return nil
+        default:
+            return nil
+        }
+        let trimmed = raw
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return trimmed
     }
 
     private func statusTool(credential: String?) async throws -> String {
@@ -567,6 +768,11 @@ public struct LoopbackMCPServer {
         case openerNotBound
         case openFailed
         case openDenied
+        case proposeSendDenied
+        case unknownSender(allowed: [String])
+        case prompterNotBound
+        case outgoingNotBound
+        case outgoingFailed(String)
 
         var description: String {
             switch self {
@@ -584,6 +790,19 @@ public struct LoopbackMCPServer {
                 return "Apple Mail did not open the message."
             case .openDenied:
                 return "Opening in Apple Mail is disabled. Enable it in MailGent Settings → General."
+            case .proposeSendDenied:
+                return "Proposing send is disabled. Enable it in MailGent Settings → General."
+            case .unknownSender(let allowed):
+                if allowed.isEmpty {
+                    return "sender must match a Mail account email from list_accounts (none available)."
+                }
+                return "sender must match a Mail account email from list_accounts (allowed: \(allowed.joined(separator: ", ")))."
+            case .prompterNotBound:
+                return "Send confirmation UI is not available (MailGent app host required)."
+            case .outgoingNotBound:
+                return "Apple Mail outgoing sender is not available (MailGent app host required)."
+            case .outgoingFailed(let message):
+                return message
             }
         }
     }
@@ -626,8 +845,9 @@ public struct LoopbackMCPServer {
                 ]
             ],
             [
-                "name": "list_placements",
-                "description": "List granted account/mailbox placements.",
+                "name": "list_accounts",
+                "description":
+                    "List Mail accounts (displayName, email) with grant-filtered mailbox placements nested under each. By default only accounts with at least one placement are returned. When Settings reveals accounts with no placements, empty placements means the identity is known but this agent has no read grant. Use email as propose_send sender when present. Search/list/get only work where placements is non-empty.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]
@@ -674,6 +894,45 @@ public struct LoopbackMCPServer {
                         "id": ["type": "string"]
                     ],
                     "required": ["accountID", "placement", "id"]
+                ]
+            ],
+            [
+                "name": "propose_send",
+                "description":
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. MailGent shows Send / Open in Mail / Cancel; the MCP call waits. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Returns { outcome: send | opened_in_mail | cancelled }.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "to": [
+                            "description": "One or more To addresses (string or string array). Display Name <email> is OK.",
+                            "oneOf": [
+                                ["type": "string"],
+                                ["type": "array", "items": ["type": "string"], "minItems": 1]
+                            ]
+                        ],
+                        "subject": ["type": "string"],
+                        "body": ["type": "string", "description": "Plain-text body"],
+                        "cc": [
+                            "description": "Optional Cc addresses (string or string array).",
+                            "oneOf": [
+                                ["type": "string"],
+                                ["type": "array", "items": ["type": "string"]]
+                            ]
+                        ],
+                        "bcc": [
+                            "description": "Optional Bcc addresses (string or string array).",
+                            "oneOf": [
+                                ["type": "string"],
+                                ["type": "array", "items": ["type": "string"]]
+                            ]
+                        ],
+                        "sender": [
+                            "type": "string",
+                            "description":
+                                "Optional From address; must match an email from list_accounts (case-insensitive). Same catalog as list_accounts for the current Settings reveal toggle."
+                        ]
+                    ],
+                    "required": ["to", "subject", "body"]
                 ]
             ],
             [

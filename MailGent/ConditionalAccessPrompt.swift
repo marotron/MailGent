@@ -868,8 +868,8 @@ struct ConditionalAccessPromptDialog: View {
     }
 }
 
-/// Compact Block / Allow chrome toward proto padding (5×8).
-private struct AskPrimaryFooterButtonStyle: ButtonStyle {
+/// Compact Block / Allow chrome toward proto padding (5×8). Shared by Ask + propose-send.
+struct AskPrimaryFooterButtonStyle: ButtonStyle {
     var prominent: Bool
 
     func makeBody(configuration: Configuration) -> some View {
@@ -895,7 +895,7 @@ private struct AskPrimaryFooterButtonStyle: ButtonStyle {
 
 /// Name + grey email badge side-by-side when they fit; otherwise name on line 1, email on line 2.
 /// Callers set `.font(...)` (envelope uses caption2; field cards use caption).
-private struct FlowAddressBadges: View {
+struct FlowAddressBadges: View {
     let addresses: [MailAddressParts]
 
     var body: some View {
@@ -938,7 +938,7 @@ private struct FlowAddressBadges: View {
     }
 }
 
-private struct ConditionalAskCard<Content: View>: View {
+struct ConditionalAskCard<Content: View>: View {
     var compact: Bool = false
     @ViewBuilder let content: Content
 

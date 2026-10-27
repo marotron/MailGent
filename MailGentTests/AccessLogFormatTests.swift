@@ -143,16 +143,16 @@ struct AccessLogFormatTests {
             responseSummary: #"{"count":0,"items":[]}"#
         )
         let placementsEmpty = AuditEntry(
-            kind: .listPlacements,
+            kind: .listAccounts,
             agentID: "a",
             agentName: "Grok Bot",
-            responseSummary: #"{"placements":[]}"#
+            responseSummary: #"{"accounts":[]}"#
         )
         let placementsHit = AuditEntry(
-            kind: .listPlacements,
+            kind: .listAccounts,
             agentID: "a",
             agentName: "Grok Bot",
-            responseSummary: #"{"placements":["acct/INBOX"]}"#,
+            responseSummary: #"{"accounts":[{"accountID":"acct","displayName":"Acct","email":"a@example.com","placements":["INBOX"]}]}"#,
             placements: [AuditPlacementRef(accountID: "acct", placement: "INBOX")]
         )
         let getOk = AuditEntry(

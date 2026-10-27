@@ -1,5 +1,6 @@
 import Foundation
 import MailStore
+import SQLite3
 import Testing
 
 struct LoopbackMCPServerTests {
@@ -537,10 +538,14 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"get\""))
         #expect(response.body.contains("\"name\":\"get_attachment\""))
         #expect(response.body.contains("\"name\":\"open_in_mail\""))
-        #expect(response.body.contains("\"name\":\"list_placements\""))
+        #expect(response.body.contains("\"name\":\"propose_send\""))
+        #expect(response.body.contains("\"name\":\"list_accounts\""))
         #expect(!response.body.contains("\"name\":\"listNew\""))
+        #expect(!response.body.contains("\"name\":\"list_placements\""))
         #expect(!response.body.contains("\"name\":\"listPlacements\""))
+        #expect(!response.body.contains("\"name\":\"listAccounts\""))
         #expect(!response.body.contains("\"name\":\"openInMail\""))
+        #expect(!response.body.contains("\"name\":\"proposeSend\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
@@ -712,6 +717,335 @@ struct LoopbackMCPServerTests {
             entry.kind == .openInMail && entry.outcome != .ok
         }
         #expect(failed)
+    }
+
+    @Test func proposeSendDeniedWhenSettingOff() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: false,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("MailGent Settings"))
+        #expect(outgoing.deliveries.isEmpty)
+        #expect(env.audit.entries().contains {
+            $0.kind == .proposeSend && $0.outcome != .ok
+        })
+    }
+
+    @Test func proposeSendReturnsSendOutcome() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(
+                    """
+                    {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"propose_send","arguments":{"to":["Alex <alex@example.com>"],"subject":"Hi","body":"Hello","cc":"ops@example.com"}}}
+                    """.utf8
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["outcome"] as? String == "send")
+        #expect(outgoing.deliveries.count == 1)
+        #expect(outgoing.deliveries[0].mode == .send)
+        #expect(outgoing.deliveries[0].proposal.to == ["Alex <alex@example.com>"])
+        #expect(outgoing.deliveries[0].proposal.cc == ["ops@example.com"])
+        #expect(env.audit.entries().contains {
+            $0.kind == .proposeSend && $0.outcome == .ok
+        })
+    }
+
+    @Test func proposeSendReturnsOpenedInMailOutcome() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .openInMail }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello"
+                    ]
+                )
+            )
+        )
+
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["outcome"] as? String == "opened_in_mail")
+        #expect(outgoing.deliveries[0].mode == .visibleCompose)
+    }
+
+    @Test func proposeSendReturnsCancelledOutcome() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .cancel }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello"
+                    ]
+                )
+            )
+        )
+
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["outcome"] as? String == "cancelled")
+        #expect(outgoing.deliveries.isEmpty)
+    }
+
+    @Test func proposeSendFailsAfterSendWhenScriptingThrows() async throws {
+        let outgoing = FakeMailOutgoingSender(error: .scriptFailed("Mail refused"))
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Mail refused"))
+        #expect(outgoing.deliveries.count == 1)
+        #expect(env.audit.entries().contains {
+            $0.kind == .proposeSend && $0.outcome != .ok
+        })
+    }
+
+    @Test func proposeSendRejectsEmptyPlacementSenderWhenRevealOff() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try ProposeSendIdentityFixture(
+            mailOutgoingSender: outgoing,
+            revealAccountsWithNoPlacements: false,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello",
+                        "sender": env.emailB.uppercased()
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("list_accounts"))
+        #expect(response.body.contains(env.emailA))
+        #expect(!response.body.contains(env.emailB))
+        #expect(outgoing.deliveries.isEmpty)
+    }
+
+    @Test func proposeSendAllowsSenderFromEmptyPlacementAccountWhenRevealOn() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try ProposeSendIdentityFixture(
+            mailOutgoingSender: outgoing,
+            revealAccountsWithNoPlacements: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello",
+                        "sender": env.emailB.uppercased()
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        #expect(outgoing.deliveries.count == 1)
+        #expect(outgoing.deliveries[0].proposal.sender == env.emailB.uppercased())
+    }
+
+    @Test func proposeSendRejectsUnknownSender() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try ProposeSendIdentityFixture(
+            mailOutgoingSender: outgoing,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello",
+                        "sender": "nobody@example.com"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("list_accounts"))
+        #expect(response.body.contains(env.emailA))
+        #expect(outgoing.deliveries.isEmpty)
+    }
+
+    @Test func listAccountsOmitsEmptyPlacementsByDefault() async throws {
+        let env = try ProposeSendIdentityFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            sendProposalPrompter: { _ in .cancel }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_accounts","arguments":{}}}"#.utf8)
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        let accounts = payload["accounts"] as? [[String: Any]]
+        #expect(accounts?.count == 1)
+        let byEmail = Dictionary(
+            uniqueKeysWithValues: (accounts ?? []).compactMap { row -> (String, [String])? in
+                guard let email = row["email"] as? String,
+                      let placements = row["placements"] as? [String]
+                else { return nil }
+                return (email, placements)
+            }
+        )
+        #expect(byEmail[env.emailA] == ["INBOX"])
+        #expect(byEmail[env.emailB] == nil)
+        #expect(env.audit.entries().contains { $0.kind == .listAccounts })
+    }
+
+    @Test func listAccountsIncludesEmptyPlacementsWhenRevealOn() async throws {
+        let env = try ProposeSendIdentityFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            revealAccountsWithNoPlacements: true,
+            sendProposalPrompter: { _ in .cancel }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_accounts","arguments":{}}}"#.utf8)
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        let accounts = payload["accounts"] as? [[String: Any]]
+        #expect(accounts?.count == 2)
+        let byEmail = Dictionary(
+            uniqueKeysWithValues: (accounts ?? []).compactMap { row -> (String, [String])? in
+                guard let email = row["email"] as? String,
+                      let placements = row["placements"] as? [String]
+                else { return nil }
+                return (email, placements)
+            }
+        )
+        #expect(byEmail[env.emailA] == ["INBOX"])
+        #expect(byEmail[env.emailB] == [])
+        #expect(env.audit.entries().contains { $0.kind == .listAccounts })
     }
 
     @Test func authenticatedGetAttachmentReturnsPathJSON() async throws {
@@ -1016,6 +1350,9 @@ private struct LoopbackFixture {
         sourceController: (any MailSourceControlling)? = nil,
         appleMailOpener: (any AppleMailOpening)? = nil,
         agentMayOpenInMail: Bool = false,
+        mailOutgoingSender: (any MailOutgoingSending)? = nil,
+        agentMayProposeSend: Bool = false,
+        sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)? = nil,
         internetMessageID: String? = nil,
         subject: String = "Invoice due",
         body: String = "Please pay",
@@ -1069,13 +1406,143 @@ private struct LoopbackFixture {
             gateway: gateway,
             sourceController: sourceController,
             appleMailOpener: appleMailOpener,
-            agentMayOpenInMail: agentMayOpenInMail
+            agentMayOpenInMail: agentMayOpenInMail,
+            mailOutgoingSender: mailOutgoingSender,
+            agentMayProposeSend: agentMayProposeSend,
+            sendProposalPrompter: sendProposalPrompter
         )
     }
 
     func remove() {
         root.remove()
         try? FileManager.default.removeItem(at: db)
+    }
+}
+
+/// Two accounts; only A is granted. B has empty placements unless reveal is on.
+private struct ProposeSendIdentityFixture {
+    let root: FixtureTree
+    let db: URL
+    let accountsDB: URL
+    let credential = "secret-token"
+    let accountA = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+    let accountB = "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF"
+    let emailA = "marotron@gmail.com"
+    let emailB = "nite.ma.roux@gmail.com"
+    let audit: AuditLog
+    let server: LoopbackMCPServer
+
+    init(
+        mailOutgoingSender: (any MailOutgoingSending)?,
+        revealAccountsWithNoPlacements: Bool = false,
+        sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)?
+    ) throws {
+        root = try FixtureTree()
+        try root.writeEmlx(
+            named: "1.emlx",
+            rfc822: """
+            From: Alice <alice@example.com>
+            To: Bob <bob@example.com>
+            Subject: Invoice due
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            Please pay
+            """,
+            account: accountA,
+            mailbox: "INBOX.mbox"
+        )
+        try root.writeEmlx(
+            named: "2.emlx",
+            rfc822: """
+            From: Other <other@example.com>
+            To: Bob <bob@example.com>
+            Subject: Other
+            Date: Tue, 2 Jan 2024 00:00:00 +0000
+            Content-Type: text/plain
+
+            hi
+            """,
+            account: accountB,
+            mailbox: "INBOX.mbox"
+        )
+
+        accountsDB = try Self.writeAccountsDatabase([
+            (id: accountA, displayName: "Maro - gmail", email: emailA),
+            (id: accountB, displayName: "MaRoux - gmail", email: emailB),
+        ])
+
+        db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MailGent-mcp-send-\(UUID().uuidString).sqlite")
+        let index = try MailboxIndex(store: MailStore(root: root.mail), databaseURL: db)
+        _ = try index.ingest()
+
+        audit = AuditLog()
+        let pairing = Pairing(audit: audit)
+        let agent = try pairing.register(
+            name: "Cursor",
+            trustClass: .machineLocal,
+            credential: credential
+        )
+        let grants = GrantGate()
+        try grants.allow(agentID: agent.id, accountID: accountA)
+        let gateway = AgentReadAPI(
+            read: ReadAPI(index: index),
+            pairing: pairing,
+            grants: grants,
+            audit: audit,
+            accountsDatabases: [accountsDB]
+        )
+        server = LoopbackMCPServer(
+            gateway: gateway,
+            mailOutgoingSender: mailOutgoingSender,
+            agentMayProposeSend: true,
+            revealAccountsWithNoPlacements: revealAccountsWithNoPlacements,
+            sendProposalPrompter: sendProposalPrompter
+        )
+    }
+
+    func remove() {
+        root.remove()
+        try? FileManager.default.removeItem(at: db)
+        try? FileManager.default.removeItem(at: accountsDB)
+    }
+
+    private static func writeAccountsDatabase(
+        _ rows: [(id: String, displayName: String, email: String)]
+    ) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Accounts-\(UUID().uuidString).sqlite")
+        var db: OpaquePointer?
+        guard sqlite3_open(url.path, &db) == SQLITE_OK, let db else {
+            throw NSError(domain: "ProposeSendIdentityFixture", code: 1)
+        }
+        defer { sqlite3_close(db) }
+        guard sqlite3_exec(
+            db,
+            """
+            CREATE TABLE ZACCOUNT (
+              ZIDENTIFIER TEXT,
+              ZACCOUNTDESCRIPTION TEXT,
+              ZUSERNAME TEXT
+            );
+            """,
+            nil,
+            nil,
+            nil
+        ) == SQLITE_OK else {
+            throw NSError(domain: "ProposeSendIdentityFixture", code: 2)
+        }
+        for row in rows {
+            let sql = """
+            INSERT INTO ZACCOUNT (ZIDENTIFIER, ZACCOUNTDESCRIPTION, ZUSERNAME)
+            VALUES ('\(row.id)', '\(row.displayName)', '\(row.email)');
+            """
+            guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+                throw NSError(domain: "ProposeSendIdentityFixture", code: 3)
+            }
+        }
+        return url
     }
 }
 
@@ -1192,5 +1659,24 @@ private final class FakeAppleMailOpener: AppleMailOpening, @unchecked Sendable {
     func openMessage(internetMessageID: String) -> Bool {
         openedIDs.append(internetMessageID)
         return result
+    }
+}
+
+private final class FakeMailOutgoingSender: MailOutgoingSending, @unchecked Sendable {
+    struct Delivery: Equatable {
+        let proposal: SendProposal
+        let mode: MailOutgoingMode
+    }
+
+    var deliveries: [Delivery] = []
+    var error: MailOutgoingError?
+
+    init(error: MailOutgoingError? = nil) {
+        self.error = error
+    }
+
+    func deliver(_ proposal: SendProposal, mode: MailOutgoingMode) throws {
+        deliveries.append(Delivery(proposal: proposal, mode: mode))
+        if let error { throw error }
     }
 }
