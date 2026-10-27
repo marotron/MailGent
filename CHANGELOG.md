@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.19.0] - 2026-10-27
+
+### Added
+
+- Access Log leak detail: click the purple leak badge (message meta, or Subject / Body after Ask chips) to open a detections panel between the meta row and the message card; field badges filter to that field. Rows show numbered original → replacement with field (`Body:N` when known), rule, and mode badges (`eye.slash.fill` / `arrow.left.arrow.right` / `shield.slash.fill`); redacted hits use a solid purple `[REDACTED]` chip. Body hit line numbers are stored on new audit detections.
+
+### Fixed
+
+- Leak guard phone heuristic: ignore date-like runs (`26-10-2026 14`), decimal ranges (`12.71 - 12.71`), and bare long IDs (`+286623088411329`) that the loose digit pattern over-matched
+- Leak guard credit-card heuristic: require a passing Luhn check so meeting/account IDs are not treated as cards
+- Leak guard password patterns: redact only the secret value after `password`/`passwd`/`secret`; whole `token=…` assignments still redact as before
+
 ## [0.18.0] - 2026-10-26
 
 ### Added

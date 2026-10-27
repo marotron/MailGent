@@ -2535,6 +2535,10 @@ struct MessageAccessCard: View {
     var bodyViaPassNick: String? = nil
     var attachmentInfoViaPassNick: String? = nil
     var attachmentContentViaPassNick: String? = nil
+    /// Access Log: currently open leak detections panel scope (drives field-badge expanded chrome).
+    var leakPanelScope: AccessLogLeakPanelScope? = nil
+    /// Access Log: toggle detections panel filtered to Subject / Body.
+    var onToggleLeakPanel: ((AccessLogLeakPanelScope) -> Void)? = nil
 
     @State private var chipRowNote: String?
 
@@ -2623,7 +2627,9 @@ struct MessageAccessCard: View {
             labeledSection(
                 "Body",
                 mark: bodyRuleMark,
-                conditional: conditionalAskMark(for: \.body)
+                conditional: conditionalAskMark(for: \.body),
+                leakCount: leakHitCount(for: .body),
+                leakScope: .body
             ) {
                 bodyPreview
             }
@@ -2735,6 +2741,10 @@ struct MessageAccessCard: View {
         }
     }
 
+    private func leakHitCount(for field: AuditLeakDetection.Field) -> Int {
+        ref.displayLeakDetections.filter { $0.field == field }.count
+    }
+
     @ViewBuilder
     private var subjectPreview: some View {
         leakGuardRow(
@@ -2745,7 +2755,9 @@ struct MessageAccessCard: View {
             original: ref.subjectOriginal,
             deniedPlaceholder: ref.subject.isEmpty ? "(no subject)" : ref.subject,
             mark: ruleMark(for: \.subject),
-            conditional: conditionalAskMark(for: \.subject)
+            conditional: conditionalAskMark(for: \.subject),
+            leakCount: leakHitCount(for: .subject),
+            leakScope: .subject
         )
     }
 
@@ -2833,7 +2845,9 @@ struct MessageAccessCard: View {
         original: String?,
         deniedPlaceholder: String,
         mark: AppliedGrantRule? = nil,
-        conditional: ConditionalAskMark? = nil
+        conditional: ConditionalAskMark? = nil,
+        leakCount: Int = 0,
+        leakScope: AccessLogLeakPanelScope? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(label):")
@@ -2869,11 +2883,24 @@ struct MessageAccessCard: View {
             if let conditional {
                 ConditionalFieldMarkChip(outcome: conditional.outcome, remembered: conditional.remembered)
             }
+            fieldLeakBadge(count: leakCount, scope: leakScope)
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
             }
         }
         .font(.caption)
+    }
+
+    @ViewBuilder
+    private func fieldLeakBadge(count: Int, scope: AccessLogLeakPanelScope?) -> some View {
+        if count > 0, let scope, let onToggleLeakPanel {
+            AccessLogLeakHitBadge(
+                count: count,
+                compact: true,
+                action: { onToggleLeakPanel(scope) },
+                expanded: leakPanelScope == scope
+            )
+        }
     }
 
     private var omittedBodyPreview: some View {
@@ -2896,10 +2923,18 @@ struct MessageAccessCard: View {
         _ title: String,
         mark: AppliedGrantRule?,
         conditional: ConditionalAskMark? = nil,
+        leakCount: Int = 0,
+        leakScope: AccessLogLeakPanelScope? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(title, mark: mark, conditional: conditional)
+            sectionTitle(
+                title,
+                mark: mark,
+                conditional: conditional,
+                leakCount: leakCount,
+                leakScope: leakScope
+            )
             content()
         }
     }
@@ -2907,7 +2942,9 @@ struct MessageAccessCard: View {
     private func sectionTitle(
         _ title: String,
         mark: AppliedGrantRule?,
-        conditional: ConditionalAskMark? = nil
+        conditional: ConditionalAskMark? = nil,
+        leakCount: Int = 0,
+        leakScope: AccessLogLeakPanelScope? = nil
     ) -> some View {
         HStack(alignment: .center, spacing: 6) {
             Text(title)
@@ -2917,6 +2954,7 @@ struct MessageAccessCard: View {
             if let conditional {
                 ConditionalFieldMarkChip(outcome: conditional.outcome, remembered: conditional.remembered)
             }
+            fieldLeakBadge(count: leakCount, scope: leakScope)
             if let mark {
                 RuleFieldMarkChip(nick: mark.nick, polarity: mark.polarity)
             }
@@ -3314,10 +3352,21 @@ struct AccessLogConditionalAskBadge: View {
 
 // MARK: - Leak guard access log visuals
 
+/// Open scope for the Access Log detections panel (Variant A).
+enum AccessLogLeakPanelScope: Equatable, Sendable {
+    case all
+    case subject
+    case body
+}
+
 struct AccessLogLeakHitBadge: View {
     let count: Int
     /// Collapsed / list: shield chip + count. Expanded: `{shield} leak` chip + count.
     var compact: Bool = false
+    /// When set, the badge is a button that toggles the detections panel.
+    var action: (() -> Void)? = nil
+    /// Visual “pressed / open” chrome when the panel is showing this badge’s scope.
+    var expanded: Bool = false
     @Environment(\.backgroundProminence) private var backgroundProminence
 
     private var onProminentBackground: Bool {
@@ -3326,7 +3375,7 @@ struct AccessLogLeakHitBadge: View {
 
     var body: some View {
         let ink = onProminentBackground ? Color.white : WithheldStyle.text
-        HStack(spacing: 3) {
+        let chip = HStack(spacing: 3) {
             HStack(spacing: compact ? 0 : 3) {
                 ZStack {
                     Text("L")
@@ -3347,27 +3396,50 @@ struct AccessLogLeakHitBadge: View {
             .padding(.horizontal, compact ? 4 : 5)
             .frame(height: 14)
             .background(
-                Capsule().fill(
-                    onProminentBackground ? Color.white.opacity(0.22) : WithheldStyle.fill
-                )
+                Capsule().fill(chipFill)
             )
             .overlay {
-                Capsule().strokeBorder(
-                    onProminentBackground ? Color.white.opacity(0.75) : WithheldStyle.border,
-                    lineWidth: 0.5
-                )
+                Capsule().strokeBorder(chipBorder, lineWidth: 0.5)
             }
+            .shadow(
+                color: expanded && !onProminentBackground
+                    ? WithheldStyle.border.opacity(0.45)
+                    : .clear,
+                radius: expanded ? 2 : 0
+            )
 
             Text("\(count)")
                 .font(.caption2.weight(.semibold).monospacedDigit())
                 .foregroundStyle(ink)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "Leak guard detected \(count) part\(count == 1 ? "" : "s")"
-        )
+        .accessibilityLabel(accessibilityLabelText)
+        .accessibilityAddTraits(action != nil ? .isButton : [])
+        .accessibilityValue(expanded ? "Expanded" : "")
         .help("Leak guard detected \(count) sensitive part\(count == 1 ? "" : "s")")
         .layoutPriority(1)
+
+        if let action {
+            Button(action: action) { chip }
+                .buttonStyle(.plain)
+        } else {
+            chip
+        }
+    }
+
+    private var chipFill: Color {
+        if onProminentBackground {
+            return Color.white.opacity(expanded ? 0.32 : 0.22)
+        }
+        return expanded ? Color.purple.opacity(0.22) : WithheldStyle.fill
+    }
+
+    private var chipBorder: Color {
+        onProminentBackground ? Color.white.opacity(0.75) : WithheldStyle.border
+    }
+
+    private var accessibilityLabelText: String {
+        "Leak guard detected \(count) part\(count == 1 ? "" : "s")"
     }
 }
 
@@ -3375,9 +3447,9 @@ struct LeakGuardDetectionsList: View {
     let detections: [AuditLeakDetection]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(detections.enumerated()), id: \.offset) { _, detection in
-                detectionRow(detection)
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(detections.enumerated()), id: \.offset) { index, detection in
+                LeakGuardDetectionRow(detection: detection, index: index + 1)
             }
         }
         .padding(.horizontal, 8)
@@ -3391,46 +3463,233 @@ struct LeakGuardDetectionsList: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Leak guard detections")
     }
+}
 
-    @ViewBuilder
-    private func detectionRow(_ detection: AuditLeakDetection) -> some View {
+/// One leak hit: compact before → after + field badge; rule/mode + full secret expand on hover.
+private struct LeakGuardDetectionRow: View {
+    let detection: AuditLeakDetection
+    let index: Int
+    @State private var isHovering = false
+
+    private static let codeFontSize: CGFloat = 9.5
+    private static let badgeHeight: CGFloat = 14
+    /// Secrets longer than this get a wrapped full-text block on hover.
+    private static let expandThreshold = 40
+    /// Soft-wrap long tokens that have no spaces (ZWSP every N graphemes).
+    private static let wrapChunkSize = 24
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                Text(fieldTitle(detection.field))
-                    .font(.caption2.weight(.semibold))
+            HStack(alignment: .center, spacing: 8) {
+                Text("\(index)")
+                    .font(.system(size: 9, weight: .bold).monospacedDigit())
                     .foregroundStyle(WithheldStyle.text)
-                Text("·")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Text(detection.label)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text("·")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Text(modeTitle(detection))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(WithheldStyle.text)
-                Spacer(minLength: 0)
+                    .frame(width: 16, height: 16)
+                    .background(
+                        Circle().fill(Color.purple.opacity(0.18))
+                    )
+                    .overlay {
+                        Circle().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+                    }
+                    .accessibilityHidden(true)
+
+                HStack(alignment: .center, spacing: 5) {
+                    codeSnippet(displayOriginal, replacement: false, truncating: true)
+                        .layoutPriority(0)
+                    Text("→")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .layoutPriority(1)
+                    replacementView(truncating: true)
+                        .layoutPriority(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                fieldBadge
+                    .layoutPriority(1)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(displayOriginal(detection))
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                Text("→")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                replacementView(detection)
-                Spacer(minLength: 0)
+
+            if isHovering {
+                VStack(alignment: .leading, spacing: 3) {
+                    if shouldExpandOriginal {
+                        codeSnippet(
+                            softWrapped(displayOriginal),
+                            replacement: false,
+                            truncating: false
+                        )
+                    }
+                    if shouldExpandReplacement {
+                        codeSnippet(
+                            softWrapped(displayReplacement),
+                            replacement: true,
+                            truncating: false
+                        )
+                    }
+                    HStack(spacing: 5) {
+                        Text(detection.label)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        modeBadge
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.leading, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: 18)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText(detection))
-        .help(helpText(detection))
+        .accessibilityLabel(accessibilityText)
+        .help(helpText)
+    }
+
+    private func codeSnippet(_ text: String, replacement: Bool, truncating: Bool) -> some View {
+        Text(text)
+            .font(.system(size: Self.codeFontSize).monospaced())
+            .foregroundStyle(replacement ? WithheldStyle.text : .primary)
+            .lineLimit(truncating ? 1 : nil)
+            .truncationMode(.middle)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(replacement ? Color.purple.opacity(0.08) : Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(
+                        replacement ? WithheldStyle.border : Color.secondary.opacity(0.28),
+                        lineWidth: 0.5
+                    )
+            }
+            // Expand the layout slot so long secrets truncate (or wrap) inside the card;
+            // background stays sized to the text when the string is short.
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: !truncating)
+            .textSelection(.enabled)
+    }
+
+    /// Insert zero-width spaces so unbroken tokens wrap inside the card width.
+    private func softWrapped(_ text: String) -> String {
+        guard text.count > Self.wrapChunkSize else { return text }
+        var result = ""
+        result.reserveCapacity(text.count + text.count / Self.wrapChunkSize)
+        var count = 0
+        for character in text {
+            if count == Self.wrapChunkSize {
+                result.append("\u{200B}")
+                count = 0
+            }
+            result.append(character)
+            count += 1
+        }
+        return result
+    }
+
+    private var fieldBadge: some View {
+        let title: String = {
+            if detection.field == .body, let line = detection.line {
+                return "Body:\(line)"
+            }
+            return fieldTitle(detection.field)
+        }()
+        return HStack(spacing: 3) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 8, weight: .semibold))
+            Text(title)
+                .font(.system(size: 8, weight: .semibold))
+        }
+        .foregroundStyle(WithheldStyle.text)
+        .padding(.horizontal, 5)
+        .frame(height: Self.badgeHeight)
+        .background(Capsule().fill(Color.purple.opacity(0.10)))
+        .overlay {
+            Capsule().strokeBorder(WithheldStyle.border, lineWidth: 0.5)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .help(
+            {
+                if detection.field == .body, let line = detection.line {
+                    return "Body line \(line)"
+                }
+                return fieldTitle(detection.field)
+            }()
+        )
+    }
+
+    private var modeBadge: some View {
+        let meta = modeMeta
+        return HStack(spacing: 3) {
+            Image(systemName: meta.systemImage)
+                .font(.system(size: 8, weight: .semibold))
+            Text(meta.title)
+                .font(.system(size: 8, weight: .semibold))
+        }
+        .foregroundStyle(meta.foreground)
+        .padding(.horizontal, 5)
+        .frame(height: Self.badgeHeight)
+        .background(Capsule().fill(meta.fill))
+        .overlay {
+            Capsule()
+                .strokeBorder(meta.border, style: StrokeStyle(lineWidth: 0.5, dash: meta.dashed ? [3, 2] : []))
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .help(modeTitle)
+    }
+
+    private var modeMeta: (
+        title: String,
+        systemImage: String,
+        foreground: Color,
+        fill: Color,
+        border: Color,
+        dashed: Bool
+    ) {
+        switch detection.disposition {
+        case .redacted:
+            return (
+                "redacted",
+                "eye.slash.fill",
+                .white,
+                LeakGuardStyle.ink,
+                LeakGuardStyle.ink,
+                false
+            )
+        case .replaced where !detection.discloseToAgent:
+            return (
+                "stealth",
+                "shield.slash.fill",
+                WithheldStyle.text.opacity(0.85),
+                Color.purple.opacity(0.08),
+                WithheldStyle.border,
+                false
+            )
+        case .replaced:
+            return (
+                "replaced",
+                "arrow.left.arrow.right",
+                WithheldStyle.text,
+                Color.white,
+                WithheldStyle.border,
+                true
+            )
+        case .withheld:
+            return (
+                "withheld",
+                "shield.slash.fill",
+                WithheldStyle.text.opacity(0.85),
+                Color.purple.opacity(0.08),
+                WithheldStyle.border,
+                false
+            )
+        }
     }
 
     private func fieldTitle(_ field: AuditLeakDetection.Field) -> String {
@@ -3440,7 +3699,7 @@ struct LeakGuardDetectionsList: View {
         }
     }
 
-    private func modeTitle(_ detection: AuditLeakDetection) -> String {
+    private var modeTitle: String {
         switch detection.disposition {
         case .redacted:
             return "redacted"
@@ -3451,63 +3710,87 @@ struct LeakGuardDetectionsList: View {
         }
     }
 
-    private func displayOriginal(_ detection: AuditLeakDetection) -> String {
-        let text = detection.original.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? detection.label : text
+    private var displayOriginal: String {
+        let collapsed = collapseWhitespace(detection.original)
+        return collapsed.isEmpty ? detection.label : collapsed
+    }
+
+    private var displayReplacement: String {
+        let raw = detection.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? "…" : raw
+    }
+
+    private var shouldExpandOriginal: Bool {
+        displayOriginal.count > Self.expandThreshold
+    }
+
+    private var shouldExpandReplacement: Bool {
+        guard case .replaced = detection.disposition else { return false }
+        return displayReplacement.count > Self.expandThreshold
+    }
+
+    private func collapseWhitespace(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
     }
 
     @ViewBuilder
-    private func replacementView(_ detection: AuditLeakDetection) -> some View {
+    private func replacementView(truncating: Bool) -> some View {
         switch detection.disposition {
         case .redacted:
             RedactedTokenChip()
         case .replaced:
-            Text(detection.replacement.isEmpty ? "…" : detection.replacement)
-                .font(.caption.monospaced())
-                .foregroundStyle(WithheldStyle.text)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
+            codeSnippet(displayReplacement, replacement: true, truncating: truncating)
         case .withheld:
             WithheldLabel(rules: [detection.label])
         }
     }
 
-    private func accessibilityText(_ detection: AuditLeakDetection) -> String {
-        let whereField = fieldTitle(detection.field)
-        let mode = modeTitle(detection)
-        let original = displayOriginal(detection)
+    private var accessibilityText: String {
+        let whereField: String = {
+            if detection.field == .body, let line = detection.line {
+                return "Body line \(line)"
+            }
+            return fieldTitle(detection.field)
+        }()
+        let original = displayOriginal
         switch detection.disposition {
         case .redacted:
-            return "\(whereField), \(detection.label), \(mode): \(original) redacted"
+            return "\(whereField), \(detection.label), \(modeTitle): \(original) redacted"
         case .replaced:
-            return "\(whereField), \(detection.label), \(mode): \(original) to \(detection.replacement)"
+            return "\(whereField), \(detection.label), \(modeTitle): \(original) to \(detection.replacement)"
         case .withheld:
-            return "\(whereField), \(detection.label), \(mode): \(original)"
+            return "\(whereField), \(detection.label), \(modeTitle): \(original)"
         }
     }
 
-    private func helpText(_ detection: AuditLeakDetection) -> String {
-        "\(fieldTitle(detection.field)) · \(detection.label) · \(modeTitle(detection))"
+    private var helpText: String {
+        let field: String = {
+            if detection.field == .body, let line = detection.line {
+                return "Body:\(line)"
+            }
+            return fieldTitle(detection.field)
+        }()
+        return "\(field) · \(detection.label) · \(modeTitle)"
     }
 }
 
-/// Compact hatch chip for `[REDACTED]` in leak-detection rows.
+/// Inverse-purple chip for `[REDACTED]` in leak-detection rows (matches code snippet size).
 struct RedactedTokenChip: View {
     var body: some View {
         Text("[REDACTED]")
-            .font(.system(size: 9, weight: .bold).monospaced())
-            .foregroundStyle(HatchDeniedStyle.lock)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background {
-                HatchPattern().opacity(0.95)
-            }
+            .font(.system(size: 9.5, weight: .semibold).monospaced())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(LeakGuardStyle.ink, in: RoundedRectangle(cornerRadius: 3))
             .overlay {
                 RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(HatchDeniedStyle.stripe, lineWidth: 0.5)
+                    .strokeBorder(LeakGuardStyle.ink, lineWidth: 0.5)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("Redacted")
     }
 }

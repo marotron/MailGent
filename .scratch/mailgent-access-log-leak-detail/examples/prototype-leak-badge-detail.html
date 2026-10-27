@@ -1,0 +1,730 @@
+<!doctype html>
+<!-- THROWAWAY PROTOTYPE: Access Log leak badge → detection list + field-line badge.
+     Question: where do detections live, and how does click-reveal work?
+     Three structurally different variants via ?variant=A|B|C (or bottom switcher).
+     Mode badges use stock SF Symbols (exported PNGs in sf-icons/):
+       redacted → eye.slash.fill
+       replaced → arrow.left.arrow.right
+       stealth  → shield.slash.fill
+       field    → doc.text
+     See ../map.md. Hard refresh if chrome looks wrong. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Access Log leak badge detail proto</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #152033;
+      --muted: #5f6d86;
+      --line: #c9d1df;
+      --canvas: #e8ebf0;
+      --paper: #ffffff;
+      --blue: #2a4fc7;
+      --blue-soft: #eef2ff;
+      --blue-border: #b4c2f5;
+      --green: #166a2d;
+      --green-soft: #dff4e4;
+      --leak: #7a3db8;
+      --leak-text: color-mix(in srgb, #7a3db8 88%, #000);
+      --leak-fill: color-mix(in srgb, #7a3db8 12%, #fff);
+      --leak-border: color-mix(in srgb, #7a3db8 38%, #fff);
+      --sanitized: color-mix(in srgb, #7a3db8 10%, #fff);
+      --shadow: 0 1px 2px #15203308, 0 12px 32px #1520330c;
+      --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 20px 120px;
+      font: 13px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(900px 400px at 15% -5%, #e8dff8 0%, transparent 55%), var(--canvas);
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; cursor: pointer; }
+    .intro {
+      max-width: 920px; margin: 0 auto 16px;
+      display: flex; justify-content: space-between; gap: 16px; align-items: end;
+    }
+    .intro h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+    .intro p { margin: 6px 0 0; color: var(--muted); max-width: 640px; }
+    .proto-badge {
+      font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--leak); background: var(--leak-fill); border: 1px solid var(--leak-border);
+      padding: 6px 10px; border-radius: 999px; flex: 0 0 auto;
+    }
+    .note {
+      max-width: 920px; margin: 0 auto 14px; padding: 10px 12px;
+      background: #fff; border: 1px solid #e1e6ef; border-radius: 10px;
+      color: var(--muted); font-size: 12px;
+    }
+    .note strong { color: var(--ink); }
+    .desk {
+      max-width: 920px; margin: 0 auto; background: var(--paper);
+      border: 1px solid #e1e6ef; border-radius: 12px; box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .detail { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .kind { display: flex; align-items: center; gap: 8px; font: 600 14px/1.2 system-ui; }
+    .kind svg { width: 14px; height: 14px; color: var(--muted); }
+    .meta {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      position: relative;
+    }
+    .meta .when { color: var(--muted); font-size: 11px; }
+    .field-chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      border: 0.5px solid var(--blue-border); background: var(--blue-soft);
+      color: var(--blue); border-radius: 999px; padding: 1px 6px;
+      font: 600 9px/1.2 var(--mono);
+    }
+    .field-chip.ask {
+      background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 35%, #fff);
+      color: var(--green);
+    }
+    .field-chip svg { width: 9px; height: 9px; }
+
+    /* Leak badge — mirrors AccessLogLeakHitBadge */
+    .leak-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      border: 0; background: transparent; padding: 0; color: var(--leak-text);
+      border-radius: 999px;
+    }
+    .leak-badge .chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: var(--leak-fill); border: 0.5px solid var(--leak-border);
+      border-radius: 999px; padding: 0 5px; height: 14px;
+      font: 600 9px/1 system-ui;
+    }
+    .leak-badge.compact .chip { padding: 0 4px; gap: 0; }
+    .leak-badge .chip svg { width: 9px; height: 9px; }
+    .leak-badge .n {
+      font: 600 11px/1 var(--mono); color: var(--leak-text);
+    }
+    .leak-badge.clickable { cursor: pointer; }
+    .leak-badge.clickable:hover .chip,
+    .leak-badge.clickable:focus-visible .chip {
+      background: color-mix(in srgb, #7a3db8 18%, #fff);
+    }
+    .leak-badge.clickable[aria-expanded="true"] .chip {
+      background: color-mix(in srgb, #7a3db8 22%, #fff);
+      box-shadow: 0 0 0 2px color-mix(in srgb, #7a3db8 18%, transparent);
+    }
+    .leak-badge:focus-visible { outline: 2px solid var(--leak); outline-offset: 2px; }
+
+    /* Detection list — one leak per line; swap left, meta right */
+    .detections {
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 6px 8px; border-radius: 6px;
+      background: var(--leak-fill); border: 0.5px solid var(--leak-border);
+      width: 100%;
+    }
+    .detections.hidden { display: none; }
+    .det-row {
+      display: flex; align-items: center; gap: 10px;
+      min-height: 22px;
+    }
+    .det-idx {
+      flex: 0 0 16px; width: 16px; height: 16px;
+      display: grid; place-items: center;
+      border-radius: 50%;
+      background: color-mix(in srgb, #7a3db8 18%, #fff);
+      border: 0.5px solid var(--leak-border);
+      font: 700 9px/1 var(--mono); color: var(--leak-text);
+    }
+    .det-swap {
+      flex: 1 1 auto; min-width: 0;
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .det-swap .arrow { color: #b0b8c6; font: 600 11.5px/1.35 system-ui; flex: 0 0 auto; }
+    /* Same type size for original, replacement, and [REDACTED] chip */
+    .det-code,
+    .redacted-chip {
+      display: inline-flex; align-items: center; max-width: 100%;
+      padding: 1px 6px; border-radius: 4px;
+      font: 11.5px/1.35 var(--mono);
+      white-space: pre-wrap; word-break: break-all;
+      box-sizing: border-box;
+    }
+    .det-code {
+      color: var(--ink);
+      background: #f1f3f7; border: 0.5px solid #d5dae4;
+    }
+    .det-code.repl {
+      color: var(--leak-text);
+      background: color-mix(in srgb, #7a3db8 8%, #fff);
+      border-color: var(--leak-border);
+    }
+    .det-meta {
+      flex: 0 0 auto;
+      display: inline-flex; align-items: center; justify-content: flex-end;
+      gap: 5px; margin-left: auto; max-width: 52%;
+    }
+    .det-meta .rule {
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 140px;
+    }
+    .meta-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      height: 16px; padding: 0 6px; border-radius: 999px;
+      font: 600 9px/1 system-ui; white-space: nowrap;
+      border: 0.5px solid var(--leak-border);
+      background: #fff; color: var(--leak-text);
+    }
+    .meta-badge svg { width: 9px; height: 9px; flex: 0 0 auto; }
+    /* Stock SF Symbols (exported via NSImage systemSymbolName) as masks → currentColor */
+    .sf {
+      display: inline-block; width: 10px; height: 10px; flex: 0 0 auto;
+      background: currentColor;
+      -webkit-mask: var(--sf) center / contain no-repeat;
+      mask: var(--sf) center / contain no-repeat;
+      -webkit-mask-size: contain; mask-size: contain;
+    }
+    .sf.eye-slash { --sf: url("data:image/png;base64,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"); }
+    .sf.arrow-swap { --sf: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABlmWCKAAAEj0lEQVR4Ae2ZS2wVVRjHARHLQ1BeagRpo2JBCDRIXBFjFBfdsNCwqHFhkGDiCjcmDdiEAImER9ix6aJsaEhK2MCCBVuJYYOGh5jwMFSIYKtQ3hT4/UhPMrkR2nvuTJlO55/8MnfuY875/nPO950zd8yYUqUDpQOlA6UDpQOlA6UDo9SBFzKOu47rTwbbuZ9xW1GXz9KAqfSoGVpgNlyAOzAq9ApRboG78GiA9RwnQOE1nQh3wA0IwXvcD5Og0JpPdHvhFiSD7+H8W3gRCqmxRLUAOuE2JIO/yvlOMCcUUuOI6n04ACa5ZPBXON8KVoJCyuAb4RBUBv8X722AiVBIWUIXwT5IZntHwEVohZegkDL4JdAFfRCGfT+vT8E6GBHDfjwdrVYGvxTa4FNIDnGzv6b8Dk1gcpSs9IAL98IFMPlWrZjOvUMr1vnPoK6ixZucOyI0dgJkPQUM+hhsg6MwLPqeVrohDPvnfdT0jtjIzeLVyoDzpoexHYrJAUdo7CNYCZVL23u8dwmcm5obYzA/G7JMuufg4JB/UfHFGANOco2fwPzxCSSzvet/F0THQRNc+sbkGX42qByJ5oA/wMoz7FpGiwZbuek5y3st4KYo97KkxeoyPzQDO+xdE4SKMIPXTo+Z4Gi5DrlVLQYY1H/gELTcNUJYE3ju/mAKnIF/IZeq1QCD8g6fBvPJexASo/N/MfhwxIVRD+SugqRhAHE9MSEkooWca4LJT1McCU6HE+CqLVdKywCDMhlqgjV5AVgdNME2NOUK/AKWrtwoTQMMylWZic8SaE6YCsr1gAYcAj97mjTsLfgApsHfkOm0SdsA+vvkcZgmuEVugFehG9rBafCsVVs9n2+EL2A52D/zR65GDf0Zkrz7X0IbrAXL42By/aBB3nWDtoJ8A1aVESuH9VC1hi8afEAzLLO+H0osL9NTFlOglt75WM2qUT9wEc1zCplUfdbgiLgPqSlvBlgm/4TX4G3QgGCClUSDzAnml1SUNwMc+hpwHmbBuxBMcEHl6HAEOBI0o7Ay6LmwCbzbISd4dJR0wByoWXkbAcmAXFh5p6/BhxAqQR2vGwY4xtHvRasWA7xL/t5FThZ4ffcZbq/9j6EJwsJKM+aBS+zfIHqzFfNAxBXa1/Ax2CE7moXCsHcKWAJ9yJrUy5x8Dt4Ep8pFGBa5uPkVfA4QOpnl0QWRbZn8/q+dy7zfBlGKGQHzael1cLs7HArT62ltuU7wH6ooefFq5fM+E1Ne1ENHfo7tTMz8NQesAHds5oAYE/nZoHK4u3O03pv0VoGjL6mrnLTDbnC3WbViDLARS5FJKOtpoAlToBVMeLYZdJMXu2APdIc3i3Z0SewddsolE6C1fzu8AYWUI/NN6ATXAsngPd8Mfl5IGXwDHIQ+SAbfy/mPUOg730iAh8HtbzL4fzj/AWZDYVVPZC6yzP7J4M3wX8EkKLS+I7p+SAbvsF8NmTwR4rq5ks//ksFb531AatkdFbLsdYG7O/9DaIZMg49dCNGvTGR/psNkcAPkMtdjqdKB0oHSgdKB0oHSgdKB1B14DKWJOgYssrzUAAAAAElFTkSuQmCC"); }
+    .sf.shield-slash { --sf: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABlmWCKAAAEqklEQVR4Ae2aW6gVVRiAtTQvqYWhgRVdBD15JSKViDgZXYQigsiCfEpfVNQe9UEwiOy1h0ojiHqIiCB6qoeiC5WFRg+Z2U28lResjDQvlX7fYa8Yhj272bNnzszG9cN3ZvaemTVrffOvtWZmnxEjYkQD0UA0EA1EA9FANBANRAPRwIVoYGSBRl/GMRPgL/gNzkGRGM1BY+BisIyzcKq1zmJ4olsB7v8sPATb4UnYAf9CnhjPTlNbzGQ5B6bAadgDX8EBOAK/Qt5y2XV4YhSn2QtWzKv2ISyAiyArvMrXwM2wDF4Gy/D4NGbAB7ARFsMAXA6NCjPAqxMqr4RbICnB9SthHpgtz8H3EI7JszzB/u/AE3Ab3AB2vdrDMWArhP5vY9KZMJbv1sA2+AfyNDhrH7PtMLwGj4OZdDU4hvQcDkDdhv31I7gKpoONvRbs0zvhFxgJ98CdMBF6Ccu6FBwv7gPLNLsMB87jQ2s1/DETtkBWJlzCtk1wDLKubi/f/0m5L4Fiaos8Ep6hdlVJMAPeArOwtqhbwh+0vNYs0LwSXoB23cHtdoeqMsHZ4gFPUlc4IjtQZUmY26qYEjZD2d1BAUtb56hl8RRnHQDn/nYS3uP7KiUo4BGoLbZz5tdhFuSR4PxdZiY0QoA3O2+kJDzP5+SY8D6fQyaUKaExApzTP4P7wWcGH3xWwiEI8/3XrD8MZoo3YcvgOwjbiywbJaCdBO/lq5TQOAHDLaGRApISSICh7lBVJjRWgBK2wV0aIBwTlODDktuk3ZiwO7E97Ndp2WgBVvwTqFJC4wUECXcjwhgH6yCdCd7NhdnhMdbzZkJfCFDCp9BJwk62F5HQNwKKSvi/V2l9JSBLws9cfbdJOhOW810nCQqo9WHIkd5b4dCAPEu7g6/MjDAmZEkYyz6dJCjAF6+1hU97f0Oehif3KUuCr8aW1NZ6TuyLkDOQbFze9f0c5/OC4fPDHZB8NjjC5/Xgc4PbbwUzLlm+b4RmQm2xgjOfhGSlullXwqpW7YOE5BR4gG1ZEnxl/gPYTWqL6zjzYeim0el90xIGKS9IsJFK2ADpTDDzXoRaw0r10g2CjCIS3uXci2ptfevkAyx3gVcrNKjIUgmrwbA7DEKYAtOZoHjfBveU/hZSRvhb4UEYhAlQNCZxoL8nngUHO1PfQXEhXAETQdljwGcMu54zUOEoS4BXex9YYUdqf8ryTXGRaCfhWwryV+i0BKdSz104yhJgBbxqP8E3MB+sbBkSbKRiK5FQpgDqOHQ/sJflF+Arcudnn/CKhJmgSG90PodKJJQtgHoO9Ulva7+EPXATFB0XlHBjqxwzqxIJlFtZ+N8dt8OrcBq6nRmOccxGmAYhHACXgIOj5Tk7OABvgCouKMX2FnaB6+FR+BjySDjFfq/AYpgK6WgnwexYm96xSZ+dr2fDGnBAayfCKe1teBCU1umKKuFeCJngE+kOaHxYcVPaG54fQRFn4E2wuzh7dGo4m/+LUaw5xjjomjVPQ1dRdJrq6iQZO4/n+8kwA+zr9uPfodsbG2VNAQfao3Ac+ipGU9uiU2VfNTRWNhqIBqKBaCAaiAaigWigSQbOA8lZR/6ljE0TAAAAAElFTkSuQmCC"); }
+    .sf.doc-text { --sf: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABlmWCKAAAE20lEQVR4Ae2aW6hVRRjH7eoloywoCSsiFEsQC7sfJUUqukpg9FT44HMFQRcsorcudIHoLeihKKIb0ZUKtNSeuoCECHpUuipkWpl27/erPYfRs89272+tdfbanPXBjzVr7ZlZ3/xn5ptZc86kSY01CjQKNAo0CjQKNAo0CkxQBY4osd1HUtex4LWXev8m/x/wJ4y79eJoO+csPwVmwEyY00pP5no4+4cMf8FeGIavYDf8CopSe7OnT4FbYAPYizYqgr2/Ge6D2XAM1N7s8QdgP0Qa3a7M79T1OlwKR0FtzR66FfZBu4YUeebw/wgWgjGlUjs6WPt0yl0L07LyOr4HvoM0KrKfD0qexN1pMLX11LLGk8QQ6TvhCfgMHBmVWFQAHV9wiEe7uH8BXoWd0CmqX83vt4HzXTP/AVAUA6hC3AROg8dAEX6D2tgZePIzpKFuD70JJ0A3toJMX0Iq/xrpe2ANpNGT/+aI6GZlIVtvZiSPmD2UD3+Xrm3gkhYxV5C34VH4BBQh2XISd8FF4JJbqkUF0Im8rOt57nTESafMO/AwrId8ChlvHCEXQ6kiRGMAflRiCvk+eD0V5kLaE1xFWn8fgnVgzChseS8WrqykCmz8h/AkGCecHsmWkbgXFoOBuLDVUQAb5bL4LDwOGyEXYQn3q+FyKCxC3aYAbRoxR8JzYCy4A+ZD2hgtIq3vBuM1YBAOWV1HQGqMI+FFcHX4AvIN0SXc3w9DEA6MdRHAnpR2pggvwSPwKeQbIpfG22EOjFWen8a2fk0BGyXJZpCYBbvADVA7W8tD84k7yPSxdAXpd2Ez5OJwe3jrlwA/4drezL0LST8IngnkwmRZDkoaH5IAXl0in4eBEWAYZ7eCGxsbcDxc0IJLz3YWJVKA7Klwv2LA13jp1vdzMMoXNQUMtaVfU8Ch6o7PqL4UzgQbkYY1yY42l19PhtRoyw1UELR1u+EN8OPHADgduhXgbvIuhjTsQ42n/H+bCa/9MoPZ9y168WElmS1b2NIQKlzRoFYw4QWoOggex8g4HaLvMU64OSpjpaCa0RZ1bHRNo5948HkduElJ3/Sjc3V+4lnh07AJutkgda6tza9VCuD54DK4uc17u320n4xvgdvcgRPgR5z2oNS1Pi1XJHsyR4A7xkoarydVjoA91P8y+KHS7fpO1hHzo+hAi7E+kEYyRxNVCqBPrtX5R0/Uz8rKNctgZdL+f0qzgPqvh+gfNZz/r4CxoBKrcgrMxONVcANEY8A+ym6HDyA/DuO2HKtSAA8qt4NLWXQEfENZN0MDuRHS8WfgPYiOAEXcAgO5DNpr37bgUk8raxUIf48HZSntfUUEyP9a417fvf94mD67zc53l4620GYpKoBz8hdINo3EuTAvPajwuoi6PULL44r/qxCKE9FVwCVpG3hGrynkfHgK1oLrtrvAMs1RNguWwtmHVDzMfWiZjApgdF4H52eO+O0/BI4CDz1DPUK5sUyRHWkO/7z3zb8e9GnczCB0Gfid7tzrJx/z/vNg3M3euBH8G36/BNjAu5dAdKMVO0vnhcmmkJgN18CVcA6cCGGHKNvJ3FX+AIruWYObrB0Qmv+UKyyAdTg3nf9TwaXJe6dIFeZIM7YYY5zzClJ2rKHKxhoFGgUaBRoFGgUaBRoFJoAC/wIu6E7hhqhz0AAAAABJRU5ErkJggg=="); }
+    .meta-badge.field { background: color-mix(in srgb, #7a3db8 10%, #fff); }
+    .meta-badge.mode-redacted {
+      background: var(--leak);
+      border-color: var(--leak);
+      color: #fff;
+    }
+    .meta-badge.mode-replaced {
+      background: #fff;
+      border-style: dashed;
+    }
+    .meta-badge.mode-stealth {
+      background: color-mix(in srgb, #7a3db8 8%, #fff);
+      color: color-mix(in srgb, #7a3db8 70%, #5f6d86);
+    }
+    .redacted-chip {
+      font-weight: 600;
+      background: var(--leak); border: 0.5px solid var(--leak); color: #fff;
+    }
+
+    /* Message card */
+    .msg-card {
+      border: 1px solid rgba(0,0,0,.14); border-radius: 10px;
+      padding: 12px; display: flex; flex-direction: column; gap: 10px;
+      background: #fff;
+    }
+    .chip-row {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .source {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 0.5px solid var(--line); background: #f4f6f9;
+      border-radius: 999px; padding: 2px 8px; font-size: 11px; color: var(--muted);
+    }
+    .chip-row .spacer { flex: 1; }
+    .sec-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      height: 20px; padding: 0 8px; border-radius: 6px;
+      border: 0.5px solid var(--line); background: #fff;
+      font-size: 11px; color: var(--ink);
+    }
+    .row {
+      display: flex; gap: 6px; align-items: center;
+      font-size: 12px;
+    }
+    .row .k { font-weight: 300; color: var(--muted); flex: 0 0 auto; }
+    .row .v { min-width: 0; }
+    .row .v .hit {
+      background: var(--sanitized); border-radius: 2px;
+      box-decoration-break: clone; -webkit-box-decoration-break: clone;
+    }
+    .row .spacer { flex: 1; min-width: 4px; }
+    .section-title {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted); margin-bottom: 4px;
+    }
+    .section-title .spacer { flex: 1; min-width: 4px; }
+    .ask-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      color: var(--green); font: 600 11px/1 system-ui;
+    }
+    .ask-chip svg { width: 11px; height: 11px; }
+    .bodybox {
+      min-height: 132px; padding: 10px; border-radius: 8px;
+      background: rgba(0,0,0,.04); font-size: 12px; line-height: 1.45;
+    }
+    .bodybox .hit {
+      background: var(--sanitized); border-radius: 2px;
+      box-decoration-break: clone; -webkit-box-decoration-break: clone;
+    }
+
+    /* Variant B popover */
+    .popover {
+      position: absolute; z-index: 20; top: calc(100% + 6px); left: 0;
+      min-width: 320px; max-width: 420px;
+      box-shadow: 0 8px 28px #15203322, 0 1px 2px #15203310;
+      border-radius: 8px; overflow: hidden;
+    }
+    .popover.hidden { display: none; }
+    .popover .detections { border-radius: 8px; }
+
+    /* Variant C field-local panel */
+    .field-local {
+      margin: 0 0 8px; padding-left: 0;
+    }
+    .field-local.hidden { display: none; }
+
+    .variant-blurb {
+      max-width: 920px; margin: 14px auto 0; padding: 10px 12px;
+      border-left: 3px solid var(--leak); background: #fff;
+      border-radius: 0 8px 8px 0; font-size: 12px; color: var(--muted);
+    }
+    .variant-blurb b { color: var(--ink); }
+
+    /* Floating switcher */
+    .switcher {
+      position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 10px;
+      background: #1a2233; color: #fff; padding: 8px 12px; border-radius: 999px;
+      box-shadow: 0 10px 30px #15203340; z-index: 50; user-select: none;
+    }
+    .switcher button {
+      width: 28px; height: 28px; border-radius: 50%; border: 0;
+      background: #2c364c; color: #fff; font-size: 14px; font-weight: 700;
+    }
+    .switcher button:hover { background: #3a4660; }
+    .switcher .label { font: 600 12px/1 system-ui; min-width: 220px; text-align: center; }
+    .switcher .keys { font: 500 10px/1 system-ui; color: #9aa3b2; }
+
+    .state-dump {
+      max-width: 920px; margin: 12px auto 0;
+      font: 11px/1.4 var(--mono); color: var(--muted);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="intro">
+    <div>
+      <h1>Access Log · leak badge detail</h1>
+      <p>Throwaway UI proto. Click purple leak badges. Switch variants with ← → or the bar below. No GitHub issue yet — pick a direction before locking.</p>
+    </div>
+    <span class="proto-badge">Prototype</span>
+  </div>
+
+  <div class="note" id="todayNote">
+    <strong>Today:</strong> badge on the meta row is display-only.
+    <code>LeakGuardDetectionsList</code> appears when a collapsible list message expands — not on single <code>get</code>, and not from a badge click.
+    Body title has Ask / rule chips only.
+  </div>
+
+  <div class="desk" id="desk"></div>
+  <div class="variant-blurb" id="blurb"></div>
+  <pre class="state-dump" id="stateDump"></pre>
+
+  <div class="switcher" role="toolbar" aria-label="Prototype variant switcher">
+    <button type="button" id="prev" aria-label="Previous variant">←</button>
+    <div>
+      <div class="label" id="switchLabel">A — Inline under meta</div>
+      <div class="keys">← → · ?variant=A|B|C</div>
+    </div>
+    <button type="button" id="next" aria-label="Next variant">→</button>
+  </div>
+
+  <script>
+    const DETECTIONS = [
+      {
+        field: "Body",
+        line: 23,
+        label: "Password patterns",
+        mode: "redacted",
+        original: "tempPass: hunter2-deploy",
+        replacement: null
+      },
+      {
+        field: "Body",
+        line: 24,
+        label: "API tokens",
+        mode: "replaced",
+        original: "sk-live-9f3a…c21",
+        replacement: "[REDACTED_TOKEN]"
+      },
+      {
+        field: "Subject",
+        // Subject has no line number — badge stays "Subject"
+        label: "Custom · staging secrets",
+        mode: "stealth replace",
+        original: "staging password rotate",
+        replacement: "staging ******** rotate"
+      }
+    ];
+
+    const VARIANTS = {
+      A: {
+        name: "A — Inline under meta",
+        blurb: "<b>A · Inline under meta.</b> Message-level badge toggles the full detection list between the meta row and the card. Subject / Body badges (after Ask chips) filter that panel to the field. Each leak is one numbered line: swap left, field + rule + mode badges right."
+      },
+      B: {
+        name: "B — Anchored popover",
+        blurb: "<b>B · Anchored popover.</b> Badge click opens a floating panel under the badge — no card reflow. Subject / Body badges open the same popover filtered to that field. Click outside / Esc to dismiss. Message-level still shows total count."
+      },
+      C: {
+        name: "C — Field-local expand",
+        blurb: "<b>C · Field-local expand.</b> Subject and Body badges expand a mini detection list under that field. Message-level badge expands the full list under the meta row. Prefer this if leaks should stay next to the sanitized field."
+      }
+    };
+
+    const ICONS = {
+      envelope: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="3" width="11" height="8" rx="1.2"/><path d="M1.8 3.5 7 7.5l5.2-4"/></svg>',
+      shield: '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 1.1 10 2.6v3.1c0 2.5-1.7 4.1-4 4.9-2.3-.8-4-2.4-4-4.9V2.6L6 1.1z"/><text x="6" y="7.2" text-anchor="middle" font-size="5.5" font-weight="700" fill="#fff" font-family="system-ui">L</text></svg>',
+      clock: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8.8 3.2a3.8 3.8 0 1 1-1.3-1.3"/><path d="M8.5 1.5v2h2"/><path d="M6 3.8V6.2l1.4 1"/></svg>',
+      eye: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 6s1.8-3 4.5-3 4.5 3 4.5 3-1.8 3-4.5 3-4.5-3-4.5-3z"/><circle cx="6" cy="6" r="1.3"/></svg>',
+      /* mode icons — redacted vs replaced must read differently at a glance */
+      /* Mode / field marks: stock SF Symbols (see MODE_META.sf) rendered via .sf masks */
+      sf: (cls) => `<span class="sf ${cls}" aria-hidden="true"></span>`
+    };
+
+    // Pinned SF Symbol names for Swift when this ships.
+    const MODE_META = {
+      redacted: {
+        cls: "mode-redacted", sf: "eye-slash", title: "redacted",
+        systemName: "eye.slash.fill"
+      },
+      replaced: {
+        cls: "mode-replaced", sf: "arrow-swap", title: "replaced",
+        systemName: "arrow.left.arrow.right"
+      },
+      "stealth replace": {
+        cls: "mode-stealth", sf: "shield-slash", title: "stealth",
+        systemName: "shield.slash.fill"
+      }
+    };
+
+    const state = {
+      variant: "A",
+      open: null,       // "all" | "body" | "subject" | null
+      popoverAnchor: null // "meta" | "body" | "subject" | null (B only)
+    };
+
+    function params() {
+      return new URLSearchParams(location.search);
+    }
+    function setVariant(v) {
+      const q = params();
+      q.set("variant", v);
+      history.replaceState(null, "", `?${q.toString()}`);
+      state.variant = v;
+      state.open = null;
+      state.popoverAnchor = null;
+      render();
+    }
+    function cycle(dir) {
+      const keys = Object.keys(VARIANTS);
+      const i = keys.indexOf(state.variant);
+      setVariant(keys[(i + dir + keys.length) % keys.length]);
+    }
+
+    function leakBadge({ count, compact = false, expanded = false, id }) {
+      const label = compact ? "" : `<span>leak</span>`;
+      const cls = [
+        "leak-badge",
+        "clickable",
+        compact ? "compact" : "",
+      ].filter(Boolean).join(" ");
+      return `<button type="button" class="${cls}" data-leak="${id}"
+        aria-expanded="${expanded ? "true" : "false"}"
+        aria-label="Leak guard detected ${count} parts${expanded ? ", expanded" : ""}"
+        title="Leak guard detected ${count} sensitive part${count === 1 ? "" : "s"}">
+        <span class="chip">${ICONS.shield}${label}</span>
+        <span class="n">${count}</span>
+      </button>`;
+    }
+
+    function fieldChips() {
+      const chips = [
+        ["Subj", false], ["From", false], ["To", false], ["Cc", false],
+        ["Date", false], ["Body", true], ["Att", false], ["File", false]
+      ];
+      return chips.map(([lab, ask]) =>
+        `<span class="field-chip ${ask ? "ask" : ""}">${ask ? ICONS.clock : ""}${lab}</span>`
+      ).join("");
+    }
+
+    function hitCount(field) {
+      return DETECTIONS.filter(d => d.field === field).length;
+    }
+
+    function modeBadge(mode) {
+      const meta = MODE_META[mode] || MODE_META.replaced;
+      return `<span class="meta-badge ${meta.cls}" title="${escapeHtml(mode)} · SF Symbol ${meta.systemName}">${ICONS.sf(meta.sf)} ${meta.title}</span>`;
+    }
+
+    function fieldBadge(detection) {
+      // Body: include 1-based source line inside the badge (e.g. Body:23). Subject stays plain.
+      const label = detection.field === "Body" && detection.line != null
+        ? `${detection.field}:${detection.line}`
+        : detection.field;
+      const title = detection.field === "Body" && detection.line != null
+        ? `${detection.field} line ${detection.line} · SF Symbol doc.text`
+        : `SF Symbol doc.text`;
+      return `<span class="meta-badge field" title="${escapeHtml(title)}">${ICONS.sf("doc-text")} ${escapeHtml(label)}</span>`;
+    }
+
+    function detectionRows(filterField) {
+      const rows = DETECTIONS.filter(d => !filterField || d.field === filterField);
+      return rows.map((d, i) => {
+        const repl = d.replacement == null
+          ? `<span class="redacted-chip">[REDACTED]</span>`
+          : `<code class="det-code repl">${escapeHtml(d.replacement)}</code>`;
+        return `<div class="det-row">
+          <span class="det-idx" aria-hidden="true">${i + 1}</span>
+          <div class="det-swap">
+            <code class="det-code">${escapeHtml(d.original)}</code>
+            <span class="arrow">→</span>
+            ${repl}
+          </div>
+          <div class="det-meta">
+            ${fieldBadge(d)}
+            <span class="rule" title="${escapeHtml(d.label)}">${escapeHtml(d.label)}</span>
+            ${modeBadge(d.mode)}
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    function detectionsPanel({ filterField = null, extraClass = "" } = {}) {
+      const count = filterField
+        ? DETECTIONS.filter(d => d.field === filterField).length
+        : DETECTIONS.length;
+      if (count === 0) return "";
+      return `<div class="detections ${extraClass}" role="region" aria-label="Leak guard detections">
+        ${detectionRows(filterField)}
+      </div>`;
+    }
+
+    function bodyHtml() {
+      return `Hi team — rotating the <span class="hit">tempPass: hunter2-deploy</span> tonight.
+Please revoke <span class="hit">sk-live-9f3a…c21</span> after cutover.
+Thanks.`;
+    }
+
+    function wrapPopover(inner, show) {
+      if (!show) return inner;
+      return `<span style="position:relative;display:inline-flex">${inner}
+        <div class="popover">${detectionsPanel({
+          filterField: state.popoverAnchor === "body" ? "Body"
+            : state.popoverAnchor === "subject" ? "Subject" : null
+        })}</div>
+      </span>`;
+    }
+
+    function messageCard({
+      subjectLeakBadge = "",
+      bodyLeakBadge = "",
+      subjectLocal = "",
+      bodyLocal = ""
+    } = {}) {
+      return `<div class="msg-card">
+        <div class="chip-row">
+          <span class="source">iCloud · INBOX</span>
+          <span class="spacer"></span>
+          <button type="button" class="sec-btn" tabindex="-1">${ICONS.eye} Preview</button>
+          <button type="button" class="sec-btn" tabindex="-1">Open in Apple Mail</button>
+        </div>
+        <div class="row">
+          <span class="k">Subject:</span>
+          <span class="v"><span class="hit">staging ******** rotate</span></span>
+          <span class="spacer"></span>
+          ${subjectLeakBadge}
+        </div>
+        ${subjectLocal}
+        <div class="row"><span class="k">From:</span><span class="v">ops@example.com</span></div>
+        <div class="row"><span class="k">To:</span><span class="v">dev@example.com</span></div>
+        <div>
+          <div class="section-title">
+            <span>Body</span>
+            <span class="spacer"></span>
+            <span class="ask-chip">${ICONS.clock} user allowed (cached)</span>
+            ${bodyLeakBadge}
+          </div>
+          ${bodyLocal}
+          <div class="bodybox">${bodyHtml()}</div>
+        </div>
+      </div>`;
+    }
+
+    function fieldFilter() {
+      if (state.open === "body" || state.popoverAnchor === "body") return "Body";
+      if (state.open === "subject" || state.popoverAnchor === "subject") return "Subject";
+      return null;
+    }
+
+    function renderA() {
+      const openAll = state.open === "all";
+      const openBody = state.open === "body";
+      const openSubject = state.open === "subject";
+      const open = openAll || openBody || openSubject;
+      return `
+        <div class="detail">
+          <div class="kind">${ICONS.envelope} Message</div>
+          <div class="meta">
+            <span class="when">Thu, 03 Sep · iCloud</span>
+            ${fieldChips()}
+            ${leakBadge({ count: DETECTIONS.length, expanded: openAll, id: "meta" })}
+          </div>
+          ${open ? detectionsPanel({ filterField: fieldFilter() }) : ""}
+          ${messageCard({
+            subjectLeakBadge: leakBadge({
+              count: hitCount("Subject"), compact: true,
+              expanded: openSubject, id: "subject"
+            }),
+            bodyLeakBadge: leakBadge({
+              count: hitCount("Body"), compact: true,
+              expanded: openBody, id: "body"
+            })
+          })}
+        </div>`;
+    }
+
+    function renderB() {
+      const pop = state.popoverAnchor;
+      return `
+        <div class="detail">
+          <div class="kind">${ICONS.envelope} Message</div>
+          <div class="meta">
+            <span class="when">Thu, 03 Sep · iCloud</span>
+            ${fieldChips()}
+            ${wrapPopover(
+              leakBadge({ count: DETECTIONS.length, expanded: pop === "meta", id: "meta" }),
+              pop === "meta"
+            )}
+          </div>
+          ${messageCard({
+            subjectLeakBadge: wrapPopover(
+              leakBadge({
+                count: hitCount("Subject"), compact: true,
+                expanded: pop === "subject", id: "subject"
+              }),
+              pop === "subject"
+            ),
+            bodyLeakBadge: wrapPopover(
+              leakBadge({
+                count: hitCount("Body"), compact: true,
+                expanded: pop === "body", id: "body"
+              }),
+              pop === "body"
+            )
+          })}
+        </div>`;
+    }
+
+    function renderC() {
+      const openAll = state.open === "all";
+      const openBody = state.open === "body";
+      const openSubject = state.open === "subject";
+      return `
+        <div class="detail">
+          <div class="kind">${ICONS.envelope} Message</div>
+          <div class="meta">
+            <span class="when">Thu, 03 Sep · iCloud</span>
+            ${fieldChips()}
+            ${leakBadge({ count: DETECTIONS.length, expanded: openAll, id: "meta" })}
+          </div>
+          ${openAll ? detectionsPanel({}) : ""}
+          ${messageCard({
+            subjectLeakBadge: leakBadge({
+              count: hitCount("Subject"), compact: true,
+              expanded: openSubject, id: "subject"
+            }),
+            subjectLocal: openSubject
+              ? `<div class="field-local">${detectionsPanel({ filterField: "Subject" })}</div>`
+              : "",
+            bodyLeakBadge: leakBadge({
+              count: hitCount("Body"), compact: true,
+              expanded: openBody, id: "body"
+            }),
+            bodyLocal: openBody
+              ? `<div class="field-local">${detectionsPanel({ filterField: "Body" })}</div>`
+              : ""
+          })}
+        </div>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[c]);
+    }
+
+    function dumpState() {
+      const el = document.getElementById("stateDump");
+      el.textContent = `state = ${JSON.stringify({
+        variant: state.variant,
+        open: state.open,
+        popoverAnchor: state.popoverAnchor,
+        detections: DETECTIONS.length,
+        subjectHits: hitCount("Subject"),
+        bodyHits: hitCount("Body")
+      }, null, 2)}`;
+    }
+
+    function render() {
+      const v = state.variant;
+      const desk = document.getElementById("desk");
+      const blurb = document.getElementById("blurb");
+      const label = document.getElementById("switchLabel");
+      label.textContent = VARIANTS[v].name;
+      blurb.innerHTML = VARIANTS[v].blurb;
+      if (v === "A") desk.innerHTML = renderA();
+      else if (v === "B") desk.innerHTML = renderB();
+      else desk.innerHTML = renderC();
+      wire();
+      dumpState();
+    }
+
+    function toggleOpen(target) {
+      if (state.variant === "B") {
+        state.popoverAnchor = state.popoverAnchor === target ? null : target;
+        state.open = null;
+      } else {
+        state.open = state.open === target ? null : target;
+        state.popoverAnchor = null;
+      }
+      render();
+    }
+
+    function wire() {
+      document.querySelectorAll("[data-leak]").forEach(btn => {
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          const id = btn.getAttribute("data-leak");
+          if (id === "meta") toggleOpen(state.variant === "B" ? "meta" : "all");
+          else if (id === "body" || id === "subject") toggleOpen(id);
+        });
+      });
+    }
+
+    document.getElementById("prev").addEventListener("click", () => cycle(-1));
+    document.getElementById("next").addEventListener("click", () => cycle(1));
+    document.addEventListener("keydown", e => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
+      if (e.key === "ArrowLeft") { e.preventDefault(); cycle(-1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); cycle(1); }
+      if (e.key === "Escape" && state.variant === "B" && state.popoverAnchor) {
+        state.popoverAnchor = null;
+        render();
+      }
+    });
+    document.addEventListener("click", () => {
+      if (state.variant === "B" && state.popoverAnchor) {
+        state.popoverAnchor = null;
+        render();
+      }
+    });
+
+    const initial = (params().get("variant") || "A").toUpperCase();
+    state.variant = VARIANTS[initial] ? initial : "A";
+    render();
+  </script>
+</body>
+</html>

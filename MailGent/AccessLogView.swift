@@ -458,6 +458,8 @@ private struct AccessLogDetail: View {
     @State private var requestJSONStyle: AccessLogJSONStyle = .pretty
     @State private var responseView: AccessLogSideView = .formatted
     @State private var responseJSONStyle: AccessLogJSONStyle = .pretty
+    /// Formatted get: detections panel filter (`nil` = closed).
+    @State private var leakPanelScope: AccessLogLeakPanelScope? = nil
 
     var body: some View {
         ScrollView {
@@ -488,6 +490,21 @@ private struct AccessLogDetail: View {
             requestJSONStyle = .pretty
             responseView = .formatted
             responseJSONStyle = .pretty
+            leakPanelScope = nil
+        }
+    }
+
+    private func toggleLeakPanel(_ scope: AccessLogLeakPanelScope) {
+        leakPanelScope = leakPanelScope == scope ? nil : scope
+    }
+
+    private func filteredLeakDetections(for ref: AuditMessageRef) -> [AuditLeakDetection] {
+        guard let leakPanelScope else { return [] }
+        let all = ref.displayLeakDetections
+        switch leakPanelScope {
+        case .all: return all
+        case .subject: return all.filter { $0.field == .subject }
+        case .body: return all.filter { $0.field == .body }
         }
     }
 
@@ -630,6 +647,10 @@ private struct AccessLogDetail: View {
             kindChrome(title: "Message", systemImage: "envelope")
             if let ref = refs.first {
                 messageMetaRow(ref)
+                let openDetections = filteredLeakDetections(for: ref)
+                if !openDetections.isEmpty {
+                    LeakGuardDetectionsList(detections: openDetections)
+                }
                 MessageAccessCard(
                     session: session,
                     ref: ref,
@@ -644,7 +665,9 @@ private struct AccessLogDetail: View {
                             id: ref.id
                         )
                         DetachedWindowHost.shared.showCompanion(session: session)
-                    }
+                    },
+                    leakPanelScope: leakPanelScope,
+                    onToggleLeakPanel: toggleLeakPanel
                 )
 
                 if AccessLogFormat.showsSanitizedLegend(for: [ref]) {
@@ -759,7 +782,11 @@ private struct AccessLogDetail: View {
             )
             .fixedSize(horizontal: true, vertical: false)
             if ref.leakDetectionCount > 0 {
-                AccessLogLeakHitBadge(count: ref.leakDetectionCount)
+                AccessLogLeakHitBadge(
+                    count: ref.leakDetectionCount,
+                    action: { toggleLeakPanel(.all) },
+                    expanded: leakPanelScope == .all
+                )
             }
             Spacer(minLength: 0)
         }
@@ -904,6 +931,7 @@ private struct CollapsibleAuditMessage: View {
     let mailHandoffTitle: String
 
     @State private var expanded: Bool
+    @State private var leakPanelScope: AccessLogLeakPanelScope? = nil
 
     init(
         session: CompanionSession,
@@ -923,80 +951,102 @@ private struct CollapsibleAuditMessage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button(action: toggleExpanded) {
-                HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Button(action: toggleExpanded) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .padding(.top, 2)
                         .frame(width: 10)
-                    VStack(alignment: .leading, spacing: 4) {
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Collapse message" : "Expand message")
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Button(action: toggleExpanded) {
                         Text(collapsedTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        HStack(alignment: .center, spacing: 6) {
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHidden(true)
+
+                    HStack(alignment: .center, spacing: 6) {
+                        Button(action: toggleExpanded) {
                             Text(collapsedMeta)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
-                            if !expanded {
-                                GrantFieldBadgeRow(
-                                    fields: ref.fields,
-                                    labelMode: .icon,
-                                    passRevealed: ref.passRevealedFields,
-                                    blockWithheld: ref.blockWithheldFields,
-                                    conditionalConfirmed: ref.conditionalConfirmedFields,
-                                    conditionalBlocked: ref.conditionalUserBlockedFields,
-                                    conditionalRemembered: ref.conditionalRememberedFields
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHidden(true)
+
+                        if !expanded {
+                            GrantFieldBadgeRow(
+                                fields: ref.fields,
+                                labelMode: .icon,
+                                passRevealed: ref.passRevealedFields,
+                                blockWithheld: ref.blockWithheldFields,
+                                conditionalConfirmed: ref.conditionalConfirmedFields,
+                                conditionalBlocked: ref.conditionalUserBlockedFields,
+                                conditionalRemembered: ref.conditionalRememberedFields
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                            .onTapGesture(perform: toggleExpanded)
+                            if ref.leakDetectionCount > 0 {
+                                AccessLogLeakHitBadge(
+                                    count: ref.leakDetectionCount,
+                                    compact: true
                                 )
-                                .fixedSize(horizontal: true, vertical: false)
-                                if ref.leakDetectionCount > 0 {
-                                    AccessLogLeakHitBadge(
-                                        count: ref.leakDetectionCount,
-                                        compact: true
-                                    )
-                                }
+                                .onTapGesture(perform: toggleExpanded)
+                            }
+                        } else {
+                            GrantFieldBadgeRow(
+                                fields: ref.fields,
+                                labelMode: .short,
+                                passRevealed: ref.passRevealedFields,
+                                blockWithheld: ref.blockWithheldFields,
+                                conditionalConfirmed: ref.conditionalConfirmedFields,
+                                conditionalBlocked: ref.conditionalUserBlockedFields,
+                                conditionalRemembered: ref.conditionalRememberedFields
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                            .onTapGesture(perform: toggleExpanded)
+                            if ref.leakDetectionCount > 0 {
+                                AccessLogLeakHitBadge(
+                                    count: ref.leakDetectionCount,
+                                    action: { toggleLeakPanel(.all) },
+                                    expanded: leakPanelScope == .all
+                                )
                             }
                         }
-                        if expanded {
-                            HStack(alignment: .center, spacing: 6) {
-                                GrantFieldBadgeRow(
-                                    fields: ref.fields,
-                                    labelMode: .short,
-                                    passRevealed: ref.passRevealedFields,
-                                    blockWithheld: ref.blockWithheldFields,
-                                    conditionalConfirmed: ref.conditionalConfirmedFields,
-                                    conditionalBlocked: ref.conditionalUserBlockedFields,
-                                    conditionalRemembered: ref.conditionalRememberedFields
-                                )
-                                .fixedSize(horizontal: true, vertical: false)
-                                if ref.leakDetectionCount > 0 {
-                                    AccessLogLeakHitBadge(count: ref.leakDetectionCount)
-                                }
-                            }
-                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(expanded ? "Collapse message" : "Expand message")
+            .accessibilityElement(children: .contain)
             .accessibilityValue("\(collapsedTitle), \(collapsedMeta)")
 
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
-                    if !ref.displayLeakDetections.isEmpty {
-                        LeakGuardDetectionsList(detections: ref.displayLeakDetections)
+                    let openDetections = filteredLeakDetections
+                    if !openDetections.isEmpty {
+                        LeakGuardDetectionsList(detections: openDetections)
                     }
                     MessageAccessCard(
                         session: session,
                         ref: ref,
                         omitsBody: omitsBody,
                         showsFieldBadges: false,
-                        attachmentContentDetail: attachmentContentDetail
+                        attachmentContentDetail: attachmentContentDetail,
+                        leakPanelScope: leakPanelScope,
+                        onToggleLeakPanel: toggleLeakPanel
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1018,9 +1068,26 @@ private struct CollapsibleAuditMessage: View {
         }
     }
 
+    private func toggleLeakPanel(_ scope: AccessLogLeakPanelScope) {
+        leakPanelScope = leakPanelScope == scope ? nil : scope
+    }
+
+    private var filteredLeakDetections: [AuditLeakDetection] {
+        guard let leakPanelScope else { return [] }
+        let all = ref.displayLeakDetections
+        switch leakPanelScope {
+        case .all: return all
+        case .subject: return all.filter { $0.field == .subject }
+        case .body: return all.filter { $0.field == .body }
+        }
+    }
+
     private func toggleExpanded() {
         withAnimation(.easeInOut(duration: 0.15)) {
             expanded.toggle()
+            if !expanded {
+                leakPanelScope = nil
+            }
         }
     }
 

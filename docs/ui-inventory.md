@@ -118,7 +118,8 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | Ask remembered | Remember Ask reuse (no popup on this get) | `clock.arrow.circlepath` (pass-green / block-red); count when >1 fields | `AccessLogConditionalAskBadge(remembered: true)` |
 | Field badge Ask mark | Per-field Ask tint in Access Log | Live: `questionmark.circle.fill`; remembered: `clock.arrow.circlepath` | `GrantFieldBadgeRow(conditionalRemembered:)` |
 | Formatted Ask chip | Per-field mark in Formatted card | Live: `?` + “user allowed”; remembered: clock + “user allowed (cached)” | `ConditionalFieldMarkChip(remembered:)` |
-| Leak | Leak-guard hits | Shield `L` (+ count) | `AccessLogLeakHitBadge` |
+| Leak | Leak-guard hits | Shield `L` (+ count); clickable in Access Log Formatted detail / expanded search card (toggles detections panel); list rows stay display-only | `AccessLogLeakHitBadge` (+ optional `action` / `expanded`) |
+| Leak detections | Per-hit rows under meta (or Grant Desk sample) | Compact numbered index · truncated monospace original → replacement · right-aligned field chip (`doc.text`, `Body:N` when line known, size-matched to Access Log field chips); hover expands wrapped full secret (no card-width growth) + rule label + mode badge (`eye.slash.fill` / `arrow.left.arrow.right` / `shield.slash.fill`); redacted → solid purple `[REDACTED]` | `LeakGuardDetectionsList` / `LeakGuardDetectionRow` |
 | Pass / Block rule | Effectful rule applications | `checkmark.circle.fill` / `xmark.circle.fill` (pass-green / block-red); count when >1 hits | `AccessLogRuleHitBadge` |
 
 ### `AskQueueBadge`

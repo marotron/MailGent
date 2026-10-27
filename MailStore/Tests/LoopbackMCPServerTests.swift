@@ -410,7 +410,7 @@ struct LoopbackMCPServerTests {
         #expect(payload["bodyAccess"] as? String == "sanitized")
         #expect(payload["bodyAccessReason"] as? String == "leak_guard")
         #expect((payload["sanitizedRules"] as? [String])?.contains("Password patterns") == true)
-        #expect(payload["body"] as? String == "[REDACTED:passwordCtx]\nPlease pay")
+        #expect(payload["body"] as? String == "password=[REDACTED:passwordCtx]\nPlease pay")
         #expect(payload["note"] == nil)
     }
 
