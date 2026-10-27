@@ -35,7 +35,7 @@ final class AgentBridge {
     let ledger = DraftLedger()
     let conditionalAccessPrompt = ConditionalAccessPromptCoordinator()
     let attachmentContentAskCache = AttachmentContentAskCache()
-    let fieldAskDecisionCache = FieldAskDecisionCache()
+    let fieldAskDecisionCache: FieldAskDecisionCache
 
     private(set) var pairedAgents: [PairedAgentCredential] = []
     private(set) var selectedAgentID: String?
@@ -186,6 +186,7 @@ final class AgentBridge {
 
     init() {
         audit = AuditLog(fileURL: AgentBridge.auditFileURL)
+        fieldAskDecisionCache = FieldAskDecisionCache(fileURL: AgentBridge.askDecisionsFileURL)
         pairing = Pairing(audit: audit)
         audit.policy = MailGentPreferences.auditRetention
         audit.onChange = { [weak self] in
@@ -1547,6 +1548,12 @@ final class AgentBridge {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MailGent", isDirectory: true)
             .appendingPathComponent("pairing.json")
+    }
+
+    static var askDecisionsFileURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MailGent", isDirectory: true)
+            .appendingPathComponent("ask-decisions.json")
     }
 
     private static var grantsFileURL: URL {

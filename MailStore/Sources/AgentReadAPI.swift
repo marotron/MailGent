@@ -1,7 +1,7 @@
 import Foundation
 
 /// User decision on conditional field access prompt.
-public enum ConditionalAccessDecision: Sendable {
+public enum ConditionalAccessDecision: String, Sendable, Codable {
     case allow
     case block
 }
@@ -336,7 +336,8 @@ public struct AgentReadAPI {
                             accountID: message.accountID,
                             placement: message.placement,
                             messageID: message.id,
-                            field: label
+                            field: label,
+                            policy: policy
                         )
                     }
                 }

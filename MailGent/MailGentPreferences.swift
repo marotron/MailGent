@@ -12,7 +12,7 @@ enum MailGentPreferences {
     static let allowConditionalAccessPromptsKey = "allowConditionalAccessPrompts"
     /// When on (and conditional prompts are allowed), remember Ask Allow/Block per field for a short window.
     static let askDecisionCacheEnabledKey = "askDecisionCacheEnabled"
-    /// Wall-clock TTL in seconds. `0` means until MailGent quits.
+    /// Wall-clock TTL in seconds. `0` → until MailGent quits (memory only). `-1` → forever (disk).
     static let askDecisionCacheTTLSecondsKey = "askDecisionCacheTTLSeconds"
     /// `perAgent` (default) or `allAgents`.
     static let askDecisionCacheShareScopeKey = "askDecisionCacheShareScope"
@@ -20,6 +20,8 @@ enum MailGentPreferences {
     static let defaultLoopbackPort: UInt16 = 8788
     /// Default TTL when the cache is first enabled in Settings (1 hour).
     static let defaultAskDecisionCacheTTLSeconds = 3_600
+    /// UserDefaults tag for forever (no wall-clock expiry; persisted).
+    static let askDecisionCacheTTLForever = -1
 
     static var agentMayChangeSource: Bool {
         UserDefaults.standard.bool(forKey: agentMayChangeSourceKey)
@@ -37,25 +39,44 @@ enum MailGentPreferences {
         UserDefaults.standard.bool(forKey: askDecisionCacheEnabledKey)
     }
 
-    /// `nil` → until quit. Missing key uses the 1-hour default when enabled.
-    static var askDecisionCacheTTLSeconds: TimeInterval? {
-        guard UserDefaults.standard.object(forKey: askDecisionCacheTTLSecondsKey) != nil else {
-            return TimeInterval(defaultAskDecisionCacheTTLSeconds)
-        }
-        let value = UserDefaults.standard.integer(forKey: askDecisionCacheTTLSecondsKey)
-        return value > 0 ? TimeInterval(value) : nil
-    }
-
     static var askDecisionCacheShareScope: AskDecisionCacheShareScope {
         let raw = UserDefaults.standard.string(forKey: askDecisionCacheShareScopeKey) ?? ""
         return AskDecisionCacheShareScope(rawValue: raw) ?? .perAgent
     }
 
     static var askDecisionCachePolicy: AskDecisionCachePolicy {
-        AskDecisionCachePolicy(
-            enabled: askDecisionCacheEnabled,
-            ttlSeconds: askDecisionCacheTTLSeconds,
-            shareScope: askDecisionCacheShareScope
+        let enabled = askDecisionCacheEnabled
+        let shareScope = askDecisionCacheShareScope
+        guard UserDefaults.standard.object(forKey: askDecisionCacheTTLSecondsKey) != nil else {
+            return AskDecisionCachePolicy(
+                enabled: enabled,
+                ttlSeconds: TimeInterval(defaultAskDecisionCacheTTLSeconds),
+                persistAcrossLaunches: true,
+                shareScope: shareScope
+            )
+        }
+        let value = UserDefaults.standard.integer(forKey: askDecisionCacheTTLSecondsKey)
+        if value < 0 {
+            return AskDecisionCachePolicy(
+                enabled: enabled,
+                ttlSeconds: nil,
+                persistAcrossLaunches: true,
+                shareScope: shareScope
+            )
+        }
+        if value == 0 {
+            return AskDecisionCachePolicy(
+                enabled: enabled,
+                ttlSeconds: nil,
+                persistAcrossLaunches: false,
+                shareScope: shareScope
+            )
+        }
+        return AskDecisionCachePolicy(
+            enabled: enabled,
+            ttlSeconds: TimeInterval(value),
+            persistAcrossLaunches: true,
+            shareScope: shareScope
         )
     }
 

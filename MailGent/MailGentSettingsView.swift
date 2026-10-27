@@ -113,7 +113,7 @@ struct MailGentSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Remember Ask decisions", isOn: $askDecisionCacheEnabled)
                         Text(
-                            "Off by default. When on, Allow / Block for an Ask field on a message is reused for later gets within the validity window — not a standing grant. New Ask fields still prompt. Pass/Block rules still win first."
+                            "Off by default. When on, Allow / Block for an Ask field on a message is reused for later gets within the validity window — not a standing grant. New Ask fields still prompt. Pass/Block rules still win first. Timed and forever answers are stored locally; Until MailGent quits stays in memory only."
                         )
                         .foregroundStyle(.secondary)
                         .font(.callout)
@@ -123,7 +123,10 @@ struct MailGentSettingsView: View {
                             Text("15 minutes").tag(900)
                             Text("1 hour").tag(3_600)
                             Text("24 hours").tag(86_400)
+                            Text("30 days").tag(2_592_000)
+                            Text("1 year").tag(31_536_000)
                             Text("Until MailGent quits").tag(0)
+                            Text("Forever").tag(MailGentPreferences.askDecisionCacheTTLForever)
                         }
                         Picker("Share with", selection: $askDecisionCacheShareScopeRaw) {
                             Text("This agent only").tag(AskDecisionCacheShareScope.perAgent.rawValue)
