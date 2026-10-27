@@ -51,6 +51,8 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
     public let original: String
     /// Replacement text when disposition is `.replaced`; empty otherwise.
     public let replacement: String
+    /// 1-based line in the original body for body hits; `nil` for subject / legacy rows.
+    public let line: Int?
 
     public init(
         field: Field,
@@ -58,7 +60,8 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
         disposition: Disposition,
         discloseToAgent: Bool,
         original: String = "",
-        replacement: String = ""
+        replacement: String = "",
+        line: Int? = nil
     ) {
         self.field = field
         self.label = label
@@ -66,6 +69,19 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
         self.discloseToAgent = discloseToAgent
         self.original = original
         self.replacement = replacement
+        self.line = line
+    }
+
+    /// 1-based line of `offset` in `text` (Character indices; `\n` newlines). Empty prefix → 1.
+    public static func lineNumber(in text: String, atCharacterOffset offset: Int) -> Int {
+        guard !text.isEmpty else { return 1 }
+        let clamped = min(max(0, offset), text.count)
+        if clamped == 0 { return 1 }
+        let end = text.index(text.startIndex, offsetBy: clamped)
+        let prefix = text[text.startIndex..<end]
+        return prefix.reduce(1) { partial, char in
+            char == "\n" ? partial + 1 : partial
+        }
     }
 
     public static func from(
@@ -99,13 +115,18 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
                 disposition = .redacted
                 replacement = ""
             }
+            let line: Int? =
+                field == .body
+                ? lineNumber(in: sanitized.original, atCharacterOffset: hit.start)
+                : nil
             return AuditLeakDetection(
                 field: field,
                 label: hit.label,
                 disposition: disposition,
                 discloseToAgent: hit.discloseToAgent,
                 original: originalPart,
-                replacement: replacement
+                replacement: replacement,
+                line: line
             )
         }
     }
@@ -120,7 +141,7 @@ public struct AuditLeakDetection: Equatable, Hashable, Codable, Sendable {
 
 extension AuditLeakDetection {
     enum CodingKeys: String, CodingKey {
-        case field, label, disposition, discloseToAgent, original, replacement
+        case field, label, disposition, discloseToAgent, original, replacement, line
     }
 
     public init(from decoder: Decoder) throws {
@@ -131,6 +152,7 @@ extension AuditLeakDetection {
         discloseToAgent = try container.decode(Bool.self, forKey: .discloseToAgent)
         original = try container.decodeIfPresent(String.self, forKey: .original) ?? label
         replacement = try container.decodeIfPresent(String.self, forKey: .replacement) ?? ""
+        line = try container.decodeIfPresent(Int.self, forKey: .line)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -141,6 +163,7 @@ extension AuditLeakDetection {
         try container.encode(discloseToAgent, forKey: .discloseToAgent)
         try container.encode(original, forKey: .original)
         try container.encode(replacement, forKey: .replacement)
+        try container.encodeIfPresent(line, forKey: .line)
     }
 }
 

@@ -39,7 +39,7 @@ struct AgentReadAPITests {
             placement: "INBOX",
             id: "1"
         )
-        #expect(message.body == .text("[REDACTED:passwordCtx]\nPlease pay"))
+        #expect(message.body == .text("password=[REDACTED:passwordCtx]\nPlease pay"))
         #expect(message.leakGuardAccess?.bodyAccess == .sanitized)
         #expect(message.leakGuardAccess?.sanitizedRules.contains("Password patterns") == true)
     }
@@ -132,7 +132,7 @@ struct AgentReadAPITests {
                 $0.field == .body
                     && $0.label == "Password patterns"
                     && $0.disposition == .redacted
-                    && $0.original.contains("password=hunter2")
+                    && $0.original.contains("hunter2")
             } == true
         )
     }

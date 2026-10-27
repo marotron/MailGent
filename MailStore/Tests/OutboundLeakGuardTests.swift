@@ -140,6 +140,111 @@ struct OutboundLeakGuardTests {
         #expect(result.disclosedRules.contains("Phone numbers"))
     }
 
+    @Test func builtInPhoneIgnoresDateLikeRuns() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let samples = [
+            "Meet on 26-10-2026 14",
+            "Deadline 2026-10-26",
+            "Sent 26.10.2026 14",
+        ]
+        for sample in samples {
+            let result = guard_.sanitize(
+                text: sample,
+                field: .body,
+                accountID: "work",
+                placement: "INBOX",
+                fieldGranted: true
+            )
+            #expect(result.agentAccess == .granted, "unexpected redact in: \(sample)")
+            #expect(result.text == sample, "mutated: \(sample)")
+            #expect(!result.disclosedRules.contains("Phone numbers"), "phone hit in: \(sample)")
+        }
+    }
+
+    @Test func builtInPhoneIgnoresDecimalRanges() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let sample = "Salary band 12.71 - 12.71"
+        let result = guard_.sanitize(
+            text: sample,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .granted)
+        #expect(result.text == sample)
+        #expect(!result.disclosedRules.contains("Phone numbers"))
+    }
+
+    @Test func builtInPhoneIgnoresBareLongIds() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let sample = "Meeting ID: +286623088411329"
+        let result = guard_.sanitize(
+            text: sample,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .granted)
+        #expect(result.text == sample)
+    }
+
+    @Test func builtInCreditCardRequiresLuhn() {
+        let guard_ = guardWith(builtIns: [.creditCards: true])
+        let meetingID = "Meeting ID: 286623088411329"
+        let skipped = guard_.sanitize(
+            text: meetingID,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(skipped.agentAccess == .granted)
+        #expect(skipped.text == meetingID)
+
+        let pan = "Pay with 4111111111111111 today"
+        let redacted = guard_.sanitize(
+            text: pan,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(redacted.agentAccess == .sanitized)
+        #expect(redacted.text == "Pay with [REDACTED:creditCards] today")
+        #expect(redacted.disclosedRules.contains("Credit cards"))
+    }
+
+    @Test func builtInPasswordRedactsValueOnly() {
+        let guard_ = guardWith(builtIns: [.passwordCtx: true])
+        let result = guard_.sanitize(
+            text: "Your meeting password: b4Tq2WS6",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .sanitized)
+        #expect(result.text == "Your meeting password: [REDACTED:passwordCtx]")
+        #expect(result.disclosedRules.contains("Password patterns"))
+    }
+
+    @Test func builtInTokenRedactsWholeAssignment() {
+        let guard_ = guardWith(builtIns: [.passwordCtx: true])
+        let token =
+            "token=UFJEMjUz4O9j0brWLVzgMqSjvWO4rgyUGdUZVcutyuFc5ECydymwxO9P2kl9EiVemZs"
+        let result = guard_.sanitize(
+            text: "Join \(token) now",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .sanitized)
+        #expect(result.text == "Join [REDACTED:passwordCtx] now")
+    }
+
     @Test func customRegexRuleMatches() {
         let rule = CustomLeakRule(
             label: "Project code",

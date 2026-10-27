@@ -68,9 +68,20 @@ enum BuiltInHeuristicDetector {
         for cls in BuiltInLeakClass.allCases {
             guard enabledClasses[cls] == true else { continue }
             let spec = pattern(for: cls)
-            let spans = SpanFinder.regexSpans(in: text, pattern: spec.pattern, options: spec.options)
             let redactValue = "[REDACTED:\(cls.rawValue)]"
+
+            if cls == .passwordCtx {
+                hits.append(contentsOf: passwordCtxHits(in: text, label: spec.label, redactValue: redactValue))
+                continue
+            }
+
+            let spans = SpanFinder.regexSpans(in: text, pattern: spec.pattern, options: spec.options)
             for span in spans {
+                let startIdx = text.index(text.startIndex, offsetBy: span.start)
+                let endIdx = text.index(text.startIndex, offsetBy: span.end)
+                let matched = String(text[startIdx..<endIdx])
+                if cls == .phones, isPhoneFalsePositive(matched) { continue }
+                if cls == .creditCards, !passesLuhn(digitsOnly(matched)) { continue }
                 hits.append(
                     LeakHitSpan(
                         start: span.start,
@@ -86,4 +97,138 @@ enum BuiltInHeuristicDetector {
         }
         return hits
     }
+
+    /// `password`/`passwd`/`secret` → value only; `token` → whole `token=…` assignment.
+    private static func passwordCtxHits(
+        in text: String,
+        label: String,
+        redactValue: String
+    ) -> [LeakHitSpan] {
+        let matches = passwordCtxRegex.matches(
+            in: text,
+            options: [],
+            range: NSRange(text.startIndex..., in: text)
+        )
+        return matches.compactMap { match -> LeakHitSpan? in
+            guard match.numberOfRanges >= 3,
+                  let fullRange = Range(match.range(at: 0), in: text),
+                  let prefixRange = Range(match.range(at: 1), in: text),
+                  let valueRange = Range(match.range(at: 2), in: text)
+            else { return nil }
+
+            let prefix = String(text[prefixRange]).lowercased()
+            let target = prefix.hasPrefix("token") ? fullRange : valueRange
+            let start = text.distance(from: text.startIndex, to: target.lowerBound)
+            let end = text.distance(from: text.startIndex, to: target.upperBound)
+            return LeakHitSpan(
+                start: start,
+                end: end,
+                label: label,
+                source: "builtIn:passwordCtx",
+                action: .redact,
+                actionValue: redactValue,
+                discloseToAgent: true
+            )
+        }
+    }
+
+    private static let passwordCtxRegex: NSRegularExpression = {
+        // Group 1 = keyword + separator; group 2 = secret value.
+        let pattern = #"\b((?:password|passwd|secret|token)\s*[:=]\s*)(\S+)"#
+        return try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+    }()
+
+    private static func digitsOnly(_ text: String) -> String {
+        String(text.unicodeScalars.filter { CharacterSet.decimalDigits.contains($0) }.map(Character.init))
+    }
+
+    private static func passesLuhn(_ digits: String) -> Bool {
+        guard (13...19).contains(digits.count), digits.allSatisfy(\.isNumber) else { return false }
+        var sum = 0
+        for (index, character) in digits.reversed().enumerated() {
+            guard let digit = character.wholeNumberValue else { return false }
+            if index % 2 == 1 {
+                let doubled = digit * 2
+                sum += doubled > 9 ? doubled - 9 : doubled
+            } else {
+                sum += digit
+            }
+        }
+        return sum % 10 == 0
+    }
+
+    /// Dates, money/score ranges, and other digit runs that the loose phone regex over-matches.
+    private static func isPhoneFalsePositive(_ matched: String) -> Bool {
+        let trimmed = matched.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+
+        let digitCount = trimmed.unicodeScalars.filter { CharacterSet.decimalDigits.contains($0) }.count
+        if digitCount < 7 || digitCount > 15 { return true }
+
+        // Bare meeting/account IDs: optional + then 13+ digits, no separators.
+        if bareLongIdPhoneRegex.firstMatch(
+            in: trimmed,
+            options: [],
+            range: NSRange(trimmed.startIndex..., in: trimmed)
+        ) != nil {
+            return true
+        }
+
+        if dateLikePhoneRegex.firstMatch(
+            in: trimmed,
+            options: [],
+            range: NSRange(trimmed.startIndex..., in: trimmed)
+        ) != nil {
+            return true
+        }
+
+        if decimalRangePhoneRegex.firstMatch(
+            in: trimmed,
+            options: [],
+            range: NSRange(trimmed.startIndex..., in: trimmed)
+        ) != nil {
+            return true
+        }
+
+        // Dotted money/amounts (12.71) but not US-style phones (415.555.2671).
+        if trimmed.contains("."), !looksLikeDottedPhone(trimmed) {
+            let moneyish = trimmed.range(
+                of: #"\d+\.\d{1,2}"#,
+                options: .regularExpression
+            ) != nil
+            if moneyish { return true }
+        }
+
+        return false
+    }
+
+    private static func looksLikeDottedPhone(_ text: String) -> Bool {
+        dottedPhoneRegex.firstMatch(
+            in: text,
+            options: [],
+            range: NSRange(text.startIndex..., in: text)
+        ) != nil
+    }
+
+    private static let bareLongIdPhoneRegex: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"^\+?\d{13,}$"#)
+    }()
+
+    private static let dateLikePhoneRegex: NSRegularExpression = {
+        // 26-10-2026 14 | 2026-10-26 | 26.10.2026 14:30
+        let pattern =
+            #"^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}(?:\s+\d{1,2}(?::\d{2}){0,2})?$"#
+        return try! NSRegularExpression(pattern: pattern)
+    }()
+
+    private static let decimalRangePhoneRegex: NSRegularExpression = {
+        // 12.71 - 12.71 (salary / score ranges)
+        let pattern = #"^\d+\.\d{1,2}\s*[-–—]\s*\d+\.\d{1,2}$"#
+        return try! NSRegularExpression(pattern: pattern)
+    }()
+
+    private static let dottedPhoneRegex: NSRegularExpression = {
+        let pattern = #"^\+?\d{1,3}(?:\.\d{2,4}){2,4}$"#
+        return try! NSRegularExpression(pattern: pattern)
+    }()
 }

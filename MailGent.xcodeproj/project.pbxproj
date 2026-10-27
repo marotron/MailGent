@@ -35,6 +35,7 @@
 		4AB5F45311A9606170AE3178 /* PairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CAE083ABE494A3B286F5BBF /* PairingTests.swift */; };
 		4DC5B04046E0CD47888E0D25 /* CompanionDemoPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7173007ADD69F037128721 /* CompanionDemoPolicy.swift */; };
 		55575CABF1EC133BB7ED206E /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C4C0E6BD1754AB12EAD282 /* AgentBridge.swift */; };
+		5D08F69016A1C73683D20072 /* AuditLeakDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917FD5723CE985F51081A15C /* AuditLeakDetectionTests.swift */; };
 		63167C91C51890AD5948311C /* LoopbackIndexSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D15EB458DC3A0AF2AB5546 /* LoopbackIndexSnapshot.swift */; };
 		642A9E23A38921BC1CFFA9EB /* DraftLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EDCE57CEB481592E3F617EE /* DraftLedgerTests.swift */; };
 		6BF64A5F65C523851F1E69D9 /* LoopbackHTTPListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC735B77CC1CF2089A7F7A3B /* LoopbackHTTPListenerTests.swift */; };
@@ -204,6 +205,7 @@
 		8394F3D98D329AFA7D9F2170 /* AuditJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditJSON.swift; sourceTree = "<group>"; };
 		89C27982E6EEAFA280B25066 /* MailStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MailStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		901A863964E54353B610B7C0 /* MailStore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MailStore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		917FD5723CE985F51081A15C /* AuditLeakDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLeakDetectionTests.swift; sourceTree = "<group>"; };
 		95AD375037F9E0F42CCCE20B /* MenuBarIconPulseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconPulseTests.swift; sourceTree = "<group>"; };
 		969B803FFC0348F2B1D524E3 /* OpenInMailGlyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenInMailGlyph.swift; sourceTree = "<group>"; };
 		9AE5CF96DF3ED81C78B40014 /* LoopbackHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackHost.swift; sourceTree = "<group>"; };
@@ -410,6 +412,7 @@
 			isa = PBXGroup;
 			children = (
 				4E926E6F6C4F992FC732F05A /* AgentReadAPITests.swift */,
+				917FD5723CE985F51081A15C /* AuditLeakDetectionTests.swift */,
 				D148D69F39BF09DF9CF97C8B /* AuditLogTests.swift */,
 				4EDCE57CEB481592E3F617EE /* DraftLedgerTests.swift */,
 				CCB78F1FAEBD2636A89AD6EC /* FieldAskDecisionCacheTests.swift */,
@@ -696,6 +699,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B72BD93069E35D69291A346F /* AgentReadAPITests.swift in Sources */,
+				5D08F69016A1C73683D20072 /* AuditLeakDetectionTests.swift in Sources */,
 				293779A26AB1BC2F6EDAACA9 /* AuditLogTests.swift in Sources */,
 				642A9E23A38921BC1CFFA9EB /* DraftLedgerTests.swift in Sources */,
 				FEA561959921449C80D4B4F3 /* FieldAskDecisionCacheTests.swift in Sources */,
@@ -886,7 +890,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -901,7 +905,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.18.0;
+				MARKETING_VERSION = 0.19.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};
@@ -930,7 +934,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -945,7 +949,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.18.0;
+				MARKETING_VERSION = 0.19.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};

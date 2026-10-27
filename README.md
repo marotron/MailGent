@@ -1,6 +1,6 @@
 # MailGent
 
-**0.18.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.19.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft; they cannot send or delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -100,7 +100,10 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Optional on-device scan of subject/body before the agent receives mail (opt in per placement)
 - Built-in detectors plus your own filters; hits can redact or withhold
+- Phone detector skips date-like runs, decimal ranges, and bare long IDs (e.g. `26-10-2026 14`, `12.71 - 12.71`, meeting IDs) that used to false-positive
+- Credit-card detector requires a Luhn check; password patterns redact only the secret value (`password: …`), while `token=…` still redacts the whole assignment
 - A match after an emoji (or any other multi-unit character) is redacted in place; that scan no longer quits the app
+- Access Log records per-hit originals (and body line numbers on new entries) so you can inspect what was redacted or replaced
 
 ### Access log
 
@@ -108,6 +111,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Request / Response modes: **Formatted** (default), **JSON Pretty**, or **JSON Raw**
 - List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log (Companion Read and Access Log use the same Open in Apple Mail handoff when Message-ID is present)
 - Remember Ask reuse uses a clock-arrow mark (`clock.arrow.circlepath`) instead of the live Ask `questionmark.circle.fill` — list chips, field badges (optically padded), and Formatted “user allowed (cached)”; same green allow / red block colors
+- Leak badge on Formatted get / expanded search cards toggles a detections panel (message-level = all hits; Subject / Body compact badges filter to that field). Rows: numbered original → replacement with field (`Body:N` when known), rule, and mode badges; redacted hits use a solid purple `[REDACTED]` chip
 - Attachment **Preview** still opens for you when the agent was denied or the file is too large; the note under the card is about agent delivery, not your preview
 - Agents cannot edit the log; you can delete all entries, or entries older than 24 hours, in Settings
 
