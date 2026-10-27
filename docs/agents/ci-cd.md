@@ -76,7 +76,7 @@ Tag must be `v` + semver equal to `MARKETING_VERSION` (no `-alpha` suffix on the
 5. **`make dmg`** with `RELEASE_TAG` set → `dist/MailGent-<version>.dmg`  
    Optional secrets: `MAILGENT_SIGN_IDENTITY`, `MAILGENT_NOTARY_PROFILE` (otherwise ad-hoc sign).  
    Pretty Finder layout + Gatekeeper copy: [`pretty-dmg.md`](pretty-dmg.md).
-6. **`Scripts/release/notes.sh`** → `dist/RELEASE_NOTES.md` (CHANGELOG section + [`.github/RELEASE_BODY.md`](../../.github/RELEASE_BODY.md)).
+6. **`Scripts/release/notes.sh`** → `dist/RELEASE_NOTES.md` (CHANGELOG sections since the previous tag through this version + [`.github/RELEASE_BODY.md`](../../.github/RELEASE_BODY.md)).
 7. **`softprops/action-gh-release`** — pre-release titled **`X.Y.Z alpha`**, attach DMG.
 
 ### Local packaging and screenshots (no publish)

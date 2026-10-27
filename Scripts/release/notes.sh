@@ -57,7 +57,6 @@ CHANGES="$(
       prev_key = ENVIRON["PREV_KEY"]
     }
     /^## \[/ {
-      if (printing) exit
       section = $0
       sub(/^## \[/, "", section)
       sub(/\].*$/, "", section)
@@ -66,11 +65,15 @@ CHANGES="$(
       section = parts[1]
       n = split(section, a, ".")
       section_key = sprintf("%05d%05d%05d", a[1]+0, (n>=2?a[2]+0:0), (n>=3?a[3]+0:0))
-      if (section_key <= cur_key && (prev_key == "" || section_key > prev_key)) {
+      in_range = (section_key <= cur_key && (prev_key == "" || section_key > prev_key))
+      if (in_range) {
         printing = 1
         print
         next
       }
+      # Newest-first CHANGELOG: after the first in-range section, the next
+      # out-of-range heading ends the window (older sections are below).
+      if (printing) exit
       next
     }
     printing { print }
