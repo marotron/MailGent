@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.21.0] - 2026-10-28
+
+### Added
+
+- Experimental **Propose-send context thread** (Settings → Experimental, off by default): optional MCP `propose_send` `context` `{ casePath, caseLabel?, events[], links? }` (max 40 events). Agent supplies structure; MailGent resolves mail via the store and vault files under a chosen **Personal vault root** (security-scoped bookmark). Confirm dialog grows a left context rail (expandable timeline, private/shared bands, sharp origin corners on cards); vault notes render Markdown with explicit block breaks and bullets
+- Propose-send body preview: hover **−** / **+** zoom (50%–150%, same control as Ask), bottom-trailing; Formatted | Raw stays top-trailing
+
 ## [0.20.4] - 2026-10-28
 
 ### Added

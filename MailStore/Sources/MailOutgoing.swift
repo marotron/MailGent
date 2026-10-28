@@ -11,6 +11,8 @@ public struct SendProposal: Equatable, Sendable {
     public let bcc: [String]
     /// Optional From / account address for Mail.app `sender`.
     public let sender: String?
+    /// Optional Assembly-C context thread (experimental; ignored when Settings toggle off).
+    public let context: SendProposalContext?
 
     public init(
         id: String = UUID().uuidString,
@@ -20,7 +22,8 @@ public struct SendProposal: Equatable, Sendable {
         body: String,
         cc: [String] = [],
         bcc: [String] = [],
-        sender: String? = nil
+        sender: String? = nil,
+        context: SendProposalContext? = nil
     ) {
         self.id = id
         self.agentName = agentName
@@ -30,6 +33,7 @@ public struct SendProposal: Equatable, Sendable {
         self.cc = cc
         self.bcc = bcc
         self.sender = sender
+        self.context = context
     }
 }
 

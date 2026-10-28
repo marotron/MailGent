@@ -151,11 +151,11 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 
 | Field | Value |
 |---|---|
-| **Job** | Zoom the Ask dialog message preview canvas |
+| **Job** | Zoom Ask / propose-send message preview canvas |
 | **Chrome** | Compact floating `−` \| `+` material pill, sticky top-trailing over the preview canvas |
 | **Visibility** | Opacity 0 until pointer is over the canvas (`AskPreviewHoverTracker`; WKWebView / NSScrollView eat SwiftUI `onHover`) |
 | **Default** | 75% (`pageZoom` 0.75); steps of 25% between 50%–150% |
-| **Swift** | `AskPreviewZoomControls` + `AskPreviewHoverTracker` in `ConditionalAccessPrompt.swift` |
+| **Swift** | `AskPreviewZoomControls` + `AskPreviewHoverTracker` in `ConditionalAccessPrompt.swift`; propose-send: Formatted\|Raw top-trailing, zoom bottom-trailing on hover |
 
 ### Ask window title bar
 
@@ -267,6 +267,7 @@ SecondaryActionRow
 | 2026-10-20 | Ask envelope: include-in-rule is icon-only `SecondaryAction` (`includeEnvelopeInRule`; label expands left as overlay on hover); email badges and Ask chips stay read-only. No capsule `+ Rule` pill. |
 | 2026-10-19 | Status menu `AccessRequestsSection`: one row per concurrent Ask, ? selection mark, Block / Allow. Menu open raises every Ask window without taking key. |
 | 2026-10-14 | FileCard Preview opens the file for the user even when agent access is denied / too large; the under-card note now explains the agent-side restriction instead of saying Preview stays closed. Missing still shows reason only. |
+| 2026-10-28 | Propose-send body preview reuses `AskPreviewZoomControls` (− \| +) with Formatted\|Raw on hover. |
 | 2026-10-12 | Ask preview canvas: floating sticky `AskPreviewZoomControls` (− \| +); default 75% page zoom; plain Ask body uses `NSTextView.scrollableTextView()`. |
 | 2026-10-12 | Ask: title `Email access request`; centered larger `?` + callout “{agent} wants access…” + More/Less; popup capped (~560); Body `HTML only` title badge. |
 | 2026-10-27 | FileCard status icon + Preview match chip-row `SecondaryAction` (20×20 / radius 6). |

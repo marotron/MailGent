@@ -1,3 +1,4 @@
+import AppKit
 import MailStore
 import SwiftUI
 
@@ -18,8 +19,10 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.auditMaxAgeSecondsKey) private var auditMaxAgeSeconds = 0
     @AppStorage(MailGentPreferences.auditMaxCountKey) private var auditMaxCount = 0
     @AppStorage(MailGentPreferences.auditMaxBytesKey) private var auditMaxBytes = 0
+    @AppStorage(MailGentPreferences.proposeSendContextExperimentalKey) private var proposeSendContextExperimental = false
     @State private var confirmClearAll = false
     @State private var confirmClear24h = false
+    @State private var vaultRootPath: String = PersonalVaultBookmark.displayPath() ?? ""
 
     var body: some View {
         TabView {
@@ -28,12 +31,15 @@ struct MailGentSettingsView: View {
             GrantAccessView(session: session.access)
                 .tabItem { Label("Access", systemImage: "lock.shield") }
         }
-        .frame(width: 480, height: 600)
+        .frame(width: 480, height: 640)
         .onChange(of: agentMayOpenInMail) { _, _ in
             session.agents.applyAgentMayOpenInMail()
         }
         .onChange(of: agentMayProposeSend) { _, _ in
             session.agents.applyAgentMayProposeSend()
+        }
+        .onChange(of: proposeSendContextExperimental) { _, _ in
+            session.agents.applyProposeSendContextExperimental()
         }
         .onChange(of: revealAccountsWithNoPlacements) { _, _ in
             session.agents.applyRevealAccountsWithNoPlacements()
@@ -203,9 +209,63 @@ struct MailGentSettingsView: View {
                 }
                 .disabled(storedCount == 0)
             }
+            Section("Experimental") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Propose-send context thread", isOn: $proposeSendContextExperimental)
+                    Text(
+                        "Off by default. When on, propose_send may include an optional context timeline (vault + mail) beside the draft. Experimental — schema and UI may change."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
+                if proposeSendContextExperimental {
+                    VStack(alignment: .leading, spacing: 8) {
+                        LabeledContent("Personal vault root") {
+                            Text(vaultRootPath.isEmpty ? "Not set" : vaultRootPath)
+                                .foregroundStyle(vaultRootPath.isEmpty ? .secondary : .primary)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                        }
+                        HStack {
+                            Button("Choose…") { choosePersonalVaultRoot() }
+                            if !vaultRootPath.isEmpty {
+                                Button("Clear", role: .destructive) {
+                                    PersonalVaultBookmark.clear()
+                                    vaultRootPath = ""
+                                }
+                            }
+                        }
+                        Text(
+                            "MailGent reads vault files under this folder when resolving context events. Required for vault rows; mail rows still use the store."
+                        )
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .padding(8)
+        .onAppear {
+            vaultRootPath = PersonalVaultBookmark.displayPath() ?? ""
+        }
+    }
+
+    private func choosePersonalVaultRoot() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Select your Personal vault root for propose-send context."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try PersonalVaultBookmark.save(url)
+            vaultRootPath = url.path
+        } catch {
+            vaultRootPath = PersonalVaultBookmark.displayPath() ?? ""
+        }
     }
 
     private var agentMayChangeSourceHelp: String {

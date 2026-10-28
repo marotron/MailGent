@@ -1,0 +1,552 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — propose_send confirmation dialog.
+  Variants via ?variant=A|B (default B). Floating switcher at bottom.
+
+  A — mode-row in flow + nested body-pane chrome
+  B — floating Formatted|Raw; body text straight in card below divider (no body-pane card)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Propose send confirm</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0071e3;
+      --card: #fff;
+      --panel: #f5f5f7;
+      --label-w: 52px;
+      --win-w: 560px;
+      --win-h: 620px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 28px 16px 80px;
+      font: 13px/1.4 inherit;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    .page { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note code {
+      font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0000000d; padding: 1px 4px; border-radius: 4px;
+    }
+
+    .window {
+      background: var(--panel); border-radius: 10px; border: 1px solid #00000018;
+      box-shadow: 0 18px 50px #00000028; overflow: hidden;
+      width: var(--win-w);
+      height: var(--win-h);
+      min-width: 480px;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      resize: both;
+    }
+    .titlebar {
+      height: 38px; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      font-weight: 650; font-size: 13px; position: relative;
+      flex: 0 0 auto;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+
+    .chrome {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    .lead {
+      display: flex; align-items: flex-start; gap: 8px;
+      min-height: 24px;
+      color: var(--muted); font-size: 12px; line-height: 1.35;
+      flex: 0 0 auto;
+    }
+    .lead .icon {
+      width: 20px; height: 20px; border-radius: 5px;
+      background: #0071e318; color: var(--blue);
+      display: grid; place-items: center; flex-shrink: 0;
+      font-size: 11px; font-weight: 700;
+    }
+    .lead strong { color: var(--ink); font-weight: 650; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1 1 auto;
+      min-height: 0;
+      position: relative;
+    }
+    .envelope {
+      display: grid;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: var(--label-w) 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+    .lbl {
+      font-size: 11px; color: var(--muted); line-height: 1.45;
+      padding-top: 1px;
+    }
+    .val {
+      font-size: 11px; line-height: 1.45;
+      word-break: break-word;
+    }
+    .addr {
+      display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline;
+    }
+    .addr .name { font-weight: 500; }
+    .addr .email {
+      color: var(--muted);
+      background: #00000008;
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 10px;
+    }
+    .divider {
+      height: 1px; background: var(--line); margin: 2px 0;
+      flex: 0 0 auto;
+    }
+
+    .seg {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 7px;
+      overflow: hidden; background: #f4f6f9; padding: 1px; gap: 1px;
+    }
+    .seg button {
+      border: 0; background: transparent; color: #7a8494;
+      font-size: 11px; font-weight: 400; padding: 3px 9px; border-radius: 6px;
+    }
+    .seg button.on {
+      background: #fff; color: var(--ink); font-weight: 600;
+      box-shadow: 0 0 0 0.5px #c9d1df, 0 1px 2px #15203314;
+    }
+
+    /* —— Variant A: in-flow mode row + nested body pane —— */
+    .variant-a .mode-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex: 0 0 auto;
+      padding: 2px 0 4px;
+    }
+    .variant-a .body-pane {
+      flex: 1 1 auto;
+      min-height: 120px;
+      overflow: auto;
+      border-radius: 6px;
+      background: #fafafa;
+      border: 1px solid #ececef;
+    }
+    .variant-a .body-formatted,
+    .variant-a .body-raw {
+      padding: 10px 12px;
+    }
+    .variant-a .card[data-mode="formatted"] .body-raw { display: none; }
+    .variant-a .card[data-mode="raw"] .body-formatted { display: none; }
+
+    /* —— Variant B: true overlay Formatted|Raw on the body canvas —— */
+    .variant-b .mode-row { display: none; }
+    .variant-b .body-stack {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .variant-b .body-pane {
+      position: relative; /* positioning context for .seg.floating */
+      flex: 1 1 auto;
+      min-height: 120px;
+      overflow: auto;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .variant-b .seg.floating {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 5;
+      margin: 0;
+      background: rgba(244, 246, 249, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 18px #15203333, 0 0 0 0.5px #c9d1df;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-3px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .variant-b .body-pane:hover .seg.floating,
+    .variant-b .body-pane:focus-within .seg.floating {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .variant-b .body-formatted,
+    .variant-b .body-raw {
+      /* fill the pane; seg paints on top — no gutter */
+      min-height: 100%;
+      padding: 0;
+    }
+    .variant-b .card[data-mode="formatted"] .body-raw { display: none; }
+    .variant-b .card[data-mode="raw"] .body-formatted { display: none; }
+    .variant-a .body-stack { display: contents; }
+    .variant-a .seg.floating { display: none !important; }
+
+    .body-formatted {
+      font-size: 12px; line-height: 1.55;
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+    .body-formatted.html-demo {
+      white-space: normal;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .body-formatted.html-demo .mail-banner {
+      margin: 0 0 12px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0a84ff 0%, #5e5ce6 55%, #bf5af2 100%);
+      color: #fff;
+      box-shadow: 0 8px 24px #5e5ce640;
+    }
+    .body-formatted.html-demo .mail-banner .eyebrow {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; opacity: 0.85; margin: 0 0 4px;
+    }
+    .body-formatted.html-demo .mail-banner h1 {
+      margin: 0; font-size: 18px; font-weight: 750; letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    .body-formatted.html-demo .mail-banner .amt {
+      margin-top: 8px; font-size: 22px; font-weight: 800; letter-spacing: -0.03em;
+    }
+    .body-formatted.html-demo .mail-banner .amt span {
+      font-size: 12px; font-weight: 600; opacity: 0.85; margin-left: 6px;
+    }
+    .body-formatted.html-demo p { margin: 0 0 0.75em; }
+    .body-formatted.html-demo p:last-child { margin-bottom: 0; }
+    .body-formatted.html-demo .invoice-card {
+      margin: 0 0 12px;
+      border: 1px solid #d8deea;
+      border-radius: 10px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #fbfcfe, #f3f6fb);
+      box-shadow: 0 1px 0 #fff inset, 0 6px 18px #1520330d;
+    }
+    .body-formatted.html-demo .invoice-card table {
+      width: 100%; border-collapse: collapse; font-size: 11px;
+    }
+    .body-formatted.html-demo .invoice-card th,
+    .body-formatted.html-demo .invoice-card td {
+      padding: 8px 12px; text-align: left; border-bottom: 1px solid #e6ebf3;
+    }
+    .body-formatted.html-demo .invoice-card th {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #6e6e73; font-weight: 650; background: #eef2f8;
+    }
+    .body-formatted.html-demo .invoice-card tr:last-child td { border-bottom: 0; }
+    .body-formatted.html-demo .invoice-card td.num {
+      text-align: right; font-variant-numeric: tabular-nums; font-weight: 650;
+    }
+    .body-formatted.html-demo .pill {
+      display: inline-block;
+      padding: 2px 8px; border-radius: 999px;
+      background: #34c75922; color: #248a3d;
+      font-size: 10px; font-weight: 700;
+    }
+    .body-formatted.html-demo .cta {
+      display: inline-block;
+      margin: 4px 0 12px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #2f8cff, #0071e3);
+      color: #fff !important;
+      font-weight: 700; font-size: 12px;
+      text-decoration: none;
+      box-shadow: 0 4px 14px #0071e355;
+    }
+    .body-formatted.html-demo code {
+      font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0000000a; padding: 1px 4px; border-radius: 3px;
+    }
+    .body-formatted.html-demo a:not(.cta) { color: var(--blue); }
+    .body-raw {
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .footer {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+    .btn {
+      border: 1px solid rgba(0, 0, 0, 0.18);
+      background: #fff;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+    .btn.primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn:active { opacity: 0.9; }
+    .footer .spacer { flex: 1; }
+
+    .outcome {
+      font-size: 12px; color: #2c3a4a;
+      background: #ffffffb8; border: 1px solid #ffffff90;
+      border-radius: 10px; padding: 10px 14px;
+      min-height: 40px;
+    }
+    .outcome kbd {
+      font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #1d1d1f; color: #f5f5f7;
+      padding: 2px 6px; border-radius: 4px;
+    }
+
+    /* Prototype variant switcher */
+    .proto-switcher {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      z-index: 50;
+      display: flex; align-items: center; gap: 8px;
+      background: #1d1d1fee; color: #f5f5f7;
+      border-radius: 999px; padding: 8px 12px;
+      box-shadow: 0 10px 30px #00000040;
+      font-size: 12px;
+    }
+    .proto-switcher .label { opacity: 0.7; margin-right: 4px; }
+    .proto-switcher a {
+      color: #f5f5f7; text-decoration: none;
+      border: 1px solid #ffffff33; border-radius: 999px;
+      padding: 3px 10px; font-weight: 600;
+    }
+    .proto-switcher a.on {
+      background: #fff; color: #1d1d1f; border-color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note" id="variantNote">
+      Loading…
+    </div>
+
+    <div class="window" role="dialog" aria-labelledby="title">
+      <div class="titlebar">
+        <div class="traffic" aria-hidden="true" title="Close → Cancel">
+          <i class="r"></i><i class="y"></i><i class="g"></i>
+        </div>
+        <span id="title">Send proposed mail?</span>
+      </div>
+
+      <div class="chrome" id="chrome">
+        <div class="lead">
+          <div class="icon" aria-hidden="true">✉</div>
+          <div>
+            <strong>Cursor</strong> wants to send this message via Apple Mail.
+            Review the envelope, then choose.
+          </div>
+        </div>
+
+        <div class="card" id="card" aria-label="Message preview" data-mode="formatted">
+          <div class="envelope">
+            <div class="row">
+              <div class="lbl">From</div>
+              <div class="val">
+                <span class="addr">
+                  <span class="name">Maro</span>
+                  <span class="email">marotron@gmail.com</span>
+                </span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lbl">To</div>
+              <div class="val">
+                <span class="addr">
+                  <span class="name">Alex Rivera</span>
+                  <span class="email">alex@example.com</span>
+                </span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lbl">Cc</div>
+              <div class="val">
+                <span class="addr">
+                  <span class="email">ops@example.com</span>
+                </span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lbl">Subject</div>
+              <div class="val">Q3 invoice follow-up</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- A: in-flow · B: hidden (floating .seg used instead) -->
+          <div class="mode-row">
+            <div class="seg" role="tablist" aria-label="Body preview mode">
+              <button type="button" role="tab" data-mode="formatted" class="on" aria-selected="true">Formatted</button>
+              <button type="button" role="tab" data-mode="raw" aria-selected="false">Raw</button>
+            </div>
+          </div>
+
+          <!-- B: body-pane is the canvas; floatingSeg is absolute over the banner (not a layout row). -->
+          <div class="body-stack">
+            <div class="body-pane" id="bodyPane">
+              <div class="seg floating" id="floatingSeg" role="tablist" aria-label="Body preview mode">
+                <button type="button" role="tab" data-mode="formatted" class="on" aria-selected="true">Formatted</button>
+                <button type="button" role="tab" data-mode="raw" aria-selected="false">Raw</button>
+              </div>
+              <!-- Formatted: flashy HTML sniff → rendered preview (MessageBodyView / WKWebView) -->
+              <div class="body-formatted html-demo">
+                <div class="mail-banner">
+                  <div class="eyebrow">Invoice follow-up</div>
+                  <h1>Q3 settlement ready</h1>
+                  <div class="amt">$4,820<span>due · INV-2041</span></div>
+                </div>
+                <p>Hi Alex,</p>
+                <p>Following up on the <strong>Q3 invoice</strong> (<code>INV-2041</code>). Happy to jump on a call this week if anything looks off.</p>
+                <div class="invoice-card">
+                  <table>
+                    <thead>
+                      <tr><th>Item</th><th>Status</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Platform retainer · Jul–Sep</td>
+                        <td><span class="pill">Open</span></td>
+                        <td class="num">$4,200</td>
+                      </tr>
+                      <tr>
+                        <td>Usage overage</td>
+                        <td><span class="pill">Open</span></td>
+                        <td class="num">$620</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p><a class="cta" href="#">Review invoice →</a></p>
+                <p>Thanks,<br><strong>Maro</strong></p>
+              </div>
+              <!-- Raw: exact proposal.body string AppleScript still sends as plain content: -->
+              <div class="body-raw">&lt;div style="padding:14px 16px;border-radius:10px;background:linear-gradient(135deg,#0a84ff,#5e5ce6 55%,#bf5af2);color:#fff"&gt;
+  &lt;div&gt;INVOICE FOLLOW-UP&lt;/div&gt;
+  &lt;h1&gt;Q3 settlement ready&lt;/h1&gt;
+  &lt;div&gt;$4,820 due · INV-2041&lt;/div&gt;
+&lt;/div&gt;
+&lt;p&gt;Hi Alex,&lt;/p&gt;
+&lt;p&gt;Following up on the &lt;strong&gt;Q3 invoice&lt;/strong&gt; (&lt;code&gt;INV-2041&lt;/code&gt;)…&lt;/p&gt;
+&lt;table&gt;…platform retainer $4,200 · usage overage $620…&lt;/table&gt;
+&lt;a&gt;Review invoice →&lt;/a&gt;
+&lt;p&gt;Thanks,&lt;br&gt;Maro&lt;/p&gt;</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <button type="button" class="btn" data-outcome="cancelled">Cancel</button>
+          <button type="button" class="btn" data-outcome="opened_in_mail">Open in Mail</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn primary" data-outcome="send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="outcome" id="outcome">
+      Click a footer button → MCP JSON outcome. Toggle Formatted | Raw on the body.
+    </div>
+  </div>
+
+  <nav class="proto-switcher" aria-label="Prototype variants">
+    <span class="label">Variant</span>
+    <a href="?variant=A" data-v="A">A</a>
+    <a href="?variant=B" data-v="B">B</a>
+  </nav>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const variant = (params.get("variant") || "B").toUpperCase() === "A" ? "A" : "B";
+
+  const chrome = document.getElementById("chrome");
+  const card = document.getElementById("card");
+  const out = document.getElementById("outcome");
+  const note = document.getElementById("variantNote");
+
+  chrome.classList.add(variant === "A" ? "variant-a" : "variant-b");
+
+  note.innerHTML = variant === "A"
+    ? `<strong>Variant A</strong> · Formatted|Raw in a mode row · nested <code>body-pane</code> card under the divider.`
+    : `<strong>Variant B</strong> · Formatted|Raw <em>overlays</em> the body (hover to show) · no nested pane chrome · HTML sample. Send stays plain <code>content:</code>. Attachments later.`;
+
+  document.querySelectorAll(".proto-switcher a").forEach((a) => {
+    a.classList.toggle("on", a.getAttribute("data-v") === variant);
+  });
+
+  function setMode(mode) {
+    card.setAttribute("data-mode", mode);
+    document.querySelectorAll(".seg [data-mode]").forEach((b) => {
+      const on = b.getAttribute("data-mode") === mode;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    out.innerHTML = mode === "formatted"
+      ? `Body mode → <kbd>Formatted</kbd>`
+      : `Body mode → <kbd>Raw</kbd> (exact <code>proposal.body</code>)`;
+  }
+
+  document.querySelectorAll(".seg [data-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => setMode(btn.getAttribute("data-mode")));
+  });
+
+  document.querySelectorAll("[data-outcome]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      out.innerHTML = `MCP returns <kbd>{ "outcome": "${btn.getAttribute("data-outcome")}" }</kbd>`;
+    });
+  });
+  document.querySelector(".traffic .r").addEventListener("click", () => {
+    out.innerHTML = `Window close → <kbd>{ "outcome": "cancelled" }</kbd>`;
+  });
+</script>
+</body>
+</html>

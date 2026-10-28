@@ -516,8 +516,14 @@ private struct HTMLMailView: NSViewRepresentable {
             webView.evaluateJavaScript(
                 """
                 window.scrollTo(0, 0);
-                if (document.documentElement) document.documentElement.scrollTop = 0;
-                if (document.body) document.body.scrollTop = 0;
+                if (document.documentElement) {
+                  document.documentElement.scrollTop = 0;
+                  document.documentElement.scrollLeft = 0;
+                }
+                if (document.body) {
+                  document.body.scrollTop = 0;
+                  document.body.scrollLeft = 0;
+                }
                 """
             ) { _, _ in }
             // AppKit scroll view can retain a non-zero origin after zoom/layout.
@@ -646,8 +652,10 @@ private struct ScrollableLinkAwareBodyText: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        // Pad via textContainerInset — contentInsets + scroll(to: .zero) clips the
+        // leading glyphs (~10pt) so propose-send / Ask launch mid-word on the left.
         scrollView.automaticallyAdjustsContentInsets = false
-        scrollView.contentInsets = .init(top: 8, left: 10, bottom: 8, right: 10)
+        scrollView.contentInsets = .init(top: 0, left: 0, bottom: 0, right: 0)
         scrollView.scrollerInsets = .init(top: 0, left: 0, bottom: 0, right: 0)
 
         guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
@@ -656,7 +664,7 @@ private struct ScrollableLinkAwareBodyText: NSViewRepresentable {
         textView.isRichText = true
         textView.isSelectable = true
         textView.allowsUndo = false
-        textView.textContainerInset = .zero
+        textView.textContainerInset = NSSize(width: 10, height: 8)
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.widthTracksTextView = true
         textView.isHorizontallyResizable = false
@@ -699,12 +707,22 @@ private struct ScrollableLinkAwareBodyText: NSViewRepresentable {
             LinkAwareBodyText.scaledAttributedString(attributed, fontScale: fontScale)
         )
         guard resetScroll else { return }
-        // Pin to the document top after load/zoom (AppKit scroll views can keep a stale origin).
+        // Pin to the document origin after load/zoom (AppKit can keep a stale origin).
         DispatchQueue.main.async {
-            textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
-            scrollView.contentView.scroll(to: .zero)
-            scrollView.reflectScrolledClipView(scrollView.contentView)
+            Self.pinScrollToOrigin(textView: textView, scrollView: scrollView)
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            Self.pinScrollToOrigin(textView: textView, scrollView: scrollView)
+        }
+    }
+
+    private static func pinScrollToOrigin(textView: NSTextView, scrollView: NSScrollView) {
+        textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
+        let insets = scrollView.contentInsets
+        scrollView.contentView.scroll(
+            to: NSPoint(x: -insets.left, y: -insets.top)
+        )
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {

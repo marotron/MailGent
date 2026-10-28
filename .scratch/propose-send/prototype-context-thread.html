@@ -1,0 +1,2223 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — propose_send confirm + vault/mail context thread.
+
+  LOCKED for experimental app build (feat/propose-send-context-experimental):
+    E-thin × F-full × P4
+    Thin = Variant E columns (shared L/R avatar tracks, stretch cards, peek)
+    Full = Variant F (avatar-only rails, no sense icons above, centered chevron)
+    Preview = P4 Spotlight (history dim ~0.72; past clears; draft restores)
+    Footer right-aligned: Cancel · Open in Mail · Send
+  Switchers kept for reference only — see context-thread-brainstorm.md for protocol.
+
+  ?variant=A|B|C|D|E|F  · floating ← / label / →  · arrow keys
+  ?preview=1|2|3|4|5 · Shift+←/→ · preview-link treatments (draft ↔ pane)
+  A — Bridge rows · B — Dual lanes · C — Disclosure rail
+  D — Draw.io sharp top corner + sense icons (mailgent-chat.drawio)
+  E — Same as D in full; thin = column-aligned avatars + narrower both
+  F — Same as D, but rail is avatar-only (no eye/face-speak/video above)
+  P1 Ring+badge · P2 Soft twin · P3 Arrow on card · P6 Arrow in gutter · P4 Spotlight · P5 Timeline pin
+  Default: ?preview=4 · thin rail · P4 greys history until a past event is opened (draft click restores)
+
+  Private events always sit on a grey band.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Context thread · reveal variants</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0071e3;
+      --card: #fff;
+      --panel: #f5f5f7;
+      --draft: #fff4d6;
+      --private-band: #d8d8dc;
+      --private-band-soft: #e5e5ea;
+      --shared: #e8f2fc;
+      --label-w: 52px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 28px 16px 96px;
+      font: 13px/1.4 inherit;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    .page { max-width: 1100px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note code {
+      font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0000000d; padding: 1px 4px; border-radius: 4px;
+    }
+
+    .window {
+      background: var(--panel); border-radius: 10px; border: 1px solid #00000018;
+      box-shadow: 0 18px 50px #00000028; overflow: hidden;
+      display: flex; flex-direction: column;
+      resize: both; width: 920px; height: 640px;
+      min-width: 640px; min-height: 420px;
+    }
+    .titlebar {
+      height: 38px; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      font-weight: 650; font-size: 13px; position: relative; flex: 0 0 auto;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+
+    .chrome {
+      padding: 12px; display: flex; flex-direction: column; gap: 10px;
+      flex: 1 1 auto; min-height: 0;
+    }
+    .lead {
+      display: flex; align-items: flex-start; gap: 8px;
+      color: var(--muted); font-size: 12px; line-height: 1.35; flex: 0 0 auto;
+    }
+    .lead .icon {
+      width: 20px; height: 20px; border-radius: 5px;
+      background: #0071e318; color: var(--blue);
+      display: grid; place-items: center; flex-shrink: 0;
+      font-size: 11px; font-weight: 700;
+    }
+    .lead strong { color: var(--ink); font-weight: 650; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+      min-height: 0; position: relative; flex: 1 1 auto;
+    }
+    .envelope { display: grid; gap: 6px; flex: 0 0 auto; }
+    .row {
+      display: grid; grid-template-columns: var(--label-w) 1fr; gap: 8px; align-items: start;
+    }
+    .lbl { font-size: 11px; color: var(--muted); line-height: 1.45; padding-top: 1px; }
+    .val { font-size: 11px; line-height: 1.45; word-break: break-word; }
+    .addr { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+    .addr .name { font-weight: 500; }
+    .addr .email {
+      color: var(--muted); background: #00000008; border-radius: 4px;
+      padding: 0 5px; font-size: 10px;
+    }
+    .divider { height: 1px; background: var(--line); margin: 2px 0; flex: 0 0 auto; }
+
+    .seg {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 7px;
+      overflow: hidden; background: #f4f6f9; padding: 1px; gap: 1px;
+    }
+    .seg button {
+      border: 0; background: transparent; color: #7a8494;
+      font-size: 11px; font-weight: 400; padding: 3px 9px; border-radius: 6px;
+    }
+    .seg button.on {
+      background: #fff; color: var(--ink); font-weight: 600;
+      box-shadow: 0 0 0 0.5px #c9d1df, 0 1px 2px #15203314;
+    }
+    .body-pane {
+      flex: 1 1 auto; min-height: 80px; overflow: auto;
+      border-radius: 6px; background: #fafafa; border: 1px solid #ececef;
+      position: relative;
+    }
+    .body-formatted {
+      padding: 10px 12px; font-size: 12px; line-height: 1.55;
+      color: var(--ink); white-space: pre-wrap;
+    }
+    .body-pane .seg.floating {
+      position: absolute; top: 8px; right: 8px; z-index: 5; margin: 0;
+      background: rgba(244, 246, 249, 0.92);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 18px #15203333, 0 0 0 0.5px #c9d1df;
+      opacity: 0; pointer-events: none;
+      transform: translateY(-3px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .body-pane:hover .seg.floating,
+    .body-pane:focus-within .seg.floating {
+      opacity: 1; pointer-events: auto; transform: translateY(0);
+    }
+
+    .footer {
+      display: flex; gap: 8px; align-items: center; flex: 0 0 auto;
+    }
+    .btn {
+      border: 1px solid rgba(0, 0, 0, 0.18); background: #fff;
+      border-radius: 6px; padding: 5px 8px; font-size: 13px; font-weight: 500; line-height: 1.2;
+    }
+    .btn.primary {
+      background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600;
+    }
+    .footer .spacer { flex: 1; }
+
+    .outcome {
+      font-size: 12px; color: #2c3a4a;
+      background: #ffffffb8; border: 1px solid #ffffff90;
+      border-radius: 10px; padding: 10px 14px; min-height: 40px;
+    }
+    .outcome kbd {
+      font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #1d1d1f; color: #f5f5f7; padding: 2px 6px; border-radius: 4px;
+    }
+
+    /* —— Shared split (all variants) —— */
+    .layout {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      flex: 1 1 auto; min-height: 0;
+      transition: grid-template-columns 0.18s ease;
+    }
+    .layout.ctx-thin { grid-template-columns: 124px 1fr; }
+    .pane-draft, .pane-ctx {
+      display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0;
+    }
+    .ctx-panel {
+      flex: 1 1 auto; min-height: 0;
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 0; display: flex; flex-direction: column; gap: 0;
+      overflow: hidden; /* clip thread to panel; bands go edge-to-edge */
+    }
+    .ctx-header {
+      display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+      font-size: 11px; color: var(--muted);
+      padding: 8px 10px; border-bottom: 1px solid #0000000a;
+    }
+    .ctx-header .path {
+      font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--ink); background: #00000008; padding: 2px 6px; border-radius: 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+    }
+    .ctx-header .count { margin-left: auto; font-weight: 650; color: var(--ink); white-space: nowrap; }
+    .ctx-collapse {
+      border: 1px solid var(--line); background: #f5f5f7; border-radius: 5px;
+      width: 22px; height: 22px; padding: 0; flex-shrink: 0;
+      font-size: 10px; color: var(--muted); line-height: 1;
+    }
+    .ctx-collapse:hover { background: #ebebec; color: var(--ink); }
+    .layout.ctx-thin .ctx-header .path,
+    .layout.ctx-thin .ctx-header .case-lbl,
+    .layout.ctx-thin .ctx-header .count { display: none; }
+    .layout.ctx-thin .ctx-header { justify-content: center; padding: 6px 4px; }
+
+    .thread {
+      --thread-inset: 10px; /* unified L/R inset for every event card */
+      --event-gap: 8px;
+      display: flex; flex-direction: column; gap: 0;
+      overflow: auto; flex: 1 1 auto; min-height: 0;
+      padding: 0; /* private band bleeds edge-to-edge */
+    }
+
+    /* —— Bubbles (base) —— */
+    .bubble {
+      border: 1px solid var(--line); border-radius: 10px;
+      padding: 7px 9px; cursor: pointer; background: #fff;
+      position: relative;
+      box-sizing: border-box;
+      /* same max width for every direction; inset comes from margin */
+      max-width: calc(100% - (2 * var(--thread-inset)));
+    }
+    .bubble:hover { filter: brightness(0.98); }
+    /* Ownership: them/both → left, you/draft → right. Same inset both sides. */
+    .bubble.them, .bubble.both {
+      align-self: flex-start;
+      margin-left: var(--thread-inset);
+      margin-right: var(--thread-inset);
+    }
+    .bubble.them { background: #f7f7f9; }
+    .bubble.both { background: #f3eefc; border-color: #d4c4f0; }
+    .bubble.you, .bubble.draft {
+      align-self: flex-end;
+      margin-left: var(--thread-inset);
+      margin-right: var(--thread-inset);
+      border-color: #b3d4f8; background: #f0f7ff;
+    }
+    .bubble.draft {
+      background: var(--draft); border-color: #e8c96a;
+    }
+
+    /*
+      Preview-link treatments (independent of reveal A–E).
+      Class on #layout: preview-link-1 … preview-link-6
+      Hooks: .bubble.previewing · .badge.previewing · .preview-mark · .preview-bridge · .pane-draft > .card
+    */
+    .badge.previewing {
+      display: none;
+      background: #d4a017; color: #fff;
+      letter-spacing: 0.03em;
+    }
+    .preview-mark {
+      display: none;
+      pointer-events: none;
+      position: absolute;
+    }
+    .pane-draft > .card::before {
+      display: none;
+      content: "Previewing";
+      position: absolute;
+      top: -7px; left: 10px;
+      font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: #8a6a00;
+      background: var(--panel);
+      padding: 0 5px;
+      line-height: 1.2;
+      z-index: 1;
+    }
+
+    /* —— P1 Ring + badge (original) —— */
+    .preview-link-1 .bubble.previewing {
+      border-color: #d4a017;
+      box-shadow: 0 0 0 2px #ffd60a55, 0 1px 0 #fff8e0 inset;
+    }
+    .preview-link-1 .bubble.previewing .preview-mark {
+      display: block;
+      top: 10px; bottom: 10px; right: -1px;
+      width: 3px;
+      border-radius: 2px 0 0 2px;
+      background: #d4a017;
+    }
+    .preview-link-1 .badge.previewing { display: inline-block; }
+    .preview-link-1 .pane-draft > .card {
+      border-color: #e8c96a;
+      box-shadow: 0 0 0 2px #ffd60a33;
+    }
+    .preview-link-1 .pane-draft > .card::before { display: block; }
+
+    /* —— P2 Soft twin — matching wash, no chrome noise —— */
+    .preview-link-2 .bubble.previewing {
+      border-color: #c9a227;
+      background: linear-gradient(180deg, #fff8dc, #fff4d6);
+      box-shadow: 0 0 0 1px #e8c96a88, 0 6px 18px #c9a22722;
+    }
+    .preview-link-2 .pane-draft > .card {
+      border-color: #c9a227;
+      background: linear-gradient(180deg, #fffdf6, #fff);
+      box-shadow: 0 0 0 1px #e8c96a88, 0 6px 18px #c9a22722;
+    }
+    .preview-link-2 .pane-draft > .card::before {
+      display: block;
+      content: "Linked draft";
+      color: #8a6a00;
+    }
+
+    /* —— P3 Arrow bridge — blue focus + → toward pane —— */
+    .preview-link-3 .bubble.previewing {
+      border-color: var(--blue);
+      background: #fff9e6;
+      box-shadow: 0 0 0 2px #0071e328;
+    }
+    .preview-link-3 .bubble.previewing .preview-mark {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      top: 50%; right: 6px;
+      width: 18px; height: 18px;
+      margin-top: -9px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-size: 11px; font-weight: 700; line-height: 1;
+      box-shadow: 0 1px 4px #0071e355;
+      z-index: 2;
+    }
+    .preview-link-3 .bubble.previewing .preview-mark::before { content: "→"; }
+    .preview-link-3 .badge.previewing {
+      display: inline-block;
+      background: var(--blue);
+    }
+    .preview-link-3 .pane-draft > .card {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 2px #0071e328;
+    }
+    .preview-link-3 .pane-draft > .card::before {
+      display: block;
+      content: "Active preview";
+      color: #0055a5;
+    }
+
+    /* —— P6 Arrow gap — P3 look; → circle centered in the real gap
+       between draft bubble and preview card (no extra column / wider split) —— */
+    .preview-bridge {
+      display: none;
+      pointer-events: none;
+    }
+    .preview-bridge .preview-bridge-mark {
+      position: absolute;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      font-size: 11px; font-weight: 700; line-height: 18px;
+      text-align: center;
+      box-shadow: 0 1px 4px #0071e355;
+      transform: translate(-50%, -50%);
+      z-index: 6;
+    }
+    .preview-link-6 {
+      position: relative;
+      /* same column split + gap as default layout — bridge is an overlay */
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .preview-link-6.ctx-thin {
+      grid-template-columns: 124px 1fr;
+    }
+    .preview-link-6 .pane-ctx { grid-column: 1; grid-row: 1; }
+    .preview-link-6 .pane-draft { grid-column: 2; grid-row: 1; }
+    .preview-link-6 .preview-bridge {
+      display: block;
+      /* Overlay the whole split; mark coords are relative to #layout */
+      grid-column: 1 / -1;
+      grid-row: 1;
+      position: absolute;
+      left: 0; right: 0; top: 0; bottom: 0;
+      z-index: 5;
+      width: auto;
+      min-width: 0;
+      overflow: visible;
+    }
+    .preview-link-6 .preview-bridge .preview-bridge-mark {
+      /* position against #layout, not a mid-transition 0×0 bridge box */
+      position: absolute;
+    }
+    .preview-link-6 .bubble.previewing {
+      border-color: var(--blue);
+      background: #fff9e6;
+      box-shadow: 0 0 0 2px #0071e328;
+    }
+    .preview-link-6 .bubble.previewing .preview-mark { display: none; }
+    .preview-link-6 .badge.previewing {
+      display: inline-block;
+      background: var(--blue);
+    }
+    .preview-link-6 .pane-draft > .card {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 2px #0071e328;
+    }
+    .preview-link-6 .pane-draft > .card::before {
+      display: block;
+      content: "Active preview";
+      color: #0055a5;
+    }
+
+    /* —— P4 Spotlight — history dimmed only while draft is the focus (default) —— */
+    .preview-link-4 .thread .d-row,
+    .preview-link-4 .thread .row-wrap,
+    .preview-link-4 .thread .bridge,
+    .preview-link-4 .thread .xfer,
+    .preview-link-4 .thread .private-band {
+      transition: opacity 0.15s ease, filter 0.15s ease;
+    }
+    /* Dim whole history rows (not nested bubbles — avoids double opacity) */
+    .preview-link-4.spotlight-draft .thread .d-row:not(.draft),
+    .preview-link-4.spotlight-draft .thread .row-wrap:not(:has(.bubble.previewing)),
+    .preview-link-4.spotlight-draft .thread .bridge,
+    .preview-link-4.spotlight-draft .thread .xfer,
+    .preview-link-4.spotlight-draft .thread .private-band {
+      opacity: 0.72;
+      filter: saturate(0.85);
+    }
+    .preview-link-4 .bubble.previewing {
+      opacity: 1;
+      filter: none;
+      position: relative;
+      z-index: 1;
+      border-color: #1d1d1f;
+      box-shadow: 0 0 0 2px #1d1d1f14, 0 8px 22px #15203322;
+    }
+    .preview-link-4 .badge.previewing {
+      display: inline-block;
+      background: #1d1d1f; color: #fff;
+    }
+    .preview-link-4 .pane-draft > .card {
+      border-color: #1d1d1f;
+      box-shadow: 0 0 0 2px #1d1d1f14, 0 8px 22px #15203318;
+    }
+    .preview-link-4.spotlight-draft .pane-draft > .card::before {
+      display: block;
+      content: "In focus";
+      color: #1d1d1f;
+    }
+    .preview-link-4:not(.spotlight-draft) .pane-draft > .card::before {
+      display: block;
+      content: "Draft ready";
+      color: #636366;
+    }
+
+    /* —— P5 Timeline pin — top strip + shared amber chip —— */
+    .preview-link-5 .bubble.previewing {
+      border-color: #e8c96a;
+      padding-top: 16px;
+      box-shadow: 0 1px 2px #00000010;
+      overflow: hidden;
+    }
+    .preview-link-5 .bubble.previewing .preview-mark {
+      display: block;
+      top: 0; left: 0; right: 0;
+      height: 15px;
+      background: linear-gradient(90deg, #ffd60a, #f5c518);
+      color: #5c4800;
+      font-size: 8px; font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+      line-height: 15px;
+      border-radius: 9px 9px 0 0;
+    }
+    .preview-link-5 .bubble.previewing .preview-mark::before { content: "In preview · shown at right"; }
+    .preview-link-5 .reveal-d .d-card-wrap .bubble.previewing .preview-mark,
+    .preview-link-5 .reveal-e .d-card-wrap .bubble.previewing .preview-mark {
+      border-radius: 14px 0 0 0;
+    }
+    .preview-link-5 .pane-draft > .card {
+      border-color: #e8c96a;
+      overflow: visible;
+    }
+    .preview-link-5 .pane-draft > .card::before {
+      display: block;
+      content: "Draft preview";
+      top: 0; left: 0; right: 0;
+      height: 15px;
+      padding: 0;
+      background: linear-gradient(90deg, #ffd60a, #f5c518);
+      color: #5c4800;
+      text-align: center;
+      line-height: 15px;
+      border-radius: 8px 8px 0 0;
+      letter-spacing: 0.06em;
+    }
+    .preview-link-5 .pane-draft > .card {
+      padding-top: 22px;
+    }
+
+    /*
+      Private band: full-bleed grey (no side padding on the band itself).
+      Vertical padding = G/2 so band edge sits mid-gap.
+      Cards inside still use --thread-inset margins → same L/R as shared events.
+    */
+    .private-band {
+      align-self: stretch;
+      width: 100%;
+      margin: 0;
+      background: var(--private-band);
+      border-radius: 0;
+      padding: calc(var(--event-gap) / 2) 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--event-gap);
+    }
+    .thread > .row-wrap,
+    .thread > .bridge {
+      margin: calc(var(--event-gap) / 2) 0;
+      width: 100%;
+    }
+    .thread > .bridge {
+      margin-left: var(--thread-inset);
+      margin-right: var(--thread-inset);
+      width: auto;
+      max-width: calc(100% - (2 * var(--thread-inset)));
+      align-self: center;
+    }
+    .private-band .bubble {
+      box-shadow: 0 1px 2px #00000012;
+    }
+    .private-band .row-wrap {
+      width: 100%; margin: 0;
+      display: flex; flex-direction: column; align-items: stretch;
+    }
+    .reveal-c .private-band .row-wrap {
+      width: 100%;
+    }
+
+    .bubble .meta {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-size: 10px; color: var(--muted); margin-bottom: 2px;
+    }
+    .bubble .meta .when {
+      margin-left: auto;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .bubble .who { font-weight: 650; color: var(--ink); font-size: 11px; }
+    .bubble .owner { font-size: 10px; color: var(--muted); }
+    .bubble .owner strong { color: var(--ink); font-weight: 650; }
+    /* Communication flow: [wrote] Joanna Chen → you [read] — icons, no prose */
+    .bubble .flow {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 3px 4px;
+      font-size: 11px; font-weight: 650; color: var(--ink);
+      line-height: 1.35; margin: 1px 0 2px;
+    }
+    .bubble .flow .arrow {
+      color: var(--muted); font-weight: 500; margin: 0 1px;
+    }
+    .bubble .flow .party {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-weight: 650;
+    }
+    .bubble .flow .role-icon {
+      width: 11px; height: 11px; flex-shrink: 0;
+      color: var(--muted);
+    }
+    .bubble .flow .role-icon.wrote { color: var(--blue); }
+    .bubble .flow .role-icon.read { color: #34c759; }
+    .bubble .flow .role-icon.read.pending { color: #c9a227; }
+    .bubble .flow .role-icon.vault { color: #8e8e93; }
+    /* phone / video presence reuse .read sizing; tint by medium */
+    .bubble.phone .flow .role-icon.read { color: #248a3d; }
+    .bubble.video .flow .role-icon.read { color: #3d3bb8; }
+    .bubble .summary {
+      font-size: 11px; line-height: 1.4; color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bubble.open .summary { white-space: pre-wrap; overflow: visible; text-overflow: unset; }
+    .bubble .card-links {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      margin-top: 5px;
+    }
+    .bubble .card-link {
+      display: inline-flex; align-items: center; gap: 3px;
+      max-width: 100%;
+      font-size: 10px; font-weight: 500; line-height: 1.2;
+      color: #007a99;
+      background: #32ade614;
+      border: 1px solid #32ade633;
+      border-radius: 5px;
+      padding: 2px 6px 2px 4px;
+      text-decoration: none;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bubble .card-link:hover { background: #32ade622; border-color: #32ade655; }
+    .bubble .card-link .kind-icon {
+      width: 10px; height: 10px; flex-shrink: 0; color: currentColor;
+    }
+    .bubble .card-link.doc { color: #3a3a3c; background: #8e8e9314; border-color: #8e8e9333; }
+    .bubble .card-link.log { color: #8944b0; background: #af52de14; border-color: #af52de33; }
+    .bubble .card-link.mail { color: #0071e3; background: #0071e314; border-color: #0071e333; }
+    .bubble .card-link.video { color: #3d3bb8; background: #5856d614; border-color: #5856d633; }
+    .bubble .card-link.rel {
+      color: var(--muted); background: #00000008; border-color: #00000014;
+      border-style: dashed;
+    }
+    .bubble .detail {
+      display: none; margin-top: 6px; padding-top: 6px;
+      border-top: 1px solid #00000012; font-size: 11px; line-height: 1.5;
+      white-space: pre-wrap; color: #3a3a3c;
+    }
+    .bubble.open .detail { display: block; }
+    /* Draft body lives in the right pane — expanding the card is redundant */
+    .bubble.previewing {
+      cursor: default;
+    }
+    .bubble.previewing .detail,
+    .bubble.previewing.open .detail { display: none !important; }
+    .bubble.previewing.open .summary {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 1px 5px; border-radius: 4px;
+      background: #00000010; color: #555;
+      line-height: 1.2;
+    }
+    .badge .kind-icon {
+      width: 11px; height: 11px; flex-shrink: 0;
+      display: block;
+    }
+    .badge.mail { background: #0071e318; color: #0071e3; }
+    .badge.log { background: #af52de22; color: #8944b0; }
+    .badge.phone { background: #34c75922; color: #248a3d; }
+    .badge.note { background: #ff950022; color: #c45e00; }
+    .badge.draft { background: #ffd60a44; color: #8a6a00; }
+    .badge.comment { background: #5856d622; color: #4a48b0; }
+    .badge.link { background: #32ade622; color: #007a99; }
+    .badge.doc { background: #8e8e9322; color: #3a3a3c; }
+    .badge.video { background: #5856d622; color: #3d3bb8; }
+
+    /* Hide old-style release chips — variants own this */
+    .bubble .release-legacy { display: none; }
+
+    /* —— Thin rail —— */
+    .layout.ctx-thin .thread { gap: 3px; padding: 0 2px; }
+    .layout.ctx-thin .bubble {
+      max-width: 100% !important; padding: 4px 5px; border-radius: 6px;
+    }
+    /* Thin D/E: more rounded cards; keep ownership corner sharp */
+    .layout.ctx-thin.reveal-d .d-card-wrap .bubble.them,
+    .layout.ctx-thin.reveal-e .d-card-wrap .bubble.them { border-radius: 0 12px 12px 12px; }
+    .layout.ctx-thin.reveal-d .d-card-wrap .bubble.you,
+    .layout.ctx-thin.reveal-d .d-card-wrap .bubble.draft,
+    .layout.ctx-thin.reveal-e .d-card-wrap .bubble.you,
+    .layout.ctx-thin.reveal-e .d-card-wrap .bubble.draft { border-radius: 12px 0 12px 12px; }
+    .layout.ctx-thin.reveal-d .d-card-wrap .bubble.both,
+    .layout.ctx-thin.reveal-e .d-card-wrap .bubble.both { border-radius: 0 0 12px 12px; }
+    /* D thin: card 75% on ownership side; receiver avatar in the 25% slack */
+    .layout.ctx-thin.reveal-d .d-row,
+    .layout.ctx-thin.reveal-e .d-row {
+      --d-avatar: 16px;
+      --d-avatar-overlap: calc(var(--d-avatar) * 0.25);
+      display: flex;
+      align-items: center;
+      gap: 0; /* overlap handles card↔avatar contact */
+      grid-template-columns: none !important;
+      padding: 0 2px !important;
+    }
+    .layout.ctx-thin.reveal-d .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-card-wrap {
+      display: flex;
+      min-width: 0;
+    }
+    .layout.ctx-thin.reveal-d .d-row.them .d-card-wrap {
+      flex: 0 0 75%;
+      justify-content: flex-start;
+      order: 0;
+    }
+    .layout.ctx-thin.reveal-d .d-row.them .d-side {
+      flex: 1 1 25%;
+      order: 1;
+    }
+    .layout.ctx-thin.reveal-d .d-row.you .d-side,
+    .layout.ctx-thin.reveal-d .d-row.draft .d-side {
+      flex: 1 1 25%;
+      order: 0;
+    }
+    .layout.ctx-thin.reveal-d .d-row.you .d-card-wrap,
+    .layout.ctx-thin.reveal-d .d-row.draft .d-card-wrap {
+      flex: 0 0 75%;
+      justify-content: flex-end;
+      order: 1;
+    }
+    .layout.ctx-thin.reveal-d .d-row.private .d-card-wrap {
+      flex: 0 0 75%;
+      margin-left: auto;
+      justify-content: flex-end;
+    }
+    /*
+      E thin only (full E ≡ D): same avatar sides as D.
+      Extra edge pad → both card narrower; L/R avatars share fixed columns.
+      them: card fills left→right toward MK column.
+      you/draft: card fills right←left toward JC column.
+    */
+    .layout.ctx-thin.reveal-e .d-row {
+      padding: 0 8px !important;
+    }
+    .layout.ctx-thin.reveal-e .d-row.them .d-card-wrap {
+      flex: 1 1 auto;
+      justify-content: stretch;
+      order: 0;
+    }
+    .layout.ctx-thin.reveal-e .d-row.them .d-side {
+      flex: 0 0 var(--d-avatar);
+      order: 1;
+    }
+    .layout.ctx-thin.reveal-e .d-row.you .d-side,
+    .layout.ctx-thin.reveal-e .d-row.draft .d-side {
+      flex: 0 0 var(--d-avatar);
+      order: 0;
+    }
+    .layout.ctx-thin.reveal-e .d-row.you .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-row.draft .d-card-wrap {
+      flex: 1 1 auto;
+      justify-content: stretch;
+      order: 1;
+    }
+    .layout.ctx-thin.reveal-e .d-row.private .d-card-wrap {
+      flex: 1 1 auto;
+      margin-left: calc(var(--d-avatar) - var(--d-avatar-overlap));
+      justify-content: stretch;
+    }
+    .layout.ctx-thin.reveal-d .d-row.both .d-side,
+    .layout.ctx-thin.reveal-e .d-row.both .d-side {
+      flex: 0 0 auto;
+    }
+    .layout.ctx-thin.reveal-d .d-row.both .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-row.both .d-card-wrap {
+      flex: 1 1 auto;
+      justify-content: stretch;
+    }
+    .layout.ctx-thin.reveal-d .d-card-wrap .bubble,
+    .layout.ctx-thin.reveal-e .d-card-wrap .bubble {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    /* Compact receiver avatar; hide eye in thin rail.
+       Card overlaps 25% of the avatar (avatar peeks out from under the card). */
+    .layout.ctx-thin.reveal-d .d-side,
+    .layout.ctx-thin.reveal-e .d-side {
+      display: flex !important;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      width: auto;
+      min-height: 0;
+      padding: 0;
+      position: relative;
+      z-index: 2; /* avatar sits on top of the overlapping card */
+    }
+    .layout.ctx-thin.reveal-d .d-side .eye,
+    .layout.ctx-thin.reveal-e .d-side .eye,
+    .layout.ctx-thin.reveal-d .d-side .sense,
+    .layout.ctx-thin.reveal-e .d-side .sense { display: none !important; }
+    .layout.ctx-thin.reveal-d .d-side .avatar,
+    .layout.ctx-thin.reveal-e .d-side .avatar {
+      width: var(--d-avatar); height: var(--d-avatar); font-size: 7px;
+      border-width: 1px;
+    }
+    .layout.ctx-thin.reveal-d .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-card-wrap {
+      position: relative;
+      z-index: 1;
+    }
+    /* you/draft: avatar on left — card pulls left over 25% of avatar */
+    .layout.ctx-thin.reveal-d .d-row.you .d-card-wrap,
+    .layout.ctx-thin.reveal-d .d-row.draft .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-row.you .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-row.draft .d-card-wrap {
+      margin-left: calc(-1 * var(--d-avatar-overlap));
+    }
+    /* them: avatar on right — card pulls right over 25% of avatar */
+    .layout.ctx-thin.reveal-d .d-row.them .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-row.them .d-card-wrap {
+      margin-right: calc(-1 * var(--d-avatar-overlap));
+    }
+    /* both: overlap both side avatars */
+    .layout.ctx-thin.reveal-d .d-row.both .d-card-wrap,
+    .layout.ctx-thin.reveal-e .d-row.both .d-card-wrap {
+      margin-left: calc(-1 * var(--d-avatar-overlap));
+      margin-right: calc(-1 * var(--d-avatar-overlap));
+    }
+    .layout.ctx-thin .bubble.you,
+    .layout.ctx-thin .bubble.draft { align-self: flex-end !important; width: 75%; }
+    .layout.ctx-thin .badge.previewing { display: none !important; }
+    .layout.ctx-thin.preview-link-1 .bubble.previewing .preview-mark {
+      top: 6px; bottom: 6px; width: 2px;
+    }
+    .layout.ctx-thin.preview-link-3 .bubble.previewing .preview-mark {
+      right: 3px; width: 14px; height: 14px; margin-top: -7px; font-size: 9px;
+    }
+    .layout.ctx-thin.preview-link-5 .bubble.previewing {
+      padding-top: 12px;
+    }
+    .layout.ctx-thin.preview-link-5 .bubble.previewing .preview-mark {
+      height: 11px; line-height: 11px; font-size: 7px;
+    }
+    .layout.ctx-thin.preview-link-5 .bubble.previewing .preview-mark::before {
+      content: "Preview";
+    }
+    .layout.ctx-thin .bubble.them { align-self: flex-start !important; width: 75%; }
+    .layout.ctx-thin .bubble.both { align-self: center !important; width: 96%; }
+    .layout.ctx-thin .bubble .who,
+    .layout.ctx-thin .bubble .owner,
+    .layout.ctx-thin .bubble .flow,
+    .layout.ctx-thin .bubble .card-links,
+    .layout.ctx-thin .bubble .summary,
+    .layout.ctx-thin .bubble .detail,
+    .layout.ctx-thin .bridge,
+    .layout.ctx-thin .lane-head,
+    .layout.ctx-thin .rail-cell { display: none !important; }
+    .layout.ctx-thin .bubble .meta { margin: 0; gap: 3px; }
+    .layout.ctx-thin .badge .kind-lbl { display: none; }
+    .layout.ctx-thin .badge {
+      padding: 2px; border-radius: 5px;
+    }
+    .layout.ctx-thin .badge .kind-icon {
+      width: 12px; height: 12px;
+    }
+    .layout.ctx-thin .bubble .when {
+      font-size: 9px; color: var(--muted); display: block; width: 100%;
+    }
+    .layout.ctx-thin .thread { --thread-inset: 4px; --event-gap: 6px; gap: 0; padding: 0; }
+    .layout.ctx-thin .d-row {
+      grid-template-columns: 1fr !important;
+      padding: 0 4px;
+      --d-clear: 4px;
+    }
+    .layout.ctx-thin.reveal-d .d-row {
+      display: flex;
+      grid-template-columns: none !important;
+      padding: 0 3px !important;
+    }
+    .layout.ctx-thin.reveal-e .d-row {
+      display: flex;
+      grid-template-columns: none !important;
+      padding: 0 8px !important;
+    }
+    .layout.ctx-thin .d-side { display: none !important; }
+    .layout.ctx-thin.reveal-d .d-side,
+    .layout.ctx-thin.reveal-e .d-side { display: flex !important; }
+    .layout.ctx-thin .private-band {
+      width: 100%; margin: 0; padding: calc(var(--event-gap) / 2) 0; border-radius: 0;
+    }
+    .layout.ctx-thin .thread > .row-wrap,
+    .layout.ctx-thin .thread > .bridge {
+      margin: calc(var(--event-gap) / 2) 0;
+    }
+    .layout.ctx-thin .row-wrap { display: contents; }
+    .layout.ctx-thin .lanes { display: flex; flex-direction: column; gap: 3px; }
+    .layout.ctx-thin .lane { display: contents; }
+    .layout.ctx-thin .lane-col { display: flex; flex-direction: column; gap: 3px; }
+
+    /* ========== VARIANT A: bridge rows ========== */
+    .reveal-a .bridge {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 6px 10px; border-radius: 8px;
+      background: linear-gradient(90deg, #fff8e8, #ffe8c8);
+      border: 1px dashed #e8a83a;
+      font-size: 11px; line-height: 1.35; color: #7a4e00;
+    }
+    .reveal-a .bridge.pending {
+      background: linear-gradient(90deg, #fffce8, #fff0b8);
+      border-style: solid; border-color: #e8c96a;
+    }
+    .reveal-a .bridge .arrow {
+      flex-shrink: 0; font-weight: 800; font-size: 14px; line-height: 1.2;
+      color: #c77d00;
+    }
+    .reveal-a .bridge .party {
+      font-weight: 700; color: #5c3a00;
+    }
+    .reveal-a .bridge .what { color: #7a4e00; }
+    .reveal-a .bubble .inline-release { display: none; }
+
+    /* ========== VARIANT B: dual lanes ========== */
+    .reveal-b .lanes {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      flex: 1 1 auto; min-height: 0;
+    }
+    .reveal-b .lane {
+      display: flex; flex-direction: column; gap: 6px;
+      min-height: 0; overflow: auto;
+      border-radius: 8px; padding: 6px;
+    }
+    .reveal-b .lane-private {
+      background: var(--private-band);
+      border: 1px solid #b0b0b5;
+    }
+    .reveal-b .lane-shared {
+      background: var(--shared);
+      border: 1px solid #b3d4f8;
+    }
+    .reveal-b .lane-head {
+      font-size: 10px; font-weight: 750; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #636366;
+      padding: 2px 4px 4px; border-bottom: 1px solid #00000014;
+      margin-bottom: 2px; flex: 0 0 auto;
+    }
+    .reveal-b .lane-shared .lane-head { color: #0055a5; }
+    .reveal-b .lane .bubble {
+      align-self: stretch !important; max-width: none !important;
+    }
+    .reveal-b .lane-private .private-band {
+      background: transparent; padding: 0; margin: 0;
+    }
+    .reveal-b .bridge { display: none; }
+    .reveal-b .thread-flat { display: none; }
+    .reveal-b .xfer {
+      margin: 4px 0; padding: 5px 8px; border-radius: 6px;
+      background: #fff; border: 1px solid #e8a83a;
+      font-size: 10px; color: #7a4e00; line-height: 1.3;
+    }
+    .reveal-b .xfer strong { color: #5c3a00; }
+    .reveal-a .lanes,
+    .reveal-c .lanes { display: none; }
+
+    /* ========== VARIANT C: disclosure rail ========== */
+    .reveal-c .row-wrap {
+      display: grid; grid-template-columns: 1fr 72px; gap: 6px;
+      align-items: stretch; width: 100%;
+    }
+    .reveal-c .row-wrap .bubble { max-width: none; width: 100%; }
+    .reveal-c .row-wrap.you .bubble,
+    .reveal-c .row-wrap.draft .bubble { justify-self: end; max-width: 100%; }
+    .reveal-c .rail-cell {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; padding: 4px 2px; border-radius: 8px;
+      background: #f5f5f7; border: 1px solid var(--line);
+      font-size: 9px; text-align: center; color: var(--muted); line-height: 1.2;
+    }
+    .reveal-c .rail-cell.empty {
+      background: transparent; border-style: dashed; opacity: 0.45;
+    }
+    .reveal-c .rail-cell.out {
+      background: #fff4e0; border-color: #e8a83a; color: #7a4e00;
+    }
+    .reveal-c .rail-cell.pending {
+      background: #fff8c8; border-color: #e8c96a; color: #8a6a00;
+    }
+    .reveal-c .rail-cell .face {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #0071e3; color: #fff; font-weight: 700; font-size: 10px;
+      display: grid; place-items: center;
+    }
+    .reveal-c .rail-cell .out-arrow { font-weight: 800; font-size: 12px; color: #c77d00; }
+    .reveal-c .rail-cell .lbl { font-weight: 650; max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+    .reveal-c .bridge { display: none; }
+    .reveal-a .rail-cell,
+    .reveal-b .rail-cell,
+    .reveal-d .rail-cell,
+    .reveal-e .rail-cell { display: none; }
+    /* Keep row-wrap as a box so horizontal margin matches private-band padding
+       (display:contents was dropping the right inset on you/draft bubbles). */
+    .reveal-a .row-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .reveal-b .row-wrap { display: contents; }
+
+    /* ========== VARIANT D: draw.io — corner ownership + eye/avatar visibility ========== */
+    .reveal-d .bridge { display: none; }
+    .reveal-d .lanes { display: none; }
+    .reveal-d .thread > .row-wrap { display: none; } /* D uses .d-row instead */
+    /*
+      3-col grid — rail (avatar+chev) | card | rail
+      Avatar↔chev share a flex row (vertically locked together);
+      the whole rail is align-items:center against the card.
+      Sense icons float above the avatar (out of flow) so they don’t shift centering.
+    */
+    .reveal-d .d-row {
+      --event-gap: 8px;
+      --d-side: 22px;
+      --d-gap: 8px; /* avatar ↔ chev ↔ card */
+      --d-chev: 10px;
+      --d-rail: calc(var(--d-side) + var(--d-gap) + var(--d-chev));
+      --d-clear: 13px;
+      display: grid;
+      grid-template-columns: var(--d-rail) 1fr var(--d-rail);
+      column-gap: var(--d-gap);
+      row-gap: 0;
+      align-items: center;
+      width: 100%;
+      margin: calc(var(--event-gap) / 2) 0;
+      padding: 0 var(--d-clear);
+      box-sizing: border-box;
+    }
+    .reveal-d .d-row.both > .d-side:first-child { grid-column: 1; }
+    .reveal-d .d-row.both > .d-card-wrap { grid-column: 2; }
+    .reveal-d .d-row.both > .d-side:last-child { grid-column: 3; }
+
+    .reveal-d .d-row.you > .d-side,
+    .reveal-d .d-row.draft > .d-side { grid-column: 1; }
+    .reveal-d .d-row.you > .d-card-wrap,
+    .reveal-d .d-row.draft > .d-card-wrap { grid-column: 2 / -1; }
+
+    .reveal-d .d-row.them > .d-card-wrap { grid-column: 1 / 3; }
+    .reveal-d .d-row.them > .d-side { grid-column: 3; }
+
+    /* Private: same left inset as you (empty rail column) */
+    .reveal-d .d-row.private > .d-card-wrap {
+      grid-column: 1 / -1;
+      margin-left: calc(var(--d-rail) + var(--d-gap));
+    }
+    .reveal-d .private-band .d-row {
+      margin: 0;
+    }
+    .reveal-d .private-band {
+      display: flex;
+      flex-direction: column;
+      gap: var(--event-gap, 8px);
+      padding: calc(var(--event-gap, 8px) / 2) 0;
+    }
+    .d-side {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 0;
+      padding: 0;
+      min-height: 0;
+      width: var(--d-rail, auto);
+      box-sizing: border-box;
+    }
+    /* Avatar + chevron locked on one midline */
+    .d-av-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: var(--d-gap, 8px);
+    }
+    .d-av-stack {
+      position: relative;
+      width: var(--d-side, 22px);
+      height: var(--d-side, 22px);
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+    }
+    .d-side .eye,
+    .d-side .sense {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 6px);
+      transform: translateX(-50%);
+      width: 18px; height: 18px; color: #636366;
+      display: block; flex-shrink: 0;
+      pointer-events: none;
+    }
+    .d-side .eye.pending,
+    .d-side .sense.pending { color: #c9a227; }
+    .d-side .sense.speak { color: #248a3d; }
+    .d-side .sense.video { color: #3d3bb8; }
+    .d-side .avatar {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #e8e8ed; color: #1d1d1f;
+      font-size: 9px; font-weight: 700;
+      display: grid; place-items: center;
+      border: 1px solid #c7c7cc;
+    }
+    .d-side .avatar.me { background: #0071e3; color: #fff; border-color: #0071e3; }
+    .d-side .avatar.them { background: #636366; color: #fff; border-color: #636366; }
+    /* Chevron sits in the av-row — no margin math; flex centers it on the avatar */
+    .d-chev {
+      --d-chev-w: 10px;
+      --d-chev-h: 14px;
+      width: var(--d-chev-w);
+      height: var(--d-chev-h);
+      margin: 0;
+      color: #8e8e93;
+      display: block;
+      flex-shrink: 0;
+    }
+    .d-chev.d-chev-both {
+      height: calc(var(--d-chev-h) * 2);
+    }
+    .d-chev.pending { color: #c9a227; }
+    .d-card-wrap {
+      position: relative;
+      min-width: 0;
+    }
+    /* Thin: keep rail tight — no chevron */
+    .layout.ctx-thin.reveal-d .d-chev,
+    .layout.ctx-thin.reveal-e .d-chev { display: none !important; }
+    .reveal-d .d-card-wrap .bubble {
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      border-radius: 14px;
+      box-sizing: border-box;
+    }
+    /*
+      Sharp top corner = ownership / direction (part of the card border).
+      Top-left sharp  = from them (left). Top-right sharp = from me (right).
+      Both top sharp  = two-party. Keep sharp at top for now (may flip to bottom later).
+    */
+    .reveal-d .d-card-wrap .bubble.them {
+      border-radius: 0 14px 14px 14px;
+      background: #f7f7f9;
+    }
+    .reveal-d .d-card-wrap .bubble.you,
+    .reveal-d .d-card-wrap .bubble.draft {
+      border-radius: 14px 0 14px 14px;
+      background: #f0f7ff;
+    }
+    .reveal-d .d-card-wrap .bubble.both {
+      border-radius: 0 0 14px 14px;
+      background: #f3eefc;
+    }
+    .reveal-d .d-card-wrap .bubble.draft { background: var(--draft); }
+
+    /* ========== VARIANT E: full layout ≡ D; only thin mode differs ========== */
+    .reveal-e .bridge { display: none; }
+    .reveal-e .lanes { display: none; }
+    .reveal-e .thread > .row-wrap { display: none; }
+    .reveal-e .d-row {
+      --event-gap: 8px;
+      --d-side: 22px;
+      --d-gap: 8px;
+      --d-chev: 10px;
+      --d-rail: calc(var(--d-side) + var(--d-gap) + var(--d-chev));
+      --d-clear: 13px;
+      display: grid;
+      grid-template-columns: var(--d-rail) 1fr var(--d-rail);
+      column-gap: var(--d-gap);
+      row-gap: 0;
+      align-items: center;
+      width: 100%;
+      margin: calc(var(--event-gap) / 2) 0;
+      padding: 0 var(--d-clear);
+      box-sizing: border-box;
+    }
+    .reveal-e .d-row.both > .d-side:first-child { grid-column: 1; }
+    .reveal-e .d-row.both > .d-card-wrap { grid-column: 2; }
+    .reveal-e .d-row.both > .d-side:last-child { grid-column: 3; }
+
+    .reveal-e .d-row.you > .d-side,
+    .reveal-e .d-row.draft > .d-side { grid-column: 1; }
+    .reveal-e .d-row.you > .d-card-wrap,
+    .reveal-e .d-row.draft > .d-card-wrap { grid-column: 2 / -1; }
+
+    .reveal-e .d-row.them > .d-card-wrap { grid-column: 1 / 3; }
+    .reveal-e .d-row.them > .d-side { grid-column: 3; }
+
+    .reveal-e .d-row.private > .d-card-wrap {
+      grid-column: 1 / -1;
+      margin-left: calc(var(--d-rail) + var(--d-gap));
+    }
+    .reveal-e .private-band .d-row { margin: 0; }
+    .reveal-e .private-band {
+      display: flex;
+      flex-direction: column;
+      gap: var(--event-gap, 8px);
+      padding: calc(var(--event-gap, 8px) / 2) 0;
+    }
+    .reveal-e .d-card-wrap .bubble {
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      border-radius: 14px;
+      box-sizing: border-box;
+    }
+    .reveal-e .d-card-wrap .bubble.them {
+      border-radius: 0 14px 14px 14px;
+      background: #f7f7f9;
+    }
+    .reveal-e .d-card-wrap .bubble.you,
+    .reveal-e .d-card-wrap .bubble.draft {
+      border-radius: 14px 0 14px 14px;
+      background: #f0f7ff;
+    }
+    .reveal-e .d-card-wrap .bubble.both {
+      border-radius: 0 0 14px 14px;
+      background: #f3eefc;
+    }
+    .reveal-e .d-card-wrap .bubble.draft { background: var(--draft); }
+
+    /* ========== VARIANT F: ≡ D layout, rail avatars without sense icons ========== */
+    .reveal-f .d-side .eye,
+    .reveal-f .d-side .sense { display: none !important; }
+
+    .reveal-a .d-row,
+    .reveal-b .d-row,
+    .reveal-c .d-row { display: none !important; }
+
+    .hidden { display: none !important; }
+
+    .proto-switchers {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      z-index: 50;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .proto-switcher {
+      display: flex; align-items: center; gap: 10px;
+      background: #1d1d1fee; color: #f5f5f7;
+      border-radius: 999px; padding: 8px 14px;
+      box-shadow: 0 10px 30px #00000040;
+      font-size: 12px;
+    }
+    .proto-switcher.preview-link {
+      background: #3a2e10ee;
+      border: 1px solid #e8c96a55;
+    }
+    .proto-switcher button {
+      border: 1px solid #ffffff33; background: transparent; color: #f5f5f7;
+      border-radius: 999px; width: 28px; height: 28px; font-weight: 700; padding: 0;
+    }
+    .proto-switcher button:hover { background: #ffffff18; }
+    .proto-switcher .label { font-weight: 600; min-width: 280px; text-align: center; }
+    .proto-switcher .hint { opacity: 0.55; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note" id="variantNote">Loading…</div>
+
+    <div class="window" id="window" role="dialog" aria-labelledby="title">
+      <div class="titlebar">
+        <div class="traffic" aria-hidden="true" title="Close → Cancel">
+          <i class="r"></i><i class="y"></i><i class="g"></i>
+        </div>
+        <span id="title">Send proposed mail?</span>
+      </div>
+
+      <div class="chrome">
+        <div class="lead">
+          <div class="icon" aria-hidden="true">✉</div>
+          <div>
+            <strong>Cursor</strong> wants to send this message via Apple Mail.
+            Review the envelope and context, then choose.
+          </div>
+        </div>
+
+        <div class="layout reveal-a preview-link-1" id="layout">
+          <div class="pane-ctx">
+            <div class="ctx-panel">
+              <div class="ctx-header">
+                <button type="button" class="ctx-collapse" id="ctxCollapse" title="Collapse to type + date" aria-expanded="true" aria-label="Collapse context">◀</button>
+                <span class="case-lbl">Case</span>
+                <span class="path" id="casePath"></span>
+                <span class="count" id="eventCount"></span>
+              </div>
+              <div class="thread" id="thread"></div>
+            </div>
+          </div>
+          <div class="preview-bridge" id="previewBridge" aria-hidden="true">
+            <span class="preview-bridge-mark" title="Linked to draft preview">→</span>
+          </div>
+          <div class="pane-draft">
+            <div class="card">
+              <div class="envelope" id="envelope"></div>
+              <div class="divider"></div>
+              <div class="body-pane">
+                <div class="seg floating" role="tablist" aria-label="Body preview mode">
+                  <button type="button" role="tab" class="on">Formatted</button>
+                  <button type="button" role="tab">Raw</button>
+                </div>
+                <div class="body-formatted" id="draftBody"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <span class="spacer"></span>
+          <button type="button" class="btn" data-outcome="cancelled">Cancel</button>
+          <button type="button" class="btn" data-outcome="opened_in_mail">Open in Mail</button>
+          <button type="button" class="btn primary" data-outcome="send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="outcome" id="outcome">
+      Reveal ← → · preview-link Shift+←/→ · private events on a grey band.
+    </div>
+  </div>
+
+  <div class="proto-switchers">
+    <nav class="proto-switcher preview-link" aria-label="Preview-link treatments">
+      <button type="button" id="prevP" aria-label="Previous preview link">←</button>
+      <div>
+        <div class="label" id="previewLabel">P1 — Ring + badge</div>
+        <div class="hint">Shift+arrows · ?preview=</div>
+      </div>
+      <button type="button" id="nextP" aria-label="Next preview link">→</button>
+    </nav>
+    <nav class="proto-switcher" aria-label="Reveal variants">
+      <button type="button" id="prevV" aria-label="Previous variant">←</button>
+      <div>
+        <div class="label" id="switchLabel">A — Bridge rows</div>
+        <div class="hint">arrow keys · ?variant= · all keep split A</div>
+      </div>
+      <button type="button" id="nextV" aria-label="Next variant">→</button>
+    </nav>
+  </div>
+
+<script>
+const CASE_PATH = "Personal/cases/jobs/acme-staff-engineer";
+
+const DRAFT = {
+  from: { name: "Maro", email: "marotron@gmail.com" },
+  to: { name: "Joanna Chen", email: "joanna.chen@acme.example" },
+  subject: "Re: Staff Engineer — next steps",
+  body:
+`Hi Joanna,
+
+Thanks again for the call yesterday — really enjoyed digging into the edge cache work.
+
+I'd love to move forward. Thursday 2–4pm PT or Friday morning both work for a follow-up with the hiring manager.
+
+Best,
+Maro`,
+};
+
+const EVENTS = [
+  {
+    id: "e1", kind: "phone", dir: "both", owner: "You", counterpart: "Joanna Chen",
+    when: "Oct 20 · 11:40", who: "Phone · recruiter screen",
+    summary: "Call with Joanna — timeline 2–3 weeks; onsite possible early Nov",
+    detail: "LOG.md#2026-10-20-phone\n\nCalled Joanna (Acme recruiting).\n• Comp band verbally ~$240–270k + equity.\n• She'll send a calendar hold once I confirm interest.",
+    scope: "shared",
+    released: { to: "Joanna Chen", what: "Verbal interest + cache-invalidation depth", when: "on call" },
+    links: [
+      { kind: "log", label: "LOG.md#2026-10-20-phone", href: "#log-phone" },
+      { kind: "link", label: "Calendar hold · Joanna", href: "#cal-joanna" },
+    ],
+  },
+  {
+    id: "e2", kind: "mail", dir: "them", owner: "Joanna Chen", counterpart: "You",
+    when: "Oct 21 · 09:12", who: "Joanna Chen",
+    summary: "Interview loop details + availability ask",
+    detail: "From: Joanna Chen\n\nNext step is a 45‑min technical with Priya… Could you share a few windows next week?",
+    scope: "shared", released: null,
+    links: [
+      { kind: "mail", label: "Open in Mail", href: "#mail-e2" },
+      { kind: "link", label: "Acme careers · Staff Eng", href: "#acme-jd" },
+    ],
+  },
+  {
+    id: "e3", kind: "mail", dir: "you", owner: "You", counterpart: "Joanna Chen",
+    when: "Oct 21 · 14:05", who: "You",
+    summary: "Sent availability (Tue/Wed afternoons)",
+    detail: "To: Joanna Chen\n\nTue 1–4pm PT or Wed after 2pm work well.",
+    scope: "shared",
+    released: { to: "Joanna Chen", what: "Availability: Tue 1–4pm PT · Wed after 2pm", when: "Oct 21 · 14:05" },
+    rel: { to: "e2", type: "reply-to" },
+    links: [
+      { kind: "mail", label: "Open in Mail", href: "#mail-e3" },
+    ],
+  },
+  {
+    id: "e3b", kind: "video", dir: "both", owner: "You", counterpart: "Priya Shah",
+    when: "Oct 22 · 15:00", who: "Video · hiring manager",
+    summary: "45‑min with Priya — system design + QuotAI cache stampede",
+    detail: "LOG.md#2026-10-22-video\n\nZoom with Priya (hiring manager).\n• Walked edge-cache invalidation story.\n• She liked the stampede mitigation; next is offer sync with Joanna.",
+    scope: "shared",
+    released: { to: "Priya Shah", what: "Technical depth on cache invalidation", when: "on video" },
+    optional: true,
+    links: [
+      { kind: "video", label: "Zoom recording", href: "#zoom-priya" },
+      { kind: "log", label: "LOG.md#2026-10-22-video", href: "#log-video" },
+      { kind: "doc", label: "QuotAI cache notes", href: "#quotai-cache" },
+    ],
+  },
+  {
+    id: "e4", kind: "note", dir: "you", owner: "You", counterpart: null,
+    when: "Oct 24", who: "Note · interview prep",
+    summary: "Prep: edge cache + invalidation stories from QuotAI",
+    detail: "notes/interview-prep.md\n\n• Lead with QuotAI cache stampede fix.\n• Ask: how Acme measures stale-serve rate.",
+    scope: "private", released: null,
+    links: [
+      { kind: "doc", label: "notes/interview-prep.md", href: "#note-prep" },
+      { kind: "link", label: "QuotAI repo · cache", href: "#quotai-repo" },
+    ],
+  },
+  {
+    id: "e5", kind: "log", dir: "you", owner: "You", counterpart: "Joanna Chen",
+    when: "Oct 27", who: "LOG · offer window",
+    summary: "STATUS: loop green; Joanna nudging for next-step reply",
+    detail: "LOG.md#2026-10-27-offer-window\n\nAction: reply affirming + give two windows.",
+    scope: "private", released: null,
+    links: [
+      { kind: "log", label: "LOG.md#2026-10-27-offer-window", href: "#log-offer" },
+      { kind: "doc", label: "STATUS.md", href: "#status" },
+    ],
+  },
+  {
+    id: "e6", kind: "draft", dir: "you", owner: "You", counterpart: "Joanna Chen",
+    when: "Now", who: "You · about to send",
+    summary: "Confirm interest + Thu/Fri windows for hiring manager",
+    detail: DRAFT.body,
+    scope: "pending",
+    released: { to: "Joanna Chen", what: "Written interest + Thu 2–4pm / Fri morning", when: "about to send" },
+    rel: { to: "e2", type: "reply-to" },
+    links: [
+      { kind: "log", label: "LOG.md#offer-window", href: "#log-offer" },
+      { kind: "doc", label: "notes/interview-prep.md", href: "#note-prep" },
+    ],
+  },
+];
+
+const ME = { initials: "MK", label: "You (MK)" };
+const THEM = { initials: "JC", label: "Joanna (JC)" };
+
+const VARIANTS = [
+  {
+    key: "A",
+    name: "Bridge rows",
+    note: "<strong>A — Bridge rows</strong> · Same split. After each disclosure, a dashed amber <em>released → party</em> beat sits in the timeline. Private events sit on a <em>full-width grey square</em> behind the card.",
+  },
+  {
+    key: "B",
+    name: "Private | Shared lanes",
+    note: "<strong>B — Dual lanes</strong> · Same split. Context splits into <em>Private</em> (grey column) vs <em>Shared with Joanna</em>. Reveal direction = which column the event lives in.",
+  },
+  {
+    key: "C",
+    name: "Disclosure rail",
+    note: "<strong>C — Disclosure rail</strong> · Same split. Chat stays one stream; right gutter shows party face + out-arrow when content left the vault. Private = full-width grey square behind the card.",
+  },
+  {
+    key: "D",
+    name: "Draw.io corners + eyes",
+    note: "<strong>D — Draw.io</strong> · Sharp <em>top corner</em> = ownership. One <code>--d-clear</code> (≈13px) for card↔avatar and card↔edge. Empty rails omitted so me extends left / them extends right. Eye + avatar = revealed to.",
+  },
+  {
+    key: "E",
+    name: "D full · thin columns",
+    note: "<strong>E</strong> · Full layout identical to D. Thin only: extra edge clear so <em>both</em> is narrower; JC/MK sit on shared vertical columns; <em>them</em> card fills toward the right · <em>you/draft</em> fill toward the left.",
+  },
+  {
+    key: "F",
+    name: "D · avatar only",
+    note: "<strong>F</strong> · Same draw.io layout as D, but rails show <em>avatar only</em> — no eye / face-speak / video above. Medium + flow-line icons still carry presence; chevrons recenter on the avatar.",
+  },
+];
+
+/* Draft card ↔ right pane: independent of reveal A–E */
+const PREVIEW_LINKS = [
+  { key: "1", name: "Ring + badge", note: "Amber ring, Previewing chip, right-edge bar, matching pane label." },
+  { key: "2", name: "Soft twin", note: "Matching amber wash on draft card + pane — linked surfaces, almost no chrome." },
+  { key: "3", name: "Arrow bridge", note: "Blue focus ring + → pill on the draft card; shared Active preview label." },
+  { key: "6", name: "Arrow gap", note: "Same as P3, but the → circle is centered in the real gap between the draft bubble and the preview card — normal pane gap, no extra column." },
+  { key: "4", name: "Spotlight", note: "Default: history greyed while draft is focus. Click a past event → full colour; click the draft card → grey history again. Dark focus ring on draft + pane." },
+  { key: "5", name: "Timeline pin", note: "Gold top strip on both sides: In preview · shown at right / Draft preview." },
+];
+
+/* Sense icons above reveal avatars — eye (mail), face-speak (phone), video (meeting) */
+const SENSE_STROKE = `fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"`;
+const EYE_SVG = `<svg class="eye sense" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path ${SENSE_STROKE} d="M2.5 12s3.6-7 9.5-7 9.5 7 9.5 7-3.6 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.75"/><circle cx="12" cy="12" r="1.15" fill="currentColor"/></svg>`;
+/* Face speaking — person + sound waves (SF-ish person.wave.2); phone presence */
+const SPEAK_SVG = `<svg class="sense speak" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.75"/><path ${SENSE_STROKE} d="M3.8 19.5c0-3 2.3-5.2 5.2-5.2s5.2 2.2 5.2 5.2"/><path ${SENSE_STROKE} d="M16.2 9.2c1.1 1.1 1.6 2.3 1.6 3.8s-.5 2.7-1.6 3.8"/><path ${SENSE_STROKE} d="M18.8 7c1.7 1.7 2.5 3.6 2.5 6s-.8 4.3-2.5 6"/></svg>`;
+const VIDEO_SENSE_SVG = `<svg class="sense video" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="7" width="13" height="10" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.75"/><path ${SENSE_STROKE} d="m15.5 10.5 5-2.5v8l-5-2.5Z"/></svg>`;
+
+function senseIconSvg(sense, pending, title) {
+  let svg = EYE_SVG;
+  if (sense === "heard" || sense === "speak" || sense === "speech" || sense === "ear") svg = SPEAK_SVG;
+  else if (sense === "video") svg = VIDEO_SENSE_SVG;
+  const pendingCls = pending ? " pending" : "";
+  return svg
+    .replace(/class="([^"]*)"/, `class="$1${pendingCls}"`)
+    .replace('focusable="false"', `focusable="false" title="${escapeHtml(title)}"`);
+}
+
+/* Kind chips — SF Symbol–ish glyphs (envelope, phone, note.text, doc.text, …) */
+const KIND_STROKE = `fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"`;
+const KIND_META = {
+  mail: {
+    label: "Mail",
+    title: "Mail",
+    paths: `<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3.5 7 8.5 6.2L20.5 7"/>`,
+  },
+  /* Draft is a separate status badge; the medium chip stays Mail */
+  draft: {
+    label: "Draft",
+    title: "Draft",
+    paths: `<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3.5 7 8.5 6.2L20.5 7"/>`,
+  },
+  phone: {
+    label: "Phone",
+    title: "Phone call",
+    paths: `<path d="M7.2 3.8h2.4l1.2 3-1.6 1.1a11 11 0 0 0 5.1 5.1l1.1-1.6 3 1.2v2.4c0 .7-.5 1.3-1.2 1.4A14.5 14.5 0 0 1 3.6 5c.1-.7.7-1.2 1.4-1.2Z"/>`,
+  },
+  video: {
+    label: "Video",
+    title: "Video meeting",
+    paths: `<rect x="2.5" y="7" width="13" height="10" rx="1.8"/><path d="m15.5 10.5 5-2.5v8l-5-2.5Z"/>`,
+  },
+  note: {
+    label: "Note",
+    title: "Private note",
+    paths: `<path d="M6 3.5h9.5L18.5 7v13.5H6Z"/><path d="M15.5 3.5V7h3.5"/><path d="M9 11h6M9 14.5h6M9 18h4"/>`,
+  },
+  log: {
+    label: "Log",
+    title: "Case log",
+    paths: `<path d="M6 4h9l3 3v13H6Z"/><path d="M15 4v3h3"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/>`,
+  },
+  comment: {
+    label: "Comment",
+    title: "Comment",
+    paths: `<path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H11l-4 3v-3H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5Z"/>`,
+  },
+  link: {
+    label: "Link",
+    title: "Link",
+    paths: `<path d="M10 13.5a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 1 0-5-5L11.5 7"/><path d="M14 10.5a3.5 3.5 0 0 0-5 0L6.5 13a3.5 3.5 0 1 0 5 5l1-1"/>`,
+  },
+  doc: {
+    label: "Doc",
+    title: "Document",
+    paths: `<path d="M7 3.5h7.5L18.5 7.5V20.5H7Z"/><path d="M14.5 3.5v4h4"/><path d="M10 12h5.5M10 15.5h5.5"/>`,
+  },
+};
+
+function kindChip(kind) {
+  const meta = KIND_META[kind] || {
+    label: kind,
+    title: kind,
+    paths: `<circle cx="12" cy="12" r="7.5"/>`,
+  };
+  const cls = KIND_META[kind] ? kind : "doc";
+  return `
+    <span class="badge ${cls}" title="${escapeHtml(meta.title)}">
+      <svg class="kind-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <g ${KIND_STROKE}>${meta.paths}</g>
+      </svg>
+      <span class="kind-lbl">${escapeHtml(meta.label)}</span>
+    </span>
+  `;
+}
+
+/* SF Symbol–like chevron — points at the reveal avatar between card and side.
+   Duplex (`both`) = same paths stacked ‹ over › (draw.io full-duplex). */
+const CHEV_STROKE = `fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"`;
+const CHEV_LEFT = `<svg class="d-chev d-chev-l" viewBox="0 0 10 14" aria-hidden="true" focusable="false"><path ${CHEV_STROKE} d="M7.5 2.5 2.5 7l5 4.5"/></svg>`;
+const CHEV_RIGHT = `<svg class="d-chev d-chev-r" viewBox="0 0 10 14" aria-hidden="true" focusable="false"><path ${CHEV_STROKE} d="M2.5 2.5 7.5 7l-5 4.5"/></svg>`;
+const CHEV_DUPLEX = `<svg class="d-chev d-chev-both" viewBox="0 0 10 28" aria-hidden="true" focusable="false"><path ${CHEV_STROKE} d="M7.5 2.5 2.5 7l5 4.5"/><path ${CHEV_STROKE} d="M2.5 16.5 7.5 21l-5 4.5"/></svg>`;
+
+function dChev(dir, pending) {
+  let svg;
+  if (dir === "both-l") svg = CHEV_DUPLEX.replace('d-chev-both"', 'd-chev-both d-chev-l"');
+  else if (dir === "both-r") svg = CHEV_DUPLEX.replace('d-chev-both"', 'd-chev-both d-chev-r"');
+  else svg = dir === "left" ? CHEV_LEFT : CHEV_RIGHT;
+  return pending ? svg.replace('class="d-chev', 'class="d-chev pending') : svg;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function firstName(name) {
+  return String(name || "").trim().split(/\s+/)[0] || name;
+}
+
+/* Role icons on the flow line (SF-ish):
+   pencil = wrote · eye = read · face-speak = phone · video = on video · lock = vault */
+const ROLE_STROKE = `fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+const ROLE_WROTE = `<svg class="role-icon wrote" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path ${ROLE_STROKE} d="M14.2 4.8 19.2 9.8 9 20H4v-5Z"/><path ${ROLE_STROKE} d="m12.8 6.2 5 5"/></svg>`;
+const ROLE_READ = `<svg class="role-icon read" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path ${ROLE_STROKE} d="M2.5 12s3.6-7 9.5-7 9.5 7 9.5 7-3.6 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
+const ROLE_READ_PENDING = `<svg class="role-icon read pending" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path ${ROLE_STROKE} d="M2.5 12s3.6-7 9.5-7 9.5 7 9.5 7-3.6 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path ${ROLE_STROKE} d="M18.5 5.5v3.2h3.2"/></svg>`;
+/* Face speaking — phone presence (person.wave.2) */
+const ROLE_HEARD = `<svg class="role-icon read" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path ${ROLE_STROKE} d="M3.8 19.5c0-3 2.3-5.2 5.2-5.2s5.2 2.2 5.2 5.2"/><path ${ROLE_STROKE} d="M16.2 9.2c1.1 1.1 1.6 2.3 1.6 3.8s-.5 2.7-1.6 3.8"/><path ${ROLE_STROKE} d="M18.8 7c1.7 1.7 2.5 3.6 2.5 6s-.8 4.3-2.5 6"/></svg>`;
+const ROLE_VIDEO = `<svg class="role-icon read" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="7" width="13" height="10" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path ${ROLE_STROKE} d="m15.5 10.5 5-2.5v8l-5-2.5Z"/></svg>`;
+const ROLE_VAULT = `<svg class="role-icon vault" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="11" width="14" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path ${ROLE_STROKE} d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
+
+function roleIcon(kind, title) {
+  let svg = ROLE_WROTE;
+  if (kind === "read") svg = ROLE_READ;
+  else if (kind === "read-pending") svg = ROLE_READ_PENDING;
+  else if (kind === "heard") svg = ROLE_HEARD;
+  else if (kind === "video") svg = ROLE_VIDEO;
+  else if (kind === "vault") svg = ROLE_VAULT;
+  return svg.replace('class="role-icon', `class="role-icon" title="${escapeHtml(title)}`);
+}
+
+/* Rail / flow “present” sense by medium: mail→eye, phone→face-speak, video→camera */
+function presenceSense(kind) {
+  if (kind === "phone") return "heard";
+  if (kind === "video") return "video";
+  return "read";
+}
+
+function presenceTitle(kind, who, { pending = false } = {}) {
+  if (kind === "phone") {
+    return pending ? `${who} would hear this call` : `${who} heard this call`;
+  }
+  if (kind === "video") {
+    return pending ? `${who} would be on this video` : `${who} was on this video`;
+  }
+  return pending ? `Would reveal to ${who}` : `Revealed to ${who}`;
+}
+
+function counterpartAvatar(ev) {
+  const name = ev.counterpart || THEM.label;
+  if (name === "Joanna Chen" || name === THEM.label) return { ...THEM, cls: "them" };
+  const initials = String(name).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  return { initials, label: name, cls: "them" };
+}
+
+function partyWithRole(label, roleKind, roleTitle, { strong = false } = {}) {
+  const name = strong
+    ? `<strong>${escapeHtml(label)}</strong>`
+    : `<span class="name">${escapeHtml(label)}</span>`;
+  return `<span class="party" title="${escapeHtml(roleTitle)}">${roleIcon(roleKind, roleTitle)}${name}</span>`;
+}
+
+/* Flow line only — create/read shown as icons beside each party (no “X created” prose).
+   me → them:  [✎] you → Joanna Chen [👁]
+   them → me:  [✎] Joanna Chen → you [👁]
+   duplex:     [✎👁] you ↔ Joanna Chen [✎👁]
+   private:    [✎] you · vault [🔒] */
+function partyLine(ev) {
+  const me = "you";
+  if (ev.scope === "private") {
+    const wrote = partyWithRole(me, "wrote", "You created this", { strong: true });
+    const vault = `<span class="party" title="Vault only — not shared">${roleIcon("vault", "Vault only")}<span class="name">vault</span></span>`;
+    return {
+      title: `<span class="who">${escapeHtml(ev.who)}</span>`,
+      flow: ev.counterpart
+        ? `<span class="flow">${wrote}<span class="arrow">·</span><span class="party">${escapeHtml(ev.counterpart)}</span><span class="arrow">·</span>${vault}</span>`
+        : `<span class="flow">${wrote}<span class="arrow">·</span>${vault}</span>`,
+    };
+  }
+
+  if (ev.dir === "you" && ev.counterpart) {
+    const them = ev.counterpart;
+    const pending = ev.scope === "pending";
+    const from = partyWithRole(me, "wrote", "You created this", { strong: true });
+    const to = partyWithRole(
+      them,
+      pending ? "read-pending" : "read",
+      pending ? `${them} will be able to read this` : `${them} can read this`
+    );
+    return {
+      title: "",
+      flow: `<span class="flow">${from}<span class="arrow">→</span>${to}</span>`,
+    };
+  }
+
+  if (ev.dir === "them" && ev.counterpart) {
+    const them = ev.owner;
+    const from = partyWithRole(them, "wrote", `${them} created this`);
+    const to = partyWithRole(me, "read", "You can read this", { strong: true });
+    return {
+      title: "",
+      flow: `<span class="flow">${from}<span class="arrow">→</span>${to}</span>`,
+    };
+  }
+
+  if (ev.dir === "both" && ev.counterpart) {
+    const them = ev.counterpart;
+    const sense = presenceSense(ev.kind);
+    const a = partyWithRole(me, sense, presenceTitle(ev.kind, "You"), { strong: true });
+    const b = partyWithRole(them, sense, presenceTitle(ev.kind, them));
+    return {
+      title: `<span class="who">${escapeHtml(ev.who)}</span>`,
+      flow: `<span class="flow">${a}<span class="arrow">↔</span>${b}</span>`,
+    };
+  }
+
+  return {
+    title: `<span class="who">${escapeHtml(ev.who)}</span>`,
+    flow: `<span class="owner"><strong>${escapeHtml(ev.owner)}</strong></span>`,
+  };
+}
+
+function linkIconSvg(kind) {
+  const meta = KIND_META[kind] || KIND_META.link;
+  return `<svg class="kind-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><g ${KIND_STROKE}>${meta.paths}</g></svg>`;
+}
+
+function cardLinksHTML(ev) {
+  const chips = [];
+  if (ev.rel && ev.rel.to) {
+    const target = EVENTS.find((x) => x.id === ev.rel.to);
+    const label = ev.rel.type === "reply-to"
+      ? `Reply to ${target ? (target.kind === "mail" ? "mail" : target.who) : ev.rel.to}`
+      : `${ev.rel.type} → ${ev.rel.to}`;
+    chips.push(`
+      <a class="card-link rel" href="#${escapeHtml(ev.rel.to)}" data-jump="${escapeHtml(ev.rel.to)}" title="${escapeHtml(label)}">
+        ${linkIconSvg("mail")}
+        <span>${escapeHtml(label)}</span>
+      </a>
+    `);
+  }
+  (ev.links || []).forEach((lnk) => {
+    const kind = KIND_META[lnk.kind] ? lnk.kind : "link";
+    chips.push(`
+      <a class="card-link ${kind}" href="${escapeHtml(lnk.href || "#")}" title="${escapeHtml(lnk.label)}" data-link-kind="${escapeHtml(kind)}">
+        ${linkIconSvg(kind)}
+        <span>${escapeHtml(lnk.label)}</span>
+      </a>
+    `);
+  });
+  if (!chips.length) return "";
+  return `<div class="card-links">${chips.join("")}</div>`;
+}
+
+function bubbleInner(ev) {
+  const side = ev.kind === "draft" ? "draft" : ev.dir;
+  const previewing = ev.kind === "draft";
+  const party = partyLine(ev);
+  const mediumKind = ev.kind === "draft" ? "mail" : ev.kind;
+  const draftBadge = previewing
+    ? `<span class="badge draft" title="Draft">Draft</span>`
+    : "";
+  const previewBadge = previewing
+    ? `<span class="badge previewing" title="Shown in the draft panel">Previewing</span>`
+    : "";
+  const previewMark = previewing
+    ? `<span class="preview-mark" aria-hidden="true"></span>`
+    : "";
+  const expandAttrs = previewing
+    ? `aria-current="true" title="Body is shown in the draft preview pane"`
+    : `tabindex="0" role="button" aria-expanded="false"`;
+  const detail = previewing
+    ? ""
+    : `<div class="detail">${escapeHtml(ev.detail)}</div>`;
+  return `
+    <article class="bubble ${side}${previewing ? " previewing" : ""}" data-id="${ev.id}" ${expandAttrs}>
+      ${previewMark}
+      <div class="meta">
+        ${kindChip(mediumKind)}
+        ${draftBadge}
+        ${previewBadge}
+        ${party.title}
+        <span class="when">${escapeHtml(ev.when)}</span>
+      </div>
+      ${party.flow}
+      <div class="summary">${escapeHtml(ev.summary)}</div>
+      ${cardLinksHTML(ev)}
+      ${detail}
+    </article>
+  `;
+}
+
+function wrapPrivateBand(inners) {
+  return `<div class="private-band">${inners.join("")}</div>`;
+}
+
+function bridgeHTML(ev) {
+  if (!ev.released) return "";
+  const pending = ev.scope === "pending";
+  const verb = pending ? "Would release" : "Released";
+  return `
+    <div class="bridge${pending ? " pending" : ""}" data-bridge="${ev.id}">
+      <span class="arrow" aria-hidden="true">${pending ? "⇢" : "→"}</span>
+      <div>
+        <div><strong>${verb}</strong> → <span class="party">${escapeHtml(ev.released.to)}</span></div>
+        <div class="what">${escapeHtml(ev.released.what)} <span style="opacity:.7">(${escapeHtml(ev.released.when)})</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function railCell(ev) {
+  if (!ev.released) {
+    return `<div class="rail-cell empty" title="Nothing released from this event"><span>—</span><span>vault</span></div>`;
+  }
+  const pending = ev.scope === "pending";
+  const initials = ev.released.to.split(/\s+/).map((w) => w[0]).join("").slice(0, 2);
+  return `
+    <div class="rail-cell ${pending ? "pending" : "out"}" title="${escapeHtml(ev.released.what)}">
+      <span class="out-arrow" aria-hidden="true">${pending ? "⇢" : "↗"}</span>
+      <span class="face">${escapeHtml(initials)}</span>
+      <span class="lbl">${escapeHtml(ev.released.to.split(" ")[0])}</span>
+      <span>${pending ? "pending" : "out"}</span>
+    </div>
+  `;
+}
+
+function renderThreadA() {
+  const parts = [];
+  let privateBuf = [];
+  const flushPrivate = () => {
+    if (!privateBuf.length) return;
+    parts.push(wrapPrivateBand(privateBuf));
+    privateBuf = [];
+  };
+  EVENTS.forEach((ev) => {
+    const row = `
+      <div class="row-wrap ${ev.dir}">
+        ${bubbleInner(ev)}
+        ${railCell(ev)}
+      </div>
+    `;
+    if (ev.scope === "private") {
+      privateBuf.push(row);
+      return;
+    }
+    flushPrivate();
+    parts.push(row + bridgeHTML(ev));
+  });
+  flushPrivate();
+  return parts.join("");
+}
+
+function renderThreadB() {
+  const priv = EVENTS.filter((e) => e.scope === "private");
+  const shared = EVENTS.filter((e) => e.scope !== "private");
+  const privHTML = priv.length
+    ? wrapPrivateBand(priv.map((ev) => bubbleInner(ev)))
+    : `<div style="font-size:11px;color:#636366;padding:8px">No private events</div>`;
+  const sharedHTML = shared.map((ev) => {
+    const xfer = ev.released
+      ? `<div class="xfer"><strong>${ev.scope === "pending" ? "Pending →" : "Out →"} ${escapeHtml(ev.released.to)}</strong><br>${escapeHtml(ev.released.what)}</div>`
+      : (ev.dir === "them" ? `<div class="xfer" style="border-color:#b3d4f8;color:#0055a5;background:#f0f7ff"><strong>In ← ${escapeHtml(ev.owner)}</strong><br>Inbound to you</div>` : "");
+    return bubbleInner(ev) + xfer;
+  }).join("");
+  return `
+    <div class="lanes">
+      <div class="lane lane-private">
+        <div class="lane-head">Private · vault only</div>
+        <div class="lane-col">${privHTML}</div>
+      </div>
+      <div class="lane lane-shared">
+        <div class="lane-head">Shared · with Joanna</div>
+        <div class="lane-col">${sharedHTML}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* Draw.io language:
+   - Sharp top-left corner  = them owns / inbound
+   - Sharp top-right corner = me owns / outbound (or private me→me)
+   - Both top corners sharp = two-party (phone / video)
+   - Sense + avatar        = that party was present / can access
+     (eye = read mail, face-speak = phone, video = on video call)
+   - No sense icons         = private (vault only); variant F = avatar only
+*/
+/* Rail: sense (optional, out of flow) + avatar+chev on one midline.
+   chevPlace "after" = left rail (avatar | ›); "before" = right rail (‹ | avatar). */
+function dSide({ sense = "eye", pending, avatar, title, chev = "", chevPlace = "after" }) {
+  if (!sense && !avatar && !chev) return "";
+  const revealTitle = title || (avatar
+    ? (pending
+      ? `Would reveal to ${avatar.label}`
+      : `Revealed to ${avatar.label}`)
+    : "");
+  /* F: avatar-only rails — presence stays on the card flow line */
+  const showSense = sense && variant !== "F";
+  const icon = showSense
+    ? senseIconSvg(sense, pending, revealTitle)
+    : "";
+  const av = avatar
+    ? `<span class="avatar ${avatar.cls}" title="${escapeHtml(revealTitle)}">${escapeHtml(avatar.initials)}</span>`
+    : "";
+  const stack = `<div class="d-av-stack">${icon}${av}</div>`;
+  const row = chevPlace === "before"
+    ? `${chev}${stack}`
+    : `${stack}${chev}`;
+  return `<div class="d-side" title="${escapeHtml(revealTitle)}" aria-label="${escapeHtml(revealTitle)}"><div class="d-av-row">${row}</div></div>`;
+}
+
+function dRow(ev) {
+  const layout = ev.scope === "private"
+    ? "private"
+    : (ev.kind === "draft" ? "draft" : ev.dir);
+  const themAv = counterpartAvatar(ev);
+
+  let left = "";
+  let right = "";
+  if (ev.scope === "private") {
+    // me→me: no reveal rails / chevrons; --d-clear to band edges
+  } else if (ev.dir === "both") {
+    const sense = presenceSense(ev.kind);
+    left = dSide({
+      sense,
+      avatar: themAv,
+      title: presenceTitle(ev.kind, themAv.label),
+      chev: dChev("both-l"),
+      chevPlace: "after",
+    });
+    right = dSide({
+      sense,
+      avatar: { ...ME, cls: "me" },
+      title: presenceTitle(ev.kind, ME.label),
+      chev: dChev("both-r"),
+      chevPlace: "before",
+    });
+  } else if (ev.dir === "you") {
+    // reveal rail left — avatar | chev | card…
+    left = dSide({
+      sense: "eye",
+      pending: ev.scope === "pending",
+      avatar: themAv,
+      title: ev.scope === "pending"
+        ? `Would reveal to ${themAv.label} (pending send)`
+        : `Revealed to ${themAv.label}`,
+      chev: dChev("left", ev.scope === "pending"),
+      chevPlace: "after",
+    });
+  } else {
+    // reveal rail right — …card | chev | avatar
+    right = dSide({
+      sense: "eye",
+      avatar: { ...ME, cls: "me" },
+      title: `Revealed to ${ME.label}`,
+      chev: dChev("right"),
+      chevPlace: "before",
+    });
+  }
+
+  return `
+    <div class="d-row ${layout}" data-id="${ev.id}">
+      ${left}
+      <div class="d-card-wrap">
+        ${bubbleInner(ev)}
+      </div>
+      ${right}
+    </div>
+  `;
+}
+
+function renderThreadD() {
+  const parts = [];
+  let privateBuf = [];
+  const flushPrivate = () => {
+    if (!privateBuf.length) return;
+    parts.push(wrapPrivateBand(privateBuf));
+    privateBuf = [];
+  };
+  EVENTS.forEach((ev) => {
+    const row = dRow(ev);
+    if (ev.scope === "private") {
+      privateBuf.push(row);
+      return;
+    }
+    flushPrivate();
+    parts.push(row);
+  });
+  flushPrivate();
+  return parts.join("");
+}
+
+function setSpotlightDraft(on) {
+  const layout = document.getElementById("layout");
+  if (!layout) return;
+  layout.classList.toggle("spotlight-draft", !!on);
+}
+
+function bindBubbles(root) {
+  root.querySelectorAll(".bubble:not(.previewing)").forEach((b) => {
+    b.addEventListener("click", () => {
+      /* Browse history → lift P4 grey-out */
+      setSpotlightDraft(false);
+      toggleBubble(b);
+    });
+    b.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setSpotlightDraft(false);
+        toggleBubble(b);
+      }
+    });
+  });
+  root.querySelectorAll(".bubble.previewing").forEach((b) => {
+    b.addEventListener("click", () => {
+      /* Return focus to draft → restore P4 grey-out */
+      setSpotlightDraft(true);
+      document.getElementById("outcome").innerHTML =
+        `Draft focus · history <kbd>dimmed</kbd> · body in the preview pane`;
+      schedulePreviewBridgeSync();
+    });
+  });
+  root.querySelectorAll(".card-link").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const jump = a.getAttribute("data-jump");
+      if (jump) {
+        const target = root.querySelector(`.bubble[data-id="${jump}"]`);
+        if (target) {
+          setSpotlightDraft(false);
+          target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          target.classList.add("open");
+          target.setAttribute("aria-expanded", "true");
+        }
+        document.getElementById("outcome").innerHTML =
+          `Jumped to related <kbd>${jump}</kbd>`;
+        return;
+      }
+      document.getElementById("outcome").innerHTML =
+        `Open link <kbd>${escapeHtml(a.getAttribute("title") || a.textContent.trim())}</kbd> · kind <kbd>${escapeHtml(a.getAttribute("data-link-kind") || "link")}</kbd>`;
+    });
+  });
+}
+
+function renderThread(variant) {
+  const thread = document.getElementById("thread");
+  if (variant === "B") thread.innerHTML = renderThreadB();
+  else if (variant === "D" || variant === "E" || variant === "F") thread.innerHTML = renderThreadD();
+  else thread.innerHTML = renderThreadA();
+  bindBubbles(thread);
+  schedulePreviewBridgeSync();
+}
+
+function syncPreviewBridge() {
+  const layout = document.getElementById("layout");
+  const bridge = document.getElementById("previewBridge");
+  const mark = bridge && bridge.querySelector(".preview-bridge-mark");
+  if (!layout || !bridge || !mark) return;
+  if (!layout.classList.contains("preview-link-6")) {
+    mark.style.left = "";
+    mark.style.top = "";
+    return;
+  }
+  const bubble = layout.querySelector(".pane-ctx .bubble.previewing");
+  const card = layout.querySelector(".pane-draft > .card");
+  const ctxPanel = layout.querySelector(".pane-ctx .ctx-panel");
+  if (!card || !ctxPanel) return;
+
+  const lr = layout.getBoundingClientRect();
+  const cb = card.getBoundingClientRect();
+  const ctxR = ctxPanel.getBoundingClientRect().right;
+  /*
+    Gap = context rail right ↔ preview card left.
+    Clamp bubble.right to the ctx panel so a bad thin-mode rect can't pull
+    the midpoint into the preview (stale full-width measure / transition).
+  */
+  let leftEdge = ctxR;
+  let midY = cb.top + 28;
+  if (bubble) {
+    const bb = bubble.getBoundingClientRect();
+    if (bb.width > 0 && bb.right <= ctxR + 1) leftEdge = bb.right;
+    midY = bb.top + bb.height / 2;
+  }
+  const midX = (leftEdge + cb.left) / 2;
+
+  /* Origin = layout (bridge can report 0×0 mid-transition) */
+  mark.style.left = `${Math.round(midX - lr.left)}px`;
+  mark.style.top = `${Math.round(midY - lr.top)}px`;
+}
+
+function schedulePreviewBridgeSync() {
+  requestAnimationFrame(() => {
+    syncPreviewBridge();
+    requestAnimationFrame(syncPreviewBridge);
+  });
+  const layout = document.getElementById("layout");
+  if (!layout) return;
+  const onEnd = (e) => {
+    if (e.target !== layout || e.propertyName !== "grid-template-columns") return;
+    layout.removeEventListener("transitionend", onEnd);
+    syncPreviewBridge();
+  };
+  layout.addEventListener("transitionend", onEnd);
+}
+
+function toggleBubble(b) {
+  if (b.classList.contains("previewing")) return;
+  const layout = document.getElementById("layout");
+  if (layout.classList.contains("ctx-thin")) setCtxThin(false);
+  const open = !b.classList.contains("open");
+  b.classList.toggle("open", open);
+  b.setAttribute("aria-expanded", open ? "true" : "false");
+  const id = b.getAttribute("data-id");
+  const ev = EVENTS.find((x) => x.id === id);
+  document.getElementById("outcome").innerHTML = open
+    ? `Expanded <kbd>${ev.kind}</kbd> · ${escapeHtml(ev.who)} · scope <kbd>${ev.scope}</kbd>`
+    : `Collapsed <kbd>${id}</kbd>`;
+  schedulePreviewBridgeSync();
+}
+
+function setCtxThin(thin) {
+  const layout = document.getElementById("layout");
+  const btn = document.getElementById("ctxCollapse");
+  layout.classList.toggle("ctx-thin", thin);
+  btn.setAttribute("aria-expanded", thin ? "false" : "true");
+  btn.textContent = thin ? "▶" : "◀";
+  btn.title = thin ? "Expand chat" : "Collapse to type + date";
+  if (thin) {
+    layout.querySelectorAll(".bubble.open").forEach((b) => {
+      b.classList.remove("open");
+      b.setAttribute("aria-expanded", "false");
+    });
+  }
+  schedulePreviewBridgeSync();
+}
+
+function applyVariant(key) {
+  variant = key;
+  const meta = VARIANTS.find((v) => v.key === key);
+  const pMeta = PREVIEW_LINKS.find((p) => p.key === previewLink);
+  document.getElementById("variantNote").innerHTML =
+    `<strong>Locked for app:</strong> E-thin × F-full × P4 (experimental branch). Switchers are reference only.<br><br>${meta.note}<br><br><strong>Preview link P${previewLink}</strong> · ${pMeta.note}`;
+  document.getElementById("switchLabel").textContent = `${key} — ${meta.name}`;
+
+  const layout = document.getElementById("layout");
+  layout.classList.remove("reveal-a", "reveal-b", "reveal-c", "reveal-d", "reveal-e", "reveal-f");
+  /* F reuses D layout CSS; reveal-f only hides rail sense icons + recenters chevrons */
+  if (key === "F") layout.classList.add("reveal-d", "reveal-f");
+  else layout.classList.add(`reveal-${key.toLowerCase()}`);
+  renderThread(key);
+  /* Keep / restore draft spotlight when on P4 */
+  if (previewLink === "4") setSpotlightDraft(true);
+
+  const url = new URL(location.href);
+  url.searchParams.set("variant", key);
+  url.searchParams.set("preview", previewLink);
+  history.replaceState(null, "", url);
+  document.getElementById("outcome").innerHTML =
+    `Reveal <kbd>${key}</kbd> · preview-link <kbd>P${previewLink}</kbd> — ${pMeta.name}`;
+}
+
+function applyPreviewLink(key) {
+  previewLink = String(key);
+  const meta = PREVIEW_LINKS.find((p) => p.key === previewLink);
+  const layout = document.getElementById("layout");
+  layout.classList.remove(
+    "preview-link-1", "preview-link-2", "preview-link-3",
+    "preview-link-4", "preview-link-5", "preview-link-6"
+  );
+  layout.classList.add(`preview-link-${previewLink}`);
+  document.getElementById("previewLabel").textContent = `P${previewLink} — ${meta.name}`;
+  setSpotlightDraft(previewLink === "4");
+
+  const url = new URL(location.href);
+  url.searchParams.set("preview", previewLink);
+  history.replaceState(null, "", url);
+
+  const vMeta = VARIANTS.find((v) => v.key === variant);
+  document.getElementById("variantNote").innerHTML =
+    `<strong>Locked for app:</strong> E-thin × F-full × P4 (experimental branch). Switchers are reference only.<br><br>${vMeta.note}<br><br><strong>Preview link P${previewLink}</strong> · ${meta.note}`;
+  document.getElementById("outcome").innerHTML =
+    `Preview-link <kbd>P${previewLink}</kbd> — ${meta.name}`;
+  schedulePreviewBridgeSync();
+}
+
+function cycle(delta) {
+  const i = VARIANTS.findIndex((v) => v.key === variant);
+  applyVariant(VARIANTS[(i + delta + VARIANTS.length) % VARIANTS.length].key);
+}
+
+function cyclePreview(delta) {
+  const i = PREVIEW_LINKS.findIndex((p) => p.key === previewLink);
+  applyPreviewLink(PREVIEW_LINKS[(i + delta + PREVIEW_LINKS.length) % PREVIEW_LINKS.length].key);
+}
+
+/* —— boot —— */
+document.getElementById("casePath").textContent = CASE_PATH;
+document.getElementById("eventCount").textContent = `${EVENTS.length} events`;
+document.getElementById("draftBody").textContent = DRAFT.body;
+document.getElementById("envelope").innerHTML = `
+  <div class="row"><div class="lbl">From</div><div class="val"><span class="addr"><span class="name">${DRAFT.from.name}</span><span class="email">${DRAFT.from.email}</span></span></div></div>
+  <div class="row"><div class="lbl">To</div><div class="val"><span class="addr"><span class="name">${DRAFT.to.name}</span><span class="email">${DRAFT.to.email}</span></span></div></div>
+  <div class="row"><div class="lbl">Subject</div><div class="val">${DRAFT.subject}</div></div>
+`;
+
+document.getElementById("ctxCollapse").addEventListener("click", () => {
+  const thin = !document.getElementById("layout").classList.contains("ctx-thin");
+  setCtxThin(thin);
+  document.getElementById("outcome").innerHTML = thin
+    ? `Context rail → <kbd>thin</kbd>`
+    : `Context rail → <kbd>chat</kbd>`;
+});
+
+document.getElementById("thread").addEventListener("scroll", () => syncPreviewBridge(), { passive: true });
+window.addEventListener("resize", () => syncPreviewBridge());
+
+document.getElementById("prevV").addEventListener("click", () => cycle(-1));
+document.getElementById("nextV").addEventListener("click", () => cycle(1));
+document.getElementById("prevP").addEventListener("click", () => cyclePreview(-1));
+document.getElementById("nextP").addEventListener("click", () => cyclePreview(1));
+document.addEventListener("keydown", (e) => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (e.shiftKey) cyclePreview(-1);
+    else cycle(-1);
+  }
+  if (e.key === "ArrowRight") {
+    e.preventDefault();
+    if (e.shiftKey) cyclePreview(1);
+    else cycle(1);
+  }
+});
+
+document.querySelectorAll("[data-outcome]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.getElementById("outcome").innerHTML =
+      `MCP returns <kbd>{ "outcome": "${btn.getAttribute("data-outcome")}" }</kbd>`;
+  });
+});
+document.querySelector(".traffic .r").addEventListener("click", () => {
+  document.getElementById("outcome").innerHTML = `Window close → <kbd>{ "outcome": "cancelled" }</kbd>`;
+});
+
+const params = new URLSearchParams(location.search);
+let variant = (params.get("variant") || "F").toUpperCase();
+if (!VARIANTS.some((v) => v.key === variant)) variant = "F";
+let previewLink = String(params.get("preview") || "4");
+if (!PREVIEW_LINKS.some((p) => p.key === previewLink)) previewLink = "4";
+applyPreviewLink(previewLink);
+applyVariant(variant);
+setCtxThin(true); /* default: thin context rail */
+</script>
+</body>
+</html>
