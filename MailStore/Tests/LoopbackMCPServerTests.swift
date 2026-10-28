@@ -947,6 +947,38 @@ struct LoopbackMCPServerTests {
         #expect(outgoing.deliveries[0].proposal.sender == env.emailB.uppercased())
     }
 
+    @Test func proposeSendAllowsGmailDotEquivalentSender() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try ProposeSendIdentityFixture(
+            mailOutgoingSender: outgoing,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        // list_accounts has marotron@gmail.com; dotted form is the same Gmail mailbox.
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "propose_send",
+                    arguments: [
+                        "to": "alex@example.com",
+                        "subject": "Hi",
+                        "body": "Hello",
+                        "sender": "m.arotron@gmail.com"
+                    ]
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        #expect(outgoing.deliveries.count == 1)
+        #expect(outgoing.deliveries[0].proposal.sender == "m.arotron@gmail.com")
+    }
+
     @Test func proposeSendRejectsUnknownSender() async throws {
         let outgoing = FakeMailOutgoingSender()
         let env = try ProposeSendIdentityFixture(

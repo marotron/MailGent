@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.20.2] - 2026-10-28
+
+### Fixed
+
+- `propose_send` From: resolve the requested `sender` against Mail’s live account emails, set From as Mail expects (`Name <email>` when available), and fail closed if Mail would keep the default account — no silent send from another identity
+- `propose_send` From: Gmail / Googlemail local-part dots are equivalent on the MCP allow-list and when matching Mail’s live identities (e.g. `mar.kuj.cv@gmail.com` ↔ `markujcv@gmail.com`); delivery still sets Mail’s exact configured address
+
 ## [0.20.1] - 2026-10-27
 
 ### Added

@@ -1,6 +1,6 @@
 # MailGent
 
-**0.20.1 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.20.2 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -59,7 +59,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Control Center agent cards: Show / Hide MCP config, Copy Bearer / Copy MCP config, revoke with confirmation; paired agents show as glyphs in the menu bar
 - Agents talk to MailGent over MCP; MailGent has no built-in AI
 - Optional Settings → General → **Allow agents to open messages in Apple Mail** (off by default) enables MCP `open_in_mail`
-- Optional Settings → General → **Allow agents to propose sending mail** (off by default) enables MCP `propose_send` — larger confirm dialog with Formatted|Raw body preview (HTML preview only); **Send** / **Open in Mail** / **Cancel** before Apple Mail is touched
+- Optional Settings → General → **Allow agents to propose sending mail** (off by default) enables MCP `propose_send` — larger confirm dialog with Formatted|Raw body preview (HTML preview only); **Send** / **Open in Mail** / **Cancel** before Apple Mail is touched; requested `sender` must match a listed or Gmail-dot-equivalent address and a live Mail identity, or deliver fails (no silent default From)
 - MCP `list_accounts` lists Mail identities (`displayName`, `email`) with grant-filtered mailbox `placements`; by default only accounts with at least one placement are returned
 - Optional Settings → General → **Reveal accounts with no placements** (off by default) includes empty-placement identities in `list_accounts` and allows them as `propose_send` `sender`
 - MCP `get` returns `mailURL` (`message://…`) and `internetMessageID` when the message has an RFC Message-ID (fail closed when missing)
@@ -127,7 +127,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Agents can create/update drafts in a MailGent-owned ledger (in memory)
 - Drafts are **not** written into Mail.app; body-only drafts stay in MailGent and show in the Access Log
-- With **Allow agents to propose sending mail** on, `propose_send` opens a confirm dialog (Formatted|Raw preview; no attachments); **Send** or **Open in Mail** hands a new plain message to Apple Mail (Automation), not SMTP from MailGent
+- With **Allow agents to propose sending mail** on, `propose_send` opens a confirm dialog (Formatted|Raw preview; no attachments); **Send** or **Open in Mail** hands a new plain message to Apple Mail (Automation), not SMTP from MailGent; From is resolved against Mail’s live accounts (Gmail dots equivalent) and fails closed if it would not stick
 
 ### Install (DMG)
 

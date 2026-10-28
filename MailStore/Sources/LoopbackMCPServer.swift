@@ -122,7 +122,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.20.1"
+                        "version": "0.20.2"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -495,7 +495,7 @@ public struct LoopbackMCPServer {
             )
             let allowed = accounts.compactMap(\.email)
             let matched = allowed.contains {
-                $0.caseInsensitiveCompare(sender) == .orderedSame
+                MailOutgoingAppleScript.emailsEquivalent($0, sender)
             }
             if !matched {
                 let error = CallError.unknownSender(allowed: allowed)
@@ -929,7 +929,7 @@ public struct LoopbackMCPServer {
                         "sender": [
                             "type": "string",
                             "description":
-                                "Optional From address; must match an email from list_accounts (case-insensitive). Same catalog as list_accounts for the current Settings reveal toggle."
+                                "Optional From address; must match an email from list_accounts (case-insensitive; Gmail/Googlemail local-part dots are ignored). Delivery uses Mail’s live identity string. Same catalog as list_accounts for the current Settings reveal toggle."
                         ]
                     ],
                     "required": ["to", "subject", "body"]
