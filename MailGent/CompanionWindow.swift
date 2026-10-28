@@ -23,13 +23,19 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     /// One Ask dialog per request id. Concurrent prompts stay independent.
     private final class AskRecord {
         let window: NSWindow
-        var continuation: CheckedContinuation<ConditionalAccessDecision, Never>?
+        let context: ConditionalAccessPromptContext
+        var continuation: CheckedContinuation<ConditionalAccessPromptOutcome, Never>?
         var finished = false
         var pokeToken = 0
         let presentedAt = Date()
 
-        init(window: NSWindow, continuation: CheckedContinuation<ConditionalAccessDecision, Never>) {
+        init(
+            window: NSWindow,
+            context: ConditionalAccessPromptContext,
+            continuation: CheckedContinuation<ConditionalAccessPromptOutcome, Never>
+        ) {
             self.window = window
+            self.context = context
             self.continuation = continuation
         }
     }
@@ -167,7 +173,30 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     /// Menu Block / Allow — same once-only path as the dialog buttons.
     func decidePendingAsk(id: String, decision: ConditionalAccessDecision) {
-        finishAsk(id: id, decision: decision)
+        let outcome: ConditionalAccessPromptOutcome = decision == .allow ? .allow : .block
+        finishAsk(id: id, outcome: outcome)
+    }
+
+    /// After an armed rule commit, recheck other open Asks for the same agent when the rule can change them.
+    func rematchPendingAsks(
+        excluding id: String,
+        agentID: String,
+        rule: GrantRule,
+        enablements: [RuleEnablement]
+    ) {
+        let targets = asks.compactMap { askID, record -> String? in
+            guard askID != id else { return nil }
+            guard record.context.agentID == agentID else { return nil }
+            guard AskRuleRematch.shouldRecheck(
+                rule: rule,
+                enablements: enablements,
+                context: record.context
+            ) else { return nil }
+            return askID
+        }
+        for askID in targets {
+            finishAsk(id: askID, outcome: .recheck)
+        }
     }
 
     /// Raise every pending Ask. The selected window is ordered last. `makeKey` only when the menu is closed.
@@ -201,13 +230,13 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Present one conditional Ask dialog until Allow / Block / traffic-light close.
+    /// Present one conditional Ask dialog until Allow / Block / rematch recheck / traffic-light close.
     /// Each request gets its own `HostedWindow`. MenuBarExtra `hide` / `orderOut` cannot flash-dismiss it.
     func runConditionalAsk(
         request: ConditionalAccessPromptRequest,
         accountLabel: String,
         ruleSupport: ConditionalAccessAskRuleSupport? = nil
-    ) async -> ConditionalAccessDecision {
+    ) async -> ConditionalAccessPromptOutcome {
         await presentConditionalAsk(
             request: request,
             accountLabel: accountLabel,
@@ -254,7 +283,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         request: ConditionalAccessPromptRequest,
         accountLabel: String,
         ruleSupport: ConditionalAccessAskRuleSupport?
-    ) async -> ConditionalAccessDecision {
+    ) async -> ConditionalAccessPromptOutcome {
         await withCheckedContinuation { continuation in
             AskQueueIndicator.shared.register(
                 id: request.id,
@@ -266,10 +295,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 request: request,
                 accountLabel: accountLabel,
                 onAllow: { [weak self] in
-                    self?.finishAsk(id: request.id, decision: .allow)
+                    self?.finishAsk(id: request.id, outcome: .allow)
                 },
                 onBlock: { [weak self] in
-                    self?.finishAsk(id: request.id, decision: .block)
+                    self?.finishAsk(id: request.id, outcome: .block)
                 },
                 ruleSupport: ruleSupport,
                 showOpenInMail: request.context.mailURL != nil,
@@ -299,7 +328,11 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: 2400, height: 1600)
             cascade(window, index: index)
-            asks[request.id] = AskRecord(window: window, continuation: continuation)
+            asks[request.id] = AskRecord(
+                window: window,
+                context: request.context,
+                continuation: continuation
+            )
             bringAskForward(id: request.id)
         }
     }
@@ -499,20 +532,29 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    private func finishAsk(id: String, decision: ConditionalAccessDecision) {
+    private func finishAsk(id: String, outcome: ConditionalAccessPromptOutcome) {
         guard let record = asks[id] else { return }
         if record.finished {
             MailGentLog.trace("ask finish ignored (already decided) id=\(id)")
             return
         }
-        guard AskQueueIndicator.shared.resolve(id: id, with: decision) != nil else { return }
+        let removed: Bool
+        switch outcome {
+        case .allow:
+            removed = AskQueueIndicator.shared.resolve(id: id, with: .allow) != nil
+        case .block:
+            removed = AskQueueIndicator.shared.resolve(id: id, with: .block) != nil
+        case .recheck:
+            removed = AskQueueIndicator.shared.remove(id: id)
+        }
+        guard removed else { return }
         record.finished = true
         record.pokeToken += 1
         let continuation = record.continuation
         record.continuation = nil
         asks[id] = nil
         dismissAskWindow(record.window)
-        continuation?.resume(returning: decision)
+        continuation?.resume(returning: outcome)
     }
 
     private func finishSendProposal(id: String, decision: SendProposalDecision) {
@@ -716,7 +758,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
         if let id = asks.first(where: { $0.value.window === sender })?.key {
             // Traffic-light / ⌘W on this Ask → Block (fail-closed) for this request only.
-            finishAsk(id: id, decision: .block)
+            finishAsk(id: id, outcome: .block)
             return false
         }
         if let id = sendProposals.first(where: { $0.value.window === sender })?.key {

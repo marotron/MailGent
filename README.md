@@ -1,6 +1,6 @@
 # MailGent
 
-**0.20.3 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.20.4 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -86,6 +86,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Red badge on the menu-bar icon (and Dock when visible) shows how many access requests are waiting
 - The status menu lists them under **Access requests** (count, one row each, **Block** / **Allow**). Clicking a row raises that window and does not decide it. Opening the menu raises every pending window without taking focus; closing it leaves the selected one in front
 - Optional rule from Ask: Subject / From **Add to rule** picks open a right-pane editor (New or Existing). **Allow** / **Block** writes the rule when armed; closing the window still blocks this read without writing a rule
+- Armed rule commit rematches other open Asks for the same agent: matching windows recheck (full cover → silent complete; partial cover → new Ask for leftovers only). Pass and Block both rematch
 - Ask rule editor **Enable on**: This mailbox (default) or This account · all mailboxes for that agent
 - Pass/Block field defaults from Ask keep Attachment content when names were already On on Scope (names ride along as the carrier bit)
 - Long From / To / Cc lines stack display name then address badge when they do not fit side-by-side; **Add to rule** stays on the first line
@@ -95,7 +96,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Shared Pass / Block overlays on mail that is already in scope (match From / Subject; optional When date window)
 - Enable a rule per agent on a placement in Grant Desk
-- From an Ask prompt, create or update a rule via envelope picks; enablement is the prompting agent plus that account and either the Ask mailbox or the whole account (Enable on)
+- From an Ask prompt, create or update a rule via envelope picks; enablement is the prompting agent plus that account and either the Ask mailbox or the whole account (Enable on). Saving that rule also rematches other pending Asks for that agent when the rule can change them
 - Matcher chips in the rule editor: copy the value to the pasteboard, or append that matcher onto another Pass/Block rule (same From or Subject field); works in view and edit
 - Duplicate matchers in a rule (same mode + value) are flagged with orange chip chrome and a warning mark
 

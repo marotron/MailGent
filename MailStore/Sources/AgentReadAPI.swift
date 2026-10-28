@@ -1,9 +1,24 @@
 import Foundation
 
-/// User decision on conditional field access prompt.
+/// User decision on conditional field access prompt (Remember-Ask cache + menu Allow/Block).
 public enum ConditionalAccessDecision: String, Sendable, Codable {
     case allow
     case block
+}
+
+/// Prompter result for one Ask window. `recheck` re-runs grant→rules→Ask and is never cached.
+public enum ConditionalAccessPromptOutcome: String, Sendable, Codable {
+    case allow
+    case block
+    case recheck
+
+    public var decision: ConditionalAccessDecision? {
+        switch self {
+        case .allow: return .allow
+        case .block: return .block
+        case .recheck: return nil
+        }
+    }
 }
 
 /// One Ask-field value shown to the human before Allow / Block.
@@ -215,7 +230,7 @@ public struct AgentReadAPI {
     public let accountsDatabases: [URL]?
     public var allowConditionalAccessPrompts: Bool
     public var askDecisionCachePolicy: AskDecisionCachePolicy
-    public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)?
+    public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)?
 
     public init(
         read: ReadAPI,
@@ -229,7 +244,7 @@ public struct AgentReadAPI {
         accountsDatabases: [URL]? = nil,
         allowConditionalAccessPrompts: Bool = false,
         askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
-        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
+        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)? = nil
     ) {
         self.read = read
         self.pairing = pairing
@@ -263,10 +278,9 @@ public struct AgentReadAPI {
 
     /// Resolves Ask mode fields for this get.
     /// When allow is off: Ask → denied (classic On/Off behavior; no popup).
-    /// When allow is on: prompt once for all Ask fields; timeout/dismiss → deny.
+    /// When allow is on: prompt for Ask fields; `recheck` re-reads grant→rules and may re-prompt leftovers.
     /// `limitingAskTo` restricts which Ask fields are prompted (e.g. Attachment content only on `get_attachment`).
     private func resolveConditionalFields(
-        _ fields: GrantFields,
         agentID: String,
         agentName: String,
         message: ReadMessage,
@@ -275,10 +289,8 @@ public struct AgentReadAPI {
         func isAsk(_ mode: FieldAccessMode, label: String) -> Bool {
             mode == .ask && (limitingAskTo?.contains(label) ?? true)
         }
-        let askMask = Self.askMask(fields, limitingAskTo: limitingAskTo)
-        if !allowConditionalAccessPrompts {
-            // Feature off → Ask denied (same as classic grants without conditional).
-            return ConditionalFieldResolution(
+        func denyAsks(_ fields: GrantFields) -> ConditionalFieldResolution {
+            ConditionalFieldResolution(
                 fields: GrantFields(
                     subjectMode: isAsk(fields.subjectMode, label: "Subject") ? .off : fields.subjectMode,
                     fromMode: isAsk(fields.fromMode, label: "From") ? .off : fields.fromMode,
@@ -296,59 +308,124 @@ public struct AgentReadAPI {
                 prompted: .none
             )
         }
-
-        let askLabels = collectAskFields(fields).filter { limitingAskTo?.contains($0) ?? true }
-        guard !askLabels.isEmpty else {
-            return ConditionalFieldResolution(fields: fields, confirmed: .none, blocked: .none, prompted: .none)
-        }
-
-        var cachedAllow: Set<String> = []
-        var cachedBlock: Set<String> = []
-        var needPrompt: [String] = []
+        let probe = IndexedMessage(
+            id: message.id,
+            accountID: message.accountID,
+            placement: message.placement,
+            from: message.from,
+            to: message.to,
+            cc: message.cc,
+            date: message.date,
+            subject: message.subject,
+            body: "",
+            isPartial: message.isPartial
+        )
         let policy = askDecisionCachePolicy
-        for label in askLabels {
-            if let cached = fieldAskDecisionCache.decision(
-                agentID: agentID,
-                accountID: message.accountID,
-                placement: message.placement,
-                messageID: message.id,
-                field: label,
-                policy: policy
-            ) {
-                if cached == .allow {
-                    cachedAllow.insert(label)
-                } else {
-                    cachedBlock.insert(label)
-                }
-            } else {
-                needPrompt.append(label)
-            }
-        }
 
-        var promptedAllow: Set<String> = []
-        var promptedBlock: Set<String> = []
-        if !needPrompt.isEmpty {
-            if let prompter = conditionalAccessPrompter {
-                let context = ConditionalAccessPromptContext(
+        while true {
+            guard let fields = effectiveFields(for: probe, agentID: agentID) else {
+                return ConditionalFieldResolution(
+                    fields: .none,
+                    confirmed: .none,
+                    blocked: .none,
+                    prompted: .none
+                )
+            }
+            if !allowConditionalAccessPrompts {
+                // Feature off → Ask denied (same as classic grants without conditional).
+                return denyAsks(fields)
+            }
+
+            let askMask = Self.askMask(fields, limitingAskTo: limitingAskTo)
+            let askLabels = collectAskFields(fields).filter { limitingAskTo?.contains($0) ?? true }
+            guard !askLabels.isEmpty else {
+                return ConditionalFieldResolution(
+                    fields: fields,
+                    confirmed: .none,
+                    blocked: .none,
+                    prompted: .none
+                )
+            }
+
+            var cachedAllow: Set<String> = []
+            var cachedBlock: Set<String> = []
+            var needPrompt: [String] = []
+            for label in askLabels {
+                if let cached = fieldAskDecisionCache.decision(
                     agentID: agentID,
-                    agentName: agentName,
                     accountID: message.accountID,
                     placement: message.placement,
                     messageID: message.id,
-                    internetMessageID: message.internetMessageID,
-                    requestedFields: needPrompt,
-                    fieldPreviews: Self.fieldPreviews(message: message, askLabels: needPrompt),
-                    // Raw HTML for Ask message preview (not prettyHTMLBody — prefix heuristic can nil it).
-                    htmlBody: message.htmlBody,
-                    envelope: ConditionalMessageEnvelope(
-                        subject: message.subject,
-                        from: message.from,
-                        to: message.to,
-                        cc: message.cc,
-                        date: message.date
-                    )
+                    field: label,
+                    policy: policy
+                ) {
+                    if cached == .allow {
+                        cachedAllow.insert(label)
+                    } else {
+                        cachedBlock.insert(label)
+                    }
+                } else {
+                    needPrompt.append(label)
+                }
+            }
+
+            if needPrompt.isEmpty {
+                let allowLabels = cachedAllow
+                let blockLabels = cachedBlock
+                return ConditionalFieldResolution(
+                    fields: Self.applyingAskDecisions(
+                        fields,
+                        allowLabels: allowLabels,
+                        blockLabels: blockLabels,
+                        limitingAskTo: limitingAskTo
+                    ),
+                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+                    blocked: Self.mask(forLabels: blockLabels, in: askMask),
+                    prompted: .none
                 )
-                let decision = await prompter(context)
+            }
+
+            guard let prompter = conditionalAccessPrompter else {
+                // No prompter → allow remaining Ask fields (fallback; not user-confirmed).
+                let allowLabels = cachedAllow.union(needPrompt)
+                return ConditionalFieldResolution(
+                    fields: Self.applyingAskDecisions(
+                        fields,
+                        allowLabels: allowLabels,
+                        blockLabels: cachedBlock,
+                        limitingAskTo: limitingAskTo
+                    ),
+                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+                    blocked: Self.mask(forLabels: cachedBlock, in: askMask),
+                    prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
+                )
+            }
+
+            let context = ConditionalAccessPromptContext(
+                agentID: agentID,
+                agentName: agentName,
+                accountID: message.accountID,
+                placement: message.placement,
+                messageID: message.id,
+                internetMessageID: message.internetMessageID,
+                requestedFields: needPrompt,
+                fieldPreviews: Self.fieldPreviews(message: message, askLabels: needPrompt),
+                // Raw HTML for Ask message preview (not prettyHTMLBody — prefix heuristic can nil it).
+                htmlBody: message.htmlBody,
+                envelope: ConditionalMessageEnvelope(
+                    subject: message.subject,
+                    from: message.from,
+                    to: message.to,
+                    cc: message.cc,
+                    date: message.date
+                )
+            )
+            let outcome = await prompter(context)
+            switch outcome {
+            case .recheck:
+                continue
+            case .allow, .block:
+                guard let decision = outcome.decision else { continue }
                 if policy.enabled {
                     for label in needPrompt {
                         fieldAskDecisionCache.store(
@@ -362,31 +439,24 @@ public struct AgentReadAPI {
                         )
                     }
                 }
-                if decision == .allow {
-                    promptedAllow = Set(needPrompt)
-                } else {
-                    promptedBlock = Set(needPrompt)
-                }
-            } else {
-                // No prompter → allow remaining Ask fields (fallback; not user-confirmed).
-                promptedAllow = Set(needPrompt)
+                let promptedAllow: Set<String> = decision == .allow ? Set(needPrompt) : []
+                let promptedBlock: Set<String> = decision == .block ? Set(needPrompt) : []
+                let allowLabels = cachedAllow.union(promptedAllow)
+                let blockLabels = cachedBlock.union(promptedBlock)
+                let promptedLabels = promptedAllow.union(promptedBlock)
+                return ConditionalFieldResolution(
+                    fields: Self.applyingAskDecisions(
+                        fields,
+                        allowLabels: allowLabels,
+                        blockLabels: blockLabels,
+                        limitingAskTo: limitingAskTo
+                    ),
+                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+                    blocked: Self.mask(forLabels: blockLabels, in: askMask),
+                    prompted: Self.mask(forLabels: promptedLabels, in: askMask)
+                )
             }
         }
-
-        let allowLabels = cachedAllow.union(promptedAllow)
-        let blockLabels = cachedBlock.union(promptedBlock)
-        let promptedLabels = promptedAllow.union(promptedBlock)
-        return ConditionalFieldResolution(
-            fields: Self.applyingAskDecisions(
-                fields,
-                allowLabels: allowLabels,
-                blockLabels: blockLabels,
-                limitingAskTo: limitingAskTo
-            ),
-            confirmed: Self.mask(forLabels: allowLabels, in: askMask),
-            blocked: Self.mask(forLabels: blockLabels, in: askMask),
-            prompted: Self.mask(forLabels: promptedLabels, in: askMask)
-        )
     }
 
     private static func applyingAskDecisions(
@@ -414,7 +484,9 @@ public struct AgentReadAPI {
     }
 
     private static func mask(forLabels labels: Set<String>, in askMask: GrantFields) -> GrantFields {
-        GrantFields(
+        // Set content after init — GrantFields init clears content when metadata is off,
+        // but content-only Ask (names already On on Scope) must still count as confirmed.
+        var mask = GrantFields(
             subjectMode: labels.contains("Subject") && askMask.subject ? .on : .off,
             fromMode: labels.contains("From") && askMask.from ? .on : .off,
             toMode: labels.contains("To") && askMask.to ? .on : .off,
@@ -423,9 +495,12 @@ public struct AgentReadAPI {
             bodyMode: labels.contains("Body") && askMask.body ? .on : .off,
             attachmentMetadataMode: labels.contains("Attachment names") && askMask.attachmentMetadata
                 ? .on : .off,
-            attachmentContentMode: labels.contains("Attachment content") && askMask.attachmentContent
-                ? .on : .off
+            attachmentContentMode: .off
         )
+        if labels.contains("Attachment content"), askMask.attachmentContent {
+            mask.attachmentContentMode = .on
+        }
+        return mask
     }
 
     private static let bodyPreviewCap = 2_000
@@ -576,7 +651,6 @@ public struct AgentReadAPI {
                 return (cached == .allow, cached == .block)
             }
             let resolution = await resolveConditionalFields(
-                fields,
                 agentID: agentID,
                 agentName: agentName,
                 message: message,
@@ -774,7 +848,7 @@ public struct AgentReadAPI {
                 body: "",
                 isPartial: message.isPartial
             )
-            guard let grant = effectiveGrant(for: probe, agentID: agent.id) else {
+            guard effectiveGrant(for: probe, agentID: agent.id) != nil else {
                 record(
                     kind: .get,
                     agent: agent,
@@ -785,9 +859,7 @@ public struct AgentReadAPI {
                 )
                 throw PairingError.unauthorized
             }
-            let rawFields = grant.fields
             let resolution = await resolveConditionalFields(
-                rawFields,
                 agentID: agent.id,
                 agentName: agent.name,
                 message: message
@@ -797,6 +869,8 @@ public struct AgentReadAPI {
                 message: message,
                 resolution: resolution
             )
+            // Refresh overlays after possible mid-Ask rule rematch.
+            let appliedRules = effectiveGrant(for: probe, agentID: agent.id)?.applied ?? []
             let fields = resolution.fields
             let granted = message.applying(fields)
             var (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
@@ -836,7 +910,7 @@ public struct AgentReadAPI {
                         fields: fields,
                         subjectSanitized: subjectField,
                         bodySanitized: bodyField,
-                        appliedRules: grant.applied,
+                        appliedRules: appliedRules,
                         conditionalFields: resolution.confirmed,
                         conditionalBlockedFields: resolution.blocked,
                         conditionalCachedFields: cachedFields

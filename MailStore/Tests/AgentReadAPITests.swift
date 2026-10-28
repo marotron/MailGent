@@ -1505,6 +1505,155 @@ struct AgentReadAPITests {
         #expect(capture.bodyBadge == "HTML only")
         #expect(capture.bodyPreview == "(empty)")
     }
+
+    @Test func getRecheckFullyCoveredCompletesWithoutSecondPrompt() async throws {
+        final class Harness: @unchecked Sendable {
+            var rules: RuleStore!
+            var agentID: String = ""
+            var accountID: String = ""
+            var promptCount = 0
+            var promptedFields: [[String]] = []
+        }
+        let harness = Harness()
+        let cache = FieldAskDecisionCache()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask,
+                attachmentMetadataMode: .on,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: AskDecisionCachePolicy(
+                enabled: true,
+                ttlSeconds: 3_600,
+                shareScope: .perAgent
+            ),
+            fieldAskDecisionCache: cache,
+            conditionalAccessPrompter: { context in
+                harness.promptCount += 1
+                harness.promptedFields.append(context.requestedFields)
+                #expect(harness.promptCount == 1)
+                harness.rules.upsert(
+                    GrantRule(
+                        id: "rule-from-ask",
+                        name: "From this ask",
+                        nick: "A",
+                        fromRules: [MatchRule(value: "alice@example.com", mode: .exact)],
+                        fields: GrantFields(
+                            subject: false,
+                            from: false,
+                            to: false,
+                            cc: false,
+                            date: false,
+                            body: true,
+                            attachmentMetadata: true,
+                            attachmentContent: true
+                        )
+                    )
+                )
+                harness.rules.setEnabled(
+                    true,
+                    ruleID: "rule-from-ask",
+                    agentID: harness.agentID,
+                    accountID: harness.accountID,
+                    placement: "INBOX"
+                )
+                return .recheck
+            }
+        )
+        defer { env.remove() }
+        harness.rules = env.rules
+        harness.agentID = env.agentID
+        harness.accountID = env.accountID
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(harness.promptCount == 1)
+        #expect(harness.promptedFields == [["Body", "Attachment content"]])
+        #expect(message.body == .text("Please pay"))
+        #expect(
+            cache.decision(
+                agentID: env.agentID,
+                accountID: env.accountID,
+                placement: "INBOX",
+                messageID: "1",
+                field: "Body",
+                policy: AskDecisionCachePolicy(enabled: true, ttlSeconds: 3_600, shareScope: .perAgent)
+            ) == nil
+        )
+    }
+
+    @Test func getRecheckPartialCoverRepromptsLeftoverAskFields() async throws {
+        final class Harness: @unchecked Sendable {
+            var rules: RuleStore!
+            var agentID: String = ""
+            var accountID: String = ""
+            var promptCount = 0
+            var promptedFields: [[String]] = []
+        }
+        let harness = Harness()
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask,
+                attachmentMetadataMode: .on,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            conditionalAccessPrompter: { context in
+                harness.promptCount += 1
+                harness.promptedFields.append(context.requestedFields)
+                if harness.promptCount == 1 {
+                    harness.rules.upsert(
+                        GrantRule(
+                            id: "rule-body-only",
+                            name: "Body only",
+                            nick: "A",
+                            fromRules: [MatchRule(value: "alice@example.com", mode: .exact)],
+                            fields: GrantFields(envelope: false, body: true)
+                        )
+                    )
+                    harness.rules.setEnabled(
+                        true,
+                        ruleID: "rule-body-only",
+                        agentID: harness.agentID,
+                        accountID: harness.accountID,
+                        placement: "INBOX"
+                    )
+                    return .recheck
+                }
+                return .allow
+            }
+        )
+        defer { env.remove() }
+        harness.rules = env.rules
+        harness.agentID = env.agentID
+        harness.accountID = env.accountID
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(harness.promptCount == 2)
+        #expect(harness.promptedFields == [["Body", "Attachment content"], ["Attachment content"]])
+        #expect(message.body == .text("Please pay"))
+        #expect(message.leakGuardAccess?.conditionalAccessFields == ["Attachment content"])
+    }
 }
 
 private struct AgentReadFixture {
@@ -1524,7 +1673,7 @@ private struct AgentReadFixture {
         allowConditionalAccessPrompts: Bool = false,
         askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
         fieldAskDecisionCache: FieldAskDecisionCache = FieldAskDecisionCache(),
-        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
+        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)? = nil
     ) throws {
         root = try FixtureTree()
         let defaultRFC822 = """
@@ -1684,7 +1833,7 @@ private struct AttachmentReadFixture {
         oversizedMetadata: Bool = false,
         extraJPEGAttachment: Data? = nil,
         allowConditionalAccessPrompts: Bool = false,
-        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessDecision)? = nil
+        conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)? = nil
     ) throws {
         root = try FixtureTree()
         if oversizedMetadata {

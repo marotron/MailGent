@@ -28,6 +28,7 @@ public enum AskRuleEnableScope: String, CaseIterable, Identifiable, Sendable {
 /// Rule save hooks for the Ask rule editor (prompting agent only).
 public struct ConditionalAccessAskRuleSupport {
     public let allRules: () -> [GrantRule]
+    public let allEnablements: () -> [RuleEnablement]
     public let nextNick: () -> String
     public let messageProbe: IndexedMessage
     /// Persists the rule and enables it for the prompting agent at `placement`
@@ -36,11 +37,13 @@ public struct ConditionalAccessAskRuleSupport {
 
     public init(
         allRules: @escaping () -> [GrantRule],
+        allEnablements: @escaping () -> [RuleEnablement] = { [] },
         nextNick: @escaping () -> String,
         messageProbe: IndexedMessage,
         onSave: @escaping (GrantRule, String?) -> Void
     ) {
         self.allRules = allRules
+        self.allEnablements = allEnablements
         self.nextNick = nextNick
         self.messageProbe = messageProbe
         self.onSave = onSave
@@ -146,14 +149,14 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
         }
     }
 
-    /// Builds and persists the rule when armed. Returns false when nothing to write.
+    /// Builds and persists the rule when armed. Returns the saved rule, or nil when nothing to write.
     @discardableResult
     func commit(
         decision: ConditionalAccessDecision,
         context: ConditionalAccessPromptContext,
         support: ConditionalAccessAskRuleSupport
-    ) -> Bool {
-        guard isArmed else { return false }
+    ) -> GrantRule? {
+        guard isArmed else { return nil }
         let polarity = resolveCommitPolarity(decision: decision, support: support)
         let fromRules = withDraft(fromRules, mode: fromDraftMode, value: fromDraftValue)
         let subjectRules = withDraft(subjectRules, mode: subjectDraftMode, value: subjectDraftValue)
@@ -162,7 +165,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
                 !whenAfter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     || !whenBefore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             )
-        guard !fromRules.isEmpty || !subjectRules.isEmpty || whenCommitted else { return false }
+        guard !fromRules.isEmpty || !subjectRules.isEmpty || whenCommitted else { return nil }
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let when: RuleWhen? = whenEnabled
@@ -174,7 +177,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
 
         if intent == .existing {
             guard let current = support.allRules().first(where: { $0.id == selectedRuleID ?? ruleID }) else {
-                return false
+                return nil
             }
             let rule = GrantRule(
                 id: current.id,
@@ -189,7 +192,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
                 fields: detailOpen ? fields : current.fields
             )
             support.onSave(rule, enableScope.placement(forAskPlacement: context.placement))
-            return true
+            return rule
         }
 
         let rule = GrantRule(
@@ -205,7 +208,7 @@ final class ConditionalAccessAskRuleDraft: ObservableObject {
             fields: fields
         )
         support.onSave(rule, enableScope.placement(forAskPlacement: context.placement))
-        return true
+        return rule
     }
 
     func bootstrapNewRule(context: ConditionalAccessPromptContext, support: ConditionalAccessAskRuleSupport) {

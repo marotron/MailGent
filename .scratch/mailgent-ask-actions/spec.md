@@ -15,10 +15,10 @@ Product lock for optional actions on the conditional Ask dialog (`ConditionalAcc
 
 - Creating or updating a Pass/Block from Ask is **optional**.
 - Modes: **New rule** (append) or **Existing rule** (edit a rule already in `rules.json`).
-- A saved/updated rule affects **future** matching mail only.
-- The user must still press **Allow** or **Block** for the current `get`.
-- Closing without Allow/Block still **Blocks** this read (fail-closed).
-- Does **not** change `ConditionalAccessDecision` (stays `.allow` / `.block`).
+- A saved/updated rule applies to **future** matching mail, and **rematches other open Asks** for the same agent when the rule can change them (Pass and Block; partial cover re-prompts leftovers only).
+- The user must still press **Allow** or **Block** for the current `get` (Ask #1). Rematch never auto-answers that window.
+- Closing without Allow/Block still **Blocks** this read (fail-closed); **no** rule write.
+- `ConditionalAccessDecision` stays `.allow` / `.block` (cache + menu). Prompter may also return `.recheck` via `ConditionalAccessPromptOutcome` (never cached).
 
 ### Reuse existing rule model
 
@@ -57,7 +57,7 @@ Locked to proto **variant G** (`examples/prototype-ask-rule-right.html?variant=G
 
 [#21](https://github.com/marotron/MailGent/issues/21), [#22](https://github.com/marotron/MailGent/issues/22), [#32](https://github.com/marotron/MailGent/issues/32), and [#41](https://github.com/marotron/MailGent/issues/41) ship in any order. Identity is pairing `agentID` ([#31](https://github.com/marotron/MailGent/issues/31)): MCP and CLI on one endpoint share grants, rule enablements, and the Ask cache; another endpoint does not.
 
-On every `get`: Scope grant → Pass/Block overlays → Ask only for fields still on Ask. Cache is per field for that `agentID` + message, and only for fields still on Ask. A rule save does not write the cache. A redacted Allow stays one-shot until the cache entry can carry an optional body override.
+On every `get`: Scope grant → Pass/Block overlays → Ask only for fields still on Ask. Cache is per field for that `agentID` + message, and only for fields still on Ask. A rule save does not write the Ask cache. Rematch resumes other pending gets with `.recheck` so overlays re-apply; leftover Ask fields may open a new window. A redacted Allow stays one-shot until the cache entry can carry an optional body override.
 
 ## Current seams
 
@@ -65,7 +65,10 @@ On every `get`: Scope grant → Pass/Block overlays → Ask only for fields stil
 flowchart LR
   get["MCP get"] --> ask["Ask fields?"]
   ask -->|yes| dialog["ConditionalAccessPromptDialog"]
-  dialog -->|Allow or Block| resolve["this read only"]
+  dialog -->|Allow or Block| resolve["this read"]
+  dialog -->|armed rule commit| rematch["rematch other open Asks"]
+  rematch --> recheck["finishAsk recheck"]
+  recheck --> loop["resolveConditionalFields loop"]
   resolve --> leak["leak guard"]
   leak --> agent["agent"]
   rulesUI["Grant Desk Rules"] --> store["rules.json"]
@@ -76,12 +79,14 @@ flowchart LR
 |---------|------|
 | Ask UI | `MailGent/ConditionalAccessPrompt.swift` |
 | Ask host | `MailGent/CompanionWindow.swift` (`DetachedWindowHost`) |
-| Decision | `MailStore/Sources/AgentReadAPI.swift` → `ConditionalAccessDecision` |
+| Decision / rematch outcome | `MailStore/Sources/AgentReadAPI.swift` → `ConditionalAccessDecision` + `ConditionalAccessPromptOutcome` |
+| Rematch gate | `MailStore/Sources/AskRuleRematch.swift` → `shouldRecheck` |
 | Rule authoring today | `MailGent/PassDeskPane.swift` via `AgentBridge.createRuleDraft` |
 
 ## Out of scope
 
-- Auto-Allow / Auto-Block when saving a rule.
+- Rematch on Grant Desk rule edits.
 - Opening Grant Desk from Ask.
 - Teaching the agent new MCP tools for redaction.
 - Changing RuleEngine match semantics.
+- In-place field shrinking without dismissing the window.
