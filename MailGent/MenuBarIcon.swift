@@ -38,12 +38,19 @@ struct PendingAskState: Equatable, Sendable {
 
     /// Removes one request and returns the decision. A second call for the same id does nothing.
     mutating func resolve(id: String, with decision: ConditionalAccessDecision) -> ConditionalAccessDecision? {
-        guard let index = summaries.firstIndex(where: { $0.id == id }) else { return nil }
+        guard remove(id: id) else { return nil }
+        return decision
+    }
+
+    /// Drops one pending request without an Allow/Block (e.g. rematch recheck).
+    @discardableResult
+    mutating func remove(id: String) -> Bool {
+        guard let index = summaries.firstIndex(where: { $0.id == id }) else { return false }
         summaries.remove(at: index)
         if selectedID == id {
             selectedID = summaries.first?.id
         }
-        return decision
+        return true
     }
 
     /// Traffic-light close is fail-closed Block for that request only.
@@ -113,6 +120,13 @@ final class AskQueueIndicator: ObservableObject {
         let applied = pending.resolve(id: id, with: decision)
         if applied != nil { syncDockBadge() }
         return applied
+    }
+
+    @discardableResult
+    func remove(id: String) -> Bool {
+        let removed = pending.remove(id: id)
+        if removed { syncDockBadge() }
+        return removed
     }
 
     private func syncDockBadge() {

@@ -44,6 +44,19 @@ struct PendingAskStateTests {
         #expect(state.count == 1)
     }
 
+    @Test func removeDropsRequestWithoutAllowOrBlock() {
+        var state = PendingAskState()
+        state.register(id: "first", agent: "Cursor", subject: "Payslip April")
+        state.register(id: "second", agent: "Grok", subject: "Contract")
+
+        let removed = state.remove(id: "first")
+        #expect(removed)
+        #expect(state.summaries.map(\.id) == ["second"])
+        #expect(state.selectedID == "second")
+        let again = state.remove(id: "first")
+        #expect(!again)
+    }
+
     @Test func closingAWindowBlocksOnlyThatRequest() {
         var state = PendingAskState()
         state.register(id: "first", agent: "Cursor", subject: "Payslip April")

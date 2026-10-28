@@ -1463,9 +1463,10 @@ final class AgentBridge {
         refreshGatewayLeakGuard()
     }
 
-    private func askDecision(for context: ConditionalAccessPromptContext) async -> ConditionalAccessDecision {
+    private func askDecision(for context: ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome {
         let support = ConditionalAccessAskRuleSupport(
             allRules: { [rules] in rules.allRules() },
+            allEnablements: { [rules] in rules.allEnablements() },
             nextNick: { [weak self] in self?.nextRuleNick() ?? "A" },
             messageProbe: context.matcherProbeMessage(),
             onSave: { [weak self] rule, placement in

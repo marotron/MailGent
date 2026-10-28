@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.20.4] - 2026-10-28
+
+### Added
+
+- When an Ask commits an armed Pass/Block rule, other open Asks for the same agent are checked; matching ones re-run grant→rules→Ask (full cover completes silently; partial cover re-prompts only leftover Ask fields)
+
+### Fixed
+
+- Ask confirm/block badges for Attachment content alone (names already On on Scope) no longer drop the content bit when building the confirmed field mask
+
 ## [0.20.3] - 2026-10-28
 
 ### Fixed

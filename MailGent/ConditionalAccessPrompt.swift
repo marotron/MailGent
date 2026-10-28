@@ -32,28 +32,34 @@ public struct ConditionalAccessPromptRequest: Identifiable, Sendable {
 public final class ConditionalAccessPromptCoordinator: ObservableObject {
     public init() {}
 
-    /// Request a decision from the user. Suspends until Allow / Block for this request.
+    /// Request a decision from the user. Suspends until Allow / Block / rematch recheck for this request.
     /// Concurrent gets each open their own dialog; one decision never resolves another.
     /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
     public func requestDecision(
         context: ConditionalAccessPromptContext,
         accountLabel: String? = nil,
         ruleSupport: ConditionalAccessAskRuleSupport? = nil
-    ) async -> ConditionalAccessDecision {
+    ) async -> ConditionalAccessPromptOutcome {
         let request = ConditionalAccessPromptRequest(context: context)
         let mailboxLabel = accountLabel.flatMap { $0.isEmpty ? nil : $0 } ?? context.accountID
         let fieldsText = context.requestedFields.joined(separator: ", ")
 
-        let decision = await DetachedWindowHost.shared.runConditionalAsk(
+        let outcome = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
             accountLabel: mailboxLabel,
             ruleSupport: ruleSupport
         )
 
+        let label: String
+        switch outcome {
+        case .allow: label = "allow"
+        case .block: label = "block"
+        case .recheck: label = "recheck"
+        }
         MailGentLog.trace(
-            "conditional access \(decision == .allow ? "allow" : "block") agent=\(context.agentName) fields=\(fieldsText)"
+            "conditional access \(label) agent=\(context.agentName) fields=\(fieldsText)"
         )
-        return decision
+        return outcome
     }
 }
 
@@ -749,11 +755,18 @@ struct ConditionalAccessPromptDialog: View {
     }
 
     private func resolveDecision(_ decision: ConditionalAccessDecision) {
-        if let ruleSupport, ruleDraft.isArmed {
-            _ = ruleDraft.commit(
-                decision: decision,
-                context: request.context,
-                support: ruleSupport
+        if let ruleSupport, ruleDraft.isArmed,
+           let saved = ruleDraft.commit(
+               decision: decision,
+               context: request.context,
+               support: ruleSupport
+           )
+        {
+            DetachedWindowHost.shared.rematchPendingAsks(
+                excluding: request.id,
+                agentID: request.context.agentID,
+                rule: saved,
+                enablements: ruleSupport.allEnablements()
             )
         }
         switch decision {
