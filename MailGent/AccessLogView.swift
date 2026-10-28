@@ -657,6 +657,14 @@ private struct AccessLogDetail: View {
                     omitsBody: false,
                     showsFieldBadges: false,
                     attachmentContentCards: AccessLogFormat.getAttachmentContentCards(for: ref),
+                    onAttachmentPreview: { filename in
+                        session.openAttachment(
+                            accountID: ref.accountID,
+                            placement: ref.placement,
+                            id: ref.id,
+                            filename: filename
+                        )
+                    },
                     showsChipRowActions: true,
                     onChipRowPreview: {
                         session.openRead(
@@ -1616,12 +1624,25 @@ enum AccessLogFormat {
             }
         }
 
+        /// Under a single `get_attachment` FileCard. Nested `get` Formatted uses
+        /// `getAttachmentContentPreviewNote` once under the whole list instead.
         var previewBlockedReason: String? {
             switch state {
             case .granted: return nil
-            case .denied: return "Not delivered to the agent. You can still preview it."
-            case .missing: return "Attachment is not available in Mail — nothing to preview."
-            case .huge: return "Too large to deliver to the agent. You can still preview it."
+            case .denied: return "File content was not delivered to the agent. You can still preview it."
+            case .missing:
+                if stateLineOverride != nil { return nil }
+                return "Attachment is not available in Mail — nothing to preview."
+            case .huge: return "File content was too large to deliver to the agent. You can still preview it."
+            }
+        }
+
+        /// True when Preview can still open Mail bytes (denied / huge / omitted-from-get).
+        var canStillPreviewFromMail: Bool {
+            switch state {
+            case .granted: return false
+            case .denied, .huge: return true
+            case .missing: return stateLineOverride != nil
             }
         }
 
@@ -1704,7 +1725,19 @@ enum AccessLogFormat {
         }
     }
 
-    /// FileCard-shaped Attachment Content inside a `get` Formatted card (no nested Preview).
+    /// Once under Attachment Content on Access Log `get` Formatted (not per FileCard).
+    static let getAttachmentContentPreviewNote =
+        "File content was not delivered to the agent as part of this get call. You can still preview it."
+
+    static func showsGetAttachmentContentPreviewNote(for cards: [AttachmentCardModel]) -> Bool {
+        cards.contains { card in
+            card.canStillPreviewFromMail
+                && card.filename != "(attachment)"
+                && card.filename != "(none named)"
+        }
+    }
+
+    /// FileCard-shaped Attachment Content inside a `get` Formatted card.
     static func getAttachmentContentCards(for ref: AuditMessageRef) -> [AttachmentCardModel] {
         let named = ref.attachments
         if !ref.fields.attachmentContent {

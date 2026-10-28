@@ -271,11 +271,12 @@
 
     /* Non-granted: status glyph on paper so it stays readable on the hatched card */
     .status-icon {
-      width: 18px; height: 18px; flex: 0 0 auto;
-      border-radius: 4px;
+      /* Match .secondary-action collapsed face (20 × radius 6). */
+      width: 20px; height: 20px; flex: 0 0 auto;
+      border-radius: 6px;
       display: grid; place-items: center;
       font: 800 10px/1 "SF Pro Text", -apple-system, sans-serif;
-      background: #fff;
+      background: #f4f6f9;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
     }
     .status-icon .lock-ic { width: 10px; height: 11px; }
@@ -635,7 +636,7 @@
       padding: 8px; gap: 4px;
     }
     .attach-cols .file-name { font-size: 12px; }
-    .attach-cols .status-icon { width: 18px; height: 18px; font-size: 10px; }
+    .attach-cols .status-icon { width: 20px; height: 20px; font-size: 10px; }
     .attach-tile {
       display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.05);
       border-radius: 6px; padding: 6px; min-height: 32px; font-size: 12px; color: var(--muted);
@@ -1291,9 +1292,9 @@
       // EntityTrailingAction — Preview always works for the user; the under-card note
       // explains the agent-side restriction. Missing has no bytes, so it stays fail-closed.
       const previewBlockedReason =
-        state === "denied" ? "Not delivered to the agent. You can still preview it."
+        state === "denied" ? "File content was not delivered to the agent. You can still preview it."
         : state === "missing" ? "Attachment is not available in Mail — nothing to preview."
-        : state === "huge" ? "Too large to deliver to the agent. You can still preview it."
+        : state === "huge" ? "File content was too large to deliver to the agent. You can still preview it."
         : "";
       const preview = secondaryActionHtml({
         label: "Preview",
@@ -1376,8 +1377,8 @@
     }
 
     /**
-     * FileCard-shaped outcome for Attachment Content inside get (no nested Preview —
-     * chip-row Preview is the handoff). Same chrome as attach missing / denied / huge.
+     * FileCard-shaped outcome for Attachment Content inside get. Nested Preview opens
+     * the file from Mail; chip-row Preview stays message → Companion Read.
      */
     function attachmentContentOutcomeCard(opts = {}) {
       const {
@@ -1391,6 +1392,19 @@
         : `<div class="status-icon missing" title="Not included">✕</div>`;
       const copyClass =
         state === "denied" ? "denied" : state === "huge" ? "huge" : "missing";
+      const canPreview = filename !== "(attachment)" && filename !== "(none named)"
+        && !(state === "missing" && !line);
+      const preview = canPreview
+        ? secondaryActionHtml({
+            label: "Preview",
+            icon: "eye",
+            title: "Preview",
+            attrs: `data-preview-file data-preview-note="getAttachPreviewMsg"`,
+            blocked: false,
+            muted: false
+          })
+        : "";
+      // Per-card note omitted — messageAccessCard prints one shared get-call note under the list.
       return `
         <div class="file-card state-${esc(state)}">
           <div class="file-top">
@@ -1398,6 +1412,7 @@
             <div class="file-meta">
               <div class="file-name">${esc(filename)}</div>
             </div>
+            ${preview}
           </div>
           <span class="state-copy ${copyClass}">${esc(line)}</span>
         </div>`;
@@ -1438,16 +1453,23 @@
         ? omittedTile("Not included", "Search and list return headers only. Use get for body.")
         : `<div class="body-box">${esc(m.body || "")}</div>`;
 
+      const getContentPreviewNote =
+        `<p class="secondary-action-note" style="display:block">File content was not delivered to the agent as part of this get call. You can still preview it.</p>`;
       let attContent;
+      let showGetContentPreviewNote = false;
       if (!contentGranted) {
         // Denied: same FileCard chrome as attach Not granted.
-        attContent = (named.length ? named : [{ filename: FILE }]).map(a =>
+        const deniedFiles = named.length ? named : [{ filename: FILE }];
+        attContent = deniedFiles.map(a =>
           attachmentContentOutcomeCard({
             filename: a.filename,
             state: "denied",
             line: "Not allowed by the current grant."
           })
         ).join("");
+        showGetContentPreviewNote = !searchSummaryOnly && deniedFiles.some(a =>
+          a.filename !== "(attachment)" && a.filename !== "(none named)"
+        );
       } else if (omitsAttachmentContent || searchSummaryOnly) {
         // Truth: get/search did not deliver file bytes — FileCard missing chrome.
         const line = searchSummaryOnly
@@ -1461,6 +1483,7 @@
               line
             })
           ).join("");
+          showGetContentPreviewNote = !searchSummaryOnly;
         } else {
           attContent = attachmentContentOutcomeCard({
             filename: searchSummaryOnly ? "(not in search)" : "(none named)",
@@ -1470,6 +1493,9 @@
         }
       } else {
         attContent = `<div class="attach-tile"><span>📎</span><span>none in this response</span></div>`;
+      }
+      if (showGetContentPreviewNote) {
+        attContent += getContentPreviewNote;
       }
 
       // Truth-first lines for search summary vs full get card.

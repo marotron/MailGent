@@ -48,7 +48,8 @@ enum BuiltInHeuristicDetector {
         case .phones:
             return PatternSpec(
                 label: "Phone numbers",
-                pattern: #"\+?\d[\d\s().-]{8,}\d"#,
+                // Optional leading `(` so `(44) 01252…` is one span (not `44)…`).
+                pattern: #"\(?\+?\d[\d\s().-]{8,}\d"#,
                 options: []
             )
         case .emails:
@@ -80,7 +81,7 @@ enum BuiltInHeuristicDetector {
                 let startIdx = text.index(text.startIndex, offsetBy: span.start)
                 let endIdx = text.index(text.startIndex, offsetBy: span.end)
                 let matched = String(text[startIdx..<endIdx])
-                if cls == .phones, isPhoneFalsePositive(matched) { continue }
+                if cls == .phones, isPhoneFalsePositive(matched, in: text, at: span.start) { continue }
                 if cls == .creditCards, !passesLuhn(digitsOnly(matched)) { continue }
                 hits.append(
                     LeakHitSpan(
@@ -157,8 +158,8 @@ enum BuiltInHeuristicDetector {
         return sum % 10 == 0
     }
 
-    /// Dates, money/score ranges, and other digit runs that the loose phone regex over-matches.
-    private static func isPhoneFalsePositive(_ matched: String) -> Bool {
+    /// Dates, money/score ranges, registry IDs, and other digit runs the loose phone regex over-matches.
+    private static func isPhoneFalsePositive(_ matched: String, in text: String, at start: Int) -> Bool {
         let trimmed = matched.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
 
@@ -199,7 +200,25 @@ enum BuiltInHeuristicDetector {
             if moneyish { return true }
         }
 
+        if hasRegistryLeftContext(in: text, before: start) {
+            return true
+        }
+
         return false
+    }
+
+    /// ~40 chars before the match: VAT / company registry labels (not a checksum validator).
+    private static func hasRegistryLeftContext(in text: String, before start: Int) -> Bool {
+        guard start > 0 else { return false }
+        let endIdx = text.index(text.startIndex, offsetBy: start)
+        let windowChars = min(40, start)
+        let startIdx = text.index(endIdx, offsetBy: -windowChars)
+        let prefix = String(text[startIdx..<endIdx])
+        return registryPhoneContextRegex.firstMatch(
+            in: prefix,
+            options: [],
+            range: NSRange(prefix.startIndex..., in: prefix)
+        ) != nil
     }
 
     private static func looksLikeDottedPhone(_ text: String) -> Bool {
@@ -230,5 +249,12 @@ enum BuiltInHeuristicDetector {
     private static let dottedPhoneRegex: NSRegularExpression = {
         let pattern = #"^\+?\d{1,3}(?:\.\d{2,4}){2,4}$"#
         return try! NSRegularExpression(pattern: pattern)
+    }()
+
+    private static let registryPhoneContextRegex: NSRegularExpression = {
+        // Left-window labels for VAT / company registry digit runs.
+        let pattern =
+            #"(?:VAT(?:\s*(?:No\.?|Number))?|Registered\s+in\s+England(?:\s+No\.?)?|Company\s+No(?:\.|mber)?|Reg\.?\s*No\.?|\bGB)\s*$"#
+        return try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
     }()
 }

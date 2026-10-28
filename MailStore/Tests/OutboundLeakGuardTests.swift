@@ -190,6 +190,96 @@ struct OutboundLeakGuardTests {
         #expect(result.text == sample)
     }
 
+    @Test func builtInPhoneIgnoresVATNumber() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let sample = "VAT No. GB 492 8051 30"
+        let result = guard_.sanitize(
+            text: sample,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .granted)
+        #expect(result.text == sample)
+        #expect(!result.disclosedRules.contains("Phone numbers"))
+    }
+
+    @Test func builtInPhoneIgnoresRegisteredCompanyNumber() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let sample = "Registered in England No. 492 8051 30"
+        let result = guard_.sanitize(
+            text: sample,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .granted)
+        #expect(result.text == sample)
+        #expect(!result.disclosedRules.contains("Phone numbers"))
+    }
+
+    @Test func builtInPhoneKeepsLeadingParenCountryCode() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let result = guard_.sanitize(
+            text: "Call us on (44) 01252 860600 or email",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .sanitized)
+        #expect(result.text == "Call us on [REDACTED:phones] or email")
+        #expect(result.disclosedRules.contains("Phone numbers"))
+    }
+
+    @Test func builtInPhoneStillRedactsUKMobileAndLandline() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let mobile = guard_.sanitize(
+            text: "Mobile 07776769914 thanks",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(mobile.text == "Mobile [REDACTED:phones] thanks")
+
+        let landline = guard_.sanitize(
+            text: "Office 01252 860600 thanks",
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(landline.text == "Office [REDACTED:phones] thanks")
+    }
+
+    @Test func builtInPhoneAdsystSignatureIgnoresVATKeepsPhones() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let sample = """
+        Mobile: 07776769914
+        Tel: 01252 860600
+        Disclaimer: call (44) 01252 860600
+        VAT No. GB 492 8051 30
+        Registered in England No. 02269680
+        """
+        let result = guard_.sanitize(
+            text: sample,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .sanitized)
+        #expect(result.text.contains("[REDACTED:phones]"))
+        #expect(!result.text.contains("07776769914"))
+        #expect(!result.text.contains("01252 860600"))
+        #expect(!result.text.contains("(44) 01252 860600"))
+        #expect(result.text.contains("VAT No. GB 492 8051 30"))
+        #expect(result.text.contains("Registered in England No. 02269680"))
+    }
+
     @Test func builtInCreditCardRequiresLuhn() {
         let guard_ = guardWith(builtIns: [.creditCards: true])
         let meetingID = "Meeting ID: 286623088411329"

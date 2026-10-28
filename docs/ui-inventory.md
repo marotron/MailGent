@@ -71,7 +71,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 | **Job** | Truth-first message shell (headers, body, attachment info/content) |
 | **Tap** | None — Preview button only opens Companion Read / attachment preview |
 | **Chip row** | Source chip left · Preview + `Open in Apple Mail` trailing right |
-| **Attachment Content** | When bytes were not in the agent response → `FileCard` missing/denied chrome (name + state line). No nested Preview (chip-row owns it) |
+| **Attachment Content** | When bytes were not in the agent response → `FileCard` missing/denied chrome (name + state line). Nested `Preview` opens that file from Mail (chip-row Preview stays message → Companion Read). One shared caption under the list: file content was not delivered as part of this get call |
 | **Swift** | `MessageAccessCard` |
 | **HTML** | `.msg-card` |
 
@@ -269,6 +269,8 @@ SecondaryActionRow
 | 2026-10-14 | FileCard Preview opens the file for the user even when agent access is denied / too large; the under-card note now explains the agent-side restriction instead of saying Preview stays closed. Missing still shows reason only. |
 | 2026-10-12 | Ask preview canvas: floating sticky `AskPreviewZoomControls` (− \| +); default 75% page zoom; plain Ask body uses `NSTextView.scrollableTextView()`. |
 | 2026-10-12 | Ask: title `Email access request`; centered larger `?` + callout “{agent} wants access…” + More/Less; popup capped (~560); Body `HTML only` title badge. |
+| 2026-10-27 | FileCard status icon + Preview match chip-row `SecondaryAction` (20×20 / radius 6). |
+| 2026-10-27 | Access Log `get` Attachment Content FileCards show nested Preview (open file from Mail); chip-row Preview still opens Companion Read. |
 | 2026-10-04 | Access Log `get` chip-row Preview opens Companion Read (same as search); file Preview stays on `get_attachment` FileCard. |
 | 2026-10-04 | Open in Apple Mail icon → `OpenInMailGlyph` (`arrow.up.right.square` external-link). |
 | 2026-10-04 | Access Log mode chrome: only the active view (Formatted or JSON Pretty/Raw) shows raised selected face. |

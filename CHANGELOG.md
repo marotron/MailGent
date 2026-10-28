@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.20.3] - 2026-10-28
+
+### Fixed
+
+- Leak guard phone heuristic: ignore VAT / company-registry digit runs when a left-context label matches (`VAT No.`, `Registered in England No.`, `Company No.`, `Reg. No.`, trailing `GB`); keep real phones including leading-paren country codes such as `(44) 01252…`
+- Access Log `get` Formatted: Attachment Content FileCards show nested **Preview** (opens the file from Mail); chip-row Preview still opens Companion Read. One shared note under the list when content was not delivered as part of that get call
+
 ## [0.20.2] - 2026-10-28
 
 ### Fixed

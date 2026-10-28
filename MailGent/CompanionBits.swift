@@ -2203,6 +2203,8 @@ struct FileCard: View {
     var showsPreview: Bool = true
     /// Attach Formatted shows the locked legend under denied cards; get nested content does not.
     var showsLockedLegend: Bool = true
+    /// Nested `get` Formatted suppresses per-card copy; one note sits under the list instead.
+    var showsPreviewBlockedReason: Bool = true
     var onPreview: (() -> Void)? = nil
 
     /// Match Attachment Info `attachmentTile` radius when side-by-side in get Formatted.
@@ -2214,7 +2216,7 @@ struct FileCard: View {
             if showsLockedLegend, model.state == .denied {
                 LockedFieldsLegend()
             }
-            if let reason = model.previewBlockedReason {
+            if showsPreview, showsPreviewBlockedReason, let reason = model.previewBlockedReason {
                 Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -2389,17 +2391,17 @@ struct FileCard: View {
             }
             .foregroundStyle(HatchDeniedStyle.legend)
             .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(HatchDeniedStyle.stripe, lineWidth: 1)
             }
-            case .missing:
+        case .missing:
             statusIcon {
                 Text("✕")
                     .font(.system(size: 10, weight: .heavy))
             }
             .foregroundStyle(Color(red: 0.37, green: 0.43, blue: 0.53))
             .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(FileCardStyle.missingStripe, lineWidth: 1)
             }
         case .huge:
@@ -2409,16 +2411,21 @@ struct FileCard: View {
             }
             .foregroundStyle(FileCardStyle.hugeInk)
             .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(Color.orange.opacity(0.45), lineWidth: 1)
             }
         }
     }
 
+    /// Match trailing Preview / chip-row `SecondaryAction` (20×20 / radius 6).
     private func statusIcon<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .frame(width: 18, height: 18)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        let side = SecondaryActionMetrics.controlHeight
+        return content()
+            .frame(width: side, height: side)
+            .background(
+                Color(nsColor: .controlBackgroundColor),
+                in: RoundedRectangle(cornerRadius: SecondaryActionMetrics.cornerRadius, style: .continuous)
+            )
     }
 
     @ViewBuilder
@@ -2549,8 +2556,10 @@ struct MessageAccessCard: View {
     var omitsBody: Bool = false
     var showsFieldBadges: Bool = true
     var attachmentContentDetail: String = "none in this response"
-    /// When set, Attachment Content uses FileCard chrome (no nested Preview).
+    /// When set, Attachment Content uses FileCard chrome.
     var attachmentContentCards: [AccessLogFormat.AttachmentCardModel]? = nil
+    /// Access Log get: per-file Preview on Attachment Content cards (opens bytes from Mail).
+    var onAttachmentPreview: ((String) -> Void)? = nil
     /// Access Log get: Source chip left · Preview + Open in Apple Mail right.
     var showsChipRowActions: Bool = false
     var chipRowPreviewEnabled: Bool = true
@@ -2684,7 +2693,23 @@ struct MessageAccessCard: View {
                     if let cards = attachmentContentCards, !cards.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
-                                FileCard(model: card, showsPreview: false, showsLockedLegend: false)
+                                let previewName = Self.previewableAttachmentFilename(card.filename)
+                                FileCard(
+                                    model: card,
+                                    showsPreview: previewName != nil && onAttachmentPreview != nil,
+                                    showsLockedLegend: false,
+                                    showsPreviewBlockedReason: false
+                                ) {
+                                    if let previewName {
+                                        onAttachmentPreview?(previewName)
+                                    }
+                                }
+                            }
+                            if AccessLogFormat.showsGetAttachmentContentPreviewNote(for: cards) {
+                                Text(AccessLogFormat.getAttachmentContentPreviewNote)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     } else {
@@ -2738,6 +2763,14 @@ struct MessageAccessCard: View {
             return AppliedGrantRule(id: "preview", nick: nick, polarity: .pass)
         }
         return ruleMark(for: \.attachmentContent)
+    }
+
+    /// Placeholders from `getAttachmentContentCards` when nothing was named — no file to open.
+    private static func previewableAttachmentFilename(_ filename: String) -> String? {
+        switch filename {
+        case "(attachment)", "(none named)": return nil
+        default: return filename
+        }
     }
 
     private func ruleMark(for keyPath: KeyPath<GrantFields, Bool>) -> AppliedGrantRule? {
