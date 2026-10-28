@@ -469,6 +469,9 @@ struct AccessLogFormatTests {
         #expect(deniedCards.count == 1)
         #expect(deniedCards[0].state == .denied)
         #expect(deniedCards[0].filename == "a.pdf")
+        #expect(deniedCards[0].canStillPreviewFromMail)
+        #expect(AccessLogFormat.showsGetAttachmentContentPreviewNote(for: deniedCards))
+        #expect(AccessLogFormat.getAttachmentContentPreviewNote.contains("get call"))
 
         let omitted = AuditMessageRef(
             accountID: "acc",
@@ -489,5 +492,7 @@ struct AccessLogFormatTests {
         #expect(omittedCards.count == 1)
         #expect(omittedCards[0].state == .missing)
         #expect(omittedCards[0].stateLine.contains("get_attachment"))
+        #expect(omittedCards[0].canStillPreviewFromMail)
+        #expect(AccessLogFormat.showsGetAttachmentContentPreviewNote(for: omittedCards))
     }
 }
