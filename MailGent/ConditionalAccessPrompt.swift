@@ -239,7 +239,7 @@ struct ConditionalAccessInAppPreview: View {
 }
 
 /// Pass-through hover probe: tracking area fires over WKWebView / NSScrollView without stealing clicks/scroll.
-private struct AskPreviewHoverTracker: NSViewRepresentable {
+struct AskPreviewHoverTracker: NSViewRepresentable {
     @Binding var isHovering: Bool
 
     func makeNSView(context: Context) -> AskPreviewHoverNSView {
@@ -265,7 +265,7 @@ private struct AskPreviewHoverTracker: NSViewRepresentable {
     }
 }
 
-private final class AskPreviewHoverNSView: NSView {
+final class AskPreviewHoverNSView: NSView {
     var onHoverChange: ((Bool) -> Void)?
     private var tracking: NSTrackingArea?
 
@@ -295,8 +295,8 @@ private final class AskPreviewHoverNSView: NSView {
     }
 }
 
-/// Compact floating − | + for Ask preview; sticky top-trailing while the canvas is hovered.
-private struct AskPreviewZoomControls: View {
+/// Compact floating − | + for Ask / propose-send preview; sticky top-trailing while the canvas is hovered.
+struct AskPreviewZoomControls: View {
     let zoom: CGFloat
     let canZoomOut: Bool
     let canZoomIn: Bool

@@ -788,6 +788,97 @@ struct LoopbackMCPServerTests {
         })
     }
 
+    @Test func proposeSendIgnoresContextWhenExperimentalOff() async throws {
+        let box = ProposalCaptureBox()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            proposeSendContextExperimental: false,
+            sendProposalPrompter: { proposal in
+                box.value = proposal
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(
+                    """
+                    {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"propose_send","arguments":{"to":["a@b.c"],"subject":"Hi","body":"Hello","context":{"casePath":"../escape","events":[]}}}}
+                    """.utf8
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        #expect(box.value?.context == nil)
+    }
+
+    @Test func proposeSendParsesContextWhenExperimentalOn() async throws {
+        let box = ProposalCaptureBox()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            proposeSendContextExperimental: true,
+            sendProposalPrompter: { proposal in
+                box.value = proposal
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(
+                    """
+                    {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"propose_send","arguments":{"to":["a@b.c"],"subject":"Hi","body":"Hello","context":{"casePath":"cases/acme","caseLabel":"Acme","events":[{"id":"e1","kind":"note","scope":"private","ownership":"you","at":"2026-10-20T11:40:00Z","summary":"Prep","source":{"vault":{"path":"LOG.md"}}}]}}}}
+                    """.utf8
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        #expect(box.value?.context?.casePath == "cases/acme")
+        #expect(box.value?.context?.caseLabel == "Acme")
+        #expect(box.value?.context?.events.count == 1)
+    }
+
+    @Test func proposeSendRejectsBadContextWhenExperimentalOn() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            proposeSendContextExperimental: true,
+            sendProposalPrompter: { _ in .cancel }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(
+                    """
+                    {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"propose_send","arguments":{"to":["a@b.c"],"subject":"Hi","body":"Hello","context":{"casePath":"../escape","events":[]}}}}
+                    """.utf8
+                )
+            )
+        )
+
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("relative path") || response.body.contains("casePath"))
+    }
+
     @Test func proposeSendReturnsOpenedInMailOutcome() async throws {
         let outgoing = FakeMailOutgoingSender()
         let env = try LoopbackFixture(
@@ -1384,6 +1475,7 @@ private struct LoopbackFixture {
         agentMayOpenInMail: Bool = false,
         mailOutgoingSender: (any MailOutgoingSending)? = nil,
         agentMayProposeSend: Bool = false,
+        proposeSendContextExperimental: Bool = false,
         sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)? = nil,
         internetMessageID: String? = nil,
         subject: String = "Invoice due",
@@ -1441,6 +1533,7 @@ private struct LoopbackFixture {
             agentMayOpenInMail: agentMayOpenInMail,
             mailOutgoingSender: mailOutgoingSender,
             agentMayProposeSend: agentMayProposeSend,
+            proposeSendContextExperimental: proposeSendContextExperimental,
             sendProposalPrompter: sendProposalPrompter
         )
     }
@@ -1692,6 +1785,10 @@ private final class FakeAppleMailOpener: AppleMailOpening, @unchecked Sendable {
         openedIDs.append(internetMessageID)
         return result
     }
+}
+
+private final class ProposalCaptureBox: @unchecked Sendable {
+    var value: SendProposal?
 }
 
 private final class FakeMailOutgoingSender: MailOutgoingSending, @unchecked Sendable {

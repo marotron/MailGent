@@ -52,6 +52,7 @@ public struct LoopbackMCPServer {
         agentMayOpenInMail: Bool = false,
         mailOutgoingSender: (any MailOutgoingSending)? = nil,
         agentMayProposeSend: Bool = false,
+        proposeSendContextExperimental: Bool = false,
         revealAccountsWithNoPlacements: Bool = false,
         sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)? = nil
     ) {
@@ -67,6 +68,7 @@ public struct LoopbackMCPServer {
         box.setAgentMayOpenInMail(agentMayOpenInMail)
         box.setMailOutgoingSender(mailOutgoingSender)
         box.setAgentMayProposeSend(agentMayProposeSend)
+        box.setProposeSendContextExperimental(proposeSendContextExperimental)
         box.setRevealAccountsWithNoPlacements(revealAccountsWithNoPlacements)
         box.setSendProposalPrompter(sendProposalPrompter)
         box.setIndexState(
@@ -122,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.20.4"
+                        "version": "0.21.0"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -453,6 +455,18 @@ public struct LoopbackMCPServer {
         let bcc = Self.stringListArgument(arguments["bcc"]) ?? []
         let sender = (arguments["sender"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let context: SendProposalContext?
+        if host.readProposeSendContextExperimental() {
+            do {
+                context = try SendProposalContext.parseOptional(arguments["context"])
+            } catch let error as SendProposalContextError {
+                throw CallError.invalidContext(error.description)
+            } catch {
+                throw CallError.invalidContext(error.localizedDescription)
+            }
+        } else {
+            context = nil
+        }
         let proposal = SendProposal(
             agentName: agent.name,
             to: to,
@@ -460,7 +474,8 @@ public struct LoopbackMCPServer {
             body: body,
             cc: cc,
             bcc: bcc,
-            sender: (sender?.isEmpty == false) ? sender : nil
+            sender: (sender?.isEmpty == false) ? sender : nil,
+            context: context
         )
         var requestFields: [String: Any] = [
             "to": to,
@@ -470,6 +485,7 @@ public struct LoopbackMCPServer {
         if !cc.isEmpty { requestFields["cc"] = cc }
         if !bcc.isEmpty { requestFields["bcc"] = bcc }
         if let sender = proposal.sender { requestFields["sender"] = sender }
+        if context != nil { requestFields["context"] = true }
         let request = AuditJSON.request(requestFields)
         let started = Date()
         let detail = "\(subject) → \(to.joined(separator: ", "))"
@@ -770,6 +786,7 @@ public struct LoopbackMCPServer {
         case openDenied
         case proposeSendDenied
         case unknownSender(allowed: [String])
+        case invalidContext(String)
         case prompterNotBound
         case outgoingNotBound
         case outgoingFailed(String)
@@ -797,6 +814,8 @@ public struct LoopbackMCPServer {
                     return "sender must match a Mail account email from list_accounts (none available)."
                 }
                 return "sender must match a Mail account email from list_accounts (allowed: \(allowed.joined(separator: ", ")))."
+            case .invalidContext(let message):
+                return message
             case .prompterNotBound:
                 return "Send confirmation UI is not available (MailGent app host required)."
             case .outgoingNotBound:
@@ -899,7 +918,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. MailGent shows Send / Open in Mail / Cancel; the MCP call waits. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Returns { outcome: send | opened_in_mail | cancelled }.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. MailGent shows Send / Open in Mail / Cancel; the MCP call waits. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events. Returns { outcome: send | opened_in_mail | cancelled }.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -930,6 +949,11 @@ public struct LoopbackMCPServer {
                             "type": "string",
                             "description":
                                 "Optional From address; must match an email from list_accounts (case-insensitive; Gmail/Googlemail local-part dots are ignored). Delivery uses Mail’s live identity string. Same catalog as list_accounts for the current Settings reveal toggle."
+                        ],
+                        "context": [
+                            "type": "object",
+                            "description":
+                                "Experimental. Ignored unless Settings → Experimental → Propose-send context thread is on. Assembly C: agent chooses structure (events + links); MailGent resolves content. casePath is relative to the Personal vault root. events[].kind mail|phone|video|note|log; scope private|shared; ownership them|you|both; source.mail {accountID,placement,id} or source.vault {path,anchor?}."
                         ]
                     ],
                     "required": ["to", "subject", "body"]

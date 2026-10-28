@@ -29,12 +29,15 @@
 		293779A26AB1BC2F6EDAACA9 /* AuditLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D148D69F39BF09DF9CF97C8B /* AuditLogTests.swift */; };
 		2F4FE3368AA28992C7B23BBA /* MailStore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 901A863964E54353B610B7C0 /* MailStore.framework */; };
 		2F5324489BAA27248291B03D /* MailboxIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 324901A35D4D5FA91E03ECFC /* MailboxIndex.swift */; };
+		32001D8A1C0C2A6AA26B5C91 /* ContextThreadDetailText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B426F4944E629D30C2F6210 /* ContextThreadDetailText.swift */; };
 		3823562C960A6A1C567C2A39 /* PendingAskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484B9EDA0FCEC54EF4654590 /* PendingAskStateTests.swift */; };
 		3A1074812FD9A761D9287699 /* RuleEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C17826F359867E2023F73837 /* RuleEngineTests.swift */; };
 		3E256917F995A8B862FADB30 /* MailOutgoingAppleScriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33A23047DC34471D8DB27DEE /* MailOutgoingAppleScriptTests.swift */; };
 		3E66836A46714BCF9F405D69 /* PersistedPairingDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19BBF7283CD24EE161B31A98 /* PersistedPairingDocument.swift */; };
+		4037811DDD99435745DB10B2 /* ProposeSendContextResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C106B58C576CC6725F91AF /* ProposeSendContextResolverTests.swift */; };
 		4465780ADD2AE3D8D7736CC8 /* ConditionalAccessPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = B014DB2C34437042D2990197 /* ConditionalAccessPrompt.swift */; };
 		4AB5F45311A9606170AE3178 /* PairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CAE083ABE494A3B286F5BBF /* PairingTests.swift */; };
+		4D447F600E6C75A6281CAB36 /* SendProposalContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF67F1627B17F2FACD912AE /* SendProposalContext.swift */; };
 		4DC5B04046E0CD47888E0D25 /* CompanionDemoPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7173007ADD69F037128721 /* CompanionDemoPolicy.swift */; };
 		53068A513BF5B6F4B0DD6E05 /* MailOutgoing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A060DFE381B93BE53E28D9 /* MailOutgoing.swift */; };
 		55575CABF1EC133BB7ED206E /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C4C0E6BD1754AB12EAD282 /* AgentBridge.swift */; };
@@ -62,6 +65,7 @@
 		95048FE1C282B55B991FB796 /* AuditLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB1AFCF3E8F6D950BF92F5A2 /* AuditLog.swift */; };
 		95CC5F744CA2B8EA5DC9E0EB /* GrantPersistPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9E5459C35AEB574F0DE8BB3 /* GrantPersistPolicy.swift */; };
 		99B69CCECA8F1C564B93D0F3 /* CompanionScreenshotDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D7EA27D8F7C81D0A97A6278 /* CompanionScreenshotDemo.swift */; };
+		9B7F2171D55140D736C87F99 /* PersonalVaultBookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3850B891AD2B1CAF5D10A7 /* PersonalVaultBookmark.swift */; };
 		A06F6A94BB05AC04B1A498F8 /* RuleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18C2502E2ED1034ADD1C4030 /* RuleStore.swift */; };
 		A290E6CE0EFA3A08B876DE5F /* LoopbackHTTPListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7DDF0FCE7FBAF23584F2ADC /* LoopbackHTTPListener.swift */; };
 		A4EA13775428F2E3541F9FC3 /* DraftLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 528FD978FC082F82F2816CBD /* DraftLedger.swift */; };
@@ -74,12 +78,15 @@
 		BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */; };
 		C0188CC8CD8EC3134C07EED7 /* MailGentPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C26C62157AAF64661A97F30 /* MailGentPreferences.swift */; };
 		C0CBA840E379580044926FD5 /* MailGentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A64C89D4B9A7AC15E7D1F0 /* MailGentApp.swift */; };
+		C18263C76D6F581662C3F608 /* ContextThreadDetailTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75E66663D70C4B7C519CD48 /* ContextThreadDetailTextTests.swift */; };
 		C57B4E0E01CD7A9ACFBB5A3A /* ListAccountsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1297EEFF3D2D839F40D9B9FE /* ListAccountsTests.swift */; };
 		C7D9C4DCF1C56C6128FE89C5 /* AppleScriptMailOutgoingSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2A2CC49181A3F242BA3F2C /* AppleScriptMailOutgoingSender.swift */; };
 		C9A6961CFF589066E3C6AAB5 /* MailGentLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C75F2A82AE11253A13A02AA7 /* MailGentLog.swift */; };
 		CB6234E269021A7544E728EB /* AskRuleRematch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D88D78AA7F82C1830402B64A /* AskRuleRematch.swift */; };
+		CD197902FB8403EB2041745F /* SendProposalContextThread.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46B32B4531CC3E517A7CFC3B /* SendProposalContextThread.swift */; };
 		D18A6F9F67CC4F3430E74D23 /* CompanionBits.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FA154D45D5CE917C4FFF9B /* CompanionBits.swift */; };
 		D29AD02C96DD33FF1721BF00 /* AuditJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8394F3D98D329AFA7D9F2170 /* AuditJSON.swift */; };
+		D56D7508E038F599C195B6B4 /* SendProposalContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6410C48B5C6A6936C9D82D13 /* SendProposalContextTests.swift */; };
 		D86CC75F0A31E72D4B46A3E3 /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 648AC073DE4FD69431D88DED /* MenuBarStatus.swift */; };
 		DA5906F5786FBAF94D685572 /* MailAccountIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D934E3CB26D68565D5D5BC /* MailAccountIdentity.swift */; };
 		DA7EE61A189612B725B35B62 /* CompanionStatusCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78F35858A5743F1DF91DF7CB /* CompanionStatusCopyTests.swift */; };
@@ -91,6 +98,7 @@
 		E23BD62991A7F29E5F665642 /* MailLibraryAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */; };
 		E61C22F14969329F9CFF7DA4 /* OutboundLeakGuardPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6649F118D658AEDF5024358 /* OutboundLeakGuardPolicy.swift */; };
 		E68C204CCBE51F19C7846D13 /* FixtureTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */; };
+		E6A96820EFD8C73BE9BFF708 /* ProposeSendContextResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5720E7CD50FAD0E39EBE17AD /* ProposeSendContextResolver.swift */; };
 		E9D122DE8DEEAD5DCCC76B8D /* MailGentSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96CF1287F2250FC130ADFF2 /* MailGentSettingsView.swift */; };
 		E9F71B5A946806FA35D7D01F /* IngestPassCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26146BC39A13A78001DB95CC /* IngestPassCopyTests.swift */; };
 		F1036185EA7E3B1DBF78D877 /* MenuBarIconAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B51DCEADC842920CCD3614 /* MenuBarIconAppearanceTests.swift */; };
@@ -176,6 +184,7 @@
 		2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixtureTree.swift; sourceTree = "<group>"; };
 		26146BC39A13A78001DB95CC /* IngestPassCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IngestPassCopyTests.swift; sourceTree = "<group>"; };
 		26D15EB458DC3A0AF2AB5546 /* LoopbackIndexSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackIndexSnapshot.swift; sourceTree = "<group>"; };
+		29C106B58C576CC6725F91AF /* ProposeSendContextResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProposeSendContextResolverTests.swift; sourceTree = "<group>"; };
 		2CAE083ABE494A3B286F5BBF /* PairingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingTests.swift; sourceTree = "<group>"; };
 		3095DC18600D385E203F8310 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3170F948BBAD550C5DCA5C42 /* RuleStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleStoreTests.swift; sourceTree = "<group>"; };
@@ -184,9 +193,11 @@
 		3458D17127D37E2B2B2A08D4 /* AccessLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessLogView.swift; sourceTree = "<group>"; };
 		35D5EE0DD69288D33CBD49D7 /* FieldAskDecisionCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldAskDecisionCache.swift; sourceTree = "<group>"; };
 		3ABE76A4AD61FA50F38E3CAD /* GrantGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantGateTests.swift; sourceTree = "<group>"; };
+		3B426F4944E629D30C2F6210 /* ContextThreadDetailText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextThreadDetailText.swift; sourceTree = "<group>"; };
 		427ADB50B63D1F261E1026D8 /* CustomRuleDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomRuleDetector.swift; sourceTree = "<group>"; };
 		4300DC2F8E91835ED58CC47B /* MailLibraryAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccessTests.swift; sourceTree = "<group>"; };
 		466928AF4F28F66ECF13B5BB /* CompanionFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionFixtureTests.swift; sourceTree = "<group>"; };
+		46B32B4531CC3E517A7CFC3B /* SendProposalContextThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendProposalContextThread.swift; sourceTree = "<group>"; };
 		484B9EDA0FCEC54EF4654590 /* PendingAskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingAskStateTests.swift; sourceTree = "<group>"; };
 		4AC12DE84FE059C771B0C5CB /* AgentReadAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentReadAPI.swift; sourceTree = "<group>"; };
 		4D4FE71A2E9E5ADD630382FC /* MailGent.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MailGent.entitlements; sourceTree = "<group>"; };
@@ -194,12 +205,14 @@
 		4EDCE57CEB481592E3F617EE /* DraftLedgerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftLedgerTests.swift; sourceTree = "<group>"; };
 		528FD978FC082F82F2816CBD /* DraftLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftLedger.swift; sourceTree = "<group>"; };
 		55FA154D45D5CE917C4FFF9B /* CompanionBits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionBits.swift; sourceTree = "<group>"; };
+		5720E7CD50FAD0E39EBE17AD /* ProposeSendContextResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProposeSendContextResolver.swift; sourceTree = "<group>"; };
 		5A640247692782FE58810B6F /* ConditionalAccessAskRulePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConditionalAccessAskRulePanel.swift; sourceTree = "<group>"; };
 		5AF627201D28B0D28492127F /* LoopbackMCPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackMCPServer.swift; sourceTree = "<group>"; };
 		5B696811F36B2E8C871C72DD /* MenuBarIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIcon.swift; sourceTree = "<group>"; };
 		5C26C62157AAF64661A97F30 /* MailGentPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailGentPreferences.swift; sourceTree = "<group>"; };
 		5D7EA27D8F7C81D0A97A6278 /* CompanionScreenshotDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionScreenshotDemo.swift; sourceTree = "<group>"; };
 		5FE12930EF0CFFECDA359A7B /* OutboundLeakGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundLeakGuardTests.swift; sourceTree = "<group>"; };
+		6410C48B5C6A6936C9D82D13 /* SendProposalContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendProposalContextTests.swift; sourceTree = "<group>"; };
 		648AC073DE4FD69431D88DED /* MenuBarStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatus.swift; sourceTree = "<group>"; };
 		64A6DFFC17F55A3C09E8F42F /* MailStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStoreTests.swift; sourceTree = "<group>"; };
 		69A060DFE381B93BE53E28D9 /* MailOutgoing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailOutgoing.swift; sourceTree = "<group>"; };
@@ -212,6 +225,7 @@
 		738EC54BEBF392C6FDDFFEA0 /* MailGentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MailGentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		778B721780C50949015C932F /* AccountIdentityPrototype */ = {isa = PBXFileReference; includeInIndex = 0; path = AccountIdentityPrototype; sourceTree = BUILT_PRODUCTS_DIR; };
 		78F35858A5743F1DF91DF7CB /* CompanionStatusCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionStatusCopyTests.swift; sourceTree = "<group>"; };
+		7E3850B891AD2B1CAF5D10A7 /* PersonalVaultBookmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalVaultBookmark.swift; sourceTree = "<group>"; };
 		815D87541071517935ECCA01 /* MailLibraryAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailLibraryAccess.swift; sourceTree = "<group>"; };
 		8394F3D98D329AFA7D9F2170 /* AuditJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditJSON.swift; sourceTree = "<group>"; };
 		897AF78B0E8255C4EF7B8607 /* AskRuleRematchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskRuleRematchTests.swift; sourceTree = "<group>"; };
@@ -251,10 +265,12 @@
 		D6C7CA5DA19D403E785D39DB /* ConditionalAccessAskRuleDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConditionalAccessAskRuleDraftTests.swift; sourceTree = "<group>"; };
 		D88D78AA7F82C1830402B64A /* AskRuleRematch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskRuleRematch.swift; sourceTree = "<group>"; };
 		DC735B77CC1CF2089A7F7A3B /* LoopbackHTTPListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackHTTPListenerTests.swift; sourceTree = "<group>"; };
+		DEF67F1627B17F2FACD912AE /* SendProposalContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendProposalContext.swift; sourceTree = "<group>"; };
 		E2B51DCEADC842920CCD3614 /* MenuBarIconAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconAppearanceTests.swift; sourceTree = "<group>"; };
 		E3A01689817EA5C0FDEB857C /* OutboundLeakGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundLeakGuard.swift; sourceTree = "<group>"; };
 		F17049D8016849D2AC6897A7 /* CompanionWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionWindow.swift; sourceTree = "<group>"; };
 		F65A3AD129EA6045BDA63B9A /* SanitizedField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SanitizedField.swift; sourceTree = "<group>"; };
+		F75E66663D70C4B7C519CD48 /* ContextThreadDetailTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextThreadDetailTextTests.swift; sourceTree = "<group>"; };
 		FCE9684894DA388E88CA487A /* SendProposalPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendProposalPrompt.swift; sourceTree = "<group>"; };
 		FD2BE993542F41B69F61935A /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -296,6 +312,7 @@
 				8394F3D98D329AFA7D9F2170 /* AuditJSON.swift */,
 				CB1AFCF3E8F6D950BF92F5A2 /* AuditLog.swift */,
 				6AE7D7251E1AD3C482E0366F /* BuiltInHeuristicDetector.swift */,
+				3B426F4944E629D30C2F6210 /* ContextThreadDetailText.swift */,
 				427ADB50B63D1F261E1026D8 /* CustomRuleDetector.swift */,
 				528FD978FC082F82F2816CBD /* DraftLedger.swift */,
 				35D5EE0DD69288D33CBD49D7 /* FieldAskDecisionCache.swift */,
@@ -315,10 +332,12 @@
 				A6649F118D658AEDF5024358 /* OutboundLeakGuardPolicy.swift */,
 				20B0BC892630583E6155EB36 /* Pairing.swift */,
 				19BBF7283CD24EE161B31A98 /* PersistedPairingDocument.swift */,
+				5720E7CD50FAD0E39EBE17AD /* ProposeSendContextResolver.swift */,
 				C2F004EF060971BC18270103 /* ReadAPI.swift */,
 				69CC200E34218FF2F5DE89F5 /* RuleEngine.swift */,
 				18C2502E2ED1034ADD1C4030 /* RuleStore.swift */,
 				F65A3AD129EA6045BDA63B9A /* SanitizedField.swift */,
+				DEF67F1627B17F2FACD912AE /* SendProposalContext.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -393,7 +412,9 @@
 				648AC073DE4FD69431D88DED /* MenuBarStatus.swift */,
 				969B803FFC0348F2B1D524E3 /* OpenInMailGlyph.swift */,
 				D630ADC66DDB31FC9C4BE691 /* PassDeskPane.swift */,
+				7E3850B891AD2B1CAF5D10A7 /* PersonalVaultBookmark.swift */,
 				D46E33C5C81175285853B22F /* RootView.swift */,
+				46B32B4531CC3E517A7CFC3B /* SendProposalContextThread.swift */,
 				FCE9684894DA388E88CA487A /* SendProposalPrompt.swift */,
 				C5C5F8B1E11BCC65F86DEEF8 /* WorkspaceAppleMailOpener.swift */,
 			);
@@ -433,6 +454,7 @@
 				897AF78B0E8255C4EF7B8607 /* AskRuleRematchTests.swift */,
 				917FD5723CE985F51081A15C /* AuditLeakDetectionTests.swift */,
 				D148D69F39BF09DF9CF97C8B /* AuditLogTests.swift */,
+				F75E66663D70C4B7C519CD48 /* ContextThreadDetailTextTests.swift */,
 				4EDCE57CEB481592E3F617EE /* DraftLedgerTests.swift */,
 				CCB78F1FAEBD2636A89AD6EC /* FieldAskDecisionCacheTests.swift */,
 				2457AEC9E2F68ACD495BFB1E /* FixtureTree.swift */,
@@ -447,9 +469,11 @@
 				5FE12930EF0CFFECDA359A7B /* OutboundLeakGuardTests.swift */,
 				2CAE083ABE494A3B286F5BBF /* PairingTests.swift */,
 				AFB9B70A68078F3B0AA3AC90 /* PersistedPairingDocumentTests.swift */,
+				29C106B58C576CC6725F91AF /* ProposeSendContextResolverTests.swift */,
 				B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */,
 				C17826F359867E2023F73837 /* RuleEngineTests.swift */,
 				3170F948BBAD550C5DCA5C42 /* RuleStoreTests.swift */,
+				6410C48B5C6A6936C9D82D13 /* SendProposalContextTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -660,7 +684,9 @@
 				D86CC75F0A31E72D4B46A3E3 /* MenuBarStatus.swift in Sources */,
 				0C7301968CC929B458828409 /* OpenInMailGlyph.swift in Sources */,
 				8C9F498B2E7159C45FEA825C /* PassDeskPane.swift in Sources */,
+				9B7F2171D55140D736C87F99 /* PersonalVaultBookmark.swift in Sources */,
 				AEF71C91C5910871BC3F8F5B /* RootView.swift in Sources */,
+				CD197902FB8403EB2041745F /* SendProposalContextThread.swift in Sources */,
 				8B1C6D0383D85C9E0355C50A /* SendProposalPrompt.swift in Sources */,
 				141F3AD2E07CAFEBDFD4FDF9 /* WorkspaceAppleMailOpener.swift in Sources */,
 			);
@@ -693,6 +719,7 @@
 				D29AD02C96DD33FF1721BF00 /* AuditJSON.swift in Sources */,
 				95048FE1C282B55B991FB796 /* AuditLog.swift in Sources */,
 				224FEFBEEFAEDC05150AC85C /* BuiltInHeuristicDetector.swift in Sources */,
+				32001D8A1C0C2A6AA26B5C91 /* ContextThreadDetailText.swift in Sources */,
 				0752B67909E8AB597545E886 /* CustomRuleDetector.swift in Sources */,
 				A4EA13775428F2E3541F9FC3 /* DraftLedger.swift in Sources */,
 				769343A90EF6F68B95C152C9 /* FieldAskDecisionCache.swift in Sources */,
@@ -712,10 +739,12 @@
 				E61C22F14969329F9CFF7DA4 /* OutboundLeakGuardPolicy.swift in Sources */,
 				1DE5DA69EEA5A59D2D3A6272 /* Pairing.swift in Sources */,
 				3E66836A46714BCF9F405D69 /* PersistedPairingDocument.swift in Sources */,
+				E6A96820EFD8C73BE9BFF708 /* ProposeSendContextResolver.swift in Sources */,
 				282D6FFA46C18C58C3878014 /* ReadAPI.swift in Sources */,
 				DCBC757873D04FC1B15285FE /* RuleEngine.swift in Sources */,
 				A06F6A94BB05AC04B1A498F8 /* RuleStore.swift in Sources */,
 				77615061AD58CE5C42957BC2 /* SanitizedField.swift in Sources */,
+				4D447F600E6C75A6281CAB36 /* SendProposalContext.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -727,6 +756,7 @@
 				0DCFFEA9AB8BACD06C7DB073 /* AskRuleRematchTests.swift in Sources */,
 				5D08F69016A1C73683D20072 /* AuditLeakDetectionTests.swift in Sources */,
 				293779A26AB1BC2F6EDAACA9 /* AuditLogTests.swift in Sources */,
+				C18263C76D6F581662C3F608 /* ContextThreadDetailTextTests.swift in Sources */,
 				642A9E23A38921BC1CFFA9EB /* DraftLedgerTests.swift in Sources */,
 				FEA561959921449C80D4B4F3 /* FieldAskDecisionCacheTests.swift in Sources */,
 				E68C204CCBE51F19C7846D13 /* FixtureTree.swift in Sources */,
@@ -741,9 +771,11 @@
 				92E4ADEFDF2C44409C19A714 /* OutboundLeakGuardTests.swift in Sources */,
 				4AB5F45311A9606170AE3178 /* PairingTests.swift in Sources */,
 				14D015808DE9EF4BEFA3116F /* PersistedPairingDocumentTests.swift in Sources */,
+				4037811DDD99435745DB10B2 /* ProposeSendContextResolverTests.swift in Sources */,
 				BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */,
 				3A1074812FD9A761D9287699 /* RuleEngineTests.swift in Sources */,
 				7C7E4CA976A1BA00CC7129EA /* RuleStoreTests.swift in Sources */,
+				D56D7508E038F599C195B6B4 /* SendProposalContextTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -918,7 +950,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 53;
+				CURRENT_PROJECT_VERSION = 54;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -934,7 +966,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.20.4;
+				MARKETING_VERSION = 0.21.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};
@@ -963,7 +995,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 53;
+				CURRENT_PROJECT_VERSION = 54;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -979,7 +1011,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.20.4;
+				MARKETING_VERSION = 0.21.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};

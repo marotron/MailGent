@@ -17,6 +17,8 @@ public final class LoopbackHost: @unchecked Sendable {
     private var agentMayOpenInMail = false
     /// Off by default — agents may call MCP `propose_send` only when the companion enables it.
     private var agentMayProposeSend = false
+    /// Off by default — optional `propose_send` `context` thread is ignored until Settings Experimental enables it.
+    private var proposeSendContextExperimental = false
     /// Off by default — `list_accounts` / `propose_send` sender catalog omit empty-placement identities.
     private var revealAccountsWithNoPlacements = false
     /// Suspends until the user chooses Send / Open in Mail / Cancel (or window close → Cancel).
@@ -81,6 +83,12 @@ public final class LoopbackHost: @unchecked Sendable {
         return agentMayProposeSend
     }
 
+    public func readProposeSendContextExperimental() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return proposeSendContextExperimental
+    }
+
     public func readRevealAccountsWithNoPlacements() -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -127,6 +135,12 @@ public final class LoopbackHost: @unchecked Sendable {
     public func setAgentMayProposeSend(_ allowed: Bool) {
         lock.lock()
         agentMayProposeSend = allowed
+        lock.unlock()
+    }
+
+    public func setProposeSendContextExperimental(_ enabled: Bool) {
+        lock.lock()
+        proposeSendContextExperimental = enabled
         lock.unlock()
     }
 

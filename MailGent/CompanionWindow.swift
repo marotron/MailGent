@@ -245,10 +245,15 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     }
 
     /// Present propose-send confirm until Send / Open in Mail / Cancel / traffic-light close.
-    func runSendProposalConfirm(proposal: SendProposal) async -> SendProposalDecision {
+    func runSendProposalConfirm(
+        proposal: SendProposal,
+        resolvedContext: ProposeSendResolvedContext? = nil,
+        onOpenContextOriginal: @escaping (ContextThreadOriginal) -> Void = { _ in }
+    ) async -> SendProposalDecision {
         await withCheckedContinuation { continuation in
             let dialog = SendProposalPromptDialog(
                 proposal: proposal,
+                resolvedContext: resolvedContext,
                 onSend: { [weak self] in
                     self?.finishSendProposal(id: proposal.id, decision: .send)
                 },
@@ -257,20 +262,27 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 },
                 onCancel: { [weak self] in
                     self?.finishSendProposal(id: proposal.id, decision: .cancel)
-                }
+                },
+                onOpenContextOriginal: onOpenContextOriginal
             )
-            let size = SendProposalPromptDialog.windowSize
+            let withContext = resolvedContext != nil
+            let size = withContext
+                ? SendProposalPromptDialog.contextWindowSize
+                : SendProposalPromptDialog.windowSize
+            let minSize = withContext
+                ? SendProposalPromptDialog.contextWindowMinSize
+                : SendProposalPromptDialog.windowMinSize
             if !statusMenuIsOpen {
                 beginPresentation()
             }
             let window = makeWindow(
                 title: "Send proposed mail?",
                 size: size,
-                minSize: SendProposalPromptDialog.windowMinSize,
+                minSize: minSize,
                 root: dialog
             )
             window.styleMask.remove(.miniaturizable)
-            window.maxSize = NSSize(width: 900, height: 900)
+            window.maxSize = NSSize(width: withContext ? 1100 : 900, height: 900)
             cascade(window, index: sendProposals.count)
             sendProposals[proposal.id] = SendProposalRecord(window: window, continuation: continuation)
             intendedVisible.insert(ObjectIdentifier(window))

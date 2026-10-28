@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MailStore
 import Observation
@@ -888,6 +889,12 @@ final class AgentBridge {
         makeLoopbackHost().setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
     }
 
+    func applyProposeSendContextExperimental() {
+        makeLoopbackHost().setProposeSendContextExperimental(
+            MailGentPreferences.proposeSendContextExperimental
+        )
+    }
+
     func applyRevealAccountsWithNoPlacements() {
         makeLoopbackHost().setRevealAccountsWithNoPlacements(
             MailGentPreferences.revealAccountsWithNoPlacements
@@ -970,12 +977,43 @@ final class AgentBridge {
         host.setAgentMayOpenInMail(MailGentPreferences.agentMayOpenInMail)
         host.setMailOutgoingSender(AppleScriptMailOutgoingSender())
         host.setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
+        host.setProposeSendContextExperimental(MailGentPreferences.proposeSendContextExperimental)
         host.setRevealAccountsWithNoPlacements(MailGentPreferences.revealAccountsWithNoPlacements)
-        host.setSendProposalPrompter { proposal in
-            await DetachedWindowHost.shared.runSendProposalConfirm(proposal: proposal)
+        host.setSendProposalPrompter { [weak self] proposal in
+            let resolved = await self?.resolveProposeSendContext(proposal)
+            let opener = await self?.makeProposeSendOriginalOpener()
+                ?? ProposeSendOriginalOpener(gateway: nil)
+            return await DetachedWindowHost.shared.runSendProposalConfirm(
+                proposal: proposal,
+                resolvedContext: resolved,
+                onOpenContextOriginal: { original in
+                    Task { @MainActor in
+                        opener.open(original)
+                    }
+                }
+            )
         }
         loopbackHost = host
         return host
+    }
+
+    /// Prefetch Assembly-C context for the confirm dialog (nil when experimental off / no context / no vault).
+    private func resolveProposeSendContext(_ proposal: SendProposal) async -> ProposeSendResolvedContext? {
+        guard MailGentPreferences.proposeSendContextExperimental,
+              let context = proposal.context
+        else {
+            return nil
+        }
+        let vaultRoot = PersonalVaultBookmark.resolvedURL()
+        let vault: any ProposeSendVaultReading = vaultRoot.map { PersonalVaultFileReader(rootURL: $0) }
+            ?? EmptyVaultReader()
+        let mail = CompanionProposeSendMailFetcher(gateway: makeLoopbackHost().readGateway())
+        let resolver = ProposeSendContextResolver(mail: mail, vault: vault)
+        return await resolver.resolve(context: context, proposal: proposal)
+    }
+
+    private func makeProposeSendOriginalOpener() -> ProposeSendOriginalOpener {
+        ProposeSendOriginalOpener(gateway: makeLoopbackHost().readGateway())
     }
 
     private func refreshListenNote() {
@@ -1699,4 +1737,87 @@ private struct GrantDeskEditBaseline {
     let ruleSnapshot: RuleSnapshot
     let selectedAccessKey: String?
     let leakGuardPolicy: OutboundLeakGuardPolicy
+}
+
+/// Opens a context-thread original from the confirm dialog (Sendable so the UI callback can hop).
+private final class ProposeSendOriginalOpener: @unchecked Sendable {
+    let gateway: AgentReadAPI?
+
+    init(gateway: AgentReadAPI?) {
+        self.gateway = gateway
+    }
+
+    @MainActor
+    func open(_ original: ContextThreadOriginal) {
+        switch original {
+        case let .mail(accountID, placement, id, internetMessageID):
+            if let internetMessageID,
+               !internetMessageID.isEmpty,
+               WorkspaceAppleMailOpener().openMessage(internetMessageID: internetMessageID)
+            {
+                return
+            }
+            guard let gateway else { return }
+            do {
+                let message = try gateway.read.get(
+                    accountID: accountID,
+                    placement: placement,
+                    id: id
+                )
+                _ = WorkspaceAppleMailOpener().openMessage(
+                    internetMessageID: message.internetMessageID
+                )
+            } catch {
+                // Soft-fail — confirm stays open.
+            }
+
+        case let .vault(relativePath):
+            guard let root = PersonalVaultBookmark.resolvedURL(),
+                  let fileURL = PersonalVaultFileReader.resolvedFileURL(
+                      root: root,
+                      relativePath: relativePath
+                  )
+            else {
+                return
+            }
+            NSWorkspace.shared.open(fileURL)
+        }
+    }
+}
+
+/// Human-local mail prefetch for propose-send context (no Ask prompts).
+private final class CompanionProposeSendMailFetcher: ProposeSendMailFetching, @unchecked Sendable {
+    let gateway: AgentReadAPI?
+
+    init(gateway: AgentReadAPI?) {
+        self.gateway = gateway
+    }
+
+    func fetchMail(accountID: String, placement: String, id: String) async -> ProposeSendMailContent? {
+        guard let gateway else { return nil }
+        do {
+            let message = try gateway.read.get(accountID: accountID, placement: placement, id: id)
+            let bodyText: String?
+            switch message.body {
+            case .text(let text):
+                bodyText = text.isEmpty ? nil : text
+            case .notAvailable, .notGranted:
+                bodyText = nil
+            }
+            let messageID = message.internetMessageID
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return ProposeSendMailContent(
+                subject: message.subject,
+                from: message.from,
+                body: bodyText ?? message.htmlBody,
+                internetMessageID: messageID.isEmpty ? nil : messageID
+            )
+        } catch {
+            return nil
+        }
+    }
+}
+
+private struct EmptyVaultReader: ProposeSendVaultReading {
+    func readVaultFile(relativePath: String) -> String? { nil }
 }

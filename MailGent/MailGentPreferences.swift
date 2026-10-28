@@ -19,6 +19,10 @@ enum MailGentPreferences {
     static let askDecisionCacheTTLSecondsKey = "askDecisionCacheTTLSeconds"
     /// `perAgent` (default) or `allAgents`.
     static let askDecisionCacheShareScopeKey = "askDecisionCacheShareScope"
+    /// Experimental: show Assembly-C context thread on `propose_send` when agent sends `context`.
+    static let proposeSendContextExperimentalKey = "proposeSendContextExperimental"
+    /// Security-scoped bookmark data for Personal vault root (used by experimental context resolve).
+    static let personalVaultRootBookmarkKey = "personalVaultRootBookmark"
 
     static let defaultLoopbackPort: UInt16 = 8788
     /// Default TTL when the cache is first enabled in Settings (1 hour).
@@ -36,6 +40,10 @@ enum MailGentPreferences {
 
     static var agentMayProposeSend: Bool {
         UserDefaults.standard.bool(forKey: agentMayProposeSendKey)
+    }
+
+    static var proposeSendContextExperimental: Bool {
+        UserDefaults.standard.bool(forKey: proposeSendContextExperimentalKey)
     }
 
     static var revealAccountsWithNoPlacements: Bool {
