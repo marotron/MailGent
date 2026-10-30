@@ -1,6 +1,6 @@
 # MailGent
 
-**0.21.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.21.2 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -60,7 +60,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Agents talk to MailGent over MCP; MailGent has no built-in AI
 - Optional Settings → General → **Allow agents to open messages in Apple Mail** (off by default) enables MCP `open_in_mail`
 - Optional Settings → General → **Allow agents to propose sending mail** (off by default) enables MCP `propose_send` — larger confirm dialog with Formatted|Raw body preview (HTML preview only) and hover **−** / **+** zoom on the body; **Send** / **Open in Mail** / **Cancel** before Apple Mail is touched; requested `sender` must match a listed or Gmail-dot-equivalent address and a live Mail identity, or deliver fails (no silent default From)
-- Optional Settings → Experimental → **Propose-send context thread** (off by default): `propose_send` may pass `context` so the confirm dialog shows a vault + mail timeline beside the draft (choose a Personal vault root; agent structure, MailGent resolves content; schema/UI may change)
+- Optional Settings → Experimental → **Propose-send context thread** (off by default): `propose_send` may pass `context` so the confirm dialog shows a vault + mail timeline beside the draft (choose a Personal vault root; agent structure, MailGent resolves content; schema/UI may change). Mail cards compact to subject + `from → to`; expand for labeled From / To / Cc / Subject / Date / Attachments (optional rows when present), then Open / link chips and body
 - MCP `list_accounts` lists Mail identities (`displayName`, `email`) with grant-filtered mailbox `placements`; by default only accounts with at least one placement are returned
 - Optional Settings → General → **Reveal accounts with no placements** (off by default) includes empty-placement identities in `list_accounts` and allows them as `propose_send` `sender`
 - MCP `get` returns `mailURL` (`message://…`) and `internetMessageID` when the message has an RFC Message-ID (fail closed when missing)
@@ -105,7 +105,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Optional on-device scan of subject/body before the agent receives mail (opt in per placement)
 - Built-in detectors plus your own filters; hits can redact or withhold
-- Phone detector skips date-like runs, decimal ranges, bare long IDs (e.g. `26-10-2026 14`, `12.71 - 12.71`, meeting IDs), and VAT / company-registry digit runs after labels such as `VAT No.`, `Registered in England No.`, or `Company No.`
+- Phone detector skips date-like runs, decimal ranges, bare long IDs (e.g. `26-10-2026 14`, `12.71 - 12.71`, meeting IDs), VAT / company-registry digit runs after labels such as `VAT No.`, `Registered in England No.`, or `Company No.`, URL path segment IDs (digit run after `/`), and orphan-`)` spans with no `(` (e.g. listing titles glued after a markdown-style link close)
 - Credit-card detector requires a Luhn check; password patterns redact only the secret value (`password: …`), while `token=…` still redacts the whole assignment
 - A match after an emoji (or any other multi-unit character) is redacted in place; that scan no longer quits the app
 - Access Log records per-hit originals (and body line numbers on new entries) so you can inspect what was redacted or replaced
@@ -131,7 +131,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Agents can create/update drafts in a MailGent-owned ledger (in memory)
 - Drafts are **not** written into Mail.app; body-only drafts stay in MailGent and show in the Access Log
 - With **Allow agents to propose sending mail** on, `propose_send` opens a confirm dialog (Formatted|Raw preview with hover zoom; no attachments); **Send** or **Open in Mail** hands a new plain message to Apple Mail (Automation), not SMTP from MailGent; From is resolved against Mail’s live accounts (Gmail dots equivalent) and fails closed if it would not stick
-- With **Propose-send context thread** on, optional `context` adds an expandable left rail of mail and Personal-vault notes/logs (Markdown rendered for vault detail; private bands; max 40 events)
+- With **Propose-send context thread** on, optional `context` adds an expandable left rail of mail and Personal-vault notes/logs (Markdown rendered for vault detail; private bands; max 40 events). Mail rows use compact `from → to` until selected, then a labeled envelope (Cc and Attachments only when present) above the body
 
 ### Install (DMG)
 

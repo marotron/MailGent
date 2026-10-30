@@ -1809,6 +1809,9 @@ private final class CompanionProposeSendMailFetcher: ProposeSendMailFetching, @u
             return ProposeSendMailContent(
                 subject: message.subject,
                 from: message.from,
+                to: message.to,
+                cc: message.cc,
+                attachmentNames: message.attachments.map(\.filename),
                 body: bodyText ?? message.htmlBody,
                 internetMessageID: messageID.isEmpty ? nil : messageID
             )

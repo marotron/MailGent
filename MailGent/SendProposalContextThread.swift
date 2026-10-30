@@ -195,8 +195,13 @@ struct SendProposalContextThreadView: View {
     private func fullCard(_ item: ContextThreadItem, selected: Bool) -> some View {
         let sharp = sharpCorner(for: item)
         let expanded = selected && !item.isDraft
+        let hasEnvelope = !(item.subject ?? "").isEmpty
+            || !(item.from ?? "").isEmpty
+            || !(item.to ?? "").isEmpty
+            || !(item.cc ?? "").isEmpty
+        let summaryRepeatsSubject = item.subject.map { $0 == item.summary } ?? false
         return VStack(alignment: .leading, spacing: 6) {
-            // Meta
+            // Meta: kind · party · date (date moves into labeled block when expanded mail)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 kindBadge(item.kind)
                 if let party = item.party?.name, !party.isEmpty {
@@ -205,23 +210,41 @@ struct SendProposalContextThreadView: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Text(shortDate(item.at))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if !(expanded && hasEnvelope) {
+                    Text(shortDate(item.at))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            if let from = item.from, !from.isEmpty {
-                metaLine(label: "From", value: from)
-            }
-            if let subject = item.subject, !subject.isEmpty {
-                metaLine(label: "Subject", value: subject)
+            if hasEnvelope {
+                if expanded {
+                    // Detailed envelope: From / To / Cc? / Subject / Date / Attachments?
+                    expandedEnvelope(item)
+                } else {
+                    // Compact: subject + from → to
+                    if let subject = item.subject, !subject.isEmpty {
+                        Text(subject)
+                            .font(.caption2.weight(.medium))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                    if !(item.from ?? "").isEmpty || !(item.to ?? "").isEmpty {
+                        addressRouteRow(from: item.from, to: item.to)
+                    }
+                }
             }
 
-            Text(item.summary)
-                .font(.caption2.weight(.medium))
-                .lineLimit(expanded ? 4 : 2)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            if !summaryRepeatsSubject, !(expanded && hasEnvelope) {
+                Text(item.summary)
+                    .font(.caption2.weight(hasEnvelope ? .regular : .medium))
+                    .foregroundStyle(hasEnvelope ? .secondary : .primary)
+                    .lineLimit(expanded ? 4 : 2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let reason = item.unavailableReason {
                 Text(reason)
@@ -229,6 +252,7 @@ struct SendProposalContextThreadView: View {
                     .foregroundStyle(.orange)
             }
 
+            // Open / link chips sit between header and body (or under compact meta).
             sourceAndLinkChips(item)
 
             // Body below divider when focused (draft body lives in the right pane).
@@ -258,17 +282,125 @@ struct SendProposalContextThreadView: View {
         .overlay(cardStroke(selected: selected, sharp: sharp))
     }
 
-    private func metaLine(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+    /// Expanded mail header: labeled fields matching the confirm envelope.
+    @ViewBuilder
+    private func expandedEnvelope(_ item: ContextThreadItem) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let from = item.from, !from.isEmpty {
+                envelopeField(label: "From", addresses: from)
+            }
+            if let to = item.to, !to.isEmpty {
+                envelopeField(label: "To", addresses: to)
+            }
+            if let cc = item.cc, !cc.isEmpty {
+                envelopeField(label: "Cc", addresses: cc)
+            }
+            if let subject = item.subject, !subject.isEmpty {
+                envelopePlainField(label: "Subject", value: subject)
+            }
+            envelopePlainField(label: "Date", value: shortDate(item.at))
+            if !item.attachmentNames.isEmpty {
+                envelopePlainField(
+                    label: "Attachments",
+                    value: item.attachmentNames.joined(separator: ", ")
+                )
+            }
+        }
+    }
+
+    private static let envelopeLabelWidth: CGFloat = 62
+
+    private func envelopeField(label: String, addresses: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(label)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: Self.envelopeLabelWidth, alignment: .leading)
+            addressValue(addresses)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func envelopePlainField(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.envelopeLabelWidth, alignment: .leading)
             Text(value)
                 .font(.system(size: 9))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func addressValue(_ raw: String) -> some View {
+        let parts = MailAddressParts.parseList(raw)
+        if parts.isEmpty {
+            Text(raw)
+                .font(.system(size: 9))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(3)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
+        } else {
+            FlowAddressBadges(addresses: parts)
+                .font(.system(size: 9))
+        }
+    }
+
+    /// Compact route line: `{from} → {to}` with preview-style email pills.
+    @ViewBuilder
+    private func addressRouteRow(from: String?, to: String?) -> some View {
+        let fromParts = MailAddressParts.parseList(from ?? "")
+        let toParts = MailAddressParts.parseList(to ?? "")
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if !fromParts.isEmpty {
+                compactAddressPills(fromParts)
+            } else if let from, !from.isEmpty {
+                Text(from)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            if !fromParts.isEmpty || !(from ?? "").isEmpty,
+               !toParts.isEmpty || !(to ?? "").isEmpty
+            {
+                Text("→")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            if !toParts.isEmpty {
+                compactAddressPills(toParts)
+            } else if let to, !to.isEmpty {
+                Text(to)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .font(.system(size: 9))
+    }
+
+    @ViewBuilder
+    private func compactAddressPills(_ parts: [MailAddressParts]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                if let email = part.email {
+                    AddressBadge(email: email, lineLimit: 1)
+                } else if let name = part.name {
+                    Text(name)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
         }
     }
 

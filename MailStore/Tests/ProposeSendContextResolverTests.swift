@@ -83,18 +83,36 @@ import Testing
             "a/INBOX/1": ProposeSendMailContent(
                 subject: "Re: chat",
                 from: "Jo <jo@x.com>",
+                to: "Maro <maro@x.com>",
+                cc: "Pat <pat@x.com>",
+                attachmentNames: ["brief.pdf"],
                 body: "Hello",
                 internetMessageID: "<m1@x>"
             )
         ])
         let resolver = ProposeSendContextResolver(mail: mail, vault: FakeVault(files: [:]))
-        let proposal = SendProposal(agentName: "Cursor", to: ["a@b.c"], subject: "S", body: "B")
+        let proposal = SendProposal(
+            agentName: "Cursor",
+            to: ["a@b.c"],
+            subject: "S",
+            body: "B",
+            cc: ["cc@x.com"],
+            sender: "maro@x.com"
+        )
         let resolved = await resolver.resolve(context: context, proposal: proposal)
         let item = resolved.items.first { $0.id == "m1" }
         #expect(item?.from == "Jo <jo@x.com>")
+        #expect(item?.to == "Maro <maro@x.com>")
+        #expect(item?.cc == "Pat <pat@x.com>")
+        #expect(item?.attachmentNames == ["brief.pdf"])
         #expect(item?.subject == "Re: chat")
         #expect(item?.detail == "Hello")
         #expect(item?.unavailableReason == nil)
+        let draft = resolved.items.first { $0.id == "draft" }
+        #expect(draft?.from == "maro@x.com")
+        #expect(draft?.to == "a@b.c")
+        #expect(draft?.cc == "cc@x.com")
+        #expect(draft?.subject == "S")
         if case let .mail(_, _, id, messageID)? = item?.original {
             #expect(id == "1")
             #expect(messageID == "<m1@x>")
