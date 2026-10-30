@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.21.2] - 2026-10-30
+
+### Changed
+
+- Propose-send context thread mail cards: compact rail keeps subject + `from → to` address pills; expanded (clicked) shows labeled From / To / Cc (when present) / Subject / Date / Attachments (when present), then Open-in-Mail and link chips, then body. Resolver and fetch now pass `to`, `cc`, and attachment filenames for the envelope
+
 ## [0.21.1] - 2026-10-29
 
 ### Fixed

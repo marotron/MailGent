@@ -4,6 +4,10 @@ import Foundation
 public struct ProposeSendMailContent: Equatable, Sendable {
     public let subject: String
     public let from: String
+    public let to: String
+    public let cc: String
+    /// Attachment filenames only (names for the expanded envelope).
+    public let attachmentNames: [String]
     public let body: String?
     /// RFC Message-ID when available (for Open in Mail).
     public let internetMessageID: String?
@@ -11,11 +15,17 @@ public struct ProposeSendMailContent: Equatable, Sendable {
     public init(
         subject: String,
         from: String,
+        to: String = "",
+        cc: String = "",
+        attachmentNames: [String] = [],
         body: String? = nil,
         internetMessageID: String? = nil
     ) {
         self.subject = subject
         self.from = from
+        self.to = to
+        self.cc = cc
+        self.attachmentNames = attachmentNames
         self.body = body
         self.internetMessageID = internetMessageID
     }
@@ -47,7 +57,11 @@ public struct ContextThreadItem: Equatable, Sendable, Identifiable {
     public let summary: String
     /// Mail envelope meta (shown above the body divider).
     public let from: String?
+    public let to: String?
+    public let cc: String?
     public let subject: String?
+    /// Attachment filenames (expanded envelope only when non-empty).
+    public let attachmentNames: [String]
     /// Expanded detail (mail body / vault excerpt); nil when unavailable or empty.
     public let detail: String?
     public let unavailableReason: String?
@@ -65,7 +79,10 @@ public struct ContextThreadItem: Equatable, Sendable, Identifiable {
         at: Date,
         summary: String,
         from: String? = nil,
+        to: String? = nil,
+        cc: String? = nil,
         subject: String? = nil,
+        attachmentNames: [String] = [],
         detail: String? = nil,
         unavailableReason: String? = nil,
         isDraft: Bool = false,
@@ -80,7 +97,10 @@ public struct ContextThreadItem: Equatable, Sendable, Identifiable {
         self.at = at
         self.summary = summary
         self.from = from
+        self.to = to
+        self.cc = cc
         self.subject = subject
+        self.attachmentNames = attachmentNames
         self.detail = detail
         self.unavailableReason = unavailableReason
         self.isDraft = isDraft
@@ -173,7 +193,10 @@ public struct ProposeSendContextResolver: Sendable {
                             at: event.at,
                             summary: event.summary,
                             from: content.from.isEmpty ? nil : content.from,
+                            to: content.to.isEmpty ? nil : content.to,
+                            cc: content.cc.isEmpty ? nil : content.cc,
                             subject: content.subject.isEmpty ? nil : content.subject,
+                            attachmentNames: content.attachmentNames,
                             detail: content.body.flatMap { $0.isEmpty ? nil : $0 },
                             original: resolvedOriginal,
                             linkChips: chips
@@ -237,6 +260,16 @@ public struct ProposeSendContextResolver: Sendable {
             }
         }
 
+        let draftFrom = proposal.sender?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let draftTo = proposal.to
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        let draftCc = proposal.cc
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        let draftSubject = proposal.subject.trimmingCharacters(in: .whitespacesAndNewlines)
         items.append(
             ContextThreadItem(
                 id: "draft",
@@ -244,7 +277,11 @@ public struct ProposeSendContextResolver: Sendable {
                 scope: .shared,
                 ownership: .you,
                 at: Date.distantFuture,
-                summary: proposal.subject.isEmpty ? "Draft" : proposal.subject,
+                summary: draftSubject.isEmpty ? "Draft" : draftSubject,
+                from: (draftFrom?.isEmpty == false) ? draftFrom : nil,
+                to: draftTo.isEmpty ? nil : draftTo,
+                cc: draftCc.isEmpty ? nil : draftCc,
+                subject: draftSubject.isEmpty ? nil : draftSubject,
                 detail: proposal.body,
                 isDraft: true
             )
