@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.21.1] - 2026-10-29
+
+### Fixed
+
+- Leak guard phone heuristic: skip URL path segment IDs (match preceded by `/`) and orphan-`)` spans with no `(` (e.g. OpenRent-style `…/3090520 )1 Bed…`); keep real phones such as `+44 (0)…`, `+1 (737)…`, and `(44) 01252…`
+
 ## [0.21.0] - 2026-10-28
 
 ### Added

@@ -1,6 +1,6 @@
 # MailGent
 
-**0.21.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.21.1 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -105,7 +105,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Optional on-device scan of subject/body before the agent receives mail (opt in per placement)
 - Built-in detectors plus your own filters; hits can redact or withhold
-- Phone detector skips date-like runs, decimal ranges, bare long IDs (e.g. `26-10-2026 14`, `12.71 - 12.71`, meeting IDs), and VAT / company-registry digit runs after labels such as `VAT No.`, `Registered in England No.`, or `Company No.`
+- Phone detector skips date-like runs, decimal ranges, bare long IDs (e.g. `26-10-2026 14`, `12.71 - 12.71`, meeting IDs), VAT / company-registry digit runs after labels such as `VAT No.`, `Registered in England No.`, or `Company No.`, URL path segment IDs (digit run after `/`), and orphan-`)` spans with no `(` (e.g. listing titles glued after a markdown-style link close)
 - Credit-card detector requires a Luhn check; password patterns redact only the secret value (`password: …`), while `token=…` still redacts the whole assignment
 - A match after an emoji (or any other multi-unit character) is redacted in place; that scan no longer quits the app
 - Access Log records per-hit originals (and body line numbers on new entries) so you can inspect what was redacted or replaced

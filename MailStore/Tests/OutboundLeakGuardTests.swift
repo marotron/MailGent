@@ -220,6 +220,43 @@ struct OutboundLeakGuardTests {
         #expect(!result.disclosedRules.contains("Phone numbers"))
     }
 
+    @Test func builtInPhoneIgnoresURLPathListingIDs() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let sample =
+            "Property ( https://www.openrent.co.uk/3090520 )1 Bed Flat, Leopold Street, DE1 - £650"
+        let result = guard_.sanitize(
+            text: sample,
+            field: .body,
+            accountID: "work",
+            placement: "INBOX",
+            fieldGranted: true
+        )
+        #expect(result.agentAccess == .granted)
+        #expect(result.text == sample)
+        #expect(!result.disclosedRules.contains("Phone numbers"))
+    }
+
+    @Test func builtInPhoneKeepsInternationalParenForms() {
+        let guard_ = guardWith(builtIns: [.phones: true])
+        let samples = [
+            "Mobile +44 (0)7883 302465 thanks",
+            "Office +44 (0)20 7946 0958 thanks",
+            "US +1 (737) 325-2956 thanks",
+        ]
+        for sample in samples {
+            let result = guard_.sanitize(
+                text: sample,
+                field: .body,
+                accountID: "work",
+                placement: "INBOX",
+                fieldGranted: true
+            )
+            #expect(result.agentAccess == .sanitized, "missed phone in: \(sample)")
+            #expect(result.text.contains("[REDACTED:phones]"), "not redacted: \(sample)")
+            #expect(result.disclosedRules.contains("Phone numbers"), "no disclose: \(sample)")
+        }
+    }
+
     @Test func builtInPhoneKeepsLeadingParenCountryCode() {
         let guard_ = guardWith(builtIns: [.phones: true])
         let result = guard_.sanitize(

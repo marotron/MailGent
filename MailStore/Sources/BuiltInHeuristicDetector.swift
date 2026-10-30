@@ -166,6 +166,16 @@ enum BuiltInHeuristicDetector {
         let digitCount = trimmed.unicodeScalars.filter { CharacterSet.decimalDigits.contains($0) }.count
         if digitCount < 7 || digitCount > 15 { return true }
 
+        // URL path segment IDs: `/3090520 )1` after markdown-style link close.
+        if start > 0 {
+            let before = text.index(text.startIndex, offsetBy: start - 1)
+            if text[before] == "/" { return true }
+        }
+
+        // Orphan `)` (no `(` in the span) — e.g. listing title glued after `)1 Bed`.
+        // Real phones that use parens always include `(` in the match (`(0)`, `(44)`, `(415)`).
+        if trimmed.contains(")"), !trimmed.contains("(") { return true }
+
         // Bare meeting/account IDs: optional + then 13+ digits, no separators.
         if bareLongIdPhoneRegex.firstMatch(
             in: trimmed,
