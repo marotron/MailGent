@@ -124,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.23.1"
+                        "version": "0.23.2"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -569,9 +569,46 @@ public struct LoopbackMCPServer {
 
         if isNew {
             let registry = host.pendingProposals
+            let audit = host.audit
+            let auditAgent = agent
+            let auditDetail = detail
             Task {
                 let decision = await prompter(stored)
-                _ = registry.resolve(id: proposalId, decision: decision)
+                if registry.resolve(id: proposalId, decision: decision) {
+                    let payload = Self.outcomePayload(decision)
+                    let outcomeKey: String
+                    switch decision {
+                    case .cancel: outcomeKey = "cancelled"
+                    case .send: outcomeKey = "send"
+                    case .openInMail: outcomeKey = "opened_in_mail"
+                    }
+                    audit?.append(
+                        AuditEntry(
+                            kind: .proposeSend,
+                            agentID: auditAgent.id,
+                            agentName: auditAgent.name,
+                            detail: "\(outcomeKey) · \(auditDetail)",
+                            at: Date(),
+                            finishedAt: Date(),
+                            requestSummary: AuditJSON.request(["proposalId": proposalId, "human": true]),
+                            responseSummary: AuditJSON.json(payload)
+                        )
+                    )
+                } else if registry.isExpired(id: proposalId) {
+                    let payload: [String: Any] = ["outcome": "expired"]
+                    audit?.append(
+                        AuditEntry(
+                            kind: .proposeSend,
+                            agentID: auditAgent.id,
+                            agentName: auditAgent.name,
+                            detail: "expired · \(auditDetail)",
+                            at: Date(),
+                            finishedAt: Date(),
+                            requestSummary: AuditJSON.request(["proposalId": proposalId, "human": true]),
+                            responseSummary: AuditJSON.json(payload)
+                        )
+                    )
+                }
             }
         }
 
@@ -688,19 +725,32 @@ public struct LoopbackMCPServer {
             let detail = "\(proposal.subject) → \(proposal.to.joined(separator: ", "))"
             let payload = Self.outcomePayload(decision)
             guard host.pendingProposals.claimDelivery(id: proposalId) else {
-                host.audit?.append(
-                    AuditEntry(
-                        kind: .awaitProposeSend,
-                        agentID: agent.id,
-                        agentName: agent.name,
-                        detail: "already_delivered · \(detail)",
-                        at: started,
-                        finishedAt: Date(),
-                        requestSummary: request,
-                        responseSummary: AuditJSON.json(payload)
+                // Only echo a successful outcome when deliver actually completed.
+                if host.pendingProposals.isDeliverySucceeded(id: proposalId) {
+                    host.audit?.append(
+                        AuditEntry(
+                            kind: .awaitProposeSend,
+                            agentID: agent.id,
+                            agentName: agent.name,
+                            detail: "already_delivered · \(detail)",
+                            at: started,
+                            finishedAt: Date(),
+                            requestSummary: request,
+                            responseSummary: AuditJSON.json(payload)
+                        )
                     )
+                    return try jsonString(payload)
+                }
+                let error = CallError.outgoingFailed("Delivery already in progress for this proposal.")
+                recordProposeSendFailure(
+                    kind: .awaitProposeSend,
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: detail,
+                    error: error
                 )
-                return try jsonString(payload)
+                throw error
             }
             return try deliverProposeSendDecision(
                 agent: agent,
@@ -732,6 +782,7 @@ public struct LoopbackMCPServer {
         switch decision {
         case .cancel:
             let payload: [String: Any] = ["outcome": "cancelled"]
+            host.pendingProposals.markDeliverySucceeded(id: proposal.id)
             host.audit?.append(
                 AuditEntry(
                     kind: .awaitProposeSend,
@@ -749,6 +800,7 @@ public struct LoopbackMCPServer {
         case .send, .openInMail:
             guard proposal.canDeliverSecretConstants else {
                 let error = CallError.secretConstantMissing(proposal.secretConstantMissing)
+                host.pendingProposals.releaseDeliveryClaim(id: proposal.id)
                 recordProposeSendFailure(
                     kind: .awaitProposeSend,
                     agent: agent,
@@ -762,6 +814,7 @@ public struct LoopbackMCPServer {
             let mode: MailOutgoingMode = decision == .send ? .send : .visibleCompose
             let outcomeKey = decision == .send ? "send" : "opened_in_mail"
             guard let sender = host.readMailOutgoingSender() else {
+                host.pendingProposals.releaseDeliveryClaim(id: proposal.id)
                 recordProposeSendFailure(
                     kind: .awaitProposeSend,
                     agent: agent,
@@ -777,6 +830,7 @@ public struct LoopbackMCPServer {
             } catch {
                 let message = (error as? MailOutgoingError)?.description
                     ?? String(describing: error)
+                host.pendingProposals.releaseDeliveryClaim(id: proposal.id)
                 recordProposeSendFailure(
                     kind: .awaitProposeSend,
                     agent: agent,
@@ -787,6 +841,7 @@ public struct LoopbackMCPServer {
                 )
                 throw CallError.outgoingFailed(message)
             }
+            host.pendingProposals.markDeliverySucceeded(id: proposal.id)
             let payload: [String: Any] = ["outcome": outcomeKey]
             host.audit?.append(
                 AuditEntry(

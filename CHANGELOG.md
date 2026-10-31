@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.23.2] - 2026-10-31
+
+### Fixed
+
+- Failed Apple Mail deliver after `await_propose_send` no longer sticks the delivery claim — a later await retries or errors instead of returning a bare `outcome: send` without delivering
+
+### Added
+
+- Access log records the human propose-send decision (cancel / send / open in Mail / expired) as soon as the confirm resolves, even if the agent never awaits
+- Menu-bar red count, Dock badge, and status menu **Needs your action** include open propose-send confirms alongside Ask (kind-aware rows; Allow/Block only on Ask)
+
 ## [0.23.1] - 2026-10-31
 
 ### Added

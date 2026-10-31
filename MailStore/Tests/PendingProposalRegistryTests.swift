@@ -156,6 +156,25 @@ import Testing
         registry.expireIfNeeded()
         #expect(box.id == "exp-1")
     }
+
+    @Test func releaseDeliveryClaimAllowsSecondClaim() {
+        let registry = PendingProposalRegistry()
+        let proposal = makeProposal()
+        guard case let .created(id, _, _) = registry.submit(agentID: "agent-1", proposal: proposal) else {
+            Issue.record("expected created")
+            return
+        }
+        #expect(registry.resolve(id: id, decision: .send))
+        #expect(registry.claimDelivery(id: id))
+        #expect(!registry.claimDelivery(id: id))
+        #expect(!registry.isDeliverySucceeded(id: id))
+
+        registry.releaseDeliveryClaim(id: id)
+        #expect(registry.claimDelivery(id: id))
+        registry.markDeliverySucceeded(id: id)
+        #expect(registry.isDeliverySucceeded(id: id))
+        #expect(!registry.claimDelivery(id: id))
+    }
 }
 
 private final class FakeClock: @unchecked Sendable {

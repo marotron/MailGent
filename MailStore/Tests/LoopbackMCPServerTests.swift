@@ -1017,6 +1017,41 @@ struct LoopbackMCPServerTests {
         })
     }
 
+    @Test func proposeSendHumanCancelAuditedWithoutAwait() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .cancel }
+        )
+        defer { env.remove() }
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "alex@example.com", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+
+        // Human decision is audited at resolve — not only when an agent later awaits.
+        var sawCancel = false
+        for _ in 0..<40 {
+            if env.audit.entries().contains(where: {
+                $0.kind == .proposeSend && $0.detail.hasPrefix("cancelled")
+            }) {
+                sawCancel = true
+                break
+            }
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(sawCancel)
+        #expect(env.audit.entries().contains {
+            $0.kind == .proposeSend && $0.detail.hasPrefix("awaiting_user")
+        })
+        // No await yet → no await_propose_send receipt row.
+        #expect(!env.audit.entries().contains { $0.kind == .awaitProposeSend })
+        _ = proposalId
+    }
+
     @Test func awaitProposeSendReturnsSendOutcome() async throws {
         let outgoing = FakeMailOutgoingSender()
         let env = try LoopbackFixture(
@@ -1279,6 +1314,98 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains {
             $0.kind == .awaitProposeSend && $0.outcome != .ok
         })
+    }
+
+    @Test func awaitProposeSendAfterFailedDeliverDoesNotReportBareSendOnRetry() async throws {
+        let outgoing = FakeMailOutgoingSender(error: .scriptFailed("Mail refused"))
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "alex@example.com", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+
+        let first = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": proposalId, "timeout": 5]
+                )
+            )
+        )
+        #expect(first.body.contains("isError"))
+        #expect(outgoing.deliveries.count == 1)
+
+        // Claim must not stick after failure — a bare `outcome: send` without a second
+        // deliver would lie that Apple Mail accepted the message.
+        let second = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": proposalId, "timeout": 5]
+                )
+            )
+        )
+        if !second.body.contains("isError") {
+            let payload = try Self.toolPayload(second.body)
+            #expect(payload["outcome"] as? String != "send")
+        }
+        #expect(outgoing.deliveries.count >= 1)
+        // Still failing (error uncleared): either error again or retry attempt; never silent success.
+        #expect(second.body.contains("isError") || second.body.contains("Mail refused"))
+    }
+
+    @Test func awaitProposeSendRetriesDeliverAfterPriorFailure() async throws {
+        let outgoing = FakeMailOutgoingSender(error: .scriptFailed("Mail refused"))
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "alex@example.com", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+
+        let first = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": proposalId, "timeout": 5]
+                )
+            )
+        )
+        #expect(first.body.contains("isError"))
+        #expect(outgoing.deliveries.count == 1)
+
+        outgoing.error = nil
+        let payload = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
+        #expect(payload["outcome"] as? String == "send")
+        #expect(outgoing.deliveries.count == 2)
     }
 
     @Test func proposeSendRejectsEmptyPlacementSenderWhenRevealOff() async throws {

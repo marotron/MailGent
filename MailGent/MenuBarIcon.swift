@@ -2,26 +2,38 @@ import AppKit
 import MailStore
 import SwiftUI
 
+enum PendingUserActionKind: Equatable, Sendable {
+    case ask
+    case proposeSend
+}
+
 struct PendingAskSummary: Equatable, Sendable {
     let id: String
     let agent: String
     let subject: String
+    let kind: PendingUserActionKind
 }
 
-/// Concurrent access requests in stable registration order. No windows or continuations.
+/// Concurrent human-action prompts (Ask + propose-send) in stable registration order.
 struct PendingAskState: Equatable, Sendable {
     private(set) var summaries: [PendingAskSummary] = []
     private(set) var selectedID: String?
 
     var count: Int { summaries.count }
 
-    mutating func register(id: String, agent: String, subject: String) {
+    mutating func register(
+        id: String,
+        agent: String,
+        subject: String,
+        kind: PendingUserActionKind = .ask
+    ) {
         let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
         summaries.append(
             PendingAskSummary(
                 id: id,
                 agent: agent,
-                subject: trimmed.isEmpty ? "(no subject)" : trimmed
+                subject: trimmed.isEmpty ? "(no subject)" : trimmed,
+                kind: kind
             )
         )
         if selectedID == nil {
@@ -59,25 +71,27 @@ struct PendingAskState: Equatable, Sendable {
     }
 }
 
-/// Status-menu Access requests section. Hidden when nothing is pending.
+/// Status-menu pending human-actions section. Hidden when nothing is pending.
 struct AccessRequestMenu: Equatable, Sendable {
     struct Row: Equatable, Sendable {
         let id: String
         let label: String
+        let kind: PendingUserActionKind
         let isSelected: Bool
     }
 
     let isVisible: Bool
     let count: Int
     let rows: [Row]
-    /// Spoken count, e.g. "1 access request". Nil when the section is hidden.
+    /// Spoken count, e.g. "1 item needs your action". Nil when the section is hidden.
     let accessibilityPhrase: String?
 
     static func project(_ state: PendingAskState) -> AccessRequestMenu {
         let rows = state.summaries.map { summary in
             Row(
                 id: summary.id,
-                label: "\(summary.agent) · \(summary.subject)",
+                label: rowLabel(summary),
+                kind: summary.kind,
                 isSelected: summary.id == state.selectedID
             )
         }
@@ -89,24 +103,38 @@ struct AccessRequestMenu: Equatable, Sendable {
         )
     }
 
+    static func rowLabel(_ summary: PendingAskSummary) -> String {
+        switch summary.kind {
+        case .ask:
+            return "\(summary.agent) · \(summary.subject)"
+        case .proposeSend:
+            return "\(summary.agent) · Send · \(summary.subject)"
+        }
+    }
+
     static func phrase(for count: Int) -> String? {
         switch count {
         case ..<1: return nil
-        case 1: return "1 access request"
-        default: return "\(count) access requests"
+        case 1: return "1 item needs your action"
+        default: return "\(count) items need your action"
         }
     }
 }
 
-/// Pending access requests. Drives the menu section, menu-bar bubble, and Dock `badgeLabel`.
+/// Pending human actions. Drives the menu section, menu-bar bubble, and Dock `badgeLabel`.
 @MainActor
 final class AskQueueIndicator: ObservableObject {
     static let shared = AskQueueIndicator()
 
     @Published private(set) var pending = PendingAskState()
 
-    func register(id: String, agent: String, subject: String) {
-        pending.register(id: id, agent: agent, subject: subject)
+    func register(
+        id: String,
+        agent: String,
+        subject: String,
+        kind: PendingUserActionKind = .ask
+    ) {
+        pending.register(id: id, agent: agent, subject: subject, kind: kind)
         syncDockBadge()
     }
 
