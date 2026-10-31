@@ -1052,6 +1052,36 @@ final class AgentBridge {
                     Task { @MainActor in
                         opener.open(original)
                     }
+                },
+                handoffSend: { proposal in
+                    let registry = host.pendingProposals
+                    guard registry.claimDelivery(id: proposal.id) else {
+                        if registry.isDeliverySucceeded(id: proposal.id) {
+                            return nil
+                        }
+                        return "Delivery already in progress for this proposal."
+                    }
+                    guard proposal.canDeliverSecretConstants else {
+                        registry.releaseDeliveryClaim(id: proposal.id)
+                        let names = proposal.secretConstantMissing.map { "[[mg:\($0)]]" }
+                            .joined(separator: ", ")
+                        return names.isEmpty
+                            ? "Unknown secret constants in this message."
+                            : "Unknown secret constants: \(names)"
+                    }
+                    guard let sender = host.readMailOutgoingSender() else {
+                        registry.releaseDeliveryClaim(id: proposal.id)
+                        return "Mail outgoing sender is not bound."
+                    }
+                    do {
+                        try sender.deliver(proposal, mode: .send)
+                        registry.markDeliverySucceeded(id: proposal.id)
+                        return nil
+                    } catch {
+                        registry.releaseDeliveryClaim(id: proposal.id)
+                        return (error as? MailOutgoingError)?.description
+                            ?? String(describing: error)
+                    }
                 }
             )
         }

@@ -281,12 +281,15 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         return entries[id]?.expiresAt
     }
 
-    /// Claim the one-shot deliver right after a decision. Fails when in-flight or already succeeded.
+    /// Claim the one-shot deliver. Fails when expired, in-flight, or already succeeded.
+    ///
+    /// Decision may still be `nil` when the confirm UI owns the Send handoff (claim → AppleScript
+    /// → mark succeeded, then resolve). `await_propose_send` claims after a decision as before
+    /// (including `.cancel`, which only marks the claim succeeded).
     public func claimDelivery(id: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard var entry = entries[id],
-              entry.decision != nil,
               !entry.expired,
               entry.deliveryPhase == .idle
         else {
@@ -369,6 +372,10 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         guard var entry = entries[id], !entry.expired, entry.decision == nil else {
             lock.unlock()
             return
+        }
+        // Drop an in-flight confirm handoff so a late AppleScript completion cannot mark success.
+        if entry.deliveryPhase == .inFlight {
+            entry.deliveryPhase = .idle
         }
         entry.expired = true
         entry.terminalAt = now()

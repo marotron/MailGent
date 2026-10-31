@@ -5,12 +5,16 @@ import SwiftUI
 /// Confirm dialog for MCP `propose_send`. Ask chrome + Variant B body preview
 /// (card fills to footer; Formatted|Raw overlays the body on hover).
 /// When experimental context is resolved, shows E-thin × F-full × P4 split.
+/// Send keeps the window open through Automation handoff (sending → handed off / failed).
 struct SendProposalPromptDialog: View {
+    @ObservedObject var model: SendProposalConfirmModel
     let proposal: SendProposal
     let resolvedContext: ProposeSendResolvedContext?
     let onSend: () -> Void
     let onOpenInMail: () -> Void
     let onCancel: () -> Void
+    let onRetry: () -> Void
+    let onDone: () -> Void
     var onOpenContextOriginal: (ContextThreadOriginal) -> Void = { _ in }
 
     @State private var showRaw = false
@@ -83,18 +87,26 @@ struct SendProposalPromptDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
-            lead
-            if secretConstantsBlocked {
+            if model.isReview {
+                lead
+            } else {
+                phaseBanner
+            }
+            if secretConstantsBlocked, model.isReview {
                 secretMissingBanner
             }
-            if let resolved = resolvedContext {
-                splitContent(resolved)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                envelopeCard
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Group {
+                if let resolved = resolvedContext {
+                    splitContent(resolved)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    envelopeCard
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
-            if !usedSecretSummaries.isEmpty {
+            .opacity(model.isReview ? 1 : 0.72)
+            .allowsHitTesting(model.isReview)
+            if !usedSecretSummaries.isEmpty, model.isReview {
                 secretUsedStrip
             }
             footer
@@ -130,6 +142,83 @@ struct SendProposalPromptDialog: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var phaseBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            phaseIcon
+            VStack(alignment: .leading, spacing: 2) {
+                Text(phaseTitle)
+                    .font(.callout.weight(.semibold))
+                Text(phaseSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(phaseSubtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(phaseBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(phaseTitle). \(phaseSubtitle)")
+    }
+
+    @ViewBuilder
+    private var phaseIcon: some View {
+        switch model.phase {
+        case .sending:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 18, height: 18)
+        case .handedOff:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(.green)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(.red)
+        case .review:
+            EmptyView()
+        }
+    }
+
+    private var phaseTitle: String {
+        switch model.phase {
+        case .sending: "Sending via Apple Mail…"
+        case .handedOff: "Handed to Apple Mail"
+        case .failed: "Mail refused the send"
+        case .review: ""
+        }
+    }
+
+    private var phaseSubtitle: String {
+        switch model.phase {
+        case .sending:
+            "Handing the message to Mail (Automation). Not waiting for Sent."
+        case .handedOff:
+            "Mail accepted the send. It may take a moment to appear in Sent."
+        case let .failed(message):
+            message
+        case .review:
+            ""
+        }
+    }
+
+    private var phaseSubtitleColor: Color {
+        if case .failed = model.phase { return .red.opacity(0.85) }
+        return .secondary
+    }
+
+    private var phaseBackground: Color {
+        switch model.phase {
+        case .sending: Color.accentColor.opacity(0.08)
+        case .handedOff: Color.green.opacity(0.10)
+        case .failed: Color.red.opacity(0.08)
+        case .review: .clear
+        }
     }
 
     private func splitContent(_ resolved: ProposeSendResolvedContext) -> some View {
@@ -288,22 +377,49 @@ struct SendProposalPromptDialog: View {
         .accessibilityValue("\(Int((pageZoom * 100).rounded())) percent")
     }
 
+    @ViewBuilder
     private var footer: some View {
-        HStack(spacing: 8) {
-            Button("Cancel") { onCancel() }
-                .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
-                .keyboardShortcut(.cancelAction)
+        switch model.phase {
+        case .review:
+            HStack(spacing: 8) {
+                Button("Cancel") { onCancel() }
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+                    .keyboardShortcut(.cancelAction)
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            Button("Open in Mail") { onOpenInMail() }
-                .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
-                .disabled(secretConstantsBlocked)
+                Button("Open in Mail") { onOpenInMail() }
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+                    .disabled(secretConstantsBlocked)
 
-            Button("Send") { onSend() }
-                .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
-                .keyboardShortcut(.defaultAction)
-                .disabled(secretConstantsBlocked)
+                Button("Send") { onSend() }
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(secretConstantsBlocked)
+            }
+        case .sending:
+            HStack(spacing: 8) {
+                Text("Working…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+            }
+        case .handedOff:
+            HStack(spacing: 8) {
+                Spacer(minLength: 8)
+                Button("Done") { onDone() }
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
+                    .keyboardShortcut(.defaultAction)
+            }
+        case .failed:
+            HStack(spacing: 8) {
+                Button("Try again") { onRetry() }
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+                Spacer(minLength: 8)
+                Button("Close") { onCancel() }
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
+                    .keyboardShortcut(.defaultAction)
+            }
         }
     }
 
