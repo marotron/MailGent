@@ -923,6 +923,12 @@ final class AgentBridge {
         makeLoopbackHost().setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
     }
 
+    func applyProposeSendHardTimeout() {
+        makeLoopbackHost().setProposeSendHardTimeoutSeconds(
+            TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+        )
+    }
+
     func applyProposeSendContextExperimental() {
         makeLoopbackHost().setProposeSendContextExperimental(
             MailGentPreferences.proposeSendContextExperimental
@@ -1012,15 +1018,28 @@ final class AgentBridge {
         host.setAgentMayOpenInMail(MailGentPreferences.agentMayOpenInMail)
         host.setMailOutgoingSender(AppleScriptMailOutgoingSender())
         host.setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
+        host.setProposeSendHardTimeoutSeconds(
+            TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+        )
         host.setProposeSendContextExperimental(MailGentPreferences.proposeSendContextExperimental)
         host.setRevealAccountsWithNoPlacements(MailGentPreferences.revealAccountsWithNoPlacements)
         refreshSecretConstantsOnHost(host)
+        host.pendingProposals.setExpirationHandler { id in
+            Task { @MainActor in
+                DetachedWindowHost.shared.expireSendProposal(id: id)
+            }
+        }
         host.setSendProposalPrompter { [weak self] proposal in
             let resolved = await self?.resolveProposeSendContext(proposal)
             let opener = await self?.makeProposeSendOriginalOpener()
                 ?? ProposeSendOriginalOpener(gateway: nil)
+            let expiresAt = host.pendingProposals.expiresAt(id: proposal.id)
+                ?? Date().addingTimeInterval(
+                    TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+                )
             return await DetachedWindowHost.shared.runSendProposalConfirm(
                 proposal: proposal,
+                expiresAt: expiresAt,
                 resolvedContext: resolved,
                 onOpenContextOriginal: { original in
                     Task { @MainActor in

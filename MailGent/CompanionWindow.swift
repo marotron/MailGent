@@ -255,6 +255,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     /// Present propose-send confirm until Send / Open in Mail / Cancel / traffic-light close.
     func runSendProposalConfirm(
         proposal: SendProposal,
+        expiresAt: Date,
         resolvedContext: ProposeSendResolvedContext? = nil,
         onOpenContextOriginal: @escaping (ContextThreadOriginal) -> Void = { _ in }
     ) async -> SendProposalDecision {
@@ -291,12 +292,23 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: withContext ? 1100 : 900, height: 900)
+            attachProposeSendExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: sendProposals.count)
             sendProposals[proposal.id] = SendProposalRecord(window: window, continuation: continuation)
-            intendedVisible.insert(ObjectIdentifier(window))
-            claimActivation()
-            window.makeKeyAndOrderFront(nil)
+            // Same raise path as Companion / Settings / Ask: orderFrontRegardless + delayed
+            // re-pokes so Cursor (or another front app) does not leave the confirm buried.
+            bringForward(window)
         }
+    }
+
+    /// Trailing titlebar countdown (hard Settings timeout). Footer mid is the dogfood fallback only.
+    private func attachProposeSendExpiryTitlebar(expiresAt: Date, to window: NSWindow) {
+        let hosting = NSHostingView(rootView: ProposeSendExpiryTitlebarLabel(expiresAt: expiresAt))
+        hosting.frame.size = hosting.fittingSize
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .trailing
+        accessory.view = hosting
+        window.addTitlebarAccessoryViewController(accessory)
     }
 
     private func presentConditionalAsk(
@@ -589,6 +601,23 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         sendProposals[id] = nil
         dismissAskWindow(record.window)
         continuation?.resume(returning: decision)
+    }
+
+    /// Hard-timeout path: dismiss confirm without delivering. Resumes cancel so the
+    /// fire-and-forget prompter Task can finish; registry already marked `expired`.
+    func expireSendProposal(id: String) {
+        guard let record = sendProposals[id] else { return }
+        if record.finished {
+            MailGentLog.trace("send proposal expire ignored (already decided) id=\(id)")
+            return
+        }
+        MailGentLog.trace("send proposal expired id=\(id)")
+        record.finished = true
+        let continuation = record.continuation
+        record.continuation = nil
+        sendProposals[id] = nil
+        dismissAskWindow(record.window)
+        continuation?.resume(returning: .cancel)
     }
 
     /// Hide one Ask window. Other pending requests stay up.

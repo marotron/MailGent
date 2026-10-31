@@ -1,7 +1,11 @@
 <!doctype html>
 <!--
   THROWAWAY PROTOTYPE — propose_send confirmation dialog.
-  Variants via ?variant=A|B (default B). Floating switcher at bottom.
+  Variants via ?variant=A|B (default B) and ?timer=titlebar|lead|footer (default titlebar).
+  Floating switcher at bottom.
+
+  LOCKED for Swift: Timer Titlebar (NSTitlebarAccessoryViewController trailing).
+  Footer mid = dogfood fallback only; Lead kept for compare.
 
   A — mode-row in flow + nested body-pane chrome
   B — floating Formatted|Raw; body text straight in card below divider (no body-pane card)
@@ -59,6 +63,12 @@
       background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
       font-weight: 650; font-size: 13px; position: relative;
       flex: 0 0 auto;
+      padding: 0 120px; /* room for traffic + optional titlebar timer */
+    }
+    .titlebar #title { font-weight: 650; }
+    .titlebar .expires {
+      position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+      font-weight: 500;
     }
     .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
     .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
@@ -87,7 +97,26 @@
       display: grid; place-items: center; flex-shrink: 0;
       font-size: 11px; font-weight: 700;
     }
+    .lead .lead-copy { flex: 1 1 auto; min-width: 0; }
     .lead strong { color: var(--ink); font-weight: 650; }
+
+    .expires {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    .expires.urgent { color: #c93400; }
+    /* Only the active slot’s .expires is visible */
+    .expires { display: none; }
+    .timer-titlebar .titlebar .expires { display: block; }
+    .timer-lead .lead .expires {
+      display: block; align-self: flex-start; padding-top: 2px;
+    }
+    .timer-footer .footer .expires { display: block; }
 
     .card {
       background: var(--card);
@@ -347,13 +376,21 @@
     .proto-switcher {
       position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
       z-index: 50;
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      justify-content: center;
       background: #1d1d1fee; color: #f5f5f7;
-      border-radius: 999px; padding: 8px 12px;
+      border-radius: 999px; padding: 8px 14px;
       box-shadow: 0 10px 30px #00000040;
       font-size: 12px;
+      max-width: calc(100vw - 24px);
     }
-    .proto-switcher .label { opacity: 0.7; margin-right: 4px; }
+    .proto-switcher .group {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .proto-switcher .sep {
+      width: 1px; height: 16px; background: #ffffff33; margin: 0 2px;
+    }
+    .proto-switcher .label { opacity: 0.7; margin-right: 2px; }
     .proto-switcher a {
       color: #f5f5f7; text-decoration: none;
       border: 1px solid #ffffff33; border-radius: 999px;
@@ -370,21 +407,23 @@
       Loading…
     </div>
 
-    <div class="window" role="dialog" aria-labelledby="title">
+    <div class="window" id="window" role="dialog" aria-labelledby="title">
       <div class="titlebar">
         <div class="traffic" aria-hidden="true" title="Close → Cancel">
           <i class="r"></i><i class="y"></i><i class="g"></i>
         </div>
         <span id="title">Send proposed mail?</span>
+        <div class="expires" id="expiresTitlebar" aria-live="polite">Expires in 1:00:00</div>
       </div>
 
       <div class="chrome" id="chrome">
         <div class="lead">
           <div class="icon" aria-hidden="true">✉</div>
-          <div>
+          <div class="lead-copy">
             <strong>Cursor</strong> wants to send this message via Apple Mail.
             Review the envelope, then choose.
           </div>
+          <div class="expires" id="expiresLead" aria-live="polite">Expires in 1:00:00</div>
         </div>
 
         <div class="card" id="card" aria-label="Message preview" data-mode="formatted">
@@ -488,6 +527,7 @@
           <button type="button" class="btn" data-outcome="cancelled">Cancel</button>
           <button type="button" class="btn" data-outcome="opened_in_mail">Open in Mail</button>
           <span class="spacer"></span>
+          <div class="expires" id="expiresFooter" aria-live="polite">Expires in 1:00:00</div>
           <button type="button" class="btn primary" data-outcome="send">Send</button>
         </div>
       </div>
@@ -499,29 +539,106 @@
   </div>
 
   <nav class="proto-switcher" aria-label="Prototype variants">
-    <span class="label">Variant</span>
-    <a href="?variant=A" data-v="A">A</a>
-    <a href="?variant=B" data-v="B">B</a>
+    <div class="group">
+      <span class="label">Variant</span>
+      <a href="#" data-param="variant" data-v="A">A</a>
+      <a href="#" data-param="variant" data-v="B">B</a>
+    </div>
+    <span class="sep" aria-hidden="true"></span>
+    <div class="group">
+      <span class="label">Timer</span>
+      <a href="#" data-param="timer" data-v="titlebar">Titlebar</a>
+      <a href="#" data-param="timer" data-v="lead">Lead</a>
+      <a href="#" data-param="timer" data-v="footer">Footer</a>
+    </div>
   </nav>
 
 <script>
   const params = new URLSearchParams(location.search);
   const variant = (params.get("variant") || "B").toUpperCase() === "A" ? "A" : "B";
+  const timerRaw = (params.get("timer") || "titlebar").toLowerCase();
+  const timer = ["titlebar", "lead", "footer"].includes(timerRaw) ? timerRaw : "titlebar";
 
+  const windowEl = document.getElementById("window");
   const chrome = document.getElementById("chrome");
   const card = document.getElementById("card");
   const out = document.getElementById("outcome");
   const note = document.getElementById("variantNote");
+  const expiresEls = [
+    document.getElementById("expiresTitlebar"),
+    document.getElementById("expiresLead"),
+    document.getElementById("expiresFooter"),
+  ];
 
   chrome.classList.add(variant === "A" ? "variant-a" : "variant-b");
+  windowEl.classList.add(`timer-${timer}`);
+  chrome.classList.add(`timer-${timer}`);
 
-  note.innerHTML = variant === "A"
+  const variantBlurb = variant === "A"
     ? `<strong>Variant A</strong> · Formatted|Raw in a mode row · nested <code>body-pane</code> card under the divider.`
-    : `<strong>Variant B</strong> · Formatted|Raw <em>overlays</em> the body (hover to show) · no nested pane chrome · HTML sample. Send stays plain <code>content:</code>. Attachments later.`;
+    : `<strong>Variant B</strong> · Formatted|Raw <em>overlays</em> the body (hover to show) · no nested pane chrome · HTML sample.`;
+  const timerBlurbs = {
+    titlebar: `<strong>Timer · Titlebar</strong> · <code>Expires in …</code> right-aligned (LOCKED for Swift · <code>NSTitlebarAccessoryViewController</code>).`,
+    lead: `<strong>Timer · Lead</strong> · compare only.`,
+    footer: `<strong>Timer · Footer</strong> · between Open in Mail and Send — dogfood fallback if titlebar fails.`,
+  };
+  note.innerHTML = `${variantBlurb}<br>${timerBlurbs[timer]}<br>Hard Settings limit (<code>proposeSendHardTimeoutSeconds</code>) — not the MCP soft-wait. At 0 the dialog dismisses via the existing expire path. Cancel / Send stay human-only (never auto-send).`;
+
+  function switcherHref(param, value) {
+    const next = new URLSearchParams(location.search);
+    next.set("variant", variant);
+    next.set("timer", timer);
+    next.set(param, value);
+    return `?${next.toString()}`;
+  }
 
   document.querySelectorAll(".proto-switcher a").forEach((a) => {
-    a.classList.toggle("on", a.getAttribute("data-v") === variant);
+    const param = a.getAttribute("data-param");
+    const value = a.getAttribute("data-v");
+    a.setAttribute("href", switcherHref(param, value));
+    const current = param === "variant" ? variant : timer;
+    a.classList.toggle("on", value.toLowerCase() === current.toLowerCase());
   });
+
+  /** Remaining seconds → "Expires in H:MM:SS" (≥1h) or "Expires in M:SS". */
+  function formatExpires(remainingSec) {
+    const s = Math.max(0, Math.floor(remainingSec));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const ss = String(sec).padStart(2, "0");
+    const clock = h > 0
+      ? `${h}:${String(m).padStart(2, "0")}:${ss}`
+      : `${m}:${ss}`;
+    return `Expires in ${clock}`;
+  }
+
+  // Demo budget ~1h so the tick is visible without waiting forever.
+  // Use ?demoRemaining=90 to dogfood the <1m / urgent path quickly.
+  const demoRemaining = Number(params.get("demoRemaining"));
+  let remaining = Number.isFinite(demoRemaining) && demoRemaining >= 0
+    ? demoRemaining
+    : 60 * 60; // 1:00:00
+
+  function paintExpires() {
+    const text = formatExpires(remaining);
+    const urgent = remaining > 0 && remaining < 60;
+    for (const el of expiresEls) {
+      el.textContent = text;
+      el.classList.toggle("urgent", urgent);
+      el.setAttribute("aria-label", text);
+    }
+    if (remaining <= 0) {
+      out.innerHTML = `Hard timeout hit 0 → existing expire path dismisses the window (no in-dialog “expired” chrome). <kbd>{ "outcome": "expired" }</kbd>`;
+    }
+  }
+
+  paintExpires();
+  setInterval(() => {
+    if (remaining <= 0) return;
+    remaining -= 1;
+    paintExpires();
+  }, 1000);
 
   function setMode(mode) {
     card.setAttribute("data-mode", mode);

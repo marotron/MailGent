@@ -6,6 +6,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.23.0] - 2026-10-31
+
+### Added
+
+- MCP `await_propose_send` — soft-wait for a pending `propose_send` (`proposalId`, optional `timeout` default 60s clamped 1…120). Returns `{ outcome: send | opened_in_mail | cancelled | expired }` or `{ status: awaiting_user, … }` so the agent can poll without holding one HTTP call open for the whole human wait
+- Settings → General → **Confirm wait limit** (when propose-send is on): 15m / 30m / 1h / 2h / 4h / 8h (default 1 hour). Hard timeout expires the proposal with **no send** and dismisses the confirm dialog
+- Fingerprint dedupe while awaiting: same agent + normalized to/cc/bcc/sender/subject/body reuses the same `proposalId` (no second dialog). Context is not part of the fingerprint
+
+### Changed
+
+- Propose-send confirm shows a live hard-timeout countdown in the titlebar (`Expires in H:MM:SS` / `M:SS`) from Settings → Confirm wait limit
+
+### Fixed
+
+- Propose-send confirm could open behind other windows when triggered from MCP while another app was frontmost — now uses the same frontmost raise path as Ask / Companion (`orderFrontRegardless` + delayed re-pokes)
+
+### Breaking
+
+- `propose_send` no longer blocks until Send / Open in Mail / Cancel. It returns immediately with `{ status: awaiting_user, proposalId, expiresAt, message }`. Agents must call `await_propose_send` for the outcome. Re-proposing the same mail while awaiting is a no-op (same id)
+
 ## [0.22.0] - 2026-10-31
 
 ### Added

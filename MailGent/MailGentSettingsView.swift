@@ -7,6 +7,8 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.agentMayChangeSourceKey) private var agentMayChangeSource = false
     @AppStorage(MailGentPreferences.agentMayOpenInMailKey) private var agentMayOpenInMail = false
     @AppStorage(MailGentPreferences.agentMayProposeSendKey) private var agentMayProposeSend = false
+    @AppStorage(MailGentPreferences.proposeSendHardTimeoutSecondsKey) private var proposeSendHardTimeoutSeconds =
+        MailGentPreferences.defaultProposeSendHardTimeoutSeconds
     @AppStorage(MailGentPreferences.revealAccountsWithNoPlacementsKey) private var revealAccountsWithNoPlacements = false
     @AppStorage(MailGentPreferences.allowConditionalAccessPromptsKey) private var allowConditionalAccessPrompts = false
     @AppStorage(MailGentPreferences.askDecisionCacheEnabledKey) private var askDecisionCacheEnabled = false
@@ -99,6 +101,50 @@ struct MailGentSettingsView: View {
         AccessLogFormat.bytes(session.agents.auditStoredBytes)
     }
 
+    private var proposeSendSettingsRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Allow agents to propose sending mail", isOn: $agentMayProposeSend)
+            Text(proposeSendHelp)
+                .foregroundStyle(.secondary)
+                .font(.callout)
+            if agentMayProposeSend {
+                proposeSendHardTimeoutPicker
+            }
+        }
+    }
+
+    private var proposeSendHardTimeoutPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Confirm wait limit", selection: $proposeSendHardTimeoutSeconds) {
+                Text("15 minutes").tag(900)
+                Text("30 minutes").tag(1_800)
+                Text("1 hour").tag(3_600)
+                Text("2 hours").tag(7_200)
+                Text("4 hours").tag(14_400)
+                Text("8 hours").tag(28_800)
+            }
+            Text("If you do not decide within this time, the proposal expires with no send.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+        }
+        .onChange(of: proposeSendHardTimeoutSeconds) { _, newValue in
+            applyProposeSendHardTimeout(newValue)
+        }
+    }
+
+    private func applyProposeSendHardTimeout(_ newValue: Int) {
+        let clamped = MailGentPreferences.clampProposeSendHardTimeoutSeconds(newValue)
+        if clamped != newValue {
+            proposeSendHardTimeoutSeconds = clamped
+            return
+        }
+        session.agents.applyProposeSendHardTimeout()
+    }
+
+    private var proposeSendHelp: String {
+        "Off by default. When on, a paired agent may call MCP propose_send; you confirm Send, Open in Mail, or Cancel before Apple Mail is touched. The agent waits via await_propose_send — MailGent never auto-sends."
+    }
+
     private var secretConstantsSettingsRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle("Enable secret constants", isOn: $secretConstantsEnabled)
@@ -134,14 +180,7 @@ struct MailGentSettingsView: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Allow agents to propose sending mail", isOn: $agentMayProposeSend)
-                    Text(
-                        "Off by default. When on, a paired agent may call MCP propose_send; you confirm Send, Open in Mail, or Cancel before Apple Mail is touched."
-                    )
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-                }
+                proposeSendSettingsRow
                 secretConstantsSettingsRow
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Reveal accounts with no placements", isOn: $revealAccountsWithNoPlacements)
