@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.22.0] - 2026-10-31
+
+### Added
+
+- **Secret constants** (Settings → General → **Enable secret constants**, off by default): named values you store locally so agents can insert `[[mg:name]]` placeholders in draft / `propose_send` bodies without ever seeing the value. Control Center → **Secret constants…** catalog (list + detail): CRUD, label / hint (`phone` \| `address` \| `id` \| `other`), optional multiline values, Show/Hide, token preview + Copy, and per-constant **Allowed agents** toggles over the paired-agent roster
+- MCP `list_secrets` — returns allowlisted `{ name, label?, hint? }` for the calling agent (never values). Always listed in `tools/list`; errors as disabled while the Settings toggle is off. Empty list when none are allowlisted
+- `create_draft` / `update_draft` / `propose_send` accept `[[mg:name]]` in the body when enabled and allowlisted; tool results and agent-facing audit stay tokenized. Propose-send confirm resolves values for you only (orange `<mark>` highlights; subtle “updated” when the value changed since draft); Send / Open in Mail fail closed on unknown or disallowed tokens
+- Sealed Application Support catalog plus one Keychain wrapping key (`secret-constants.wrapping-key`). Stored constant values are extra leak-guard patterns when leak guard is on (`secret_constant` reason); allowlisted agents see named markers such as `[redacted:name]`, others see generic `[redacted]`
+
 ## [0.21.2] - 2026-10-30
 
 ### Changed

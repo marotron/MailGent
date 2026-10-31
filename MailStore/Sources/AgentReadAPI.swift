@@ -873,7 +873,11 @@ public struct AgentReadAPI {
             let appliedRules = effectiveGrant(for: probe, agentID: agent.id)?.applied ?? []
             let fields = resolution.fields
             let granted = message.applying(fields)
-            var (sanitized, subjectField, bodyField) = sanitizeGet(granted, fields: fields)
+            var (sanitized, subjectField, bodyField) = sanitizeGet(
+                granted,
+                fields: fields,
+                agentID: agent.id
+            )
             // Prompted and cache-reuse both count as conditional (cache is silent — no second dialog).
             if resolution.confirmed.subject || resolution.blocked.subject {
                 subjectField = subjectField.markingConditionalPrompt(
@@ -1341,7 +1345,8 @@ public struct AgentReadAPI {
             field: .subject,
             accountID: item.accountID,
             placement: item.placement,
-            fieldGranted: fields.subject
+            fieldGranted: fields.subject,
+            agentID: agentID
         )
         guard subjectField.text != item.subject else { return item }
         return IndexedMessage(
@@ -1360,14 +1365,16 @@ public struct AgentReadAPI {
 
     private func sanitizeGet(
         _ message: ReadMessage,
-        fields: GrantFields
+        fields: GrantFields,
+        agentID: String
     ) -> (ReadMessage, SanitizedField, SanitizedField) {
         let subjectField = leakGuard.sanitize(
             text: message.subject,
             field: .subject,
             accountID: message.accountID,
             placement: message.placement,
-            fieldGranted: fields.subject
+            fieldGranted: fields.subject,
+            agentID: agentID
         )
         var current = message.withSanitizedSubject(subjectField.text)
 
@@ -1377,7 +1384,8 @@ public struct AgentReadAPI {
             field: .body,
             accountID: message.accountID,
             placement: message.placement,
-            fieldGranted: fields.body
+            fieldGranted: fields.body,
+            agentID: agentID
         )
         let sanitizedBody = Self.readBody(from: bodyField, fields: fields, fallback: message.body)
         current = current.withSanitizedBody(sanitizedBody)
@@ -1416,13 +1424,18 @@ public struct AgentReadAPI {
         }
     }
 
-    private func subjectField(for item: IndexedMessage, fields: GrantFields) -> SanitizedField {
+    private func subjectField(
+        for item: IndexedMessage,
+        fields: GrantFields,
+        agentID: String
+    ) -> SanitizedField {
         leakGuard.sanitize(
             text: item.subject,
             field: .subject,
             accountID: item.accountID,
             placement: item.placement,
-            fieldGranted: fields.subject
+            fieldGranted: fields.subject,
+            agentID: agentID
         )
     }
 
@@ -1478,7 +1491,7 @@ public struct AgentReadAPI {
         items.prefix(AuditLog.messageRefCap).map { item in
             let grant = effectiveGrant(for: item, agentID: agentID)
             let fields = grant?.fields ?? .headersOnly
-            let subjectSanitized = subjectField(for: item, fields: fields)
+            let subjectSanitized = subjectField(for: item, fields: fields, agentID: agentID)
             return AuditMessageRef(
                 item,
                 fields: fields,

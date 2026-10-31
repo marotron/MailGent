@@ -38,15 +38,64 @@ struct SendProposalPromptDialog: View {
         MailMIME.bodyLooksLikeHTML(proposal.body)
     }
 
+    private var hasSecretHighlights: Bool {
+        !proposal.secretConstantSpans.isEmpty && !bodyLooksLikeHTML
+    }
+
+    private var secretHighlightHTML: String? {
+        guard hasSecretHighlights else { return nil }
+        return SecretConstantHighlight.html(
+            resolved: proposal.body,
+            spans: proposal.secretConstantSpans
+        )
+    }
+
+    private var secretConstantsBlocked: Bool {
+        !proposal.secretConstantMissing.isEmpty
+    }
+
+    /// Unique secrets in body order — for the strip under the preview.
+    private var usedSecretSummaries: [UsedSecretSummary] {
+        var order: [String] = []
+        var byName: [String: UsedSecretSummary] = [:]
+        let chars = Array(proposal.body)
+        for span in proposal.secretConstantSpans.sorted(by: { $0.start < $1.start }) {
+            let start = max(0, min(span.start, chars.count))
+            let end = max(start, min(span.end, chars.count))
+            let value = String(chars[start..<end])
+            if var existing = byName[span.name] {
+                existing.updated = existing.updated || span.updatedSinceDraft
+                if existing.value.isEmpty, !value.isEmpty {
+                    existing.value = value
+                }
+                byName[span.name] = existing
+            } else {
+                order.append(span.name)
+                byName[span.name] = UsedSecretSummary(
+                    name: span.name,
+                    value: value,
+                    updated: span.updatedSinceDraft
+                )
+            }
+        }
+        return order.compactMap { byName[$0] }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
             lead
+            if secretConstantsBlocked {
+                secretMissingBanner
+            }
             if let resolved = resolvedContext {
                 splitContent(resolved)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 envelopeCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            if !usedSecretSummaries.isEmpty {
+                secretUsedStrip
             }
             footer
         }
@@ -130,6 +179,12 @@ struct SendProposalPromptDialog: View {
 
                 Divider().opacity(0.35)
 
+                if proposal.secretConstantSpans.contains(where: \.updatedSinceDraft) {
+                    Text("Some secret constants were updated since this draft was written.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
                 bodyPreview
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -137,11 +192,50 @@ struct SendProposalPromptDialog: View {
         }
     }
 
+    private var secretMissingBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Unknown secret constants")
+                    .font(.caption.weight(.semibold))
+                Text(proposal.secretConstantMissing.map { "[[mg:\($0)]]" }.joined(separator: ", "))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    /// Between body preview and Cancel / Open / Send — orangy marks mean “replaced secret”.
+    private var secretUsedStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "key.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("Secret constants replaced for send")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            FlowUsedSecrets(summaries: usedSecretSummaries)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Secret constants replaced for send")
+    }
+
     private var bodyPreview: some View {
         ZStack {
             MessageBodyView(
-                readBody: bodyLooksLikeHTML ? .text("") : .text(proposal.body),
-                htmlBody: bodyLooksLikeHTML ? proposal.body : nil,
+                readBody: bodyLooksLikeHTML || hasSecretHighlights ? .text("") : .text(proposal.body),
+                htmlBody: secretHighlightHTML ?? (bodyLooksLikeHTML ? proposal.body : nil),
                 rawBody: proposal.body,
                 showRaw: showRaw,
                 pageZoom: pageZoom,
@@ -196,18 +290,20 @@ struct SendProposalPromptDialog: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Spacer(minLength: 8)
-
             Button("Cancel") { onCancel() }
                 .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
                 .keyboardShortcut(.cancelAction)
 
+            Spacer(minLength: 8)
+
             Button("Open in Mail") { onOpenInMail() }
                 .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+                .disabled(secretConstantsBlocked)
 
             Button("Send") { onSend() }
                 .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
+                .disabled(secretConstantsBlocked)
         }
     }
 
@@ -230,6 +326,55 @@ struct SendProposalPromptDialog: View {
         }
     }
 
+}
+
+private struct UsedSecretSummary: Equatable, Identifiable {
+    var name: String
+    var value: String
+    var updated: Bool
+    var id: String { name }
+}
+
+/// Compact wrapping chips: `[[mg:name]] → value` (orangy value matches body `<mark>`).
+private struct FlowUsedSecrets: View {
+    let summaries: [UsedSecretSummary]
+
+    var body: some View {
+        // Simple wrap without a custom layout type — enough for ~10 constants.
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(summaries) { summary in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("[[mg:\(summary.name)]]")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                    Text(summary.value.isEmpty ? "—" : summary.value)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.35), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+                        .textSelection(.enabled)
+                    if summary.updated {
+                        Text("updated")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    summary.updated
+                        ? "\(summary.name) replaced with \(summary.value), updated since draft"
+                        : "\(summary.name) replaced with \(summary.value)"
+                )
+            }
+        }
+    }
+}
+
+extension SendProposalPromptDialog {
     private func envelopeAddressRow(label: String, raw: String) -> some View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let addresses = MailAddressParts.parseList(trimmed)

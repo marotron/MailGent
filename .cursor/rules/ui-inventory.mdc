@@ -1,0 +1,20 @@
+---
+description: Visual UI features — approved proto wins; inventory reuse by job; ask before adding types
+alwaysApply: true
+---
+
+# UI inventory (MailGent)
+
+Standing process for visual UI features. **Home (cross-repo):** global `swift-implementation-plans.mdc` → Visual features. This rule specializes MailGent paths.
+
+## Order (earlier wins on conflict)
+
+1. **HTML proto** under `.scratch/<feature>/` → refine until a variant is **approved**.
+2. **Approved proto = visual source of truth** for layout, copy, density, and interaction. Match it in SwiftUI — do not reshape into different chrome after approval.
+3. **Reuse** [`docs/ui-inventory.md`](../../docs/ui-inventory.md) when an existing type already matches the **job**. Prefer that type’s Swift source of truth over one-off duplicates.
+4. **Proto needs unnamed chrome** → compose locally in the feature to match the proto. Do **not** force a mismatched inventory type. Do **not** add inventory rows mid-feature.
+5. **After UI ships and dogfoods** → list candidate new types and **ask** which to add to `docs/ui-inventory.md` (keep HTML names in lockstep). No inventory edits for those candidates until answered.
+
+## Conflict
+
+Approved proto wins over inventory convenience. Do not force a plain multi-section `Form` (or other inventory-shaped shell) if that breaks locked list|detail chrome.

@@ -7,9 +7,15 @@ public enum LeakGuardScanField: Sendable {
 
 public struct OutboundLeakGuard: Sendable {
     public var policy: OutboundLeakGuardPolicy
+    /// Active catalog values scanned as literal leak patterns. Empty when master toggle is off.
+    public var secretConstants: [SecretConstant]
 
-    public init(policy: OutboundLeakGuardPolicy = .default) {
+    public init(
+        policy: OutboundLeakGuardPolicy = .default,
+        secretConstants: [SecretConstant] = []
+    ) {
         self.policy = policy
+        self.secretConstants = secretConstants
     }
 
     public func isScopeProtected(accountID: String, placement: String) -> Bool {
@@ -21,7 +27,8 @@ public struct OutboundLeakGuard: Sendable {
         field: LeakGuardScanField,
         accountID: String,
         placement: String,
-        fieldGranted: Bool
+        fieldGranted: Bool,
+        agentID: String? = nil
     ) -> SanitizedField {
         guard fieldGranted else {
             return .notGranted(original: text)
@@ -29,14 +36,21 @@ public struct OutboundLeakGuard: Sendable {
         guard policy.enabled, isScopeProtected(accountID: accountID, placement: placement) else {
             return .granted(text)
         }
-        let hits = resolveOverlaps(collectHits(in: text))
+        let hits = resolveOverlaps(collectHits(in: text, agentID: agentID))
         let hitMode = field == .subject ? policy.subjectHitMode : policy.bodyHitMode
         return applyHits(original: text, hits: hits, hitMode: hitMode)
     }
 
-    func collectHits(in text: String) -> [LeakHitSpan] {
+    func collectHits(in text: String, agentID: String? = nil) -> [LeakHitSpan] {
         var hits = BuiltInHeuristicDetector.collect(in: text, enabledClasses: policy.builtInClasses)
         hits.append(contentsOf: CustomRuleDetector.collect(in: text, rules: policy.customRules))
+        hits.append(
+            contentsOf: SecretConstantValueDetector.collect(
+                in: text,
+                constants: secretConstants,
+                agentID: agentID
+            )
+        )
         return hits
     }
 
@@ -110,7 +124,14 @@ public struct OutboundLeakGuard: Sendable {
         let disclosed = disclosedRules.sorted()
         let all = allRules.sorted()
         let agentAccess: FieldAccess = disclosed.isEmpty ? .granted : .sanitized
-        let reason: FieldAccessReason = agentAccess == .sanitized ? .leakGuard : .grant
+        let reason: FieldAccessReason
+        if agentAccess != .sanitized {
+            reason = .grant
+        } else if hits.allSatisfy({ SecretConstantValueDetector.isSecretConstantSource($0.source) }) {
+            reason = .secretConstant
+        } else {
+            reason = .leakGuard
+        }
         return SanitizedField(
             text: out,
             access: .sanitized,

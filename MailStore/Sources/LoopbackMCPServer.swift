@@ -124,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.21.2"
+                        "version": "0.22.0"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -136,7 +136,7 @@ public struct LoopbackMCPServer {
                 return try rpcOK(id: id ?? NSNull(), result: [:] as [String: Any])
 
             case "tools/list":
-                return try rpcOK(id: id ?? NSNull(), result: ["tools": Self.makeToolDescriptors()])
+                return try rpcOK(id: id ?? NSNull(), result: ["tools": makeToolDescriptors()])
 
             case "tools/call":
                 guard let name = params["name"] as? String else {
@@ -144,7 +144,7 @@ public struct LoopbackMCPServer {
                 }
                 let arguments = params["arguments"] as? [String: Any] ?? [:]
                 let indexSnapshot = host.snapshot()
-                if !indexSnapshot.isReady, name != "status" {
+                if !indexSnapshot.isReady, name != "status", name != "list_secrets", name != "listSecrets" {
                     return try indexingUnavailable(id: id, snapshot: indexSnapshot)
                 }
                 do {
@@ -197,9 +197,12 @@ public struct LoopbackMCPServer {
         arguments: [String: Any],
         credential: String?
     ) async throws -> String {
-        // status must work while indexing even before a gateway is bound.
+        // status / list_secrets must work even before a gateway is bound.
         if name == "status" {
             return try await statusTool(credential: credential)
+        }
+        if name == "list_secrets" || name == "listSecrets" {
+            return try listSecrets(credential: credential)
         }
         guard let gateway = host.readGateway() else {
             throw CallError.indexNotReady
@@ -269,21 +272,21 @@ public struct LoopbackMCPServer {
         case "create_draft":
             let started = Date()
             let body = arguments["body"] as? String ?? ""
+            let agent = try host.authenticate(credential)
+            try validateSecretConstantInsert(body: body, agentID: agent.id)
             let version = host.ledger.create(body: body)
-            if let agent = try? host.authenticate(credential) {
-                host.audit?.append(
-                    AuditEntry(
-                        kind: .createDraft,
-                        agentID: agent.id,
-                        agentName: agent.name,
-                        detail: version.draftID,
-                        at: started,
-                        finishedAt: Date(),
-                        requestSummary: AuditJSON.request(["body": body]),
-                        responseSummary: AuditJSON.json(AuditJSON.version(version))
-                    )
+            host.audit?.append(
+                AuditEntry(
+                    kind: .createDraft,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: version.draftID,
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: AuditJSON.request(["body": body]),
+                    responseSummary: AuditJSON.json(AuditJSON.version(version))
                 )
-            }
+            )
             return try jsonString(AuditJSON.version(version))
         case "update_draft":
             guard
@@ -293,21 +296,21 @@ public struct LoopbackMCPServer {
                 throw CallError.badArguments
             }
             let started = Date()
+            let agent = try host.authenticate(credential)
+            try validateSecretConstantInsert(body: body, agentID: agent.id)
             let version = try host.ledger.update(draftID: draftID, body: body)
-            if let agent = try? host.authenticate(credential) {
-                host.audit?.append(
-                    AuditEntry(
-                        kind: .updateDraft,
-                        agentID: agent.id,
-                        agentName: agent.name,
-                        detail: "\(version.draftID)/\(version.label)",
-                        at: started,
-                        finishedAt: Date(),
-                        requestSummary: AuditJSON.request(["draftID": draftID, "body": body]),
-                        responseSummary: AuditJSON.json(AuditJSON.version(version))
-                    )
+            host.audit?.append(
+                AuditEntry(
+                    kind: .updateDraft,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "\(version.draftID)/\(version.label)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: AuditJSON.request(["draftID": draftID, "body": body]),
+                    responseSummary: AuditJSON.json(AuditJSON.version(version))
                 )
-            }
+            )
             return try jsonString(AuditJSON.version(version))
         case "open_in_mail", "openInMail":
             return try await openInMail(arguments: arguments, credential: credential)
@@ -451,6 +454,7 @@ public struct LoopbackMCPServer {
         guard let body = arguments["body"] as? String else {
             throw CallError.badArguments
         }
+        try validateSecretConstantInsert(body: body, agentID: agent.id)
         let cc = Self.stringListArgument(arguments["cc"]) ?? []
         let bcc = Self.stringListArgument(arguments["bcc"]) ?? []
         let sender = (arguments["sender"] as? String)?
@@ -467,15 +471,18 @@ public struct LoopbackMCPServer {
         } else {
             context = nil
         }
+        let resolvedBody = resolveSecretConstantsForHuman(body: body)
         let proposal = SendProposal(
             agentName: agent.name,
             to: to,
             subject: subject,
-            body: body,
+            body: resolvedBody.body,
             cc: cc,
             bcc: bcc,
             sender: (sender?.isEmpty == false) ? sender : nil,
-            context: context
+            context: context,
+            secretConstantSpans: resolvedBody.spans,
+            secretConstantMissing: resolvedBody.missing
         )
         var requestFields: [String: Any] = [
             "to": to,
@@ -555,6 +562,17 @@ public struct LoopbackMCPServer {
             return try jsonString(payload)
 
         case .send, .openInMail:
+            guard proposal.canDeliverSecretConstants else {
+                let error = CallError.secretConstantMissing(proposal.secretConstantMissing)
+                recordProposeSendFailure(
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: detail,
+                    error: error
+                )
+                throw error
+            }
             let mode: MailOutgoingMode = decision == .send ? .send : .visibleCompose
             let outcomeKey = decision == .send ? "send" : "opened_in_mail"
             guard let sender = host.readMailOutgoingSender() else {
@@ -790,6 +808,9 @@ public struct LoopbackMCPServer {
         case prompterNotBound
         case outgoingNotBound
         case outgoingFailed(String)
+        case secretConstantsDisabled
+        case secretConstantNotAllowlisted([String])
+        case secretConstantMissing([String])
 
         var description: String {
             switch self {
@@ -822,12 +843,76 @@ public struct LoopbackMCPServer {
                 return "Apple Mail outgoing sender is not available (MailGent app host required)."
             case .outgoingFailed(let message):
                 return message
+            case .secretConstantsDisabled:
+                return "Secret constants are disabled. Enable them in MailGent Settings → General (then omit [[mg:]] placeholders until enabled)."
+            case .secretConstantNotAllowlisted(let names):
+                return "Secret constant not allowlisted for this agent: \(names.joined(separator: ", "))."
+            case .secretConstantMissing(let names):
+                return "Unknown secret constant placeholder: \(names.joined(separator: ", "))."
             }
         }
     }
 
-    private static func makeToolDescriptors() -> [[String: Any]] {
-        [
+    private struct HumanSecretResolve {
+        let body: String
+        let spans: [SecretConstantResolveSpan]
+        let missing: [String]
+    }
+
+    /// Resolve `[[mg:]]` for confirm UI / Apple Mail only. Agent-facing audit still logged tokenized above.
+    private func resolveSecretConstantsForHuman(body: String) -> HumanSecretResolve {
+        let names = SecretConstantPlaceholders.uniqueNames(in: body)
+        guard !names.isEmpty, host.readSecretConstantsEnabled() else {
+            return HumanSecretResolve(body: body, spans: [], missing: [])
+        }
+        do {
+            let result = try SecretConstantResolver.resolve(
+                body: body,
+                catalog: host.readSecretConstantsCatalog().dictionary
+            )
+            return HumanSecretResolve(body: result.resolved, spans: result.spans, missing: [])
+        } catch SecretConstantResolveError.missingNames(let missing) {
+            return HumanSecretResolve(body: body, spans: [], missing: missing)
+        } catch {
+            return HumanSecretResolve(body: body, spans: [], missing: names)
+        }
+    }
+
+    private func listSecrets(credential: String?) throws -> String {
+        let agent = try host.authenticate(credential)
+        guard host.readSecretConstantsEnabled() else {
+            throw CallError.secretConstantsDisabled
+        }
+        let allowed = host.readSecretConstantsCatalog().allowed(forAgentID: agent.id)
+        let items: [[String: Any]] = allowed.map { constant in
+            var item: [String: Any] = ["name": constant.name]
+            if !constant.label.isEmpty {
+                item["label"] = constant.label
+            }
+            if let hint = constant.hint {
+                item["hint"] = hint.rawValue
+            }
+            return item
+        }
+        return try jsonString(["secrets": items])
+    }
+
+    /// Fail closed when body uses `[[mg:]]` tokens the agent may not insert.
+    private func validateSecretConstantInsert(body: String, agentID: String) throws {
+        let names = SecretConstantPlaceholders.uniqueNames(in: body)
+        guard !names.isEmpty else { return }
+        guard host.readSecretConstantsEnabled() else {
+            throw CallError.secretConstantsDisabled
+        }
+        do {
+            try host.readSecretConstantsCatalog().validateInsert(names: names, agentID: agentID)
+        } catch SecretConstantsCatalogError.notAllowlisted(let rejected, _) {
+            throw CallError.secretConstantNotAllowlisted(rejected)
+        }
+    }
+
+    private func makeToolDescriptors() -> [[String: Any]] {
+        var tools: [[String: Any]] = [
             [
                 "name": "search",
                 "description":
@@ -918,7 +1003,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. MailGent shows Send / Open in Mail / Cancel; the MCP call waits. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events. Returns { outcome: send | opened_in_mail | cancelled }.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. MailGent shows Send / Open in Mail / Cancel; the MCP call waits. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events. Returns { outcome: send | opened_in_mail | cancelled }.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -961,7 +1046,8 @@ public struct LoopbackMCPServer {
             ],
             [
                 "name": "create_draft",
-                "description": "Create a MailGent-owned draft and its first version. Does not write Apple Mail.",
+                "description":
+                    "Create a MailGent-owned draft and its first version. Does not write Apple Mail. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and the name is allowlisted for this agent; tool results stay tokenized.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -972,7 +1058,8 @@ public struct LoopbackMCPServer {
             ],
             [
                 "name": "update_draft",
-                "description": "Append a new version to an existing MailGent draft. Does not write Apple Mail.",
+                "description":
+                    "Append a new version to an existing MailGent draft. Does not write Apple Mail. Body may include [[mg:name]] secret-constant placeholders when enabled and allowlisted; tool results stay tokenized.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1000,8 +1087,20 @@ public struct LoopbackMCPServer {
                     "properties": [:] as [String: Any]
                 ]
             ],
-            setSourceToolDescriptor
+            Self.setSourceToolDescriptor,
+            // Always listed so Cursor (and similar clients) see the tool without reconnecting
+            // when the user later enables Secret constants. Call fails closed while disabled.
+            [
+                "name": "list_secrets",
+                "description":
+                    "List secret constants this agent may reference in draft / propose_send bodies as [[mg:name]] placeholders. Returns name, optional label, and optional hint (phone|address|id|other). Values are never included. Empty list when none are allowlisted for this agent. Errors if Secret constants are disabled in MailGent Settings → General.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [:] as [String: Any]
+                ]
+            ]
         ]
+        return tools
     }
 
     private static var setSourceToolDescriptor: [String: Any] {

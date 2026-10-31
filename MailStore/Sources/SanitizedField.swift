@@ -10,6 +10,8 @@ public enum FieldAccess: String, Codable, Sendable {
 public enum FieldAccessReason: String, Codable, Sendable {
     case grant
     case leakGuard = "leak_guard"
+    /// Outbound text matched a stored secret-constant value.
+    case secretConstant = "secret_constant"
     /// User Allowed an Ask (conditional) prompt for this field on this get.
     case conditional
     /// User Blocked an Ask (conditional) prompt for this field on this get.

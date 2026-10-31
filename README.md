@@ -1,8 +1,8 @@
 # MailGent
 
-**0.21.2 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.22.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
-**Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
+**Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, secret constants, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
 **Interactive demo:** [demo.html](https://marotron.github.io/MailGent/demo.html) — watch one agent request walk through Scope → Fields → Rules → Leak guard.
 
@@ -64,6 +64,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - MCP `list_accounts` lists Mail identities (`displayName`, `email`) with grant-filtered mailbox `placements`; by default only accounts with at least one placement are returned
 - Optional Settings → General → **Reveal accounts with no placements** (off by default) includes empty-placement identities in `list_accounts` and allows them as `propose_send` `sender`
 - MCP `get` returns `mailURL` (`message://…`) and `internetMessageID` when the message has an RFC Message-ID (fail closed when missing)
+- Optional Settings → General → **Enable secret constants** (off by default) unlocks MCP `list_secrets` and `[[mg:name]]` placeholders in draft / `propose_send` bodies (see Secret constants)
 
 ### Grants — what each agent may see
 
@@ -108,7 +109,17 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Phone detector skips date-like runs, decimal ranges, bare long IDs (e.g. `26-10-2026 14`, `12.71 - 12.71`, meeting IDs), VAT / company-registry digit runs after labels such as `VAT No.`, `Registered in England No.`, or `Company No.`, URL path segment IDs (digit run after `/`), and orphan-`)` spans with no `(` (e.g. listing titles glued after a markdown-style link close)
 - Credit-card detector requires a Luhn check; password patterns redact only the secret value (`password: …`), while `token=…` still redacts the whole assignment
 - A match after an emoji (or any other multi-unit character) is redacted in place; that scan no longer quits the app
+- When **Secret constants** are enabled, each stored constant value is also scanned as a leak-guard pattern (`secret_constant`); allowlisted agents see `[redacted:name]`, others see `[redacted]`
 - Access Log records per-hit originals (and body line numbers on new entries) so you can inspect what was redacted or replaced
+
+### Secret constants
+
+- Settings → General → **Enable secret constants** (off by default); manage names and values in Control Center → **Secret constants…**
+- You define named constants (snake_case names, optional label / hint, single- or multiline value); values stay on your Mac (sealed Application Support catalog + Keychain wrapping key)
+- Per-constant **Allowed agents** toggles over the paired-agent roster — permission only; values are never duplicated per agent
+- MCP `list_secrets` returns allowlisted `{ name, label?, hint? }` only (never values); always present in the tool catalog, errors while the master toggle is off
+- Allowlisted agents may put `[[mg:name]]` in `create_draft` / `update_draft` / `propose_send` bodies; agent-facing results stay tokenized
+- Propose-send confirm resolves placeholders for you (orange highlights; fail closed on unknown tokens); Send / Open in Mail deliver the real values to Apple Mail only
 
 ### Access log
 
@@ -131,6 +142,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Agents can create/update drafts in a MailGent-owned ledger (in memory)
 - Drafts are **not** written into Mail.app; body-only drafts stay in MailGent and show in the Access Log
 - With **Allow agents to propose sending mail** on, `propose_send` opens a confirm dialog (Formatted|Raw preview with hover zoom; no attachments); **Send** or **Open in Mail** hands a new plain message to Apple Mail (Automation), not SMTP from MailGent; From is resolved against Mail’s live accounts (Gmail dots equivalent) and fails closed if it would not stick
+- With **Secret constants** on, draft and propose-send bodies may include `[[mg:name]]` placeholders; confirm UI resolves them for you (agent results stay tokenized)
 - With **Propose-send context thread** on, optional `context` adds an expandable left rail of mail and Personal-vault notes/logs (Markdown rendered for vault detail; private bands; max 40 events). Mail rows use compact `from → to` until selected, then a labeled envelope (Cc and Attachments only when present) above the body
 
 ### Install (DMG)
@@ -214,7 +226,7 @@ In the companion, **Pair Cursor** and/or **Pair Grok Bot**. Same loopback URL (S
 
 On first launch with no saved pairing, MailGent pairs **Cursor** automatically. If `~/.cursor/mcp.json` exists, MailGent writes (and on revoke removes) a `mailgent` entry with the loopback URL and Cursor's Bearer. A new agent has no grants, so it sees no mail until you allow mailboxes in Grant Desk.
 
-Tools: `search`, `list`, `list_new`, `list_accounts`, `get`, `get_attachment`, `open_in_mail`, `propose_send`, `create_draft`, `update_draft`, `status`, `update`, `set_source`. `list_accounts` returns Mail identities (`displayName`, `email`) with grant-filtered `placements` — by default only accounts with placements; empty-placement identities appear only when Settings → **Reveal accounts with no placements** is on (then usable as `propose_send` `sender`). `get` may include `mailURL` / `internetMessageID` when Message-ID is present. `open_in_mail`, `propose_send`, and `set_source` stay off unless Settings allows them. When Settings → Experimental → **Propose-send context thread** is on, `propose_send` accepts optional `context` `{ casePath, caseLabel?, events[], links? }` (ignored when the toggle is off).
+Tools: `search`, `list`, `list_new`, `list_accounts`, `get`, `get_attachment`, `open_in_mail`, `propose_send`, `create_draft`, `update_draft`, `list_secrets`, `status`, `update`, `set_source`. `list_accounts` returns Mail identities (`displayName`, `email`) with grant-filtered `placements` — by default only accounts with placements; empty-placement identities appear only when Settings → **Reveal accounts with no placements** is on (then usable as `propose_send` `sender`). `get` may include `mailURL` / `internetMessageID` when Message-ID is present. `open_in_mail`, `propose_send`, and `set_source` stay off unless Settings allows them. `list_secrets` lists allowlisted secret-constant names (never values) when Settings → **Enable secret constants** is on; `create_draft` / `update_draft` / `propose_send` may then use `[[mg:name]]` in the body. When Settings → Experimental → **Propose-send context thread** is on, `propose_send` accepts optional `context` `{ casePath, caseLabel?, events[], links? }` (ignored when the toggle is off).
 
 ## License
 

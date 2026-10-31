@@ -23,6 +23,8 @@ enum MailGentPreferences {
     static let proposeSendContextExperimentalKey = "proposeSendContextExperimental"
     /// Security-scoped bookmark data for Personal vault root (used by experimental context resolve).
     static let personalVaultRootBookmarkKey = "personalVaultRootBookmark"
+    /// Master toggle for secret constants (MCP `list_secrets`, placeholders, resolve, value leak hits).
+    static let secretConstantsEnabledKey = "secretConstantsEnabled"
 
     static let defaultLoopbackPort: UInt16 = 8788
     /// Default TTL when the cache is first enabled in Settings (1 hour).
@@ -44,6 +46,10 @@ enum MailGentPreferences {
 
     static var proposeSendContextExperimental: Bool {
         UserDefaults.standard.bool(forKey: proposeSendContextExperimentalKey)
+    }
+
+    static var secretConstantsEnabled: Bool {
+        UserDefaults.standard.bool(forKey: secretConstantsEnabledKey)
     }
 
     static var revealAccountsWithNoPlacements: Bool {

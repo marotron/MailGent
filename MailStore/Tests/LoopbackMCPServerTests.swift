@@ -549,6 +549,152 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
+        // Always listed (even when master toggle off) so MCP clients need not reconnect.
+        #expect(response.body.contains("\"name\":\"list_secrets\""))
+    }
+
+    @Test func listSecretsErrorsWhenDisabled() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "list_secrets", arguments: [:])
+            )
+        )
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Secret constants are disabled"))
+    }
+
+    @Test func listSecretsReturnsAllowlistedWhenEnabled() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+        let agent = try env.server.host.authenticate(env.credential)
+        var catalog = SecretConstantsCatalog()
+        try catalog.upsert(
+            SecretConstant(
+                name: "phone_mobile",
+                label: "Mobile",
+                hint: .phone,
+                value: "+1-555-0100",
+                allowedAgentIDs: [agent.id]
+            )
+        )
+        env.server.host.setSecretConstants(enabled: true, catalog: catalog)
+
+        let list = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Data(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#.utf8)
+            )
+        )
+        #expect(list.body.contains("\"name\":\"list_secrets\""))
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(name: "list_secrets", arguments: [:])
+            )
+        )
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        #expect(response.body.contains("phone_mobile"))
+        #expect(response.body.contains("Mobile"))
+        #expect(response.body.contains("phone"))
+        #expect(!response.body.contains("+1-555-0100"))
+    }
+
+    @Test func createDraftRejectsTokensWhenSecretConstantsDisabled() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "create_draft",
+                    arguments: ["body": "Call [[mg:phone_mobile]]"]
+                )
+            )
+        )
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Secret constants are disabled"))
+    }
+
+    @Test func createDraftAcceptsAllowlistedTokenAndKeepsBodyTokenized() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+        let agent = try env.server.host.authenticate(env.credential)
+        var catalog = SecretConstantsCatalog()
+        try catalog.upsert(
+            SecretConstant(
+                name: "phone_mobile",
+                label: "Mobile",
+                hint: .phone,
+                value: "+1-555-0100",
+                allowedAgentIDs: [agent.id]
+            )
+        )
+        env.server.host.setSecretConstants(enabled: true, catalog: catalog)
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "create_draft",
+                    arguments: ["body": "Call [[mg:phone_mobile]]"]
+                )
+            )
+        )
+        #expect(response.status == 200)
+        #expect(!response.body.contains("isError"))
+        #expect(response.body.contains("[[mg:phone_mobile]]"))
+        #expect(!response.body.contains("+1-555-0100"))
+    }
+
+    @Test func createDraftRejectsNonAllowlistedToken() async throws {
+        let env = try LoopbackFixture()
+        defer { env.remove() }
+        var catalog = SecretConstantsCatalog()
+        try catalog.upsert(
+            SecretConstant(
+                name: "phone_mobile",
+                label: "Mobile",
+                hint: .phone,
+                value: "+1-555-0100",
+                allowedAgentIDs: ["other-agent"]
+            )
+        )
+        env.server.host.setSecretConstants(enabled: true, catalog: catalog)
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "create_draft",
+                    arguments: ["body": "Call [[mg:phone_mobile]]"]
+                )
+            )
+        )
+        #expect(response.status == 200)
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("not allowlisted"))
+        #expect(response.body.contains("phone_mobile"))
     }
 
     @Test func openInMailOpensGrantedMessage() async throws {
