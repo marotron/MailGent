@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.23.1] - 2026-10-31
+
+### Added
+
+- Access log rows for MCP `list_secrets` and `await_propose_send` (terminal outcomes, errors, and claim-delivery follow-ups)
+- Settings → Access log → **Log soft-wait polls** (off by default; only when propose-send is enabled) — when on, soft `awaiting_user` polls are logged too
+
+### Changed
+
+- Terminal `await_propose_send` outcomes use Access log type `await_propose_send` (initial `propose_send` ack stays `propose_send`)
+- Access log Formatted `list_secrets` shows a compact one-line list (expand one row at a time for label/hint); sidebar summary is `N secrets` (values never appear)
+
 ## [0.23.0] - 2026-10-31
 
 ### Added

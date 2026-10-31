@@ -23,6 +23,7 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.auditMaxBytesKey) private var auditMaxBytes = 0
     @AppStorage(MailGentPreferences.proposeSendContextExperimentalKey) private var proposeSendContextExperimental = false
     @AppStorage(MailGentPreferences.secretConstantsEnabledKey) private var secretConstantsEnabled = false
+    @AppStorage(MailGentPreferences.logAwaitProposeSendSoftWaitsKey) private var logAwaitProposeSendSoftWaits = false
     @State private var confirmClearAll = false
     @State private var confirmClear24h = false
     @State private var vaultRootPath: String = PersonalVaultBookmark.displayPath() ?? ""
@@ -145,6 +146,20 @@ struct MailGentSettingsView: View {
         "Off by default. When on, a paired agent may call MCP propose_send; you confirm Send, Open in Mail, or Cancel before Apple Mail is touched. The agent waits via await_propose_send — MailGent never auto-sends."
     }
 
+    private var logSoftWaitPollsRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Log soft-wait polls", isOn: $logAwaitProposeSendSoftWaits)
+            Text(
+                "Off by default. Soft await_propose_send polls that return awaiting_user stay out of the log; Send / Cancel / expire / errors still appear. On logs every poll."
+            )
+            .foregroundStyle(.secondary)
+            .font(.callout)
+        }
+        .onChange(of: logAwaitProposeSendSoftWaits) { _, _ in
+            session.agents.applyLogAwaitProposeSendSoftWaits()
+        }
+    }
+
     private var secretConstantsSettingsRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle("Enable secret constants", isOn: $secretConstantsEnabled)
@@ -241,6 +256,9 @@ struct MailGentSettingsView: View {
                 LabeledContent("Full log") {
                     Text("\(storedCount) logs · \(storedBytesLabel)")
                         .textSelection(.enabled)
+                }
+                if agentMayProposeSend {
+                    logSoftWaitPollsRow
                 }
                 Picker("Delete entries older than", selection: $auditMaxAgeSeconds) {
                     Text("Never").tag(0)

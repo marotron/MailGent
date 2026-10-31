@@ -1,6 +1,6 @@
 # MailGent
 
-**0.23.0 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.23.1 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, secret constants, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -123,7 +123,9 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 ### Access log
 
-- Every agent call is logged with exactly what the agent received (sanitized / withheld overlays)
+- Every agent tool call is logged with exactly what the agent received (sanitized / withheld overlays), including `list_secrets` and `await_propose_send`
+- Formatted `list_secrets` shows a compact Secret constants list (one line each; expand one at a time for label/hint; sidebar `N secrets`) — values are never logged
+- Soft `await_propose_send` `awaiting_user` polls are omitted by default; Settings → Access log → **Log soft-wait polls** (when propose-send is on) logs them too. Terminal await outcomes and errors always appear (as type `await_propose_send`)
 - Request / Response modes: **Formatted** (default), **JSON Pretty**, or **JSON Raw**
 - List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log (Companion Read and Access Log use the same Open in Apple Mail handoff when Message-ID is present)
 - Remember Ask reuse uses a clock-arrow mark (`clock.arrow.circlepath`) instead of the live Ask `questionmark.circle.fill` — list chips, field badges (optically padded), and Formatted “user allowed (cached)”; same green allow / red block colors
