@@ -5,7 +5,7 @@ import SwiftUI
 struct MenuBarStatus: View {
     @Bindable var session: CompanionSession
     @ObservedObject private var askQueue = AskQueueIndicator.shared
-    @State private var accessRequestsExpanded = false
+    @State private var needsActionExpanded = false
 
     private var accessRequestMenu: AccessRequestMenu {
         AccessRequestMenu.project(askQueue.pending)
@@ -131,10 +131,10 @@ struct MenuBarStatus: View {
     private var accessRequestsSection: some View {
         VStack(alignment: .leading, spacing: 1) {
             Button {
-                accessRequestsExpanded.toggle()
+                needsActionExpanded.toggle()
             } label: {
                 HStack(spacing: 8) {
-                    Text("Access requests")
+                    Text("Needs your action")
                     Spacer(minLength: 8)
                     Text("\(accessRequestMenu.count)")
                         .foregroundStyle(.secondary)
@@ -142,7 +142,7 @@ struct MenuBarStatus: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Color(red: 110 / 255, green: 110 / 255, blue: 115 / 255))
-                        .rotationEffect(.degrees(accessRequestsExpanded ? 90 : 0))
+                        .rotationEffect(.degrees(needsActionExpanded ? 90 : 0))
                 }
                 .font(.callout)
                 .padding(.horizontal, 8)
@@ -150,10 +150,10 @@ struct MenuBarStatus: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Access requests")
+            .accessibilityLabel("Needs your action")
             .accessibilityValue(accessRequestMenu.accessibilityPhrase ?? "")
 
-            if accessRequestsExpanded {
+            if needsActionExpanded {
                 ForEach(accessRequestMenu.rows, id: \.id) { row in
                     AccessRequestMenuRow(row: row)
                 }
@@ -323,16 +323,18 @@ private struct AccessRequestMenuRow: View {
             .accessibilityLabel(row.label)
             .accessibilityAddTraits(row.isSelected ? .isSelected : [])
 
-            quickButton("Block", fill: Self.blockFill, ink: Self.blockInk) {
-                let id = row.id
-                DispatchQueue.main.async {
-                    DetachedWindowHost.shared.decidePendingAsk(id: id, decision: .block)
+            if row.kind == .ask {
+                quickButton("Block", fill: Self.blockFill, ink: Self.blockInk) {
+                    let id = row.id
+                    DispatchQueue.main.async {
+                        DetachedWindowHost.shared.decidePendingAsk(id: id, decision: .block)
+                    }
                 }
-            }
-            quickButton("Allow", fill: Self.allowFill, ink: Self.allowInk) {
-                let id = row.id
-                DispatchQueue.main.async {
-                    DetachedWindowHost.shared.decidePendingAsk(id: id, decision: .allow)
+                quickButton("Allow", fill: Self.allowFill, ink: Self.allowInk) {
+                    let id = row.id
+                    DispatchQueue.main.async {
+                        DetachedWindowHost.shared.decidePendingAsk(id: id, decision: .allow)
+                    }
                 }
             }
         }

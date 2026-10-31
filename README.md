@@ -1,6 +1,6 @@
 # MailGent
 
-**0.23.1 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.23.2 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, secret constants, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -85,8 +85,8 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - HTML-only Body shows an **HTML only** badge on the title row; plain preview is derived from HTML when needed
 - Preview canvas has − / + zoom (default 75%); dialog height stays compact (~560pt max)
 - Concurrent `get`s each open their own **Email access request** window. Allow, Block, or closing a window decides only that request
-- Red badge on the menu-bar icon (and Dock when visible) shows how many access requests are waiting
-- The status menu lists them under **Access requests** (count, one row each, **Block** / **Allow**). Clicking a row raises that window and does not decide it. Opening the menu raises every pending window without taking focus; closing it leaves the selected one in front
+- Red badge on the menu-bar icon (and Dock when visible) shows how many human actions are waiting (Ask **and** open propose-send confirms)
+- The status menu lists them under **Needs your action** (count, kind-aware rows: Ask as `Agent · subject`, send as `Agent · Send · subject`). Ask rows keep **Block** / **Allow**; send rows only raise the confirm. Clicking a row raises that window and does not decide it. Opening the menu raises every pending window without taking focus; closing it leaves the selected one in front
 - Optional rule from Ask: Subject / From **Add to rule** picks open a right-pane editor (New or Existing). **Allow** / **Block** writes the rule when armed; closing the window still blocks this read without writing a rule
 - Armed rule commit rematches other open Asks for the same agent: matching windows recheck (full cover → silent complete; partial cover → new Ask for leftovers only). Pass and Block both rematch
 - Ask rule editor **Enable on**: This mailbox (default) or This account · all mailboxes for that agent
@@ -126,6 +126,8 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Every agent tool call is logged with exactly what the agent received (sanitized / withheld overlays), including `list_secrets` and `await_propose_send`
 - Formatted `list_secrets` shows a compact Secret constants list (one line each; expand one at a time for label/hint; sidebar `N secrets`) — values are never logged
 - Soft `await_propose_send` `awaiting_user` polls are omitted by default; Settings → Access log → **Log soft-wait polls** (when propose-send is on) logs them too. Terminal await outcomes and errors always appear (as type `await_propose_send`)
+- Human propose-send decisions (cancel / send / open in Mail / expired) are logged on the confirm as type `propose_send` as soon as you act — even if the agent never calls `await_propose_send` (await still adds a separate receipt row)
+- A failed Apple Mail deliver after `await_propose_send` releases the delivery claim so a later await retries or errors; it never returns a bare `outcome: send` without delivering
 - Request / Response modes: **Formatted** (default), **JSON Pretty**, or **JSON Raw**
 - List chips for Ask allow/block and Pass/Block hits; Preview and Open in Apple Mail from the log (Companion Read and Access Log use the same Open in Apple Mail handoff when Message-ID is present)
 - Remember Ask reuse uses a clock-arrow mark (`clock.arrow.circlepath`) instead of the live Ask `questionmark.circle.fill` — list chips, field badges (optically padded), and Formatted “user allowed (cached)”; same green allow / red block colors
@@ -143,7 +145,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 - Agents can create/update drafts in a MailGent-owned ledger (in memory)
 - Drafts are **not** written into Mail.app; body-only drafts stay in MailGent and show in the Access Log
-- With **Allow agents to propose sending mail** on, `propose_send` acks immediately and opens a confirm dialog (Formatted|Raw preview with hover zoom; no attachments); the agent calls `await_propose_send` for `{ outcome }` (or still-waiting / expired). **Send** or **Open in Mail** hands a new plain message to Apple Mail (Automation), not SMTP from MailGent; From is resolved against Mail’s live accounts (Gmail dots equivalent) and fails closed if it would not stick
+- With **Allow agents to propose sending mail** on, `propose_send` acks immediately and opens a confirm dialog (Formatted|Raw preview with hover zoom; no attachments); the confirm counts toward the menu-bar **Needs your action** badge. The agent calls `await_propose_send` for `{ outcome }` (or still-waiting / expired). **Send** or **Open in Mail** hands a new plain message to Apple Mail (Automation), not SMTP from MailGent; From is resolved against Mail’s live accounts (Gmail dots equivalent) and fails closed if it would not stick; a failed deliver can be retried on a later await
 - With **Secret constants** on, draft and propose-send bodies may include `[[mg:name]]` placeholders; confirm UI resolves them for you (agent results stay tokenized)
 - With **Propose-send context thread** on, optional `context` adds an expandable left rail of mail and Personal-vault notes/logs (Markdown rendered for vault detail; private bands; max 40 events). Mail rows use compact `from → to` until selected, then a labeled envelope (Cc and Attachments only when present) above the body
 

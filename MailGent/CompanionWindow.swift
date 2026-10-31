@@ -172,11 +172,15 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Row click: select and raise that request. No Allow / Block.
+    /// Row click: select and raise that Ask or propose-send confirm. No Allow / Block.
     func raisePendingAsk(id: String) {
         _ = AskQueueIndicator.shared.select(id: id)
         guard AskQueueIndicator.shared.pending.selectedID == id else { return }
-        orderAsk(id: id, makeKey: !statusMenuIsOpen)
+        if asks[id] != nil {
+            orderAsk(id: id, makeKey: !statusMenuIsOpen)
+        } else if let record = sendProposals[id] {
+            bringForward(record.window)
+        }
     }
 
     /// Menu Block / Allow — same once-only path as the dialog buttons.
@@ -207,15 +211,23 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Raise every pending Ask. The selected window is ordered last. `makeKey` only when the menu is closed.
+    /// Raise every pending Ask / propose-send. The selected window is ordered last. `makeKey` only when the menu is closed.
     private func surfacePendingAsks(makeKey: Bool) {
         let pending = AskQueueIndicator.shared.pending
         guard pending.count > 0 else { return }
         for summary in pending.summaries {
-            orderAsk(id: summary.id, makeKey: false)
+            if asks[summary.id] != nil {
+                orderAsk(id: summary.id, makeKey: false)
+            } else if let record = sendProposals[summary.id] {
+                bringForward(record.window)
+            }
         }
         if let selected = pending.selectedID {
-            orderAsk(id: selected, makeKey: makeKey)
+            if asks[selected] != nil {
+                orderAsk(id: selected, makeKey: makeKey)
+            } else if let record = sendProposals[selected] {
+                bringForward(record.window)
+            }
         }
     }
 
@@ -295,6 +307,12 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             attachProposeSendExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: sendProposals.count)
             sendProposals[proposal.id] = SendProposalRecord(window: window, continuation: continuation)
+            AskQueueIndicator.shared.register(
+                id: proposal.id,
+                agent: proposal.agentName,
+                subject: proposal.subject,
+                kind: .proposeSend
+            )
             // Same raise path as Companion / Settings / Ask: orderFrontRegardless + delayed
             // re-pokes so Cursor (or another front app) does not leave the confirm buried.
             bringForward(window)
@@ -599,6 +617,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let continuation = record.continuation
         record.continuation = nil
         sendProposals[id] = nil
+        _ = AskQueueIndicator.shared.remove(id: id)
         dismissAskWindow(record.window)
         continuation?.resume(returning: decision)
     }
@@ -616,6 +635,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let continuation = record.continuation
         record.continuation = nil
         sendProposals[id] = nil
+        _ = AskQueueIndicator.shared.remove(id: id)
         dismissAskWindow(record.window)
         continuation?.resume(returning: .cancel)
     }

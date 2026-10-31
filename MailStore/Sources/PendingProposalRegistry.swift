@@ -38,10 +38,16 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         let expiresAt: Date
         var decision: SendProposalDecision?
         var expired: Bool
-        /// First successful await-side delivery / final audit wins.
-        var deliveryClaimed: Bool
+        /// Single-flight deliver: idle → inFlight → succeeded (or back to idle on failure).
+        var deliveryPhase: DeliveryPhase
         var waiters: [Waiter]
         var terminalAt: Date?
+    }
+
+    private enum DeliveryPhase: Equatable {
+        case idle
+        case inFlight
+        case succeeded
     }
 
     private let lock = NSLock()
@@ -149,7 +155,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             expiresAt: expiresAt,
             decision: nil,
             expired: false,
-            deliveryClaimed: false,
+            deliveryPhase: .idle,
             waiters: [],
             terminalAt: nil
         )
@@ -275,20 +281,50 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         return entries[id]?.expiresAt
     }
 
-    /// Claim the one-shot deliver/final-audit right after a decision. Second claim fails.
+    /// Claim the one-shot deliver right after a decision. Fails when in-flight or already succeeded.
     public func claimDelivery(id: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         guard var entry = entries[id],
               entry.decision != nil,
               !entry.expired,
-              !entry.deliveryClaimed
+              entry.deliveryPhase == .idle
         else {
             return false
         }
-        entry.deliveryClaimed = true
+        entry.deliveryPhase = .inFlight
         entries[id] = entry
         return true
+    }
+
+    /// After a failed AppleScript (or pre-deliver check), free the claim so a later await can retry.
+    public func releaseDeliveryClaim(id: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var entry = entries[id], entry.deliveryPhase == .inFlight else { return }
+        entry.deliveryPhase = .idle
+        entries[id] = entry
+    }
+
+    /// Mark deliver finished successfully (or cancel handled). Idempotent claim stays closed.
+    public func markDeliverySucceeded(id: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var entry = entries[id], entry.deliveryPhase == .inFlight else { return }
+        entry.deliveryPhase = .succeeded
+        entries[id] = entry
+    }
+
+    public func isDeliverySucceeded(id: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[id]?.deliveryPhase == .succeeded
+    }
+
+    public func isExpired(id: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[id]?.expired == true
     }
 
     // MARK: - Private
