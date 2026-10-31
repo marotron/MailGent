@@ -124,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.22.0"
+                        "version": "0.23.0"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -316,6 +316,8 @@ public struct LoopbackMCPServer {
             return try await openInMail(arguments: arguments, credential: credential)
         case "propose_send", "proposeSend":
             return try await proposeSend(arguments: arguments, credential: credential)
+        case "await_propose_send", "awaitProposeSend":
+            return try await awaitProposeSend(arguments: arguments, credential: credential)
         case "set_source":
             return try await setSource(arguments: arguments, credential: credential)
         case "update":
@@ -543,7 +545,143 @@ public struct LoopbackMCPServer {
             throw CallError.prompterNotBound
         }
 
-        let decision = await prompter(proposal)
+        let submit = host.pendingProposals.submit(agentID: agent.id, proposal: proposal)
+        let proposalId: String
+        let expiresAt: Date
+        let stored: SendProposal
+        let isNew: Bool
+        switch submit {
+        case let .created(id, exp, p):
+            proposalId = id
+            expiresAt = exp
+            stored = p
+            isNew = true
+        case let .deduped(id, exp, p):
+            proposalId = id
+            expiresAt = exp
+            stored = p
+            isNew = false
+        }
+
+        if isNew {
+            let registry = host.pendingProposals
+            Task {
+                let decision = await prompter(stored)
+                _ = registry.resolve(id: proposalId, decision: decision)
+            }
+        }
+
+        let payload: [String: Any] = [
+            "status": "awaiting_user",
+            "proposalId": proposalId,
+            "expiresAt": Self.iso8601(expiresAt),
+            "message":
+                "Waiting for human confirmation. Call await_propose_send with this proposalId; do not re-propose the same mail."
+        ]
+        host.audit?.append(
+            AuditEntry(
+                kind: .proposeSend,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: "awaiting_user · \(detail)",
+                at: started,
+                finishedAt: Date(),
+                requestSummary: request,
+                responseSummary: AuditJSON.json(payload)
+            )
+        )
+        return try jsonString(payload)
+    }
+
+    private func awaitProposeSend(arguments: [String: Any], credential: String?) async throws -> String {
+        let agent = try host.authenticate(credential)
+        guard let proposalId = arguments["proposalId"] as? String,
+              !proposalId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw CallError.badArguments
+        }
+        let softRaw: TimeInterval
+        if let n = arguments["timeout"] as? Double {
+            softRaw = n
+        } else if let n = arguments["timeout"] as? Int {
+            softRaw = TimeInterval(n)
+        } else if let n = arguments["timeout"] as? NSNumber {
+            softRaw = n.doubleValue
+        } else {
+            softRaw = PendingProposalRegistry.defaultSoftTimeoutSeconds
+        }
+        let started = Date()
+        let request = AuditJSON.request([
+            "proposalId": proposalId,
+            "timeout": softRaw
+        ])
+
+        let result = await host.pendingProposals.awaitDecision(id: proposalId, softTimeout: softRaw)
+        switch result {
+        case .unknown:
+            throw CallError.unknownProposal
+        case .stillAwaiting:
+            var payload: [String: Any] = [
+                "status": "awaiting_user",
+                "proposalId": proposalId,
+                "message": "Still waiting for human confirmation. Call await_propose_send again."
+            ]
+            if let expiresAt = host.pendingProposals.expiresAt(id: proposalId) {
+                payload["expiresAt"] = Self.iso8601(expiresAt)
+            }
+            return try jsonString(payload)
+
+        case .expired:
+            let payload: [String: Any] = ["outcome": "expired"]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "expired · \(proposalId)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case let .decided(decision):
+            guard let proposal = host.pendingProposals.proposal(id: proposalId) else {
+                throw CallError.unknownProposal
+            }
+            let detail = "\(proposal.subject) → \(proposal.to.joined(separator: ", "))"
+            guard host.pendingProposals.claimDelivery(id: proposalId) else {
+                return try jsonString(Self.outcomePayload(decision))
+            }
+            return try deliverProposeSendDecision(
+                agent: agent,
+                proposal: proposal,
+                decision: decision,
+                started: started,
+                request: request,
+                detail: detail
+            )
+        }
+    }
+
+    private static func outcomePayload(_ decision: SendProposalDecision) -> [String: Any] {
+        switch decision {
+        case .cancel: ["outcome": "cancelled"]
+        case .send: ["outcome": "send"]
+        case .openInMail: ["outcome": "opened_in_mail"]
+        }
+    }
+
+    private func deliverProposeSendDecision(
+        agent: PairedAgent,
+        proposal: SendProposal,
+        decision: SendProposalDecision,
+        started: Date,
+        request: String,
+        detail: String
+    ) throws -> String {
         switch decision {
         case .cancel:
             let payload: [String: Any] = ["outcome": "cancelled"]
@@ -614,6 +752,10 @@ public struct LoopbackMCPServer {
             )
             return try jsonString(payload)
         }
+    }
+
+    private static func iso8601(_ date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
     }
 
     private func recordProposeSendFailure(
@@ -808,6 +950,7 @@ public struct LoopbackMCPServer {
         case prompterNotBound
         case outgoingNotBound
         case outgoingFailed(String)
+        case unknownProposal
         case secretConstantsDisabled
         case secretConstantNotAllowlisted([String])
         case secretConstantMissing([String])
@@ -843,6 +986,8 @@ public struct LoopbackMCPServer {
                 return "Apple Mail outgoing sender is not available (MailGent app host required)."
             case .outgoingFailed(let message):
                 return message
+            case .unknownProposal:
+                return "Unknown or expired propose_send proposalId."
             case .secretConstantsDisabled:
                 return "Secret constants are disabled. Enable them in MailGent Settings → General (then omit [[mg:]] placeholders until enabled)."
             case .secretConstantNotAllowlisted(let names):
@@ -1003,7 +1148,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. MailGent shows Send / Open in Mail / Cancel; the MCP call waits. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events. Returns { outcome: send | opened_in_mail | cancelled }.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId (do not re-propose the same mail — fingerprint dedupes while awaiting). Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1042,6 +1187,22 @@ public struct LoopbackMCPServer {
                         ]
                     ],
                     "required": ["to", "subject", "body"]
+                ]
+            ],
+            [
+                "name": "await_propose_send",
+                "description":
+                    "Soft-wait for a pending propose_send proposal. Pass proposalId from propose_send. Optional timeout seconds (default 60, clamped 1…120, never longer than the remaining hard deadline). Returns { outcome: send | opened_in_mail | cancelled | expired }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. Unknown proposalId errors. Never auto-sends on timeout.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "proposalId": ["type": "string"],
+                        "timeout": [
+                            "type": "number",
+                            "description": "Soft wait seconds (default 60, max 120)."
+                        ]
+                    ],
+                    "required": ["proposalId"]
                 ]
             ],
             [

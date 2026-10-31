@@ -27,18 +27,22 @@ public final class LoopbackHost: @unchecked Sendable {
     private var secretConstantsCatalog = SecretConstantsCatalog()
     /// Suspends until the user chooses Send / Open in Mail / Cancel (or window close → Cancel).
     private var sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)?
+    /// Pending propose_send confirmations (ack + soft await + hard expire).
+    public let pendingProposals: PendingProposalRegistry
     private var indexState = LoopbackIndexSnapshot.notStarted
 
     public init(
         pairing: Pairing,
         audit: AuditLog? = nil,
         grants: GrantGate,
-        ledger: DraftLedger = DraftLedger()
+        ledger: DraftLedger = DraftLedger(),
+        pendingProposals: PendingProposalRegistry = PendingProposalRegistry()
     ) {
         self.pairing = pairing
         self.audit = audit
         self.grants = grants
         self.ledger = ledger
+        self.pendingProposals = pendingProposals
     }
 
     public func authenticate(_ credential: String?) throws -> PairedAgent {
@@ -185,6 +189,14 @@ public final class LoopbackHost: @unchecked Sendable {
         lock.lock()
         sendProposalPrompter = prompter
         lock.unlock()
+    }
+
+    public func setProposeSendHardTimeoutSeconds(_ seconds: TimeInterval) {
+        pendingProposals.setHardTimeoutSeconds(seconds)
+    }
+
+    public func readProposeSendHardTimeoutSeconds() -> TimeInterval {
+        pendingProposals.readHardTimeoutSeconds()
     }
 
     public func setIndexState(_ state: LoopbackIndexSnapshot) {

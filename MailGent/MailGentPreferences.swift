@@ -5,6 +5,8 @@ enum MailGentPreferences {
     static let agentMayChangeSourceKey = "agentMayChangeSource"
     static let agentMayOpenInMailKey = "agentMayOpenInMail"
     static let agentMayProposeSendKey = "agentMayProposeSend"
+    /// Hard wait for a pending `propose_send` before expiry (no auto-send). Seconds.
+    static let proposeSendHardTimeoutSecondsKey = "proposeSendHardTimeoutSeconds"
     /// When on, `list_accounts` includes identities with empty placements (off by default).
     static let revealAccountsWithNoPlacementsKey = "revealAccountsWithNoPlacements"
     static let loopbackPortKey = "loopbackPort"
@@ -29,6 +31,10 @@ enum MailGentPreferences {
     static let defaultLoopbackPort: UInt16 = 8788
     /// Default TTL when the cache is first enabled in Settings (1 hour).
     static let defaultAskDecisionCacheTTLSeconds = 3_600
+    /// Default hard wait for propose_send confirmation (1 hour).
+    static let defaultProposeSendHardTimeoutSeconds = 3_600
+    static let proposeSendHardTimeoutMinSeconds = 300
+    static let proposeSendHardTimeoutMaxSeconds = 28_800
     /// UserDefaults tag for forever (no wall-clock expiry; persisted).
     static let askDecisionCacheTTLForever = -1
 
@@ -42,6 +48,20 @@ enum MailGentPreferences {
 
     static var agentMayProposeSend: Bool {
         UserDefaults.standard.bool(forKey: agentMayProposeSendKey)
+    }
+
+    static var proposeSendHardTimeoutSeconds: Int {
+        let raw: Int
+        if UserDefaults.standard.object(forKey: proposeSendHardTimeoutSecondsKey) == nil {
+            raw = defaultProposeSendHardTimeoutSeconds
+        } else {
+            raw = UserDefaults.standard.integer(forKey: proposeSendHardTimeoutSecondsKey)
+        }
+        return clampProposeSendHardTimeoutSeconds(raw)
+    }
+
+    static func clampProposeSendHardTimeoutSeconds(_ value: Int) -> Int {
+        min(max(value, proposeSendHardTimeoutMinSeconds), proposeSendHardTimeoutMaxSeconds)
     }
 
     static var proposeSendContextExperimental: Bool {

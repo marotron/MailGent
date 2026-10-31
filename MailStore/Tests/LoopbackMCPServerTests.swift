@@ -539,6 +539,7 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"get_attachment\""))
         #expect(response.body.contains("\"name\":\"open_in_mail\""))
         #expect(response.body.contains("\"name\":\"propose_send\""))
+        #expect(response.body.contains("\"name\":\"await_propose_send\""))
         #expect(response.body.contains("\"name\":\"list_accounts\""))
         #expect(!response.body.contains("\"name\":\"listNew\""))
         #expect(!response.body.contains("\"name\":\"list_placements\""))
@@ -546,6 +547,7 @@ struct LoopbackMCPServerTests {
         #expect(!response.body.contains("\"name\":\"listAccounts\""))
         #expect(!response.body.contains("\"name\":\"openInMail\""))
         #expect(!response.body.contains("\"name\":\"proposeSend\""))
+        #expect(!response.body.contains("\"name\":\"awaitProposeSend\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
@@ -899,7 +901,7 @@ struct LoopbackMCPServerTests {
         })
     }
 
-    @Test func proposeSendReturnsSendOutcome() async throws {
+    @Test func proposeSendAcksAwaitingUser() async throws {
         let outgoing = FakeMailOutgoingSender()
         let env = try LoopbackFixture(
             mailOutgoingSender: outgoing,
@@ -908,7 +910,7 @@ struct LoopbackMCPServerTests {
         )
         defer { env.remove() }
 
-        let response = await env.server.handle(
+        let ack = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
@@ -921,17 +923,98 @@ struct LoopbackMCPServerTests {
             )
         )
 
-        #expect(response.status == 200)
-        #expect(!response.body.contains("isError"))
-        let payload = try Self.toolPayload(response.body)
+        #expect(ack.status == 200)
+        #expect(!ack.body.contains("isError"))
+        let payload = try Self.toolPayload(ack.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(payload["proposalId"] as? String != nil)
+        #expect(payload["expiresAt"] as? String != nil)
+        #expect(outgoing.deliveries.isEmpty)
+        #expect(env.audit.entries().contains {
+            $0.kind == .proposeSend && $0.detail.hasPrefix("awaiting_user")
+        })
+    }
+
+    @Test func awaitProposeSendReturnsSendOutcome() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: [
+                "to": ["Alex <alex@example.com>"],
+                "subject": "Hi",
+                "body": "Hello",
+                "cc": "ops@example.com"
+            ]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+        let payload = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(payload["outcome"] as? String == "send")
         #expect(outgoing.deliveries.count == 1)
         #expect(outgoing.deliveries[0].mode == .send)
         #expect(outgoing.deliveries[0].proposal.to == ["Alex <alex@example.com>"])
         #expect(outgoing.deliveries[0].proposal.cc == ["ops@example.com"])
         #expect(env.audit.entries().contains {
-            $0.kind == .proposeSend && $0.outcome == .ok
+            $0.kind == .proposeSend && $0.outcome == .ok && $0.detail.hasPrefix("send")
         })
+    }
+
+    @Test func proposeSendDedupesSameFingerprint() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let first = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        let second = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        #expect(first["proposalId"] as? String == second["proposalId"] as? String)
+    }
+
+    @Test func awaitProposeSendUnknownIdErrors() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .cancel }
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: Self.toolCallJSON(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": "missing-id"]
+                )
+            )
+        )
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Unknown") || response.body.contains("proposalId"))
     }
 
     @Test func proposeSendIgnoresContextWhenExperimentalOff() async throws {
@@ -947,21 +1030,22 @@ struct LoopbackMCPServerTests {
         )
         defer { env.remove() }
 
-        let response = await env.server.handle(
-            LoopbackMCPRequest(
-                method: "POST",
-                path: "/mcp",
-                headers: ["Authorization": "Bearer \(env.credential)"],
-                body: Data(
-                    """
-                    {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"propose_send","arguments":{"to":["a@b.c"],"subject":"Hi","body":"Hello","context":{"casePath":"../escape","events":[]}}}}
-                    """.utf8
-                )
-            )
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: [
+                "to": ["a@b.c"],
+                "subject": "Hi",
+                "body": "Hello",
+                "context": ["casePath": "../escape", "events": [] as [Any]]
+            ]
         )
-
-        #expect(response.status == 200)
-        #expect(!response.body.contains("isError"))
+        let proposalId = try #require(ack["proposalId"] as? String)
+        _ = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(box.value?.context == nil)
     }
 
@@ -993,6 +1077,13 @@ struct LoopbackMCPServerTests {
 
         #expect(response.status == 200)
         #expect(!response.body.contains("isError"))
+        let ack = try Self.toolPayload(response.body)
+        let proposalId = try #require(ack["proposalId"] as? String)
+        _ = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(box.value?.context?.casePath == "cases/acme")
         #expect(box.value?.context?.caseLabel == "Acme")
         #expect(box.value?.context?.events.count == 1)
@@ -1025,7 +1116,7 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("relative path") || response.body.contains("casePath"))
     }
 
-    @Test func proposeSendReturnsOpenedInMailOutcome() async throws {
+    @Test func awaitProposeSendReturnsOpenedInMailOutcome() async throws {
         let outgoing = FakeMailOutgoingSender()
         let env = try LoopbackFixture(
             mailOutgoingSender: outgoing,
@@ -1034,28 +1125,22 @@ struct LoopbackMCPServerTests {
         )
         defer { env.remove() }
 
-        let response = await env.server.handle(
-            LoopbackMCPRequest(
-                method: "POST",
-                path: "/mcp",
-                headers: ["Authorization": "Bearer \(env.credential)"],
-                body: Self.toolCallJSON(
-                    name: "propose_send",
-                    arguments: [
-                        "to": "alex@example.com",
-                        "subject": "Hi",
-                        "body": "Hello"
-                    ]
-                )
-            )
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "alex@example.com", "subject": "Hi", "body": "Hello"]
         )
-
-        let payload = try Self.toolPayload(response.body)
+        let proposalId = try #require(ack["proposalId"] as? String)
+        let payload = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(payload["outcome"] as? String == "opened_in_mail")
         #expect(outgoing.deliveries[0].mode == .visibleCompose)
     }
 
-    @Test func proposeSendReturnsCancelledOutcome() async throws {
+    @Test func awaitProposeSendReturnsCancelledOutcome() async throws {
         let outgoing = FakeMailOutgoingSender()
         let env = try LoopbackFixture(
             mailOutgoingSender: outgoing,
@@ -1064,28 +1149,22 @@ struct LoopbackMCPServerTests {
         )
         defer { env.remove() }
 
-        let response = await env.server.handle(
-            LoopbackMCPRequest(
-                method: "POST",
-                path: "/mcp",
-                headers: ["Authorization": "Bearer \(env.credential)"],
-                body: Self.toolCallJSON(
-                    name: "propose_send",
-                    arguments: [
-                        "to": "alex@example.com",
-                        "subject": "Hi",
-                        "body": "Hello"
-                    ]
-                )
-            )
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "alex@example.com", "subject": "Hi", "body": "Hello"]
         )
-
-        let payload = try Self.toolPayload(response.body)
+        let proposalId = try #require(ack["proposalId"] as? String)
+        let payload = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(payload["outcome"] as? String == "cancelled")
         #expect(outgoing.deliveries.isEmpty)
     }
 
-    @Test func proposeSendFailsAfterSendWhenScriptingThrows() async throws {
+    @Test func awaitProposeSendFailsAfterSendWhenScriptingThrows() async throws {
         let outgoing = FakeMailOutgoingSender(error: .scriptFailed("Mail refused"))
         let env = try LoopbackFixture(
             mailOutgoingSender: outgoing,
@@ -1094,18 +1173,20 @@ struct LoopbackMCPServerTests {
         )
         defer { env.remove() }
 
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "alex@example.com", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
         let response = await env.server.handle(
             LoopbackMCPRequest(
                 method: "POST",
                 path: "/mcp",
                 headers: ["Authorization": "Bearer \(env.credential)"],
-                body: Self.toolCallJSON(
-                    name: "propose_send",
-                    arguments: [
-                        "to": "alex@example.com",
-                        "subject": "Hi",
-                        "body": "Hello"
-                    ]
+                body: try Self.toolCallJSONObject(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": proposalId, "timeout": 5]
                 )
             )
         )
@@ -1161,25 +1242,22 @@ struct LoopbackMCPServerTests {
         )
         defer { env.remove() }
 
-        let response = await env.server.handle(
-            LoopbackMCPRequest(
-                method: "POST",
-                path: "/mcp",
-                headers: ["Authorization": "Bearer \(env.credential)"],
-                body: Self.toolCallJSON(
-                    name: "propose_send",
-                    arguments: [
-                        "to": "alex@example.com",
-                        "subject": "Hi",
-                        "body": "Hello",
-                        "sender": env.emailB.uppercased()
-                    ]
-                )
-            )
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: [
+                "to": "alex@example.com",
+                "subject": "Hi",
+                "body": "Hello",
+                "sender": env.emailB.uppercased()
+            ]
         )
-
-        #expect(response.status == 200)
-        #expect(!response.body.contains("isError"))
+        let proposalId = try #require(ack["proposalId"] as? String)
+        _ = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(outgoing.deliveries.count == 1)
         #expect(outgoing.deliveries[0].proposal.sender == env.emailB.uppercased())
     }
@@ -1193,25 +1271,22 @@ struct LoopbackMCPServerTests {
         defer { env.remove() }
 
         // list_accounts has marotron@gmail.com; dotted form is the same Gmail mailbox.
-        let response = await env.server.handle(
-            LoopbackMCPRequest(
-                method: "POST",
-                path: "/mcp",
-                headers: ["Authorization": "Bearer \(env.credential)"],
-                body: Self.toolCallJSON(
-                    name: "propose_send",
-                    arguments: [
-                        "to": "alex@example.com",
-                        "subject": "Hi",
-                        "body": "Hello",
-                        "sender": "m.arotron@gmail.com"
-                    ]
-                )
-            )
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: [
+                "to": "alex@example.com",
+                "subject": "Hi",
+                "body": "Hello",
+                "sender": "m.arotron@gmail.com"
+            ]
         )
-
-        #expect(response.status == 200)
-        #expect(!response.body.contains("isError"))
+        let proposalId = try #require(ack["proposalId"] as? String)
+        _ = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
         #expect(outgoing.deliveries.count == 1)
         #expect(outgoing.deliveries[0].proposal.sender == "m.arotron@gmail.com")
     }
@@ -1558,6 +1633,68 @@ struct LoopbackMCPServerTests {
         {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"\(name)","arguments":{\(args)}}}
         """
         return Data(json.utf8)
+    }
+
+    private static func toolCallJSONObject(name: String, arguments: [String: Any]) throws -> Data {
+        let envelope: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": [
+                "name": name,
+                "arguments": arguments
+            ]
+        ]
+        return try JSONSerialization.data(withJSONObject: envelope)
+    }
+
+    private static func proposeSendAck(
+        _ server: LoopbackMCPServer,
+        credential: String,
+        arguments: [String: Any]
+    ) async throws -> [String: Any] {
+        let response = await server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(credential)"],
+                body: try toolCallJSONObject(name: "propose_send", arguments: arguments)
+            )
+        )
+        #expect(!response.body.contains("isError"))
+        return try toolPayload(response.body)
+    }
+
+    private static func awaitProposeSendPayload(
+        _ server: LoopbackMCPServer,
+        credential: String,
+        proposalId: String,
+        timeout: Double = 5
+    ) async throws -> [String: Any] {
+        // Prompter runs in a fire-and-forget Task after propose_send ack.
+        for _ in 0..<40 {
+            let response = await server.handle(
+                LoopbackMCPRequest(
+                    method: "POST",
+                    path: "/mcp",
+                    headers: ["Authorization": "Bearer \(credential)"],
+                    body: try toolCallJSONObject(
+                        name: "await_propose_send",
+                        arguments: ["proposalId": proposalId, "timeout": timeout]
+                    )
+                )
+            )
+            if response.body.contains("isError") {
+                return try toolPayload(response.body)
+            }
+            let payload = try toolPayload(response.body)
+            if payload["outcome"] != nil {
+                return payload
+            }
+            // Soft still-awaiting: brief pause then retry.
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        throw DraftLedgerError.notFound
     }
 
     /// Pull a string value from the nested MCP tool JSON text payload.
