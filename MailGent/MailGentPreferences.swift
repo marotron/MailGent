@@ -27,6 +27,8 @@ enum MailGentPreferences {
     static let personalVaultRootBookmarkKey = "personalVaultRootBookmark"
     /// Master toggle for secret constants (MCP `list_secrets`, placeholders, resolve, value leak hits).
     static let secretConstantsEnabledKey = "secretConstantsEnabled"
+    /// When on, soft `await_propose_send` `awaiting_user` polls appear in Access log (default off).
+    static let logAwaitProposeSendSoftWaitsKey = "logAwaitProposeSendSoftWaits"
 
     static let defaultLoopbackPort: UInt16 = 8788
     /// Default TTL when the cache is first enabled in Settings (1 hour).
@@ -70,6 +72,10 @@ enum MailGentPreferences {
 
     static var secretConstantsEnabled: Bool {
         UserDefaults.standard.bool(forKey: secretConstantsEnabledKey)
+    }
+
+    static var logAwaitProposeSendSoftWaits: Bool {
+        UserDefaults.standard.bool(forKey: logAwaitProposeSendSoftWaitsKey)
     }
 
     static var revealAccountsWithNoPlacements: Bool {

@@ -10,6 +10,8 @@ public enum AuditKind: String, Codable, Equatable, Hashable, Sendable {
     case getAttachment = "get_attachment"
     case openInMail = "open_in_mail"
     case proposeSend = "propose_send"
+    case awaitProposeSend = "await_propose_send"
+    case listSecrets = "list_secrets"
     case createDraft
     case updateDraft
     case updateIndex

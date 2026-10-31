@@ -114,7 +114,7 @@ final class AgentBridge {
     static func isAgentRequest(_ kind: AuditKind) -> Bool {
         switch kind {
         case .search, .list, .listNew, .listAccounts, .get, .getAttachment, .openInMail, .proposeSend,
-            .createDraft, .updateDraft, .updateIndex, .status, .setSource:
+            .awaitProposeSend, .listSecrets, .createDraft, .updateDraft, .updateIndex, .status, .setSource:
             return true
         case .pair, .revoke:
             return false
@@ -923,6 +923,12 @@ final class AgentBridge {
         makeLoopbackHost().setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
     }
 
+    func applyLogAwaitProposeSendSoftWaits() {
+        makeLoopbackHost().setLogAwaitProposeSendSoftWaits(
+            MailGentPreferences.logAwaitProposeSendSoftWaits
+        )
+    }
+
     func applyProposeSendHardTimeout() {
         makeLoopbackHost().setProposeSendHardTimeoutSeconds(
             TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
@@ -1023,6 +1029,7 @@ final class AgentBridge {
         )
         host.setProposeSendContextExperimental(MailGentPreferences.proposeSendContextExperimental)
         host.setRevealAccountsWithNoPlacements(MailGentPreferences.revealAccountsWithNoPlacements)
+        host.setLogAwaitProposeSendSoftWaits(MailGentPreferences.logAwaitProposeSendSoftWaits)
         refreshSecretConstantsOnHost(host)
         host.pendingProposals.setExpirationHandler { id in
             Task { @MainActor in

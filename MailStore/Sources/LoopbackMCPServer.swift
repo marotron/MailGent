@@ -124,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.23.0"
+                        "version": "0.23.1"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -149,7 +149,11 @@ public struct LoopbackMCPServer {
                 }
                 do {
                     let text = try await callTool(name: name, arguments: arguments, credential: credential)
-                    if let kind = AuditKind(toolName: name) {
+                    // list_secrets / await_propose_send own their audit rows (incl. soft-wait skip).
+                    if let kind = AuditKind(toolName: name),
+                       kind != .listSecrets,
+                       kind != .awaitProposeSend
+                    {
                         host.audit?.updateLast(
                             kind: kind,
                             requestSummary: AuditJSON.json(arguments),
@@ -619,6 +623,14 @@ public struct LoopbackMCPServer {
         let result = await host.pendingProposals.awaitDecision(id: proposalId, softTimeout: softRaw)
         switch result {
         case .unknown:
+            recordProposeSendFailure(
+                kind: .awaitProposeSend,
+                agent: agent,
+                started: started,
+                request: request,
+                detail: proposalId,
+                error: .unknownProposal
+            )
             throw CallError.unknownProposal
         case .stillAwaiting:
             var payload: [String: Any] = [
@@ -629,13 +641,27 @@ public struct LoopbackMCPServer {
             if let expiresAt = host.pendingProposals.expiresAt(id: proposalId) {
                 payload["expiresAt"] = Self.iso8601(expiresAt)
             }
+            if host.readLogAwaitProposeSendSoftWaits() {
+                host.audit?.append(
+                    AuditEntry(
+                        kind: .awaitProposeSend,
+                        agentID: agent.id,
+                        agentName: agent.name,
+                        detail: "awaiting_user · \(proposalId)",
+                        at: started,
+                        finishedAt: Date(),
+                        requestSummary: request,
+                        responseSummary: AuditJSON.json(payload)
+                    )
+                )
+            }
             return try jsonString(payload)
 
         case .expired:
             let payload: [String: Any] = ["outcome": "expired"]
             host.audit?.append(
                 AuditEntry(
-                    kind: .proposeSend,
+                    kind: .awaitProposeSend,
                     agentID: agent.id,
                     agentName: agent.name,
                     detail: "expired · \(proposalId)",
@@ -649,11 +675,32 @@ public struct LoopbackMCPServer {
 
         case let .decided(decision):
             guard let proposal = host.pendingProposals.proposal(id: proposalId) else {
+                recordProposeSendFailure(
+                    kind: .awaitProposeSend,
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: proposalId,
+                    error: .unknownProposal
+                )
                 throw CallError.unknownProposal
             }
             let detail = "\(proposal.subject) → \(proposal.to.joined(separator: ", "))"
+            let payload = Self.outcomePayload(decision)
             guard host.pendingProposals.claimDelivery(id: proposalId) else {
-                return try jsonString(Self.outcomePayload(decision))
+                host.audit?.append(
+                    AuditEntry(
+                        kind: .awaitProposeSend,
+                        agentID: agent.id,
+                        agentName: agent.name,
+                        detail: "already_delivered · \(detail)",
+                        at: started,
+                        finishedAt: Date(),
+                        requestSummary: request,
+                        responseSummary: AuditJSON.json(payload)
+                    )
+                )
+                return try jsonString(payload)
             }
             return try deliverProposeSendDecision(
                 agent: agent,
@@ -687,7 +734,7 @@ public struct LoopbackMCPServer {
             let payload: [String: Any] = ["outcome": "cancelled"]
             host.audit?.append(
                 AuditEntry(
-                    kind: .proposeSend,
+                    kind: .awaitProposeSend,
                     agentID: agent.id,
                     agentName: agent.name,
                     detail: "cancelled · \(detail)",
@@ -703,6 +750,7 @@ public struct LoopbackMCPServer {
             guard proposal.canDeliverSecretConstants else {
                 let error = CallError.secretConstantMissing(proposal.secretConstantMissing)
                 recordProposeSendFailure(
+                    kind: .awaitProposeSend,
                     agent: agent,
                     started: started,
                     request: request,
@@ -715,6 +763,7 @@ public struct LoopbackMCPServer {
             let outcomeKey = decision == .send ? "send" : "opened_in_mail"
             guard let sender = host.readMailOutgoingSender() else {
                 recordProposeSendFailure(
+                    kind: .awaitProposeSend,
                     agent: agent,
                     started: started,
                     request: request,
@@ -729,6 +778,7 @@ public struct LoopbackMCPServer {
                 let message = (error as? MailOutgoingError)?.description
                     ?? String(describing: error)
                 recordProposeSendFailure(
+                    kind: .awaitProposeSend,
                     agent: agent,
                     started: started,
                     request: request,
@@ -740,7 +790,7 @@ public struct LoopbackMCPServer {
             let payload: [String: Any] = ["outcome": outcomeKey]
             host.audit?.append(
                 AuditEntry(
-                    kind: .proposeSend,
+                    kind: .awaitProposeSend,
                     agentID: agent.id,
                     agentName: agent.name,
                     detail: "\(outcomeKey) · \(detail)",
@@ -759,6 +809,7 @@ public struct LoopbackMCPServer {
     }
 
     private func recordProposeSendFailure(
+        kind: AuditKind = .proposeSend,
         agent: PairedAgent,
         started: Date,
         request: String,
@@ -767,7 +818,7 @@ public struct LoopbackMCPServer {
     ) {
         host.audit?.append(
             AuditEntry(
-                kind: .proposeSend,
+                kind: kind,
                 agentID: agent.id,
                 agentName: agent.name,
                 detail: detail,
@@ -1024,9 +1075,25 @@ public struct LoopbackMCPServer {
     }
 
     private func listSecrets(credential: String?) throws -> String {
+        let started = Date()
         let agent = try host.authenticate(credential)
+        let request = AuditJSON.json([:] as [String: Any])
         guard host.readSecretConstantsEnabled() else {
-            throw CallError.secretConstantsDisabled
+            let error = CallError.secretConstantsDisabled
+            host.audit?.append(
+                AuditEntry(
+                    kind: .listSecrets,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "disabled",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(["error": error.description]),
+                    outcome: .error(error.description)
+                )
+            )
+            throw error
         }
         let allowed = host.readSecretConstantsCatalog().allowed(forAgentID: agent.id)
         let items: [[String: Any]] = allowed.map { constant in
@@ -1039,7 +1106,20 @@ public struct LoopbackMCPServer {
             }
             return item
         }
-        return try jsonString(["secrets": items])
+        let payload: [String: Any] = ["secrets": items]
+        host.audit?.append(
+            AuditEntry(
+                kind: .listSecrets,
+                agentID: agent.id,
+                agentName: agent.name,
+                detail: "\(items.count)",
+                at: started,
+                finishedAt: Date(),
+                requestSummary: request,
+                responseSummary: AuditJSON.json(payload)
+            )
+        )
+        return try jsonString(payload)
     }
 
     /// Fail closed when body uses `[[mg:]]` tokens the agent may not insert.

@@ -460,6 +460,8 @@ private struct AccessLogDetail: View {
     @State private var responseJSONStyle: AccessLogJSONStyle = .pretty
     /// Formatted get: detections panel filter (`nil` = closed).
     @State private var leakPanelScope: AccessLogLeakPanelScope? = nil
+    /// Formatted `list_secrets`: at most one expanded row (`name`).
+    @State private var expandedSecretName: String? = nil
 
     var body: some View {
         ScrollView {
@@ -491,11 +493,18 @@ private struct AccessLogDetail: View {
             responseView = .formatted
             responseJSONStyle = .pretty
             leakPanelScope = nil
+            expandedSecretName = nil
         }
     }
 
     private func toggleLeakPanel(_ scope: AccessLogLeakPanelScope) {
         leakPanelScope = leakPanelScope == scope ? nil : scope
+    }
+
+    private func toggleSecretExpanded(_ name: String) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            expandedSecretName = expandedSecretName == name ? nil : name
+        }
     }
 
     private func filteredLeakDetections(for ref: AuditMessageRef) -> [AuditLeakDetection] {
@@ -619,6 +628,8 @@ private struct AccessLogDetail: View {
             formattedSearchListResponse
         case .getAttachment:
             formattedAttachmentResponse
+        case .listSecrets:
+            formattedSecretsResponse
         default:
             if !entry.placements.isEmpty {
                 prettyPlacements
@@ -762,6 +773,41 @@ private struct AccessLogDetail: View {
             }
         }
         .id(entry.id)
+    }
+
+    @ViewBuilder
+    private var formattedSecretsResponse: some View {
+        if let secrets = AccessLogFormat.displaySecrets(for: entry) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "key")
+                        .foregroundStyle(.secondary)
+                    Text("Secret constants · \(secrets.count)")
+                        .font(.callout.weight(.semibold))
+                }
+                Text("Names and hints only — values are never logged.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                if secrets.isEmpty {
+                    Text("None allowlisted for this agent.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(secrets) { item in
+                            AccessLogSecretListCard(
+                                item: item,
+                                isExpanded: expandedSecretName == item.name,
+                                onToggle: { toggleSecretExpanded(item.name) }
+                            )
+                        }
+                    }
+                }
+            }
+            .id(entry.id)
+        } else {
+            payloadView(responseLine)
+        }
     }
 
     private func kindChrome(title: String, systemImage: String) -> some View {
@@ -1473,6 +1519,9 @@ enum AccessLogFormat {
         if let accounts = obj["accounts"] as? [Any] {
             return "\(accounts.count) accounts"
         }
+        if let secrets = obj["secrets"] as? [Any] {
+            return "\(secrets.count) secrets"
+        }
         if let bodyAccess = obj["bodyAccess"] as? String {
             // Ask outcome is shown as a list-row chip; keep the access verb only.
             return "bodyAccess=\(bodyAccess)"
@@ -1506,8 +1555,35 @@ enum AccessLogFormat {
             return resultCount(for: entry) == 0
         case .listAccounts:
             return accountCatalogIsEmpty(for: entry)
+        case .listSecrets:
+            return displaySecrets(for: entry)?.isEmpty == true
         default:
             return false
+        }
+    }
+
+    /// One `list_secrets` item as returned to the agent (`name` / optional `label` / `hint`).
+    struct SecretListItem: Equatable, Identifiable, Sendable {
+        var name: String
+        var label: String?
+        var hint: String?
+
+        var id: String { name }
+    }
+
+    /// `nil` when the response is not a secrets payload (errors fall through to pair/JSON view).
+    static func displaySecrets(for entry: AuditEntry) -> [SecretListItem]? {
+        guard let obj = jsonObject(entry.responseSummary),
+              let raw = obj["secrets"] as? [Any]
+        else { return nil }
+        return raw.compactMap { item -> SecretListItem? in
+            guard let dict = item as? [String: Any],
+                  let name = dict["name"] as? String,
+                  !name.isEmpty
+            else { return nil }
+            let label = (dict["label"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let hint = (dict["hint"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            return SecretListItem(name: name, label: label, hint: hint)
         }
     }
 
@@ -1785,6 +1861,8 @@ enum AccessLogFormat {
         case .getAttachment: "Fetch one attachment’s file bytes."
         case .openInMail: "Open a message in Apple Mail."
         case .proposeSend: "Propose sending a new message via Apple Mail."
+        case .awaitProposeSend: "Wait for propose-send confirmation."
+        case .listSecrets: "List allowlisted secret-constant names."
         case .search: "Search messages."
         case .list: "List messages."
         case .listNew: "List new messages."
@@ -2299,6 +2377,79 @@ struct LeakGuardResponseDetail: Equatable {
     let stealth: Bool
     let subject: String?
     let body: String?
+}
+
+/// One `list_secrets` hit: compact one-line row; expand for label/hint (accordion via parent).
+private struct AccessLogSecretListCard: View {
+    let item: AccessLogFormat.SecretListItem
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onToggle) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 10)
+                    Text(item.name)
+                        .font(.system(.caption, design: .monospaced).weight(.semibold))
+                        .lineLimit(1)
+                    if let label = item.label, !isExpanded {
+                        Text(label)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    if let hint = item.hint {
+                        Text(hint)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "Collapse secret" : "Expand secret")
+            .accessibilityValue(item.name)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let label = item.label {
+                        labeled("Label", label)
+                    }
+                    labeled("Name", item.name, mono: true)
+                    if let hint = item.hint {
+                        labeled("Hint", hint)
+                    }
+                }
+                .padding(.leading, 18)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, isExpanded ? 10 : 6)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
+        }
+    }
+
+    private func labeled(_ label: String, _ value: String, mono: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\(label):")
+                .fontWeight(.light)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(mono ? .caption.monospaced() : .caption)
+                .textSelection(.enabled)
+        }
+        .font(.caption)
+    }
 }
 
 private struct AccessLogJSONValueView: View {

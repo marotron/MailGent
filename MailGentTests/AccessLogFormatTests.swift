@@ -177,6 +177,56 @@ struct AccessLogFormatTests {
         #expect(!AccessLogFormat.isEmptySuccess(placementsHit))
         #expect(!AccessLogFormat.isEmptySuccess(getOk))
         #expect(!AccessLogFormat.isEmptySuccess(searchError))
+
+        let secretsEmpty = AuditEntry(
+            kind: .listSecrets,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"secrets":[]}"#
+        )
+        let secretsHit = AuditEntry(
+            kind: .listSecrets,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"secrets":[{"name":"my_first_name","hint":"other"}]}"#
+        )
+        #expect(AccessLogFormat.isEmptySuccess(secretsEmpty))
+        #expect(!AccessLogFormat.isEmptySuccess(secretsHit))
+    }
+
+    @Test func compactResponseCountsSecrets() {
+        #expect(
+            AccessLogFormat.compactResponse(
+                #"{"secrets":[{"name":"a"},{"name":"b"},{"name":"c"}]}"#
+            ) == "3 secrets"
+        )
+        #expect(AccessLogFormat.compactResponse(#"{"secrets":[]}"#) == "0 secrets")
+    }
+
+    @Test func displaySecretsParsesAllowlistItems() {
+        let entry = AuditEntry(
+            kind: .listSecrets,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"secrets":[{"hint":"phone","label":"UK mobile","name":"my_mobile"},{"name":"my_first_name","hint":"other"}]}"#
+        )
+        let items = AccessLogFormat.displaySecrets(for: entry) ?? []
+        #expect(items.count == 2)
+        #expect(items[0].name == "my_mobile")
+        #expect(items[0].label == "UK mobile")
+        #expect(items[0].hint == "phone")
+        #expect(items[1].name == "my_first_name")
+        #expect(items[1].label == nil)
+        #expect(items[1].hint == "other")
+
+        let error = AuditEntry(
+            kind: .listSecrets,
+            agentID: "a",
+            agentName: "Cursor",
+            responseSummary: #"{"error":"secret_constants_disabled"}"#,
+            outcome: .error("secret_constants_disabled")
+        )
+        #expect(AccessLogFormat.displaySecrets(for: error) == nil)
     }
 
     @Test func passAndBlockApplicationCountsSumDisplayMessages() {

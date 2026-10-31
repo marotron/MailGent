@@ -570,6 +570,10 @@ struct LoopbackMCPServerTests {
         #expect(response.status == 200)
         #expect(response.body.contains("isError"))
         #expect(response.body.contains("Secret constants are disabled"))
+        let entries = env.audit.entries().filter { $0.kind == .listSecrets }
+        #expect(entries.count == 1)
+        #expect(entries[0].outcome != .ok)
+        #expect(!entries[0].responseSummary.contains("+1-555"))
     }
 
     @Test func listSecretsReturnsAllowlistedWhenEnabled() async throws {
@@ -612,6 +616,84 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("Mobile"))
         #expect(response.body.contains("phone"))
         #expect(!response.body.contains("+1-555-0100"))
+        let entries = env.audit.entries().filter { $0.kind == .listSecrets }
+        #expect(entries.count == 1)
+        #expect(entries[0].outcome == .ok)
+        #expect(entries[0].responseSummary.contains("phone_mobile"))
+        #expect(!entries[0].responseSummary.contains("+1-555-0100"))
+    }
+
+    @Test func awaitProposeSendSoftWaitNotLoggedByDefault() async throws {
+        // Soft timeout clamps to ≥1s; keep the human decision pending longer so we get awaiting_user.
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+        let before = env.audit.entries().filter { $0.kind == .awaitProposeSend }.count
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": proposalId, "timeout": 1]
+                )
+            )
+        )
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(env.audit.entries().filter { $0.kind == .awaitProposeSend }.count == before)
+    }
+
+    @Test func awaitProposeSendSoftWaitLoggedWhenEnabled() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+        env.server.host.setLogAwaitProposeSendSoftWaits(true)
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_propose_send",
+                    arguments: ["proposalId": proposalId, "timeout": 1]
+                )
+            )
+        )
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(env.audit.entries().contains {
+            $0.kind == .awaitProposeSend && $0.detail.hasPrefix("awaiting_user")
+        })
     }
 
     @Test func createDraftRejectsTokensWhenSecretConstantsDisabled() async throws {
@@ -966,7 +1048,7 @@ struct LoopbackMCPServerTests {
         #expect(outgoing.deliveries[0].proposal.to == ["Alex <alex@example.com>"])
         #expect(outgoing.deliveries[0].proposal.cc == ["ops@example.com"])
         #expect(env.audit.entries().contains {
-            $0.kind == .proposeSend && $0.outcome == .ok && $0.detail.hasPrefix("send")
+            $0.kind == .awaitProposeSend && $0.outcome == .ok && $0.detail.hasPrefix("send")
         })
     }
 
@@ -1195,7 +1277,7 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("Mail refused"))
         #expect(outgoing.deliveries.count == 1)
         #expect(env.audit.entries().contains {
-            $0.kind == .proposeSend && $0.outcome != .ok
+            $0.kind == .awaitProposeSend && $0.outcome != .ok
         })
     }
 

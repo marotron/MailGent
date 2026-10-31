@@ -23,6 +23,8 @@ public final class LoopbackHost: @unchecked Sendable {
     private var revealAccountsWithNoPlacements = false
     /// Off by default — master Secret constants Settings toggle.
     private var secretConstantsEnabled = false
+    /// Off by default — Access log skips soft `await_propose_send` `awaiting_user` polls.
+    private var logAwaitProposeSendSoftWaits = false
     /// Snapshot refreshed by the companion when the sealed catalog changes.
     private var secretConstantsCatalog = SecretConstantsCatalog()
     /// Suspends until the user chooses Send / Open in Mail / Cancel (or window close → Cancel).
@@ -109,6 +111,12 @@ public final class LoopbackHost: @unchecked Sendable {
         return secretConstantsEnabled
     }
 
+    public func readLogAwaitProposeSendSoftWaits() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return logAwaitProposeSendSoftWaits
+    }
+
     public func readSecretConstantsCatalog() -> SecretConstantsCatalog {
         lock.lock()
         defer { lock.unlock() }
@@ -174,6 +182,12 @@ public final class LoopbackHost: @unchecked Sendable {
         lock.lock()
         secretConstantsEnabled = enabled
         secretConstantsCatalog = catalog
+        lock.unlock()
+    }
+
+    public func setLogAwaitProposeSendSoftWaits(_ enabled: Bool) {
+        lock.lock()
+        logAwaitProposeSendSoftWaits = enabled
         lock.unlock()
     }
 
