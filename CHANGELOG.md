@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.23.3] - 2026-10-31
+
+### Changed
+
+- Propose-send confirm stays open on **Send**: shows **Sending via Apple Mail…**, then **Handed to Apple Mail** or **Mail refused…** (Try again / Close) so success is not inferred from Mail’s send sound; **Done** dismisses after a successful handoff. MCP `outcome: send` still means Automation accepted the send (not Sent-folder presence)
+
 ## [0.23.2] - 2026-10-31
 
 ### Fixed

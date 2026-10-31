@@ -1087,6 +1087,51 @@ struct LoopbackMCPServerTests {
         })
     }
 
+    /// Confirm UI owns Send handoff (claim → deliver → mark) before the prompter returns;
+    /// await must echo `send` without a second AppleScript deliver.
+    @Test func awaitProposeSendEchoesWhenConfirmAlreadyDelivered() async throws {
+        let outgoing = FakeMailOutgoingSender()
+        final class RegistryBox: @unchecked Sendable {
+            var registry: PendingProposalRegistry?
+        }
+        let box = RegistryBox()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: outgoing,
+            agentMayProposeSend: true,
+            sendProposalPrompter: { proposal in
+                guard let registry = box.registry else { return .cancel }
+                #expect(registry.claimDelivery(id: proposal.id))
+                do {
+                    try outgoing.deliver(proposal, mode: .send)
+                } catch {
+                    registry.releaseDeliveryClaim(id: proposal.id)
+                    return .cancel
+                }
+                registry.markDeliverySucceeded(id: proposal.id)
+                return .send
+            }
+        )
+        defer { env.remove() }
+        box.registry = env.server.host.pendingProposals
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalId = try #require(ack["proposalId"] as? String)
+        let payload = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
+        #expect(payload["outcome"] as? String == "send")
+        #expect(outgoing.deliveries.count == 1)
+        #expect(env.audit.entries().contains {
+            $0.kind == .awaitProposeSend && $0.detail.hasPrefix("already_delivered")
+        })
+    }
+
     @Test func proposeSendDedupesSameFingerprint() async throws {
         let env = try LoopbackFixture(
             mailOutgoingSender: FakeMailOutgoingSender(),

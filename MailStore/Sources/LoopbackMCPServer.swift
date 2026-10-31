@@ -124,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.23.2"
+                        "version": "0.23.3"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -1283,7 +1283,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId (do not re-propose the same mail — fingerprint dedupes while awaiting). Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send or Open in Mail uses Apple Mail via Automation (not SMTP). No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId (do not re-propose the same mail — fingerprint dedupes while awaiting). Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [

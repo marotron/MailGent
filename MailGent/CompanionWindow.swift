@@ -44,15 +44,26 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     /// One propose-send confirm dialog per proposal id (not on the Ask queue).
     private final class SendProposalRecord {
         let window: NSWindow
+        let model: SendProposalConfirmModel
         var continuation: CheckedContinuation<SendProposalDecision, Never>?
-        var finished = false
+        /// Continuation resumed (agent may see outcome); window may still be open for Done.
+        var decisionReported = false
         let presentedAt = Date()
+        var handoffTask: Task<Void, Never>?
 
-        init(window: NSWindow, continuation: CheckedContinuation<SendProposalDecision, Never>) {
+        init(
+            window: NSWindow,
+            model: SendProposalConfirmModel,
+            continuation: CheckedContinuation<SendProposalDecision, Never>
+        ) {
             self.window = window
+            self.model = model
             self.continuation = continuation
         }
     }
+
+    /// Runs AppleScript send while the confirm stays open. Returns nil on success, else error copy.
+    typealias SendProposalHandoff = @MainActor @Sendable (SendProposal) async -> String?
 
     private var asks: [String: AskRecord] = [:]
     private var sendProposals: [String: SendProposalRecord] = [:]
@@ -264,25 +275,35 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         )
     }
 
-    /// Present propose-send confirm until Send / Open in Mail / Cancel / traffic-light close.
+    /// Present propose-send confirm until Open in Mail / Cancel / traffic-light close,
+    /// or Send handoff finishes and the human presses Done.
     func runSendProposalConfirm(
         proposal: SendProposal,
         expiresAt: Date,
         resolvedContext: ProposeSendResolvedContext? = nil,
-        onOpenContextOriginal: @escaping (ContextThreadOriginal) -> Void = { _ in }
+        onOpenContextOriginal: @escaping (ContextThreadOriginal) -> Void = { _ in },
+        handoffSend: SendProposalHandoff? = nil
     ) async -> SendProposalDecision {
         await withCheckedContinuation { continuation in
+            let model = SendProposalConfirmModel()
             let dialog = SendProposalPromptDialog(
+                model: model,
                 proposal: proposal,
                 resolvedContext: resolvedContext,
                 onSend: { [weak self] in
-                    self?.finishSendProposal(id: proposal.id, decision: .send)
+                    self?.beginSendHandoff(id: proposal.id, proposal: proposal, handoff: handoffSend)
                 },
                 onOpenInMail: { [weak self] in
                     self?.finishSendProposal(id: proposal.id, decision: .openInMail)
                 },
                 onCancel: { [weak self] in
                     self?.finishSendProposal(id: proposal.id, decision: .cancel)
+                },
+                onRetry: { [weak self] in
+                    self?.beginSendHandoff(id: proposal.id, proposal: proposal, handoff: handoffSend)
+                },
+                onDone: { [weak self] in
+                    self?.dismissSendProposalWindow(id: proposal.id)
                 },
                 onOpenContextOriginal: onOpenContextOriginal
             )
@@ -297,7 +318,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 beginPresentation()
             }
             let window = makeWindow(
-                title: "Send proposed mail?",
+                title: model.windowTitle,
                 size: size,
                 minSize: minSize,
                 root: dialog
@@ -306,7 +327,11 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             window.maxSize = NSSize(width: withContext ? 1100 : 900, height: 900)
             attachProposeSendExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: sendProposals.count)
-            sendProposals[proposal.id] = SendProposalRecord(window: window, continuation: continuation)
+            sendProposals[proposal.id] = SendProposalRecord(
+                window: window,
+                model: model,
+                continuation: continuation
+            )
             AskQueueIndicator.shared.register(
                 id: proposal.id,
                 agent: proposal.agentName,
@@ -607,37 +632,102 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         continuation?.resume(returning: outcome)
     }
 
-    private func finishSendProposal(id: String, decision: SendProposalDecision) {
-        guard let record = sendProposals[id] else { return }
-        if record.finished {
-            MailGentLog.trace("send proposal finish ignored (already decided) id=\(id)")
-            return
+    private func beginSendHandoff(
+        id: String,
+        proposal: SendProposal,
+        handoff: SendProposalHandoff?
+    ) {
+        guard let record = sendProposals[id], !record.decisionReported else { return }
+        if case .sending = record.model.phase { return }
+        record.handoffTask?.cancel()
+        record.model.phase = .sending
+        record.window.title = record.model.windowTitle
+        hideProposeSendExpiryTitlebar(on: record.window)
+        let handoffSend = handoff
+        record.handoffTask = Task { @MainActor [weak self] in
+            let errorMessage: String?
+            if let handoffSend {
+                errorMessage = await handoffSend(proposal)
+            } else {
+                errorMessage = "Mail outgoing sender is not bound."
+            }
+            guard let self, let live = self.sendProposals[id], !live.decisionReported else { return }
+            if Task.isCancelled {
+                live.model.phase = .failed("Send was cancelled.")
+                live.window.title = live.model.windowTitle
+                return
+            }
+            if let errorMessage {
+                live.model.phase = .failed(errorMessage)
+                live.window.title = live.model.windowTitle
+                MailGentLog.trace("send proposal handoff failed id=\(id) \(errorMessage)")
+                return
+            }
+            live.model.phase = .handedOff
+            live.window.title = live.model.windowTitle
+            live.handoffTask = nil
+            self.reportSendProposalDecision(id: id, decision: .send)
         }
-        record.finished = true
+    }
+
+    /// Resume the prompter continuation once (MCP / audit). Window may stay open.
+    private func reportSendProposalDecision(id: String, decision: SendProposalDecision) {
+        guard let record = sendProposals[id], !record.decisionReported else { return }
+        record.decisionReported = true
         let continuation = record.continuation
         record.continuation = nil
-        sendProposals[id] = nil
         _ = AskQueueIndicator.shared.remove(id: id)
-        dismissAskWindow(record.window)
         continuation?.resume(returning: decision)
+    }
+
+    private func dismissSendProposalWindow(id: String) {
+        guard let record = sendProposals[id] else { return }
+        record.handoffTask?.cancel()
+        record.handoffTask = nil
+        sendProposals[id] = nil
+        if !record.decisionReported {
+            _ = AskQueueIndicator.shared.remove(id: id)
+            let continuation = record.continuation
+            record.continuation = nil
+            record.decisionReported = true
+            continuation?.resume(returning: .cancel)
+        }
+        dismissAskWindow(record.window)
+    }
+
+    private func finishSendProposal(id: String, decision: SendProposalDecision) {
+        guard let record = sendProposals[id] else { return }
+        if record.decisionReported {
+            // Already handed off successfully — traffic-light / Close only dismisses.
+            if decision == .cancel || decision == .send {
+                dismissSendProposalWindow(id: id)
+            }
+            return
+        }
+        reportSendProposalDecision(id: id, decision: decision)
+        dismissSendProposalWindow(id: id)
     }
 
     /// Hard-timeout path: dismiss confirm without delivering. Resumes cancel so the
     /// fire-and-forget prompter Task can finish; registry already marked `expired`.
     func expireSendProposal(id: String) {
         guard let record = sendProposals[id] else { return }
-        if record.finished {
+        if record.decisionReported {
             MailGentLog.trace("send proposal expire ignored (already decided) id=\(id)")
+            dismissSendProposalWindow(id: id)
             return
         }
         MailGentLog.trace("send proposal expired id=\(id)")
-        record.finished = true
-        let continuation = record.continuation
-        record.continuation = nil
-        sendProposals[id] = nil
-        _ = AskQueueIndicator.shared.remove(id: id)
-        dismissAskWindow(record.window)
-        continuation?.resume(returning: .cancel)
+        record.handoffTask?.cancel()
+        record.handoffTask = nil
+        reportSendProposalDecision(id: id, decision: .cancel)
+        dismissSendProposalWindow(id: id)
+    }
+
+    private func hideProposeSendExpiryTitlebar(on window: NSWindow) {
+        while !window.titlebarAccessoryViewControllers.isEmpty {
+            window.removeTitlebarAccessoryViewController(at: 0)
+        }
     }
 
     /// Hide one Ask window. Other pending requests stay up.

@@ -175,6 +175,33 @@ import Testing
         #expect(registry.isDeliverySucceeded(id: id))
         #expect(!registry.claimDelivery(id: id))
     }
+
+    @Test func claimDeliveryAllowedBeforeDecisionForConfirmHandoff() {
+        let registry = PendingProposalRegistry()
+        let proposal = makeProposal()
+        guard case let .created(id, _, _) = registry.submit(agentID: "agent-1", proposal: proposal) else {
+            Issue.record("expected created")
+            return
+        }
+        #expect(registry.claimDelivery(id: id))
+        registry.markDeliverySucceeded(id: id)
+        #expect(registry.resolve(id: id, decision: .send))
+        #expect(registry.isDeliverySucceeded(id: id))
+        #expect(!registry.claimDelivery(id: id))
+    }
+
+    @Test func claimDeliveryAllowedAfterCancelForAwaitPath() {
+        let registry = PendingProposalRegistry()
+        let proposal = makeProposal()
+        guard case let .created(id, _, _) = registry.submit(agentID: "agent-1", proposal: proposal) else {
+            Issue.record("expected created")
+            return
+        }
+        #expect(registry.resolve(id: id, decision: .cancel))
+        #expect(registry.claimDelivery(id: id))
+        registry.markDeliverySucceeded(id: id)
+        #expect(registry.isDeliverySucceeded(id: id))
+    }
 }
 
 private final class FakeClock: @unchecked Sendable {
