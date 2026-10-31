@@ -56,6 +56,10 @@ final class AgentBridge {
     private(set) var leakGuardPolicy: OutboundLeakGuardPolicy = .default
     /// Bumped when leak guard policy changes so SwiftUI refreshes toggles.
     private(set) var leakGuardRevision = 0
+    /// Sealed secret-constants catalog (nil only if Keychain/store open fails).
+    private(set) var secretConstantsStore: SecretConstantsStore?
+    /// Bumped when catalog or master toggle wiring changes.
+    private(set) var secretConstantsRevision = 0
     var loopbackURL: String { MailGentPreferences.loopbackURL }
     private var loopbackPort: UInt16 { MailGentPreferences.loopbackPort }
     private var http: LoopbackHTTPListener?
@@ -199,6 +203,36 @@ final class AgentBridge {
         restorePersistedPairing()
         restorePersistedLeakGuardPolicy()
         restorePersistedRules()
+        openSecretConstantsStore()
+    }
+
+    var secretConstantsCatalog: SecretConstantsCatalog {
+        _ = secretConstantsRevision
+        return secretConstantsStore?.snapshot() ?? SecretConstantsCatalog()
+    }
+
+    func applySecretConstantsEnabled() {
+        refreshSecretConstantsHostAndLeakGuard()
+    }
+
+    func upsertSecretConstant(_ constant: SecretConstant) throws {
+        guard let store = secretConstantsStore else {
+            throw SecretConstantsStoreError.ioFailed
+        }
+        var next = constant
+        next.updatedAt = Date()
+        try store.upsert(next)
+        secretConstantsRevision &+= 1
+        refreshSecretConstantsHostAndLeakGuard()
+    }
+
+    func deleteSecretConstant(name: String) throws {
+        guard let store = secretConstantsStore else {
+            throw SecretConstantsStoreError.ioFailed
+        }
+        try store.delete(name: name)
+        secretConstantsRevision &+= 1
+        refreshSecretConstantsHostAndLeakGuard()
     }
 
     var leakGuardEnabled: Bool {
@@ -924,7 +958,7 @@ final class AgentBridge {
                 read: ReadAPI(index: index),
                 pairing: pairing,
                 grants: grants,
-                leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
+                leakGuard: makeLeakGuard(),
                 rules: rules,
                 audit: audit,
                 attachmentContentAskCache: attachmentContentAskCache,
@@ -937,6 +971,7 @@ final class AgentBridge {
                 }
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
+            refreshSecretConstantsHostAndLeakGuard()
             let count = (try? gateway.read.freshness().indexedCount) ?? 0
             host.setIndexState(
                 LoopbackIndexSnapshot(
@@ -979,6 +1014,7 @@ final class AgentBridge {
         host.setAgentMayProposeSend(MailGentPreferences.agentMayProposeSend)
         host.setProposeSendContextExperimental(MailGentPreferences.proposeSendContextExperimental)
         host.setRevealAccountsWithNoPlacements(MailGentPreferences.revealAccountsWithNoPlacements)
+        refreshSecretConstantsOnHost(host)
         host.setSendProposalPrompter { [weak self] proposal in
             let resolved = await self?.resolveProposeSendContext(proposal)
             let opener = await self?.makeProposeSendOriginalOpener()
@@ -1474,7 +1510,7 @@ final class AgentBridge {
             read: existing.read,
             pairing: existing.pairing,
             grants: existing.grants,
-            leakGuard: OutboundLeakGuard(policy: leakGuardPolicy),
+            leakGuard: makeLeakGuard(),
             rules: rules,
             audit: existing.audit,
             attachmentContentAskCache: attachmentContentAskCache,
@@ -1487,9 +1523,49 @@ final class AgentBridge {
             }
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
+        refreshSecretConstantsOnHost(host)
         leakGuardRevision &+= 1
         MailGentLog.trace(
             "leak guard policy enabled=\(leakGuardPolicy.enabled) scopes=\(leakGuardPolicy.scopes.count)"
+        )
+    }
+
+    private func makeLeakGuard() -> OutboundLeakGuard {
+        let constants: [SecretConstant]
+        if MailGentPreferences.secretConstantsEnabled {
+            constants = secretConstantsCatalog.constants
+        } else {
+            constants = []
+        }
+        return OutboundLeakGuard(policy: leakGuardPolicy, secretConstants: constants)
+    }
+
+    private func openSecretConstantsStore() {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MailGent", isDirectory: true)
+        do {
+            secretConstantsStore = try SecretConstantsStore(
+                directory: directory,
+                keyProvider: KeychainSecretConstantsKeyProvider()
+            )
+            secretConstantsRevision &+= 1
+        } catch {
+            secretConstantsStore = nil
+            MailGentLog.trace("secret constants store open failed: \(error)")
+        }
+    }
+
+    private func refreshSecretConstantsHostAndLeakGuard() {
+        if let host = loopbackHost {
+            refreshSecretConstantsOnHost(host)
+        }
+        refreshGatewayLeakGuard()
+    }
+
+    private func refreshSecretConstantsOnHost(_ host: LoopbackHost) {
+        host.setSecretConstants(
+            enabled: MailGentPreferences.secretConstantsEnabled,
+            catalog: secretConstantsCatalog
         )
     }
 

@@ -17,6 +17,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private var access: NSWindow?
     private var grantDesk: NSWindow?
     private var accessLog: NSWindow?
+    private var secretConstants: NSWindow?
     private var settings: NSWindow?
     private var about: NSWindow?
     private var changelog: NSWindow?
@@ -117,6 +118,13 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         beginPresentation()
         scheduleAfterMenuDismissal {
             self.presentAccessLog(session: session, selectedID: selectedID)
+        }
+    }
+
+    func showSecretConstants(session: CompanionSession) {
+        beginPresentation()
+        scheduleAfterMenuDismissal {
+            self.presentSecretConstants(session: session)
         }
     }
 
@@ -691,6 +699,24 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
         }
         bringForward(accessLog)
+    }
+
+    private func presentSecretConstants(session: CompanionSession) {
+        let size = NSSize(width: 860, height: 520)
+        let minSize = NSSize(width: 720, height: 420)
+        let root = SecretConstantsCatalogView(session: session)
+        if let secretConstants {
+            secretConstants.minSize = minSize
+            install(root, in: secretConstants)
+        } else {
+            secretConstants = makeWindow(
+                title: "Secret constants",
+                size: size,
+                minSize: minSize,
+                root: root
+            )
+        }
+        bringForward(secretConstants)
     }
 
     private func presentSettings(session: CompanionSession) {

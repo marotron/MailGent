@@ -10,7 +10,9 @@ Single-context: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain
 
 ### UI element inventory
 
-Reusable control types, icons, and placement rules: `docs/ui-inventory.md`. Update that file when adding or renaming a shared control; keep HTML prototypes in lockstep.
+Reusable control types, icons, and placement rules: `docs/ui-inventory.md`.
+
+**Visual features:** follow the standing process in global `swift-implementation-plans.mdc` (Visual features) and `.cursor/rules/ui-inventory.mdc`. MailGent paths: HTML proto under `.scratch/<feature>/` → approved proto is source of truth → reuse inventory by **job** → compose locally for gaps → **ask** before adding inventory types after dogfood. Do not add inventory rows mid-feature; approved proto wins over inventory convenience.
 
 ### App icon / logo
 

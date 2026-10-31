@@ -14,6 +14,7 @@ Living catalogue of reusable UI element **types** and **placement rules** so Acc
 2. **Same chrome for the same job** — bordered secondary actions share one visual recipe (icon-only; expand to icon + label on hover).
 3. **Placement follows object, not screen** — actions that act *on* the visible entity trail inside its card; actions that open a *related* surface sit in the handoff row directly under that card.
 4. **Fail closed copy** — missing handoff data shows a caption under the button; do not fake success.
+5. **Visual feature process** — HTML proto under `.scratch/<feature>/` → **approved proto** is layout/copy/density/interaction source of truth → reuse a type here only when the **job** matches → compose locally when proto chrome is unnamed → **ask** which new types to catalogue **after** UI ships and dogfoods. Do not add types mid-feature. Approved proto wins over inventory convenience.
 
 ---
 

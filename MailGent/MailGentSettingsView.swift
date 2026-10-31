@@ -20,6 +20,7 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.auditMaxCountKey) private var auditMaxCount = 0
     @AppStorage(MailGentPreferences.auditMaxBytesKey) private var auditMaxBytes = 0
     @AppStorage(MailGentPreferences.proposeSendContextExperimentalKey) private var proposeSendContextExperimental = false
+    @AppStorage(MailGentPreferences.secretConstantsEnabledKey) private var secretConstantsEnabled = false
     @State private var confirmClearAll = false
     @State private var confirmClear24h = false
     @State private var vaultRootPath: String = PersonalVaultBookmark.displayPath() ?? ""
@@ -98,6 +99,24 @@ struct MailGentSettingsView: View {
         AccessLogFormat.bytes(session.agents.auditStoredBytes)
     }
 
+    private var secretConstantsSettingsRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Enable secret constants", isOn: $secretConstantsEnabled)
+            Text(
+                "Off by default. Agents always see the list_secrets tool; while off it errors as disabled. When on, allowlisted names work for list_secrets and [[mg:name]] in drafts / propose_send. Values stay local — resolved only for you on confirm and in Apple Mail."
+            )
+            .foregroundStyle(.secondary)
+            .font(.callout)
+            Button("Manage in Control Center → Secret constants…") {
+                DetachedWindowHost.shared.showSecretConstants(session: session)
+            }
+            .buttonStyle(.link)
+        }
+        .onChange(of: secretConstantsEnabled) { _, _ in
+            session.agents.applySecretConstantsEnabled()
+        }
+    }
+
     private var generalTab: some View {
         Form {
             Section("Agents") {
@@ -123,6 +142,7 @@ struct MailGentSettingsView: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
                 }
+                secretConstantsSettingsRow
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Reveal accounts with no placements", isOn: $revealAccountsWithNoPlacements)
                     Text(

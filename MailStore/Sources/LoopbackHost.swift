@@ -21,6 +21,10 @@ public final class LoopbackHost: @unchecked Sendable {
     private var proposeSendContextExperimental = false
     /// Off by default — `list_accounts` / `propose_send` sender catalog omit empty-placement identities.
     private var revealAccountsWithNoPlacements = false
+    /// Off by default — master Secret constants Settings toggle.
+    private var secretConstantsEnabled = false
+    /// Snapshot refreshed by the companion when the sealed catalog changes.
+    private var secretConstantsCatalog = SecretConstantsCatalog()
     /// Suspends until the user chooses Send / Open in Mail / Cancel (or window close → Cancel).
     private var sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)?
     private var indexState = LoopbackIndexSnapshot.notStarted
@@ -95,6 +99,18 @@ public final class LoopbackHost: @unchecked Sendable {
         return revealAccountsWithNoPlacements
     }
 
+    public func readSecretConstantsEnabled() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return secretConstantsEnabled
+    }
+
+    public func readSecretConstantsCatalog() -> SecretConstantsCatalog {
+        lock.lock()
+        defer { lock.unlock() }
+        return secretConstantsCatalog
+    }
+
     public func readMailOutgoingSender() -> (any MailOutgoingSending)? {
         lock.lock()
         defer { lock.unlock() }
@@ -147,6 +163,13 @@ public final class LoopbackHost: @unchecked Sendable {
     public func setRevealAccountsWithNoPlacements(_ reveal: Bool) {
         lock.lock()
         revealAccountsWithNoPlacements = reveal
+        lock.unlock()
+    }
+
+    public func setSecretConstants(enabled: Bool, catalog: SecretConstantsCatalog) {
+        lock.lock()
+        secretConstantsEnabled = enabled
+        secretConstantsCatalog = catalog
         lock.unlock()
     }
 

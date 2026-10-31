@@ -13,6 +13,10 @@ public struct SendProposal: Equatable, Sendable {
     public let sender: String?
     /// Optional Assembly-C context thread (experimental; ignored when Settings toggle off).
     public let context: SendProposalContext?
+    /// Human-only: spans in `body` after secret-constant resolve (never MCP-facing).
+    public let secretConstantSpans: [SecretConstantResolveSpan]
+    /// Human-only: placeholder names that could not be resolved (fail closed).
+    public let secretConstantMissing: [String]
 
     public init(
         id: String = UUID().uuidString,
@@ -23,7 +27,9 @@ public struct SendProposal: Equatable, Sendable {
         cc: [String] = [],
         bcc: [String] = [],
         sender: String? = nil,
-        context: SendProposalContext? = nil
+        context: SendProposalContext? = nil,
+        secretConstantSpans: [SecretConstantResolveSpan] = [],
+        secretConstantMissing: [String] = []
     ) {
         self.id = id
         self.agentName = agentName
@@ -34,6 +40,12 @@ public struct SendProposal: Equatable, Sendable {
         self.bcc = bcc
         self.sender = sender
         self.context = context
+        self.secretConstantSpans = secretConstantSpans
+        self.secretConstantMissing = secretConstantMissing
+    }
+
+    public var canDeliverSecretConstants: Bool {
+        secretConstantMissing.isEmpty
     }
 }
 

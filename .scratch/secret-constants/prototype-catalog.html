@@ -1,0 +1,1369 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — Secret constants placement (slice 1, revised).
+  Locked: variant C — list + detail, Settings-style rows.
+
+  Placement lock:
+    Settings → master toggle (+ Manage… opens catalog)
+    Control Center → “Secret constants…” → detached window (CRUD + agent allowlist)
+    Not Grant Desk as primary allowlist UI
+
+  Catalog chrome: C default. A/B kept for compare (?variant=A|B|C). Floating bar / ← →.
+  Open: open .scratch/secret-constants/prototype-catalog.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Secret constants catalog proto</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --window: #ececec;
+      --paper: #ffffff;
+      --ink: #1d1d1f;
+      --secondary: rgba(0, 0, 0, 0.55);
+      --separator: rgba(0, 0, 0, 0.12);
+      --line: #d2d2d7;
+      --accent: #007aff;
+      --destructive: #ff3b30;
+      --green: #34c759;
+      --panel: #f5f5f7;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      --radius-btn: 6px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink);
+      font: 13px/1.35 inherit;
+      padding: 24px 16px 110px;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
+    }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note code {
+      font: 11px/1.3 var(--mono);
+      background: #0000000d; padding: 1px 4px; border-radius: 4px;
+    }
+    .note strong { font-weight: 650; }
+
+    .stage {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(420px, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 980px) {
+      .stage { grid-template-columns: 1fr; }
+    }
+
+    .win {
+      background: var(--window);
+      border: 1px solid var(--separator);
+      border-radius: 10px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .titlebar {
+      height: 38px;
+      background: linear-gradient(180deg, #f6f6f6, #ececec);
+      border-bottom: 1px solid var(--separator);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      flex: 0 0 auto;
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+
+    .cc {
+      min-height: 520px;
+      background: var(--panel);
+    }
+    .cc-scroll { padding: 20px; display: grid; gap: 14px; }
+    .cc-header {
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .cc-header h1 {
+      margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+    }
+    .cc-header .sub {
+      margin: 2px 0 0; font-size: 12px; color: var(--secondary); line-height: 1.35;
+    }
+    .cc-header .actions {
+      margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end;
+      max-width: 210px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+    .card p { margin: 0; font-size: 12px; color: var(--secondary); line-height: 1.4; }
+    .agent-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }
+    .agent-mini {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+      background: #fff; font-size: 12px;
+    }
+    .agent-mini strong { display: block; margin-bottom: 2px; }
+    .agent-mini span { color: var(--secondary); font-size: 11px; }
+
+    .settings-strip .tabs {
+      display: flex; gap: 0; border-bottom: 1px solid var(--separator);
+      background: #f0f0f0; padding: 0 10px;
+    }
+    .settings-strip .tabs span {
+      padding: 8px 12px 7px; font-size: 12px; color: var(--secondary);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .settings-strip .tabs span.on {
+      color: var(--ink); border-bottom-color: var(--accent); font-weight: 510;
+    }
+    .settings-body { padding: 10px; background: var(--panel); }
+    .form-section {
+      background: var(--paper);
+      border-radius: 10px;
+      border: 1px solid #00000010;
+      overflow: hidden;
+    }
+    .section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+      text-transform: uppercase; color: var(--secondary);
+      padding: 8px 14px;
+      background: #f0f0f2;
+      border-bottom: 1px solid #0000000c;
+    }
+    .row { padding: 10px 14px; border-top: 1px solid #0000000c; }
+    .row:first-of-type { border-top: none; }
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .toggle-row .label { font-weight: 510; }
+    .help { margin: 6px 0 0; font-size: 12px; color: var(--secondary); line-height: 1.4; }
+    .help a, .help button.link {
+      appearance: none; border: none; background: none; padding: 0;
+      color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline;
+    }
+
+    .switch { position: relative; width: 40px; height: 24px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .switch span {
+      position: absolute; inset: 0; background: #ccc; border-radius: 999px;
+      transition: background 0.15s ease; cursor: pointer;
+    }
+    .switch span::after {
+      content: ""; position: absolute; width: 20px; height: 20px;
+      left: 2px; top: 2px; background: #fff; border-radius: 50%;
+      box-shadow: 0 1px 3px #00000040; transition: transform 0.15s ease;
+    }
+    .switch input:checked + span { background: var(--accent); }
+    .switch input:checked + span::after { transform: translateX(16px); }
+    .switch input:disabled + span { opacity: 0.45; cursor: not-allowed; }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--separator);
+      background: linear-gradient(180deg, #fafafa, #f0f0f0);
+      border-radius: var(--radius-btn);
+      padding: 4px 10px;
+      font-size: 12px;
+      box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.8) inset;
+    }
+    .btn:hover { background: linear-gradient(180deg, #ffffff, #f4f4f4); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: none;
+    }
+    .btn.destructive { color: var(--destructive); }
+    .btn.ghost {
+      border: none; background: transparent; box-shadow: none;
+      color: var(--secondary); padding: 4px 6px;
+    }
+    .btn.ghost:hover { background: #0000000a; color: var(--ink); }
+    .btn.sm { padding: 2px 8px; font-size: 12px; }
+
+    .catalog {
+      height: fit-content;
+      width: fit-content;
+      min-width: 560px;
+      max-width: min(720px, 100%);
+      resize: both;
+      overflow: auto;
+    }
+    .catalog.dimmed .catalog-body { opacity: 0.42; pointer-events: none; }
+    .catalog-banner {
+      display: none;
+      margin: 10px 12px 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #fff4e5;
+      border: 1px solid #f0c36d;
+      color: #6b4a00;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .catalog.dimmed .catalog-banner { display: block; }
+    .catalog-scroll {
+      flex: 0 0 auto;
+      padding: 12px; background: var(--panel);
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .catalog-toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .catalog-toolbar .spacer { flex: 1; }
+    .catalog-toolbar .meta { font-size: 12px; color: var(--secondary); }
+
+    .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .field label { font-size: 11px; color: var(--secondary); font-weight: 600; }
+    .field input, .field select, .field textarea {
+      border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: #fff; width: 100%;
+    }
+    .field input.mono, .field textarea { font-family: var(--mono); font-size: 12px; }
+    .field .err { color: var(--destructive); font-size: 11px; min-height: 14px; }
+    .value-wrap { display: flex; gap: 6px; align-items: center; }
+    .value-wrap input { flex: 1; }
+
+    .panel {
+      background: var(--paper);
+      border: 1px solid #00000010;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    /* A matrix */
+    .matrix-wrap { overflow-x: auto; }
+    table.matrix { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.matrix th, table.matrix td {
+      text-align: left; padding: 8px; border-bottom: 1px solid #0000000c; vertical-align: middle;
+    }
+    table.matrix th { font-size: 11px; font-weight: 600; color: var(--secondary); white-space: nowrap; }
+    table.matrix th.agent, table.matrix td.agent { text-align: center; width: 56px; }
+    table.matrix th.agent .agent-glyph { margin: 0 auto; }
+    table.matrix td.name code {
+      font: 12px/1.2 var(--mono); background: #00000008; padding: 2px 5px; border-radius: 4px;
+    }
+    table.matrix .hint-pill {
+      display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px;
+      background: #0000000a; color: var(--secondary);
+    }
+    table.matrix tr:hover td { background: #00000004; }
+    table.matrix tr.selected td { background: #007aff14; }
+    .editor-bar {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      padding: 10px 12px 12px; border-top: 1px solid #0000000c; background: #fafafa;
+    }
+    .editor-bar .span2 { grid-column: 1 / -1; }
+    .editor-actions {
+      display: flex; gap: 8px; align-items: center; justify-content: flex-end;
+      grid-column: 1 / -1;
+    }
+
+    /* B stacked */
+    .const-card {
+      border-top: 1px solid #0000000c; padding: 12px; display: grid; gap: 10px;
+    }
+    .const-card:first-of-type { border-top: none; }
+    .const-head { display: flex; align-items: center; gap: 8px; }
+    .const-head code {
+      font: 12px/1.2 var(--mono); background: #00000008; padding: 2px 6px; border-radius: 4px;
+    }
+    .const-head .spacer { flex: 1; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .agent-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .agent-chip {
+      appearance: none; border: 1px solid var(--line); background: #fff;
+      border-radius: 999px; padding: 3px 10px 3px 6px;
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    }
+    .agent-chip[aria-pressed="true"] {
+      border-color: #007aff66; background: #007aff14; color: #0055b3;
+    }
+    .agent-chip .agent-glyph { width: 12px; height: 12px; }
+    .agent-chip .agent-glyph.fallback { width: 12px; height: 12px; }
+    .agent-chip .agent-glyph.fallback svg { width: 8px; height: 8px; }
+
+    /* C split — wider name list, Settings-style detail */
+    .split {
+      display: grid;
+      grid-template-columns: minmax(240px, 42%) minmax(280px, 1fr);
+      width: 640px;
+      max-width: 100%;
+      align-items: start;
+    }
+    .name-list {
+      border-right: 1px solid #0000000c; background: #fafafa;
+      display: flex; flex-direction: column;
+      align-self: stretch;
+    }
+    .name-list .list { flex: 0 0 auto; }
+    .name-item {
+      width: 100%; text-align: left; appearance: none; border: none; background: transparent;
+      padding: 8px 12px; border-bottom: 1px solid #00000008;
+      display: flex; flex-direction: row; align-items: center; gap: 8px;
+      min-width: 0;
+    }
+    .name-item:hover { background: #00000006; }
+    .name-item[aria-selected="true"] { background: #007aff18; }
+    .name-badge {
+      display: inline-block;
+      font: 12px/1.25 var(--mono);
+      background: #00000008;
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex: 0 1 auto;
+      max-width: 55%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .name-item .meta {
+      font-size: 11px; color: var(--secondary); line-height: 1;
+      display: inline-flex; align-items: center; gap: 0; min-width: 0; flex: 1 1 auto;
+      white-space: nowrap; overflow: hidden;
+    }
+    .name-item .meta .label-bit {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;
+    }
+    .name-item .meta .dot {
+      flex: none; margin: 0 5px; opacity: 0.55; font-size: 11px; line-height: 1;
+    }
+    .name-item .meta .agent-avatars {
+      display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: auto;
+    }
+    .name-item .meta .agent-glyph { width: 12px; height: 12px; flex: none; }
+    .name-item .meta .agent-glyph.fallback { width: 12px; height: 12px; border-radius: 3px; }
+    .name-item .meta .agent-glyph.fallback svg { width: 8px; height: 8px; }
+    .name-list .foot { padding: 8px; border-top: 1px solid #0000000c; }
+    .detail {
+      padding: 0; display: flex; flex-direction: column; align-content: start;
+      min-width: 0; background: var(--panel);
+    }
+    .detail.empty {
+      display: grid; place-items: center; color: var(--secondary);
+      font-size: 12px; padding: 36px 16px; background: var(--paper);
+    }
+    .detail-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; background: #f0f0f2;
+      border-bottom: 1px solid #0000000c;
+      min-height: 36px;
+    }
+    .detail-head .spacer { flex: 1; }
+    .detail-head .name-badge { font-size: 12px; padding: 2px 6px; }
+    .detail-head .btn.sm {
+      height: 22px; box-sizing: border-box;
+      padding: 0 8px; font-size: 12px; line-height: 1;
+      display: inline-flex; align-items: center;
+    }
+    .detail-body { padding: 10px 12px 14px; display: grid; gap: 10px; }
+    .detail .form-section { background: var(--paper); }
+    .detail .section-label {
+      text-transform: none; letter-spacing: 0;
+      font-size: 12px; font-weight: 650; color: var(--ink);
+      padding: 8px 12px;
+      background: #f0f0f2;
+      border-bottom: 1px solid #0000000c;
+    }
+    .settings-row {
+      padding: 10px 14px;
+      border-top: 1px solid #0000000c;
+    }
+    .settings-row:first-of-type { border-top: none; }
+    .settings-hline {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .settings-hline .label { font-weight: 510; flex: 1 1 auto; min-width: 0; }
+    .settings-hline .control {
+      flex: 0 1 auto; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+      max-width: 62%; min-width: 0;
+    }
+    .settings-hline .control input,
+    .settings-hline .control select {
+      border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px;
+      background: #fff; min-width: 0; max-width: 100%;
+    }
+    .settings-hline .control input.mono { font-family: var(--mono); font-size: 12px; }
+    .settings-hline .control .static {
+      color: var(--ink); text-align: right; word-break: break-word;
+    }
+    .settings-hline .control .static.mono { font-family: var(--mono); font-size: 12px; }
+    .settings-row .err { color: var(--destructive); font-size: 11px; margin-top: 4px; }
+
+    /* Compact, uniform detail rows (Label / Value / agent toggles) */
+    .detail .settings-row {
+      padding: 0 12px;
+      min-height: 28px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .detail .settings-hline {
+      gap: 8px;
+      min-height: 28px;
+    }
+    .detail .toggle-row {
+      min-height: 28px;
+    }
+    .detail .toggle-row .label {
+      display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+    }
+    .agent-glyph {
+      width: 14px; height: 14px; flex: none;
+      object-fit: contain; display: block;
+    }
+    .agent-glyph.rounded { border-radius: 3.1px; }
+    .agent-glyph.fallback {
+      width: 14px; height: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #00000012; border-radius: 4px; color: var(--secondary);
+    }
+    .agent-glyph.fallback svg { width: 9px; height: 9px; display: block; }
+    .detail .settings-hline .label,
+    .detail .toggle-row .label { font-size: 12px; }
+    .detail .settings-hline .control .static { font-size: 12px; }
+    .detail .settings-hline .control input,
+    .detail .settings-hline .control select,
+    .detail .settings-hline .control .btn,
+    .detail .settings-hline .control .btn.sm {
+      height: 22px;
+      box-sizing: border-box;
+      padding: 0 8px;
+      font-size: 12px;
+      line-height: 1;
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .detail .settings-hline .control .btn.icon {
+      width: 22px;
+      padding: 0;
+      color: var(--secondary);
+    }
+    /* No pressed fill — icon itself signals the switch target */
+    .detail .settings-hline .control .btn.icon svg {
+      width: 12px; height: 12px; display: block;
+    }
+    .detail .settings-hline .control input,
+    .detail .settings-hline .control select {
+      display: inline-block; /* inputs aren't flex containers */
+    }
+    .detail .settings-row.value-row.multiline {
+      padding: 6px 12px 8px;
+      justify-content: flex-start;
+    }
+    .detail .value-area {
+      width: 100%;
+      margin-top: 6px;
+    }
+    .detail .value-area textarea {
+      width: 100%;
+      min-height: 66px;
+      resize: vertical;
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 6px 8px;
+      background: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .detail .value-area textarea.masked {
+      -webkit-text-security: disc;
+      color: transparent;
+      text-shadow: 0 0 0 var(--ink);
+    }
+    .detail .value-area textarea:disabled,
+    .detail .value-area textarea[readonly] {
+      opacity: 1; color: var(--ink);
+    }
+    .detail .help { font-size: 11px; margin-top: 4px; }
+    .detail .switch {
+      width: 32px; height: 18px;
+    }
+    .detail .switch span::after {
+      width: 14px; height: 14px; left: 2px; top: 2px;
+    }
+    .detail .switch input:checked + span::after { transform: translateX(14px); }
+
+    /* Output / preview — not a settings row */
+    .token-preview {
+      margin: 2px 10px 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px dashed #007aff55;
+      background: linear-gradient(180deg, #f0f7ff, #e8f1fc);
+    }
+    .token-preview-kicker {
+      font-size: 10px; font-weight: 650; letter-spacing: 0.04em;
+      text-transform: uppercase; color: #0055b3; margin: 0 0 8px;
+    }
+    .token-preview-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      height: 22px;
+      align-items: stretch;
+    }
+    .token-preview-row code {
+      min-width: 0;
+      height: 22px;
+      box-sizing: border-box;
+      display: flex; align-items: center;
+      font: 12px/1 var(--mono);
+      background: #fff; border: 1px solid #007aff33;
+      padding: 0 8px; border-radius: 5px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      user-select: all;
+    }
+    .token-preview-row > button.btn {
+      height: 22px !important;
+      min-height: 22px;
+      max-height: 22px;
+      box-sizing: border-box;
+      padding: 0 8px !important;
+      margin: 0;
+      font-size: 12px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .token-preview-hint {
+      margin: 8px 0 0; font-size: 11px; color: #3a5a80; line-height: 1.4;
+    }
+
+    .detail-actions {
+      display: flex; gap: 8px; justify-content: flex-end; padding: 0 2px;
+    }
+    .detail-actions .btn {
+      height: 22px; box-sizing: border-box;
+      padding: 0 10px; font-size: 12px; line-height: 1;
+      display: inline-flex; align-items: center;
+    }
+
+    .state-dump {
+      font: 11px/1.4 var(--mono); white-space: pre-wrap;
+      background: #0b1220; color: #d7e2ff; border-radius: 10px;
+      padding: 10px 12px; max-height: 160px; overflow: auto;
+    }
+
+    .switcher {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      display: flex; gap: 6px; align-items: center;
+      background: #1d1d1fe8; color: #fff; padding: 8px 10px; border-radius: 999px;
+      box-shadow: 0 8px 24px #00000040; z-index: 20; backdrop-filter: blur(8px);
+    }
+    .switcher button {
+      appearance: none; border: none; background: transparent; color: #ffffffb0;
+      width: 28px; height: 28px; border-radius: 50%; font-weight: 650;
+    }
+    .switcher button[aria-current="true"] { background: #fff; color: #1d1d1f; }
+    .switcher .cap {
+      font-size: 11px; color: #ffffff99; padding: 0 6px; max-width: 320px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .flash {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      transition: outline-color 0.6s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <strong>Prototype — placement + C locked.</strong>
+      Settings = setup (master toggle). Catalog = Control Center → <code>Secret constants…</code> detached window
+      (sibling to Grant desk / Access log). <strong>C</strong> = list + Settings-style detail (A/B for compare only).
+      Tokens stay <code>[[mg:name]]</code>. Hints: <code>phone</code> · <code>address</code> · <code>id</code> · <code>other</code>.
+    </div>
+
+    <div class="stage">
+      <!-- Left: Control Center + Settings setup strip -->
+      <div class="stack" style="display:grid;gap:14px">
+        <div class="win cc" id="cc-win">
+          <div class="titlebar">
+            <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+            MailGent
+          </div>
+          <div class="cc-scroll">
+            <div class="cc-header">
+              <div>
+                <h1>Control center</h1>
+                <p class="sub">Access and ingest first. Secret constants live here — not in Settings.</p>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn" disabled title="Existing">Grant desk…</button>
+                <button type="button" class="btn" disabled title="Existing">Access log…</button>
+                <button type="button" class="btn primary" data-act="open-catalog" id="cc-open">Secret constants…</button>
+              </div>
+            </div>
+            <div class="card">
+              <h2>Access health</h2>
+              <p>Full Disk Access granted · Companion will not write Apple Mail’s store.</p>
+            </div>
+            <div class="agent-grid">
+              <div class="agent-mini"><strong style="display:inline-flex;align-items:center;gap:6px"><img class="agent-glyph" src="../../MailGent/Assets.xcassets/CursorMark.imageset/CUBE_2D_LIGHT.svg" alt="" width="14" height="14">Cursor</strong><span>Paired · MCP listening</span></div>
+              <div class="agent-mini"><strong style="display:inline-flex;align-items:center;gap:6px"><img class="agent-glyph rounded" src="../../MailGent/Assets.xcassets/GrokMark.imageset/GrokMark.png" alt="" width="14" height="14">Grok Bot</strong><span>Paired · MCP listening</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="win settings-strip">
+          <div class="titlebar">
+            <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+            MailGent Settings
+          </div>
+          <div class="tabs"><span class="on">General</span><span>Access</span></div>
+          <div class="settings-body">
+            <div class="form-section">
+              <div class="section-label">Secret constants</div>
+              <div class="row">
+                <div class="toggle-row">
+                  <span class="label">Enable secret constants</span>
+                  <label class="switch">
+                    <input type="checkbox" id="master" checked data-act="master">
+                    <span></span>
+                  </label>
+                </div>
+                <p class="help">
+                  Off by default. When on, allowlisted agents may call <code>list_secrets</code> and insert
+                  <code>[[mg:name]]</code> in draft / propose_send bodies. Values resolve only for you.
+                  Manage names and allowlists in
+                  <button type="button" class="link" data-act="open-catalog">Control Center → Secret constants…</button>
+                </p>
+              </div>
+            </div>
+            <div class="form-section" style="margin-top:10px;opacity:0.55">
+              <div class="section-label">Agents (existing)</div>
+              <div class="row"><span style="color:var(--secondary)">Propose send, Ask prompts, loopback port…</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: detached catalog -->
+      <div class="win catalog" id="catalog-win">
+        <div class="titlebar">
+          <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+          Secret constants
+        </div>
+        <div class="catalog-banner" id="off-banner">
+          Feature off in Settings. Catalog is read-only here until you enable secret constants.
+        </div>
+        <div class="catalog-scroll catalog-body" id="catalog-root"></div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Live state</strong> (in-memory; refresh resets)
+      <div class="state-dump" id="dump"></div>
+    </div>
+  </div>
+
+  <div class="switcher" id="switcher" aria-label="Catalog variants"></div>
+
+  <script>
+    /* Same marks as AgentGlyph / Access Log — paths relative to this HTML file. */
+    const CURSOR_MARK = "../../MailGent/Assets.xcassets/CursorMark.imageset/CUBE_2D_LIGHT.svg";
+    const GROK_MARK = "../../MailGent/Assets.xcassets/GrokMark.imageset/GrokMark.png";
+    /* Source of truth = Control Center paired agents (AgentBridge.pairedAgents).
+       Prototype fixtures match current presets: Cursor + Grok Bot. No orphan names. */
+    const AGENTS = [
+      { id: "agent_cursor", name: "Cursor", mark: "cursor" },
+      { id: "agent_grok", name: "Grok Bot", mark: "grok" },
+    ];
+    function agentGlyphHTML(a) {
+      if (a.mark === "cursor") {
+        return `<img class="agent-glyph" src="${CURSOR_MARK}" alt="" width="14" height="14">`;
+      }
+      if (a.mark === "grok") {
+        return `<img class="agent-glyph rounded" src="${GROK_MARK}" alt="" width="14" height="14">`;
+      }
+      /* Fallback matches AgentGlyph cpu monogram for unpaired / other agents */
+      return `<span class="agent-glyph fallback" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M5.5 2.5h5v1h1.5A1.5 1.5 0 0 1 13.5 5v1.5h1v3h-1V11A1.5 1.5 0 0 1 12 12.5H10.5v1h-5v-1H4A1.5 1.5 0 0 1 2.5 11V9.5h-1v-3h1V5A1.5 1.5 0 0 1 4 3.5h1.5v-1Zm1 3v5h3v-5h-3Z"/>
+        </svg>
+      </span>`;
+    }
+    function agentLabelHTML(a) {
+      return `${agentGlyphHTML(a)}<span>${esc(a.name)}</span>`;
+    }
+    const HINTS = ["phone", "address", "id", "other"];
+    const NAME_RE = /^[a-z][a-z0-9_]*$/;
+    const CAPTIONS = {
+      A: "A — dense matrix (compare)",
+      B: "B — stacked chips (compare)",
+      C: "C — list + Settings-style detail ✓",
+    };
+
+    let state = {
+      enabled: true,
+      selectedID: "c1",
+      draft: null,
+      reveal: {},
+      constants: [
+        {
+          id: "c1",
+          name: "phone_mobile",
+          label: "Mobile",
+          hint: "phone",
+          value: "+1-555-0142",
+          allowedAgentIDs: ["agent_cursor"],
+        },
+        {
+          id: "c2",
+          name: "home_address",
+          label: "Home",
+          hint: "address",
+          value: "742 Evergreen Terrace\nSpringfield, OR 97477",
+          multiline: true,
+          allowedAgentIDs: ["agent_cursor", "agent_grok"],
+        },
+        {
+          id: "c3",
+          name: "tax_id_last4",
+          label: "Tax ID (last 4)",
+          hint: "id",
+          value: "4821",
+          allowedAgentIDs: [],
+        },
+      ],
+    };
+
+    function variant() {
+      const v = new URLSearchParams(location.search).get("variant") || "C";
+      return ["A", "B", "C"].includes(v) ? v : "C";
+    }
+    function setVariant(v) {
+      const u = new URL(location.href);
+      u.searchParams.set("variant", v);
+      history.replaceState(null, "", u);
+      render();
+    }
+    function uid() {
+      return "c" + Math.random().toString(36).slice(2, 8);
+    }
+    function emptyDraft() {
+      return {
+        id: null, name: "", label: "", hint: "other", value: "",
+        multiline: false, allowedAgentIDs: [], error: "",
+      };
+    }
+    function beginAdd() {
+      if (!state.enabled) return;
+      state.draft = emptyDraft();
+      state.selectedID = null;
+      render();
+    }
+    function beginEdit(id) {
+      if (!state.enabled) return;
+      const c = state.constants.find((x) => x.id === id);
+      if (!c) return;
+      state.selectedID = id;
+      state.draft = {
+        id: c.id, name: c.name, label: c.label, hint: c.hint, value: c.value,
+        multiline: !!c.multiline || /\n/.test(c.value),
+        allowedAgentIDs: [...c.allowedAgentIDs], error: "",
+      };
+      render();
+    }
+    function cancelDraft() { state.draft = null; render(); }
+    function saveDraft() {
+      const d = state.draft;
+      if (!d || !state.enabled) return;
+      const name = d.name.trim().toLowerCase();
+      if (!NAME_RE.test(name)) { d.error = "Name must match [a-z][a-z0-9_]*"; render(); return; }
+      if (!d.value.trim()) { d.error = "Value is required"; render(); return; }
+      if (state.constants.find((c) => c.name === name && c.id !== d.id)) {
+        d.error = "Name already used"; render(); return;
+      }
+      const row = {
+        id: d.id || uid(),
+        name,
+        label: d.label.trim() || name,
+        hint: d.hint,
+        value: d.value,
+        multiline: !!d.multiline || /\n/.test(d.value),
+        allowedAgentIDs: [...d.allowedAgentIDs],
+      };
+      state.constants = d.id
+        ? state.constants.map((c) => (c.id === d.id ? row : c))
+        : [...state.constants, row];
+      state.selectedID = row.id;
+      state.draft = null;
+      render();
+    }
+    function deleteConst(id) {
+      if (!state.enabled) return;
+      state.constants = state.constants.filter((c) => c.id !== id);
+      if (state.selectedID === id) state.selectedID = state.constants[0]?.id ?? null;
+      if (state.draft?.id === id) state.draft = null;
+      render();
+    }
+    function toggleAgent(target, agentID) {
+      if (!state.enabled || !target) return;
+      const set = new Set(target.allowedAgentIDs);
+      if (set.has(agentID)) set.delete(agentID); else set.add(agentID);
+      target.allowedAgentIDs = [...set];
+      render();
+    }
+    function flashCatalog() {
+      const el = document.getElementById("catalog-win");
+      el.classList.add("flash");
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setTimeout(() => el.classList.remove("flash"), 700);
+    }
+    function esc(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function draftFields(d) {
+      const nameDisabled = d.id ? "disabled" : "";
+      return `
+        <div class="field">
+          <label>Name</label>
+          <input class="mono" data-field="name" value="${esc(d.name)}" placeholder="phone_mobile" ${nameDisabled}>
+          <div class="err">${esc(d.error || "")}</div>
+        </div>
+        <div class="field">
+          <label>Label</label>
+          <input data-field="label" value="${esc(d.label)}" placeholder="Mobile">
+        </div>
+        <div class="field">
+          <label>Hint</label>
+          <select data-field="hint">
+            ${HINTS.map((h) => `<option value="${h}" ${d.hint === h ? "selected" : ""}>${h}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field span2">
+          <label>Value</label>
+          <div class="value-wrap">
+            <input class="mono" type="${state.reveal.draft ? "text" : "password"}" data-field="value" value="${esc(d.value)}" placeholder="Secret value">
+            <button type="button" class="btn sm" data-act="reveal-draft">${state.reveal.draft ? "Hide" : "Show"}</button>
+          </div>
+        </div>`;
+    }
+    function draftAgentChecks(d) {
+      return `
+        <div class="field span2">
+          <label>Allowed agents</label>
+          <div class="agent-chips">
+            ${AGENTS.map((a) => {
+              const on = d.allowedAgentIDs.includes(a.id);
+              return `<button type="button" class="agent-chip" aria-pressed="${on}" data-act="draft-allow" data-agent="${a.id}">
+                ${agentGlyphHTML(a)}${esc(a.name)}
+              </button>`;
+            }).join("")}
+          </div>
+        </div>`;
+    }
+
+    function renderA() {
+      const rows = state.constants.map((c) => {
+        const sel = state.selectedID === c.id ? " selected" : "";
+        return `<tr class="${sel}" data-act="select" data-id="${c.id}">
+          <td class="name"><code>${esc(c.name)}</code></td>
+          <td>${esc(c.label)}</td>
+          <td><span class="hint-pill">${esc(c.hint)}</span></td>
+          ${AGENTS.map((a) => {
+            const on = c.allowedAgentIDs.includes(a.id);
+            return `<td class="agent"><input type="checkbox" ${on ? "checked" : ""} data-act="allow" data-id="${c.id}" data-agent="${a.id}" aria-label="${esc(a.name)} may use ${esc(c.name)}"></td>`;
+          }).join("")}
+          <td>
+            <button type="button" class="btn ghost sm" data-act="edit" data-id="${c.id}">Edit</button>
+            <button type="button" class="btn ghost sm destructive" data-act="delete" data-id="${c.id}">Delete</button>
+          </td>
+        </tr>`;
+      }).join("");
+      const editor = state.draft ? `
+        <div class="editor-bar">
+          ${draftFields(state.draft)}
+          ${draftAgentChecks(state.draft)}
+          <div class="editor-actions">
+            <button type="button" class="btn" data-act="cancel">Cancel</button>
+            <button type="button" class="btn primary" data-act="save">${state.draft.id ? "Save" : "Add"}</button>
+          </div>
+        </div>` : "";
+      return `
+        <div class="catalog-toolbar">
+          <span class="meta">Agents only see checked names via <code>list_secrets</code>.</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn primary sm" data-act="add">Add constant</button>
+        </div>
+        <div class="panel">
+          <div class="matrix-wrap">
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th>Name</th><th>Label</th><th>Hint</th>
+                  ${AGENTS.map((a) => `<th class="agent" title="${esc(a.name)}">${agentGlyphHTML(a)}</th>`).join("")}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>${rows || `<tr><td colspan="8" style="color:var(--secondary);padding:16px">No constants yet.</td></tr>`}</tbody>
+            </table>
+          </div>
+          ${editor}
+        </div>`;
+    }
+
+    function renderB() {
+      const cards = state.constants.map((c) => {
+        const revealed = !!state.reveal[c.id];
+        return `<div class="const-card">
+          <div class="const-head">
+            <code>${esc(c.name)}</code>
+            <span class="hint-pill">${esc(c.hint)}</span>
+            <span class="spacer"></span>
+            <button type="button" class="btn ghost sm destructive" data-act="delete" data-id="${c.id}">Delete</button>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Label</label>
+              <input data-inline="label" data-id="${c.id}" value="${esc(c.label)}"></div>
+            <div class="field"><label>Hint</label>
+              <select data-inline="hint" data-id="${c.id}">
+                ${HINTS.map((h) => `<option value="${h}" ${c.hint === h ? "selected" : ""}>${h}</option>`).join("")}
+              </select></div>
+            <div class="field" style="grid-column:1/-1"><label>Value</label>
+              <div class="value-wrap">
+                <input class="mono" type="${revealed ? "text" : "password"}" data-inline="value" data-id="${c.id}" value="${esc(c.value)}">
+                <button type="button" class="btn sm" data-act="reveal" data-id="${c.id}">${revealed ? "Hide" : "Show"}</button>
+              </div>
+            </div>
+          </div>
+          <div class="field"><label>Allowed agents</label>
+            <div class="agent-chips">
+              ${AGENTS.map((a) => {
+                const on = c.allowedAgentIDs.includes(a.id);
+                return `<button type="button" class="agent-chip" aria-pressed="${on}" data-act="allow-btn" data-id="${c.id}" data-agent="${a.id}">
+                  ${agentGlyphHTML(a)}${esc(a.name)}</button>`;
+              }).join("")}
+            </div>
+          </div>
+        </div>`;
+      }).join("");
+      const adder = state.draft ? `
+        <div class="const-card" style="background:#f8fbff">
+          <div class="const-head"><strong>New constant</strong></div>
+          <div class="grid-2">${draftFields(state.draft)}</div>
+          ${draftAgentChecks(state.draft)}
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button type="button" class="btn" data-act="cancel">Cancel</button>
+            <button type="button" class="btn primary" data-act="save">Add</button>
+          </div>
+        </div>` : "";
+      return `
+        <div class="catalog-toolbar">
+          <span class="meta">Edit in place. Chip on = agent may list &amp; insert token.</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn primary sm" data-act="add" ${state.draft ? "disabled" : ""}>Add constant</button>
+        </div>
+        <div class="panel">${cards || `<div class="const-card"><span class="meta">No constants yet.</span></div>`}${adder}</div>`;
+    }
+
+    /** Edit mode: all paired agents with toggles. */
+    function settingsAgentToggles(target) {
+      return AGENTS.map((a) => {
+        const on = target.allowedAgentIDs.includes(a.id);
+        return `
+          <div class="settings-row">
+            <div class="toggle-row">
+              <span class="label">${agentLabelHTML(a)}</span>
+              <label class="switch">
+                <input type="checkbox" ${on ? "checked" : ""} data-act="draft-allow-check" data-agent="${a.id}"
+                  ${state.enabled ? "" : "disabled"} aria-label="Allow ${esc(a.name)}">
+                <span></span>
+              </label>
+            </div>
+          </div>`;
+      }).join("");
+    }
+    /** View mode: only allowlisted agents, read-only (no toggles). */
+    function settingsAgentReadonly(target) {
+      const allowed = AGENTS.filter((a) => target.allowedAgentIDs.includes(a.id));
+      if (!allowed.length) {
+        return `<div class="settings-row"><p class="help" style="margin:0">No agents allowed. Edit to grant access.</p></div>`;
+      }
+      return allowed.map((a) => `
+        <div class="settings-row">
+          <div class="toggle-row">
+            <span class="label">${agentLabelHTML(a)}</span>
+          </div>
+        </div>`).join("");
+    }
+
+    function tokenString(name) {
+      return `[[mg:${name}]]`;
+    }
+    /** Value field: single-line input or optional multiline textarea. */
+    function valueRowHTML({ value, revealed, multiline, readonly, revealAct, revealId }) {
+      const multi = !!multiline;
+      const revealBtn = `<button type="button" class="btn sm" data-act="${revealAct}"${revealId ? ` data-id="${revealId}"` : ""}>${revealed ? "Hide" : "Show"}</button>`;
+      /* Affordance icon = target mode (single shows multi icon, and vice versa). */
+      const iconSingle = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="7" width="12" height="2" rx="1"/></svg>`;
+      const iconMulti = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="3.5" width="12" height="1.75" rx="0.8"/><rect x="2" y="7.125" width="12" height="1.75" rx="0.8"/><rect x="2" y="10.75" width="9" height="1.75" rx="0.8"/></svg>`;
+      const multiBtn = readonly
+        ? ""
+        : `<button type="button" class="btn sm icon" data-act="toggle-multiline" title="${multi ? "Switch to single-line" : "Switch to multiline"}" aria-label="${multi ? "Switch to single-line value" : "Switch to multiline value"}" aria-pressed="${multi}">${multi ? iconSingle : iconMulti}</button>`;
+      let field;
+      if (multi) {
+        const mask = revealed ? "" : " masked";
+        const ro = readonly ? "readonly" : "";
+        const bind = readonly ? "" : ` data-field="value"`;
+        field = `<textarea class="mono${mask}" ${ro}${bind} rows="3" placeholder="Secret value">${esc(value)}</textarea>`;
+      } else if (readonly) {
+        field = `<input class="mono" readonly type="${revealed ? "text" : "password"}" value="${esc(value)}">`;
+      } else {
+        field = `<input class="mono" type="${revealed ? "text" : "password"}" data-field="value" value="${esc(value)}" placeholder="Secret value">`;
+      }
+      return `
+        <div class="settings-row value-row${multi ? " multiline" : ""}">
+          <div class="settings-hline">
+            <span class="label">Value</span>
+            <div class="control">
+              ${revealBtn}
+              ${multiBtn}
+              ${multi ? "" : field}
+            </div>
+          </div>
+          ${multi ? `<div class="value-area">${field}</div>` : ""}
+          ${readonly ? "" : `<p class="help">Optional multiline for addresses and other long secrets.</p>`}
+        </div>`;
+    }
+    function tokenPreviewHTML(token) {
+      return `
+        <div class="token-preview" role="group" aria-label="Agent token preview">
+          <div class="token-preview-kicker">Agent token · preview</div>
+          <div class="token-preview-row">
+            <code title="Copy for agents to insert in draft / propose_send">${esc(token)}</code>
+            <button type="button" class="btn primary" data-act="copy-token" data-token="${esc(token)}">Copy</button>
+          </div>
+          <p class="token-preview-hint">
+            Paste into a draft or propose_send body so the agent refers to this constant by name.
+            Resolved for you on confirm — agents never see the raw value.
+          </p>
+        </div>`;
+    }
+
+    function renderC() {
+      const selected = state.constants.find((c) => c.id === state.selectedID);
+      const editing = state.draft;
+      const list = state.constants.map((c) => {
+        const allowed = AGENTS.filter((a) => c.allowedAgentIDs.includes(a.id));
+        const names = allowed.map((a) => a.name).join(", ");
+        const agentsBit = allowed.length
+          ? `<span class="dot" aria-hidden="true">·</span><span class="agent-avatars" title="${esc(names)}" aria-label="${esc(names)}">${allowed.map(agentGlyphHTML).join("")}</span>`
+          : "";
+        return `<button type="button" class="name-item" aria-selected="${c.id === state.selectedID}" data-act="select" data-id="${c.id}">
+          <code class="name-badge">${esc(c.name)}</code>
+          <span class="meta"><span class="label-bit">${esc(c.label)}</span>${agentsBit}</span>
+        </button>`;
+      }).join("");
+      let detail;
+      if (editing) {
+        const nameDisabled = editing.id ? "disabled" : "";
+        const headName = editing.id ? editing.name : (editing.name.trim() || "new_constant");
+        const token = tokenString(editing.name.trim() || "…");
+        detail = `<div class="detail">
+          <div class="detail-head">
+            <code class="name-badge">${esc(headName)}</code>
+            <span class="spacer"></span>
+            <span style="font-size:12px;color:var(--secondary)">${editing.id ? "Editing" : "New"}</span>
+          </div>
+          <div class="detail-body">
+            <div class="form-section">
+              <div class="section-label">Constant</div>
+              <div class="settings-row">
+                <div class="settings-hline">
+                  <span class="label">Name</span>
+                  <div class="control">
+                    <input class="mono" data-field="name" value="${esc(editing.name)}" placeholder="phone_mobile" ${nameDisabled}>
+                  </div>
+                </div>
+                ${editing.id
+                  ? `<p class="help">Name is fixed after create.</p>`
+                  : `<p class="help">Lowercase <code>[a-z][a-z0-9_]*</code>. Becomes the token name.</p>`}
+                ${editing.error && editing.error.includes("Name") ? `<div class="err">${esc(editing.error)}</div>` : ""}
+              </div>
+              <div class="settings-row">
+                <div class="settings-hline">
+                  <span class="label">Label</span>
+                  <div class="control">
+                    <input data-field="label" value="${esc(editing.label)}" placeholder="Mobile">
+                  </div>
+                </div>
+              </div>
+              <div class="settings-row">
+                <div class="settings-hline">
+                  <span class="label">Hint</span>
+                  <div class="control">
+                    <select data-field="hint">
+                      ${HINTS.map((h) => `<option value="${h}" ${editing.hint === h ? "selected" : ""}>${h}</option>`).join("")}
+                    </select>
+                  </div>
+                </div>
+                <p class="help">Leak-guard category only — never shown to agents as the secret value.</p>
+              </div>
+              ${valueRowHTML({
+                value: editing.value,
+                revealed: !!state.reveal.draft,
+                multiline: editing.multiline,
+                readonly: false,
+                revealAct: "reveal-draft",
+              })}
+              ${editing.error && !editing.error.includes("Name") ? `<div class="settings-row"><div class="err">${esc(editing.error)}</div></div>` : ""}
+              ${editing.id ? tokenPreviewHTML(token) : ""}
+            </div>
+            <div class="form-section">
+              <div class="section-label">Allowed agents</div>
+              ${settingsAgentToggles(editing)}
+              <div class="settings-row">
+                <p class="help" style="margin:0">On = agent may <code>list_secrets</code> this name and insert its token. Off = hidden to that agent.</p>
+              </div>
+            </div>
+            <div class="detail-actions">
+              <button type="button" class="btn" data-act="cancel">Cancel</button>
+              ${editing.id ? `<button type="button" class="btn destructive" data-act="delete" data-id="${editing.id}">Delete</button>` : ""}
+              <button type="button" class="btn primary" data-act="save">${editing.id ? "Save" : "Add"}</button>
+            </div>
+          </div>
+        </div>`;
+      } else if (selected) {
+        const revealed = !!state.reveal[selected.id];
+        const token = tokenString(selected.name);
+        detail = `<div class="detail">
+          <div class="detail-head">
+            <code class="name-badge">${esc(selected.name)}</code>
+            <span class="spacer"></span>
+            <button type="button" class="btn sm" data-act="edit" data-id="${selected.id}">Edit</button>
+          </div>
+          <div class="detail-body">
+            <div class="form-section">
+              <div class="section-label">Constant</div>
+              <div class="settings-row">
+                <div class="settings-hline">
+                  <span class="label">Label</span>
+                  <div class="control"><span class="static">${esc(selected.label)}</span></div>
+                </div>
+              </div>
+              <div class="settings-row">
+                <div class="settings-hline">
+                  <span class="label">Hint</span>
+                  <div class="control"><span class="static">${esc(selected.hint)}</span></div>
+                </div>
+              </div>
+              ${valueRowHTML({
+                value: selected.value,
+                revealed,
+                multiline: !!selected.multiline || /\n/.test(selected.value),
+                readonly: true,
+                revealAct: "reveal",
+                revealId: selected.id,
+              })}
+              ${tokenPreviewHTML(token)}
+            </div>
+            <div class="form-section">
+              <div class="section-label">Allowed agents</div>
+              ${settingsAgentReadonly(selected)}
+            </div>
+          </div>
+        </div>`;
+      } else {
+        detail = `<div class="detail empty">Select a constant or add one.</div>`;
+      }
+      return `
+        <div class="panel">
+          <div class="split">
+            <div class="name-list">
+              <div class="list">${list || `<div style="padding:12px;color:var(--secondary)">Empty</div>`}</div>
+              <div class="foot"><button type="button" class="btn primary" style="width:100%" data-act="add">Add…</button></div>
+            </div>
+            ${detail}
+          </div>
+        </div>`;
+    }
+
+    function dumpState() {
+      document.getElementById("dump").textContent = JSON.stringify({
+        enabled: state.enabled,
+        selectedID: state.selectedID,
+        draft: state.draft && {
+          id: state.draft.id, name: state.draft.name, label: state.draft.label,
+          hint: state.draft.hint,
+          value: state.draft.value ? "«" + state.draft.value.length + " chars»" : "",
+          allowedAgentIDs: state.draft.allowedAgentIDs, error: state.draft.error,
+        },
+        constants: state.constants.map((c) => ({
+          name: c.name, label: c.label, hint: c.hint,
+          valueChars: c.value.length, allowedAgentIDs: c.allowedAgentIDs,
+        })),
+      }, null, 2);
+    }
+
+    function render() {
+      const v = variant();
+      document.getElementById("catalog-root").innerHTML =
+        v === "B" ? renderB() : v === "C" ? renderC() : renderA();
+      document.getElementById("catalog-win").classList.toggle("dimmed", !state.enabled);
+      document.getElementById("master").checked = state.enabled;
+      document.getElementById("cc-open").disabled = false;
+      document.getElementById("switcher").innerHTML = `
+        ${["A", "B", "C"].map((x) =>
+          `<button type="button" aria-current="${x === v}" data-variant="${x}">${x}</button>`
+        ).join("")}
+        <span class="cap">${CAPTIONS[v]}</span>`;
+      dumpState();
+    }
+
+    document.body.addEventListener("click", (e) => {
+      const varBtn = e.target.closest("[data-variant]");
+      if (varBtn) { setVariant(varBtn.dataset.variant); return; }
+      const el = e.target.closest("[data-act]");
+      if (!el) return;
+      const act = el.dataset.act;
+      if (act === "open-catalog") { flashCatalog(); return; }
+      if (act === "add") beginAdd();
+      else if (act === "edit") beginEdit(el.dataset.id);
+      else if (act === "select") {
+        state.selectedID = el.dataset.id;
+        if (variant() !== "A" || !state.draft) state.draft = null;
+        render();
+      } else if (act === "delete") deleteConst(el.dataset.id);
+      else if (act === "cancel") cancelDraft();
+      else if (act === "save") saveDraft();
+      else if (act === "reveal") {
+        state.reveal[el.dataset.id] = !state.reveal[el.dataset.id];
+        render();
+      } else if (act === "reveal-draft") {
+        state.reveal.draft = !state.reveal.draft;
+        render();
+      } else if (act === "toggle-multiline") {
+        if (!state.enabled || !state.draft) return;
+        state.draft.multiline = !state.draft.multiline;
+        if (!state.draft.multiline) {
+          state.draft.value = state.draft.value.replace(/\n/g, " ").trim();
+        }
+        render();
+      } else if (act === "copy-token") {
+        const token = el.dataset.token || "";
+        const done = () => {
+          const prev = el.textContent;
+          el.textContent = "Copied";
+          el.disabled = true;
+          setTimeout(() => { el.textContent = prev; el.disabled = false; }, 900);
+        };
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(token).then(done).catch(() => {
+            window.prompt("Copy token", token);
+          });
+        } else {
+          window.prompt("Copy token", token);
+        }
+      } else if (act === "allow-btn") {
+        toggleAgent(state.constants.find((c) => c.id === el.dataset.id), el.dataset.agent);
+      } else if (act === "draft-allow" && state.draft) {
+        toggleAgent(state.draft, el.dataset.agent);
+      }
+    });
+
+    document.body.addEventListener("change", (e) => {
+      const t = e.target;
+      if (t.matches("[data-act=master]")) {
+        state.enabled = t.checked;
+        if (!state.enabled) state.draft = null;
+        render();
+        return;
+      }
+      if (!state.enabled) return;
+      if (t.matches("[data-act=allow]")) {
+        const c = state.constants.find((x) => x.id === t.dataset.id);
+        if (!c) return;
+        const set = new Set(c.allowedAgentIDs);
+        if (t.checked) set.add(t.dataset.agent); else set.delete(t.dataset.agent);
+        c.allowedAgentIDs = [...set];
+        render();
+        return;
+      }
+      if (t.matches("[data-act=draft-allow-check]") && state.draft) {
+        const set = new Set(state.draft.allowedAgentIDs);
+        if (t.checked) set.add(t.dataset.agent); else set.delete(t.dataset.agent);
+        state.draft.allowedAgentIDs = [...set];
+        render();
+        return;
+      }
+      if (t.matches("[data-inline]")) {
+        const c = state.constants.find((x) => x.id === t.dataset.id);
+        if (!c) return;
+        c[t.dataset.inline] = t.value;
+        dumpState();
+        return;
+      }
+      if (t.matches("[data-field]") && state.draft) {
+        state.draft[t.dataset.field] = t.value;
+        if (t.dataset.field === "name") state.draft.error = "";
+        if (t.dataset.field === "value" && /\n/.test(t.value)) state.draft.multiline = true;
+        dumpState();
+      }
+    });
+
+    document.body.addEventListener("input", (e) => {
+      const t = e.target;
+      if (t.matches("textarea[data-field]") && state.draft) {
+        state.draft[t.dataset.field] = t.value;
+        if (t.dataset.field === "value" && /\n/.test(t.value)) state.draft.multiline = true;
+        dumpState();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.target.matches("input, textarea, select")) return;
+      const order = ["A", "B", "C"];
+      const i = order.indexOf(variant());
+      if (e.key === "ArrowLeft") setVariant(order[(i + order.length - 1) % order.length]);
+      if (e.key === "ArrowRight") setVariant(order[(i + 1) % order.length]);
+    });
+
+    render();
+  </script>
+</body>
+</html>

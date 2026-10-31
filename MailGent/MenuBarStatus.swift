@@ -74,6 +74,9 @@ struct MenuBarStatus: View {
                 MenuBarActionRow(title: "Open Access Log", id: "open-access-log") {
                     DetachedWindowHost.shared.showAccessLog(session: session)
                 }
+                MenuBarActionRow(title: "Secret constants…", id: "open-secret-constants") {
+                    DetachedWindowHost.shared.showSecretConstants(session: session)
+                }
 
                 #if DEBUG
                 Divider()
