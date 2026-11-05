@@ -45,7 +45,17 @@ flowchart TB
 
 ### What `make test` is
 
-`xcodegen generate`, then `xcodebuild` test on scheme `MailGent` for `platform=macOS,arch=arm64` (see `Makefile`).
+`make test` = `make build-for-testing` then `make test-without-building`. Both run `xcodebuild` on scheme `MailGent` for `platform=macOS,arch=arm64` (see `Makefile`). `build-for-testing` runs `xcodegen generate` first and writes products to `.build/DerivedData`; `test-without-building` reuses them.
+
+| Target | Runs | Use when |
+|--------|------|----------|
+| `make build-for-testing` | `xcodegen generate` + compile app and test bundles | you only need to check the build compiles |
+| `make test-without-building` | run tests from the last `build-for-testing` output | you changed nothing in app code, or want to re-run tests quickly |
+| `make test` | both, in order | CI, release, and normal local checks |
+
+**Run tests from a normal terminal, not a sandboxed agent shell.** `test-without-building` calls `IOPMAssertionCreateWithName` to stop sleep during test runs. A sandboxed shell blocks that call and fails with `Failed to prevent system sleep during UI testing. Error code: -536870199`. The same command passes outside the sandbox.
+
+Swift Testing results appear as `Test run with N tests ... passed`, not as XCTest `Executed N tests` lines.
 
 CI installs XcodeGen with Homebrew (same untap guard as Release), then runs `make test`. In-progress runs for the same ref are cancelled (`concurrency`).
 

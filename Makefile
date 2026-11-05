@@ -5,13 +5,20 @@ DERIVED_DATA := .build/DerivedData
 
 .DEFAULT_GOAL := test
 
-.PHONY: generate test run xcode prototype-accounts test-ask-backlog dmg screenshots screenshots-ci release
+.PHONY: generate test build-for-testing test-without-building run xcode prototype-accounts test-ask-backlog dmg screenshots screenshots-ci release
 
 generate:
 	xcodegen generate
 
-test: generate
-	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES test
+# Split `make test` so a failure in the test run can be isolated from the build.
+# Products land in $(DERIVED_DATA); test-without-building reuses them.
+build-for-testing: generate
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath '$(DERIVED_DATA)' CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES build-for-testing
+
+test-without-building:
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath '$(DERIVED_DATA)' CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES test-without-building
+
+test: build-for-testing test-without-building
 
 xcode: generate
 	open $(PROJECT)
