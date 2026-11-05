@@ -49,3 +49,6 @@ node_modules/
 
 # git filter-repo replacement map (local only)
 .scratch/history-redact.txt
+
+# Large local dogfood screenshots (not tracked)
+.scratch/propose-send/dogfood/

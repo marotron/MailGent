@@ -1,0 +1,503 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — scope picker for Grok Bot MailGent handoff (2 Nov 2026).
+  Question: What does each shipping slice buy the agent↔MailGent loop after
+  a human Send that the agent only awaits minutes later?
+
+  Variants via ?variant=A|B|C|D (default A) = P0 / P0+cancel / P0+P1 / full P0–P2.
+  Floating switcher at bottom. One command: open this file.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Handoff scope options</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0071e3;
+      --green: #1f8a4c;
+      --amber: #b06a00;
+      --red: #c33b3b;
+      --card: #fff;
+      --panel: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 28px 16px 110px;
+      font: 13px/1.45 inherit;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    .page { max-width: 920px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note code, .chip code, .bubble code, .meta code {
+      font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0000000d; padding: 1px 4px; border-radius: 4px;
+    }
+    h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+    .panel {
+      background: var(--card); border: 1px solid #00000018; border-radius: 14px;
+      box-shadow: 0 10px 30px #00000018; overflow: hidden;
+    }
+    .panel-h {
+      display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+    }
+    .panel-h h2 { margin: 0; font-size: 15px; }
+    .badge {
+      flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+      text-transform: uppercase; padding: 4px 8px; border-radius: 999px;
+      background: #e8f1ff; color: #0b5ccc;
+    }
+    .badge.warn { background: #fff3d6; color: #8a5600; }
+    .badge.ok { background: #e4f6ea; color: #146b38; }
+    .badge.big { background: #eee8ff; color: #4b2db0; }
+    .grid2 { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 0; }
+    @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+    .col { padding: 14px 16px; }
+    .col + .col { border-left: 1px solid var(--line); }
+    @media (max-width: 820px) { .col + .col { border-left: 0; border-top: 1px solid var(--line); } }
+    .col h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .tl { display: grid; gap: 8px; }
+    .row {
+      display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start;
+    }
+    .t { font: 11px/1.3 ui-monospace, Menlo, monospace; color: var(--muted); padding-top: 8px; }
+    .bubble {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .bubble.agent { border-left: 3px solid var(--blue); }
+    .bubble.human { border-left: 3px solid #7a5af8; }
+    .bubble.ok { border-left: 3px solid var(--green); background: #f1faf4; }
+    .bubble.bad { border-left: 3px solid var(--red); background: #fff5f5; }
+    .bubble.mid { border-left: 3px solid var(--amber); background: #fffaf0; }
+    .bubble .who { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+    .bubble .msg { color: #333; }
+    .meta { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+    .chip {
+      font-size: 11px; padding: 4px 8px; border-radius: 999px;
+      border: 1px solid var(--line); background: #fff; color: #333;
+    }
+    .chip.on { background: #e8f1ff; border-color: #b7d4ff; color: #0b5ccc; font-weight: 650; }
+    .chip.off { opacity: 0.45; text-decoration: line-through; }
+    .list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+    .list li { color: #333; }
+    .list .dim { color: var(--muted); }
+    .examples { display: grid; gap: 10px; }
+    .ex {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff;
+    }
+    .ex h4 { margin: 0 0 6px; font-size: 13px; }
+    .ex pre {
+      margin: 0; white-space: pre-wrap; word-break: break-word;
+      font: 11px/1.4 ui-monospace, Menlo, monospace;
+      background: #f0f1f4; border-radius: 8px; padding: 8px 10px; color: #222;
+    }
+    .ex .label { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 8px 0 4px; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+    .quote {
+      font: 12px/1.5 ui-serif, Georgia, serif; color: #555;
+      border-left: 3px solid #c9c9ce; padding: 6px 10px; background: #f7f7f8; border-radius: 0 8px 8px 0;
+    }
+    .quote.clean { border-left-color: var(--green); color: #222; background: #f1faf4; }
+    .mailrow {
+      display: flex; gap: 8px; align-items: center; padding: 6px 8px;
+      border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+    }
+    .tag {
+      font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      background: #e8e8ed; color: #444;
+    }
+    .tag.sent { background: #e4f6ea; color: #146b38; }
+    .tag.draft { background: #fff3d6; color: #8a5600; }
+    .tag.thread { background: #eee8ff; color: #4b2db0; }
+    .ghost { opacity: 0.35; }
+    .switcher {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      display: flex; gap: 4px; padding: 6px; background: #1d1d1fee; color: #fff;
+      border-radius: 999px; box-shadow: 0 12px 40px #00000055; z-index: 20;
+    }
+    .switcher button {
+      border: 0; background: transparent; color: #fff; padding: 8px 12px;
+      border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .switcher button[aria-current="true"] { background: #fff; color: #111; }
+    .switcher button:hover { background: #ffffff22; }
+    .switcher button[aria-current="true"]:hover { background: #fff; }
+    .hidden { display: none !important; }
+    .verdict {
+      margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+      background: #eef6ff; border: 1px solid #c5daf8; font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div>
+      <h1>Handoff scope options</h1>
+      <p class="sub">Same Spyrosoft incident, four shipping slices. Flip A–D below. Open: <code>open .scratch/propose-send/prototype-handoff-scope-options.html</code></p>
+    </div>
+
+    <div class="note">
+      <strong>Incident ground truth:</strong> Maro pressed Send at 13:39 on proposal
+      <code>44E47DA9…</code>. Access log has <code>outcome: send</code>. Agent first called
+      <code>await_propose_send</code> at 13:47 (~8 min later) → today: <code>Unknown or expired</code>
+      because terminal retention is only <strong>120s</strong>. Cards had not hit hard expiry (~14:38).
+    </div>
+
+    <!-- ========== A: P0 only ========== -->
+    <section class="variant" data-variant="A">
+      <div class="panel">
+        <div class="panel-h">
+          <div>
+            <h2>A · P0 only — outcome reliability</h2>
+            <p class="sub">Keep resolved outcomes until <code>expiresAt</code> (or longer grace). Clearer await errors + timeout docs/defaults. No new tools.</p>
+          </div>
+          <span class="badge">P0</span>
+        </div>
+        <div class="grid2">
+          <div class="col">
+            <h3>Timeline (what changes)</h3>
+            <div class="tl">
+              <div class="row">
+                <div class="t">13:38</div>
+                <div class="bubble agent"><div class="who">Agent</div><div class="msg"><code>propose_send</code> → <code>awaiting_user</code>, expires ~14:38</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:39</div>
+                <div class="bubble human"><div class="who">Maro</div><div class="msg">Presses <strong>Send</strong>. Audit: <code>outcome: send</code>. Mail leaves.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:41</div>
+                <div class="bubble mid"><div class="who">Today (120s grace ends)</div><div class="msg">Proposal swept from memory. Late await can no longer recover.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:47</div>
+                <div class="bubble bad"><div class="who">Today · await</div><div class="msg"><code>Unknown or expired propose_send proposalId.</code> — same string as a typo id.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:47</div>
+                <div class="bubble ok"><div class="who">With P0 · await</div><div class="msg"><code>{ "outcome": "send", "proposalId": "44E47DA9…", "status": "resolved" }</code><br><span class="meta">Still readable until expiresAt (~14:38). Distinct error if truly unknown.</span></div></div>
+              </div>
+            </div>
+            <div class="verdict"><strong>Fixes the Spyrosoft miss</strong> if the agent eventually awaits before hard expiry. Does not stop triple live cards or Draft leftovers.</div>
+          </div>
+          <div class="col">
+            <h3>In this slice</h3>
+            <div class="chips">
+              <span class="chip on">outcome until expiresAt</span>
+              <span class="chip on">clearer await errors</span>
+              <span class="chip on">timeout docs / defaults</span>
+              <span class="chip off">cancel / replace</span>
+              <span class="chip off">Draft / quote cleanup</span>
+              <span class="chip off">threading / Sent / remote</span>
+            </div>
+            <div class="examples">
+              <div class="ex">
+                <h4>Example await responses</h4>
+                <div class="label">Late await after Send (new)</div>
+                <pre>{
+  "outcome": "send",
+  "proposalId": "44E47DA9-…",
+  "decidedAt": "2026-11-02T13:39:00Z"
+}</pre>
+                <div class="label">Truly unknown id (clearer error)</div>
+                <pre>Unknown propose_send proposalId.
+(Not "expired" — id was never seen.)</pre>
+                <div class="label">Soft timeout docs</div>
+                <pre>timeout default 60s, clamp 1…120.
+Human gates: loop await until outcome
+or expiresAt — do not use timeout: 1.</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== B: P0 + cancel/replace ========== -->
+    <section class="variant hidden" data-variant="B">
+      <div class="panel">
+        <div class="panel-h">
+          <div>
+            <h2>B · P0 + cancel / replace</h2>
+            <p class="sub">Everything in A, plus agent can withdraw a live card or propose a replacement that auto-cancels the previous one.</p>
+          </div>
+          <span class="badge warn">P0 + cancel</span>
+        </div>
+        <div class="grid2">
+          <div class="col">
+            <h3>Timeline (wording iteration)</h3>
+            <div class="tl">
+              <div class="row">
+                <div class="t">13:30</div>
+                <div class="bubble agent"><div class="who">Agent</div><div class="msg">Draft 1 — stiff Polish. <code>propose_send</code> → card A live.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:34</div>
+                <div class="bubble mid"><div class="who">Today</div><div class="msg">Agent proposes draft 2 without closing A. Maro sees <strong>two</strong> cards; must cancel A by hand.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:34</div>
+                <div class="bubble ok"><div class="who">With B · replace</div><div class="msg"><code>propose_send(..., replacesProposalId: "AE3970AA…")</code><br>Card A auto-cancels; only card B stays. Or explicit <code>cancel_propose_send</code>.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:38</div>
+                <div class="bubble ok"><div class="who">With B</div><div class="msg">Only one live card for Patrycja. Maro Sends the final wording. Late await still recovers (from P0).</div></div>
+              </div>
+            </div>
+            <div class="verdict"><strong>Stops the triple-card UX</strong> that forced Maro to cancel ×2. Still no Draft/quote/thread fixes.</div>
+          </div>
+          <div class="col">
+            <h3>In this slice</h3>
+            <div class="chips">
+              <span class="chip on">outcome until expiresAt</span>
+              <span class="chip on">clearer await errors</span>
+              <span class="chip on">cancel_propose_send</span>
+              <span class="chip on">replacesProposalId</span>
+              <span class="chip off">post-send update</span>
+              <span class="chip off">Draft / quote cleanup</span>
+              <span class="chip off">threading / Sent / remote</span>
+            </div>
+            <div class="examples">
+              <div class="ex">
+                <h4>Example tool calls</h4>
+                <div class="label">Withdraw without sending</div>
+                <pre>cancel_propose_send({
+  "proposalId": "AE3970AA-…"
+})
+→ { "outcome": "cancelled", "by": "agent" }</pre>
+                <div class="label">Supersede with new wording</div>
+                <pre>propose_send({
+  "to": ["pgi@spyro-soft.com"],
+  "subject": "Re: Spyrosoft…",
+  "body": "Dzięki za feedback…",
+  "replacesProposalId": "AE3970AA-…"
+})
+→ awaiting_user (old card gone)</pre>
+                <div class="label">Human still sees</div>
+                <pre>One confirm window — newest body only.
+Access log: cancelled (agent) then send.</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== C: P0 + full P1 ========== -->
+    <section class="variant hidden" data-variant="C">
+      <div class="panel">
+        <div class="panel-h">
+          <div>
+            <h2>C · P0 + full P1 — agent UX polish</h2>
+            <p class="sub">B, plus post-send index refresh, clean outbound body (no spurious <code>&gt;</code>), and leftover Draft cleanup after Automation Send.</p>
+          </div>
+          <span class="badge ok">P0 + P1</span>
+        </div>
+        <div class="grid2">
+          <div class="col">
+            <h3>After Send — verification &amp; Mail hygiene</h3>
+            <div class="tl">
+              <div class="row">
+                <div class="t">13:39</div>
+                <div class="bubble human"><div class="who">Maro</div><div class="msg">Send succeeds.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:39</div>
+                <div class="bubble bad"><div class="who">Today · Gmail</div><div class="msg">
+                  <div class="mailrow"><span class="tag sent">SENT</span> Re: Spyrosoft…</div>
+                  <div class="mailrow" style="margin-top:6px"><span class="tag draft">DRAFT</span> same body left behind → double-send risk</div>
+                  <div class="quote" style="margin-top:8px">&gt; Cześć Patrycjo,<br>&gt; Dziękuję za feedback…</div>
+                  <div class="meta">Recipient may see a grey quoted block.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="t">13:39</div>
+                <div class="bubble ok"><div class="who">With C</div><div class="msg">
+                  <div class="mailrow"><span class="tag sent">SENT</span> Re: Spyrosoft…</div>
+                  <div class="mailrow ghost" style="margin-top:6px"><span class="tag draft">DRAFT</span> deleted / never left</div>
+                  <div class="quote clean" style="margin-top:8px">Cześć Patrycjo,<br>Dziękuję za feedback…</div>
+                  <div class="meta">Also: auto or prompted <code>update</code> so search finds the copy without a stale index.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="t">13:47</div>
+                <div class="bubble bad"><div class="who">Today · search</div><div class="msg"><code>"Doceniam"</code> → 0 hits (ingest still 12:53).</div></div>
+              </div>
+              <div class="row">
+                <div class="t">13:47</div>
+                <div class="bubble ok"><div class="who">With C · search</div><div class="msg">Index bumped on send outcome → hit in All Mail without a manual <code>update</code> dance.</div></div>
+              </div>
+            </div>
+            <div class="verdict"><strong>Closes the dogfood sharp edges</strong> around the send path. Still a new thread (no In-Reply-To); Sent placement still ungated for markujcv.</div>
+          </div>
+          <div class="col">
+            <h3>In this slice</h3>
+            <div class="chips">
+              <span class="chip on">outcome until expiresAt</span>
+              <span class="chip on">cancel / replace</span>
+              <span class="chip on">post-send update</span>
+              <span class="chip on">clean body (no &gt;)</span>
+              <span class="chip on">leftover Draft cleanup</span>
+              <span class="chip off">reply threading</span>
+              <span class="chip off">Sent grant</span>
+              <span class="chip off">remote access story</span>
+            </div>
+            <div class="examples">
+              <div class="ex">
+                <h4>Example before / after body</h4>
+                <div class="split">
+                  <div>
+                    <div class="label">Today (quoted look)</div>
+                    <div class="quote">&gt; Cześć Patrycjo,<br>&gt; Dziękuję za feedback<br>&gt; i za pozytywną ocenę.</div>
+                  </div>
+                  <div>
+                    <div class="label">With C</div>
+                    <div class="quote clean">Cześć Patrycjo,<br>Dziękuję za feedback<br>i za pozytywną ocenę.</div>
+                  </div>
+                </div>
+              </div>
+              <div class="ex">
+                <h4>Post-send agent path</h4>
+                <pre>await → { outcome: "send" }
+(index refresh kicked)
+search "Doceniam" → All Mail hit
+no orphan Draft in Gmail</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== D: Full P0–P2 ========== -->
+    <section class="variant hidden" data-variant="D">
+      <div class="panel">
+        <div class="panel-h">
+          <div>
+            <h2>D · Full handoff P0–P2</h2>
+            <p class="sub">C, plus reply threading, optional Sent placement grant, and a documented remote path for Grok Bot (not ad-hoc <code>/tmp</code> JSON-RPC).</p>
+          </div>
+          <span class="badge big">P0–P2</span>
+        </div>
+        <div class="grid2">
+          <div class="col">
+            <h3>Threading + Sent + remote</h3>
+            <div class="tl">
+              <div class="row">
+                <div class="t">Today</div>
+                <div class="bubble bad"><div class="who">Outbound</div><div class="msg">
+                  <div class="mailrow"><span class="tag">NEW THREAD</span> Re: subject only — not under Teamtailor thread</div>
+                  <div class="meta" style="margin-top:6px">Patrycja wrote via <code>…@teamtailor-mail.com</code>; signs as <code>pgi@…</code>. No <code>In-Reply-To</code>.</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="t">With D</div>
+                <div class="bubble ok"><div class="who">Outbound</div><div class="msg">
+                  <div class="mailrow"><span class="tag thread">SAME THREAD</span> <code>inReplyTo</code> / <code>references</code> from inbound Message-ID</div>
+                  <pre style="margin-top:8px;font:11px/1.35 ui-monospace,Menlo,monospace;background:#f0f1f4;padding:8px;border-radius:8px;">propose_send({
+  …,
+  "inReplyTo": "&lt;…@teamtailor…&gt;",
+  "references": "&lt;…&gt;"
+})</pre>
+                </div>
+              </div>
+              <div class="row">
+                <div class="t">Sent</div>
+                <div class="bubble ok"><div class="who">Grant Desk</div><div class="msg">markujcv may grant <strong>Sent</strong> placement. Agent verifies SENT without All-Mail heuristics.</div></div>
+              </div>
+              <div class="row">
+                <div class="t">Remote</div>
+                <div class="bubble ok"><div class="who">Grok Bot</div><div class="msg">Documented Mac-local pairing / CLI (or stable relay) — not scrapers against <code>/tmp/ps3.json</code>.</div></div>
+              </div>
+            </div>
+            <div class="verdict"><strong>Largest slice</strong> — product + grants + remote-agent story. Threading alone needs AppleScript / Message-ID design work.</div>
+          </div>
+          <div class="col">
+            <h3>In this slice</h3>
+            <div class="chips">
+              <span class="chip on">all of P0 + P1</span>
+              <span class="chip on">inReplyTo / references</span>
+              <span class="chip on">Sent placement grant</span>
+              <span class="chip on">remote access docs / CLI</span>
+            </div>
+            <div class="examples">
+              <div class="ex">
+                <h4>What “done” looks like for Grok</h4>
+                <ul class="list">
+                  <li>Propose once (or replace) → await recovers even hours later until expiry</li>
+                  <li>Reply lands in Patrycja’s existing conversation</li>
+                  <li><code>list</code>/<code>search</code> can see Sent when granted</li>
+                  <li>Remote agent uses a supported pairing path, not disposable <code>/tmp</code> clients</li>
+                </ul>
+              </div>
+              <div class="ex">
+                <h4>Cost / risk</h4>
+                <ul class="list">
+                  <li>Threading: Apple Mail Automation gaps; Teamtailor relay vs sign-as address</li>
+                  <li>Sent grant: grant-desk UX + placement ingest</li>
+                  <li class="dim">Remote story may be docs-only first, or a small local CLI</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="note">
+      <strong>How to choose:</strong>
+      A if you only want the late-await bug fixed.
+      B if triple live cards bit as hard as the miss.
+      C if you’re already dogfooding send and want Mail hygiene.
+      D only if threading / Sent / remote are in-scope this cycle.
+      Your earlier message also trailed off at “also” — say what else to fold in after you pick.
+    </div>
+  </div>
+
+  <nav class="switcher" aria-label="Scope variants">
+    <button type="button" data-go="A" aria-current="true">A · P0</button>
+    <button type="button" data-go="B">B · +cancel</button>
+    <button type="button" data-go="C">C · +P1</button>
+    <button type="button" data-go="D">D · P0–P2</button>
+  </nav>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    let variant = (params.get("variant") || "A").toUpperCase();
+    if (!"ABCD".includes(variant)) variant = "A";
+
+    function show(v) {
+      variant = v;
+      document.querySelectorAll(".variant").forEach(el => {
+        el.classList.toggle("hidden", el.dataset.variant !== v);
+      });
+      document.querySelectorAll(".switcher button").forEach(btn => {
+        btn.setAttribute("aria-current", btn.dataset.go === v ? "true" : "false");
+      });
+      const url = new URL(location.href);
+      url.searchParams.set("variant", v);
+      history.replaceState(null, "", url);
+    }
+
+    document.querySelectorAll(".switcher button").forEach(btn => {
+      btn.addEventListener("click", () => show(btn.dataset.go));
+    });
+    show(variant);
+  </script>
+</body>
+</html>
