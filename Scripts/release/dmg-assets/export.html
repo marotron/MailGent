@@ -132,18 +132,28 @@
       top: 8px;
       right: 8px;
     }
-    .panel {
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
       width: var(--col);
+      align-items: stretch;
+    }
+    .panel {
       height: fit-content;
-      background: rgba(255, 248, 235, 0.72);
-      border: 1px solid rgba(138, 109, 59, 0.28);
+      min-width: 0;
+      background: var(--card);
+      border: 1px solid rgba(0,0,0,.06);
       border-radius: 10px;
-      padding: 10px 14px 12px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
       box-shadow: 0 3px 12px rgba(0,0,0,.06);
-      flex-shrink: 0;
+    }
+    .panel.opt {
+      border-color: rgba(138, 109, 59, 0.28);
+      background: rgba(255, 248, 235, 0.72);
     }
     .panel .body {
       font-size: 11px;
@@ -156,6 +166,49 @@
       padding-left: 18px;
     }
     .panel .body li { margin: 3px 0; }
+    .keychain-prompt {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 8px;
+      background: linear-gradient(#f7f7f8, #d8d8dc);
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      color: #303036;
+      font-size: 6px;
+      line-height: 1.25;
+    }
+    .keychain-prompt .lock {
+      font-size: 29px;
+      line-height: 1;
+      text-align: center;
+    }
+    .keychain-prompt strong { font-size: 7px; }
+    .keychain-prompt .password {
+      height: 11px;
+      margin-top: 6px;
+      border: 1px solid #3f95e8;
+      border-radius: 2px;
+      background: white;
+    }
+    .keychain-prompt .buttons {
+      display: flex;
+      justify-content: end;
+      gap: 5px;
+      margin-top: 6px;
+    }
+    .keychain-prompt .button {
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: #e8e8ea;
+      font-size: 5px;
+    }
+    .keychain-note {
+      margin-top: 6px;
+      color: var(--ink);
+      font-size: 11px;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -181,20 +234,40 @@
         </div>
       </div>
 
-      <div class="panel">
-        <div class="step-badge opt">
-          <span class="n">?</span>
-          If blocked
-          <span class="opt-label">(optional)</span>
+      <div class="panels">
+        <div class="panel">
+          <div class="step-badge opt">
+            <span class="n">?</span>
+            Keychain
+            <span class="opt-label">(Secret constants only)</span>
+          </div>
+          <div class="keychain-prompt" aria-label="Illustrative Keychain password prompt">
+            <div class="lock">🔒</div>
+            <div>
+              <strong>MailGent wants to use your confidential information stored in your keychain.</strong>
+              <br><br>To allow this, enter the “login” keychain password.
+              <div class="password"></div>
+              <div class="buttons"><span class="button">Deny</span><span class="button">Always Allow</span></div>
+            </div>
+          </div>
+          <div class="body">If you enable <strong>Secret constants</strong>, MailGent creates one local Keychain wrapping key. This is not a Gatekeeper block.</div>
+          <div class="keychain-note">Enter your Mac password → <strong>Always Allow</strong></div>
         </div>
-        <div class="body">
-          MailGent isn’t Apple-notarized yet, so Gatekeeper may show <strong>“Not Opened”</strong>.
-          That’s macOS protecting you — skip this if the app launches fine.
-          <ol>
-            <li>Click <strong>Done</strong> (not Move to Bin)</li>
-            <li><strong>System Settings</strong> → <strong>Privacy &amp; Security</strong></li>
-            <li>Click <strong>Open Anyway</strong> → confirm → <strong>Touch ID</strong> / <strong>password</strong></li>
-          </ol>
+        <div class="panel opt">
+          <div class="step-badge opt">
+            <span class="n">?</span>
+            If blocked
+            <span class="opt-label">(optional)</span>
+          </div>
+          <div class="body">
+            MailGent isn’t Apple-notarized yet, so Gatekeeper may show <strong>“Not Opened”</strong>.
+            That’s macOS protecting you — skip this if the app launches fine.
+            <ol>
+              <li>Click <strong>Done</strong> (not Move to Bin)</li>
+              <li><strong>System Settings</strong> → <strong>Privacy &amp; Security</strong></li>
+              <li>Click <strong>Open Anyway</strong> → confirm → <strong>Touch ID</strong> / <strong>password</strong></li>
+            </ol>
+          </div>
         </div>
       </div>
     </div>

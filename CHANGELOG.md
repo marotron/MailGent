@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.23.5] - 2026-11-05
+
+### Added
+
+- DMG install guide now includes optional Keychain instructions for Secret constants.
+
+### Fixed
+
+- DMG Finder window hides its path bar when possible and reserves room for it when Finder keeps it visible, preventing the install guide from being cropped.
+
 ## [0.23.4] - 2026-11-03
 
 ### Fixed

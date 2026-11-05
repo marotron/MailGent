@@ -1,11 +1,12 @@
 # DMG install window assets
 
-Used by `Scripts/release/dmg.sh` for the Finder install window (drag → Applications, Open MailGent alias, Gatekeeper copy).
+Used by `Scripts/release/dmg.sh` for the Finder install window (drag → Applications, Open MailGent alias, Secret constants Keychain guidance, Gatekeeper copy).
 
 | File | Role |
 |------|------|
 | `background.png` | Finder window background (2× Retina @ 144 DPI; height measured from `#canvas`) |
 | `DS_Store` | Optional Finder layout blob (written by first local `make dmg`; used on CI) |
+| `install-window.png` | Real Finder screenshot of the mounted DMG; embedded in the GitHub release body |
 | `export.html` | Source for re-rendering the background |
 | `render-background.swift` | Regenerates `background.png` (also prints icon-slot centers) |
 | `Open MailGent` | Fallback Finder alias → `/Applications/MailGent.app` (CI / when AppleScript cannot remake it) |
@@ -18,6 +19,7 @@ Live Finder icons on the volume: **MailGent.app**, **Applications**, and **Open 
 
 1. Drag **MailGent** → **Applications**, then double-click **Open MailGent**
 2. If Gatekeeper blocks (optional): **Done** → System Settings → Privacy & Security → **Open Anyway** → unlock
+3. If you enable **Secret constants** (optional): enter your Mac password in the Keychain prompt and choose **Always Allow**. This creates MailGent’s local wrapping key; it is not a Gatekeeper block.
 
 ## Re-render background
 
@@ -25,4 +27,4 @@ Live Finder icons on the volume: **MailGent.app**, **Applications**, and **Open 
 swift Scripts/release/dmg-assets/render-background.swift
 ```
 
-Copy printed `icon-slot centers` into `dmg.sh` (`ICON_*`) if the layout moved. Delete `DS_Store` and run `make dmg` so Finder layout regenerates.
+Copy printed `icon-slot centers` into `dmg.sh` (`ICON_*`) if the layout moved. Delete `DS_Store` and run `make dmg` so Finder layout regenerates. The script hides Finder’s path bar when it can; otherwise it adds one path-bar row to the window height.
