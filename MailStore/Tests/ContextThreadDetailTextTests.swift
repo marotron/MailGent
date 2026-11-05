@@ -67,4 +67,33 @@ import Testing
         let attributed = ContextThreadDetailText.attributed(detail: raw, original: nil)
         #expect(String(attributed.characters) == raw)
     }
+
+    @Test func mailHTMLDetailBecomesPlainText() {
+        let original = ContextThreadOriginal.mail(
+            accountID: "a",
+            placement: "INBOX",
+            id: "1",
+            internetMessageID: nil
+        )
+        let html = "<html><body><p>Hello <b>OpenRent</b></p></body></html>"
+        let prepared = ContextThreadDetailText.preparedDetail(html, original: original)
+        #expect(!prepared.contains("<"))
+        #expect(prepared.contains("Hello"))
+        #expect(prepared.contains("OpenRent"))
+        let attributed = ContextThreadDetailText.attributed(detail: html, original: original)
+        #expect(String(attributed.characters) == prepared)
+    }
+
+    @Test func longMailDetailIsSoftCapped() {
+        let original = ContextThreadOriginal.mail(
+            accountID: "a",
+            placement: "INBOX",
+            id: "1",
+            internetMessageID: nil
+        )
+        let raw = String(repeating: "a", count: 12_000)
+        let prepared = ContextThreadDetailText.preparedDetail(raw, original: original, maxChars: 100)
+        #expect(prepared.count == 101) // 100 chars + ellipsis
+        #expect(prepared.hasSuffix("…"))
+    }
 }

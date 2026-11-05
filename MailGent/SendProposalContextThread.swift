@@ -15,6 +15,8 @@ struct SendProposalContextThreadView: View {
     /// Space between white cards. Applied as half-padding on each row *before*
     /// the band/pane background so grey stays continuous while cards separate.
     private static let eventGap: CGFloat = 8
+    /// Expanded mail/vault body pane — fixed (not max) so nested scroll stays bounded.
+    private static let expandedBodyHeight: CGFloat = 220
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -34,9 +36,9 @@ struct SendProposalContextThreadView: View {
                 }
                 .onChange(of: selectedID) { _, id in
                     guard let id else { return }
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        proxy.scrollTo(id, anchor: .center)
-                    }
+                    // No animation: expanding a card while animating scrollTo fought
+                    // nested layout and hung the confirm (spindump spin on body scroll).
+                    proxy.scrollTo(id, anchor: .center)
                 }
             }
         }
@@ -259,14 +261,20 @@ struct SendProposalContextThreadView: View {
             if expanded {
                 if let detail = item.detail, !detail.isEmpty {
                     Divider().opacity(0.35)
+                    // Fixed height (not maxHeight): same Ask rule — nested ScrollView +
+                    // maxHeight/fixedSize parents report unbounded height and can hang
+                    // the main thread when the user scrolls the expanded body.
                     ScrollView {
                         Text(ContextThreadDetailText.attributed(detail: detail, original: item.original))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
-                    .frame(maxHeight: 220)
+                    .frame(height: Self.expandedBodyHeight, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .clipped()
                 } else if item.unavailableReason == nil, item.original != nil {
                     Divider().opacity(0.35)
                     Text("Body not available here — open the original.")

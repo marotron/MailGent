@@ -1938,13 +1938,20 @@ private final class CompanionProposeSendMailFetcher: ProposeSendMailFetching, @u
             }
             let messageID = message.internetMessageID
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            let htmlFallback = message.htmlBody.flatMap { html -> String? in
+                let plain = MailMIME.plainText(fromHTML: html)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return plain.isEmpty ? nil : plain
+            }
             return ProposeSendMailContent(
                 subject: message.subject,
                 from: message.from,
                 to: message.to,
                 cc: message.cc,
                 attachmentNames: message.attachments.map(\.filename),
-                body: bodyText ?? message.htmlBody,
+                // Never feed raw HTML into the context rail — scrolling a huge markup
+                // string in the nested body pane hung the confirm dialog.
+                body: bodyText ?? htmlFallback,
                 internetMessageID: messageID.isEmpty ? nil : messageID
             )
         } catch {
