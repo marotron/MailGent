@@ -20,9 +20,11 @@ APP_NAME=MailGent
 ASSETS_DIR="$ROOT/Scripts/release/dmg-assets"
 BG_PNG="$ASSETS_DIR/background.png"
 
-# Finder window content matches background logical size (552×337; PNG is 2× Retina). Titlebar ≈ 28px.
+# Finder window content matches the background logical size (PNG is 2× Retina).
+# The optional Finder path bar, if it refuses to hide, is added at layout time.
 WIN_W=552
-WIN_H=365
+WIN_H=431
+PATHBAR_H=28
 ICON_SIZE=64
 # Icon centers over empty slots in export.html (2/3 drag + 1/3 Open alias).
 ICON_APP_X=114
@@ -196,10 +198,12 @@ tell application "Finder"
     set current view of container window to icon view
     set toolbar visible of container window to false
     set statusbar visible of container window to false
+    set pathBarHeight to 0
     try
       set pathbar visible of container window to false
+      if pathbar visible of container window then set pathBarHeight to $PATHBAR_H
     end try
-    set the bounds of container window to {100, 100, $((100 + WIN_W)), $((100 + WIN_H))}
+    set the bounds of container window to {100, 100, $((100 + WIN_W)), $((100 + WIN_H)) + pathBarHeight}
     set viewOptions to the icon view options of container window
     set arrangement of viewOptions to not arranged
     set icon size of viewOptions to $ICON_SIZE

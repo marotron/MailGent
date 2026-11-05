@@ -5,7 +5,7 @@
 
 ## What ships
 
-The Release DMG Finder window shows a **2/3 drag + 1/3 Open** row plus short Gatekeeper text (no screenshots, no helper applets):
+The Release DMG Finder window shows a **2/3 drag + 1/3 Open** row, an illustrative Keychain card for Secret constants, and short Gatekeeper text (no helper applets):
 
 | Icon | Role |
 |------|------|
@@ -15,12 +15,15 @@ The Release DMG Finder window shows a **2/3 drag + 1/3 Open** row plus short Gat
 
 Background is a **2× Retina** PNG measured from `#canvas` in `export.html`. Icon positions live in `Scripts/release/dmg.sh`.
 
+The packaging script requests Finder hide its path bar. If Finder keeps it visible, the script adds one path-bar row to the window height so the guide remains fully visible.
+
 ## User-facing steps (document the same everywhere)
 
 Keep README, `.github/RELEASE_BODY.md`, and the DMG background in sync:
 
 1. Drag **MailGent** → **Applications**, then double-click **Open MailGent**
 2. If macOS shows *Not Opened* (optional): click **Done** → **System Settings** → **Privacy & Security** → **Open Anyway** → confirm → Touch ID / password
+3. If you enable **Secret constants** (optional): enter your Mac password in the Keychain prompt and choose **Always Allow**. This creates MailGent’s local wrapping key; it is not a Gatekeeper block.
 
 ## Rebuild assets
 

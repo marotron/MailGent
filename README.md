@@ -1,6 +1,6 @@
 # MailGent
 
-**0.23.4 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.23.5 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, secret constants, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -151,7 +151,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 
 ### Install (DMG)
 
-- Pretty Finder install window: drag to Applications, plus short Gatekeeper instructions (text only)
+- Pretty Finder install window: drag to Applications, optional Keychain guidance for Secret constants, and Gatekeeper instructions. The path bar is hidden when Finder permits it; the layout still has room if Finder keeps it visible.
 - **Open MailGent** Finder alias in the DMG launches the app from Applications after drag-install (CI builds set the Finder alias bit so the icon and double-click work; Open slot aligns with the drag-row icons)
 - Background is Retina-scaled so the guide fills the DMG window on HiDPI displays
 

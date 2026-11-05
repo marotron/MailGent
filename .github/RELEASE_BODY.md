@@ -3,8 +3,12 @@
 **Pre-release alpha** — not a stable or beta build. Version in the app bundle is semver (`@VERSION@`); GitHub release title and About show **`@VERSION@ alpha`**.
 
 1. Download `MailGent-*.dmg` below.
-2. Open the disk image — the window shows drag-to-Applications, **Open MailGent**, plus Gatekeeper notes.
+2. Open the disk image — the window shows drag-to-Applications, **Open MailGent**, optional Keychain guidance for Secret constants, plus Gatekeeper notes.
 3. Drag **MailGent** to **Applications**, then double-click **Open MailGent** (or open it from Applications). If Gatekeeper blocks first launch, follow the optional steps on the background.
+
+### DMG install guide
+
+![MailGent DMG install guide](https://raw.githubusercontent.com/marotron/MailGent/v@VERSION@/Scripts/release/dmg-assets/install-window.png)
 
 ## macOS Gatekeeper warning
 
