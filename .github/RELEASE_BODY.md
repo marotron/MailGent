@@ -8,7 +8,7 @@
 
 ### DMG install guide
 
-![MailGent DMG install guide](https://raw.githubusercontent.com/marotron/MailGent/v@VERSION@/Scripts/release/dmg-assets/install-window.png)
+<img src="https://raw.githubusercontent.com/marotron/MailGent/v@VERSION@/Scripts/release/dmg-assets/install-window.png" alt="MailGent DMG install guide" width="512">
 
 ## macOS Gatekeeper warning
 
