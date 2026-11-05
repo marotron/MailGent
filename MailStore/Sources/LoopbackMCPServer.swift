@@ -124,7 +124,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.23.3"
+                        "version": "0.23.4"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -910,7 +910,7 @@ public struct LoopbackMCPServer {
 
     private func statusTool(credential: String?) async throws -> String {
         let snapshot = host.snapshot()
-        var extra = await sourceExtras()
+        let extra = await sourceExtras()
         if snapshot.isReady, let gateway = host.readGateway() {
             let freshness = try gateway.freshness(credential: credential)
             return try jsonString(AuditJSON.indexStatus(snapshot, freshness: freshness, extra: extra))
@@ -1192,7 +1192,7 @@ public struct LoopbackMCPServer {
     }
 
     private func makeToolDescriptors() -> [[String: Any]] {
-        var tools: [[String: Any]] = [
+        let tools: [[String: Any]] = [
             [
                 "name": "search",
                 "description":

@@ -1,6 +1,6 @@
 # MailGent
 
-**0.23.3 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
+**0.23.4 alpha** — Let AI help with your email — without handing over your inbox. MailGent is a gatekeeper between Apple Mail and your AI agents: Cursor and Grok talk to it over local MCP, you choose the slice they can see, secrets are redacted on-device, and every request is logged.
 
 **Early alpha.** Local Apple Mail read, per-agent grants, Ask prompts, leak guard, secret constants, and a full access log work today. Agents can draft, and (when you enable it) propose a send you confirm in MailGent before Apple Mail sends. They cannot delete. Gmail/Yahoo and remote agents are not in this build.
 
@@ -60,7 +60,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Agents talk to MailGent over MCP; MailGent has no built-in AI
 - Optional Settings → General → **Allow agents to open messages in Apple Mail** (off by default) enables MCP `open_in_mail`
 - Optional Settings → General → **Allow agents to propose sending mail** (off by default) enables MCP `propose_send` (immediate ack with `proposalId`) and `await_propose_send` (soft-wait for outcome) — larger confirm dialog with Formatted|Raw body preview (HTML preview only) and hover **−** / **+** zoom on the body; **Send** / **Open in Mail** / **Cancel** before Apple Mail is touched; never auto-sends. On **Send**, the dialog stays open through Automation handoff (**Sending…** → **Handed to Apple Mail** / refuse with **Try again**); **Done** dismisses after success — do not rely on Mail’s send sound. Confirm wait limit (15m–8h, default 1h) shows a live titlebar countdown (`Expires in …`) and expires the proposal with no send. Confirm dialogs raise frontmost like Ask (not left under Cursor). Same-mail fingerprint reuses one dialog while awaiting; requested `sender` must match a listed or Gmail-dot-equivalent address and a live Mail identity, or deliver fails (no silent default From)
-- Optional Settings → Experimental → **Propose-send context thread** (off by default): `propose_send` may pass `context` so the confirm dialog shows a vault + mail timeline beside the draft (choose a Personal vault root; agent structure, MailGent resolves content; schema/UI may change). Mail cards compact to subject + `from → to`; expand for labeled From / To / Cc / Subject / Date / Attachments (optional rows when present), then Open / link chips and body
+- Optional Settings → Experimental → **Propose-send context thread** (off by default): `propose_send` may pass `context` so the confirm dialog shows a vault + mail timeline beside the draft (choose a Personal vault root; agent structure, MailGent resolves content; schema/UI may change). Mail cards compact to subject + `from → to`; expand for labeled From / To / Cc / Subject / Date / Attachments (optional rows when present), then Open / link chips and a fixed-height scrollable body (plain text; HTML stripped; length capped so scrolling the rail does not freeze the confirm)
 - MCP `list_accounts` lists Mail identities (`displayName`, `email`) with grant-filtered mailbox `placements`; by default only accounts with at least one placement are returned
 - Optional Settings → General → **Reveal accounts with no placements** (off by default) includes empty-placement identities in `list_accounts` and allows them as `propose_send` `sender`
 - MCP `get` returns `mailURL` (`message://…`) and `internetMessageID` when the message has an RFC Message-ID (fail closed when missing)
@@ -147,7 +147,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Drafts are **not** written into Mail.app; body-only drafts stay in MailGent and show in the Access Log
 - With **Allow agents to propose sending mail** on, `propose_send` acks immediately and opens a confirm dialog (Formatted|Raw preview with hover zoom; no attachments); the confirm counts toward the menu-bar **Needs your action** badge. The agent calls `await_propose_send` for `{ outcome }` (or still-waiting / expired). **Send** keeps the confirm open and reports Automation handoff success or failure in-dialog (**Done** / **Try again**); **Open in Mail** still hands off a visible compose. Neither path is SMTP from MailGent; From is resolved against Mail’s live accounts (Gmail dots equivalent) and fails closed if it would not stick; a failed deliver can be retried from the dialog or on a later await
 - With **Secret constants** on, draft and propose-send bodies may include `[[mg:name]]` placeholders; confirm UI resolves them for you (agent results stay tokenized)
-- With **Propose-send context thread** on, optional `context` adds an expandable left rail of mail and Personal-vault notes/logs (Markdown rendered for vault detail; private bands; max 40 events). Mail rows use compact `from → to` until selected, then a labeled envelope (Cc and Attachments only when present) above the body
+- With **Propose-send context thread** on, optional `context` adds an expandable left rail of mail and Personal-vault notes/logs (Markdown rendered for vault detail; private bands; max 40 events). Mail rows use compact `from → to` until selected, then a labeled envelope (Cc and Attachments only when present) above a fixed-height plain-text body pane (HTML stripped / soft-capped so expand + scroll stays responsive)
 
 ### Install (DMG)
 
@@ -184,7 +184,20 @@ make xcode
 
 Menu bar only (`LSUIElement`). Settings → Access → Recheck, Open Full Disk Access, or Choose Mail Folder…
 
+### Running tests
+
+`make test` runs two steps you can also run separately:
+
+```bash
+make build-for-testing      # regenerate project + compile app and test bundles
+make test-without-building  # run tests from the last build (fast re-run)
+```
+
+Run these from a normal terminal. Inside a sandboxed shell, the test run can fail with `Failed to prevent system sleep during UI testing. Error code: -536870199`. Details: [`docs/agents/ci-cd.md`](docs/agents/ci-cd.md#what-make-test-is).
+
 ## Release (DMG)
+
+**Versioning (0.x alpha):** while the app is `0.x`, a breaking change bumps **MINOR** (e.g. `0.23.4` → `0.24.0`) and is listed under `### Breaking` in `CHANGELOG.md`.
 
 Build a Release `.dmg` locally (output: `dist/MailGent-<version>.dmg`, version from `project.yml`):
 

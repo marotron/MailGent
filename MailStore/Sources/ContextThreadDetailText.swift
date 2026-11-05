@@ -3,21 +3,46 @@ import Foundation
 /// Formats expanded context-thread detail for display.
 /// Vault notes use Markdown; mail (and unknown) stay plain so email bodies do not break parsers.
 public enum ContextThreadDetailText {
+    /// Soft cap so a huge HTML fallback cannot stall Text layout while scrolling.
+    public static let maxDisplayChars = 8_000
+
     public static func attributed(
         detail: String,
         original: ContextThreadOriginal?
     ) -> AttributedString {
+        let prepared = preparedDetail(detail, original: original)
         if case .vault = original {
             var options = AttributedString.MarkdownParsingOptions()
             options.interpretedSyntax = .full
-            if let parsed = try? AttributedString(markdown: detail, options: options) {
+            if let parsed = try? AttributedString(markdown: prepared, options: options) {
                 // `.full` stores block structure in presentation intents and strips `\n`
                 // from the character buffer. SwiftUI `Text` ignores those intents, so
                 // re-insert explicit breaks (and list bullets) for readable layout.
                 return withExplicitBlockBreaks(parsed)
             }
         }
-        return AttributedString(detail)
+        return AttributedString(prepared)
+    }
+
+    /// Normalize detail before attributed layout: strip HTML for mail, then soft-cap length.
+    public static func preparedDetail(
+        _ detail: String,
+        original: ContextThreadOriginal?,
+        maxChars: Int = maxDisplayChars
+    ) -> String {
+        var text = detail
+        if case .vault = original {
+            // Vault excerpts are already capped at resolve; still bound for safety.
+        } else if MailMIME.bodyLooksLikeHTML(text) {
+            text = MailMIME.plainText(fromHTML: text)
+        }
+        return truncated(text, maxChars: maxChars)
+    }
+
+    static func truncated(_ text: String, maxChars: Int) -> String {
+        guard maxChars > 0, text.count > maxChars else { return text }
+        let end = text.index(text.startIndex, offsetBy: maxChars)
+        return String(text[..<end]) + "…"
     }
 
     /// Turns presentation-intent blocks into newline-separated plain layout.

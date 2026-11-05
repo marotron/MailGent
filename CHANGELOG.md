@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.23.4] - 2026-11-03
+
+### Fixed
+
+- Propose-send context rail no longer hangs the confirm when scrolling an expanded mail/vault body: nested body pane uses a fixed height (Ask pattern), selection scroll is not animated, mail detail strips HTML and soft-caps length before layout
+
 ## [0.23.3] - 2026-10-31
 
 ### Changed

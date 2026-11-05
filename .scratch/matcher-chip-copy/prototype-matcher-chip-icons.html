@@ -1,0 +1,297 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — Grant Desk matcher chip trailing icons.
+  Copy value stays doc.on.clipboard.
+  Pick a stock SF Symbol for “Copy to another rule” (current arrow.right.doc.on.clipboard
+  muddies at ~8pt).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Matcher chip copy-to-rule icons</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --chip: rgba(0, 122, 255, 0.10);
+      --mode: #8e8e93;
+      --icon: #6e6e73;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px 18px 80px;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink);
+      font: 13px/1.45 var(--font-family, inherit);
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+    .note {
+      background: #ffffffb8;
+      border: 1px solid #ffffff90;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #2c3a4a;
+    }
+    .note code { font-size: 11px; }
+    .lean { color: #248a3d; font-weight: 650; }
+    .card {
+      background: #f5f5f7;
+      border-radius: 12px;
+      border: 1px solid #00000018;
+      box-shadow: 0 18px 50px #00000028;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+    h1 { font-size: 15px; margin: 0 0 2px; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
+    .chip {
+      display: flex;
+      align-items: flex-start;
+      gap: 4px;
+      max-width: 420px;
+      padding: 2px 6px 2px 4px;
+      background: var(--chip);
+      border-radius: 12px;
+    }
+    .mode {
+      font-size: 7px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--mode);
+      border-radius: 999px;
+      padding: 3px 6px;
+      margin-top: 2px;
+      letter-spacing: 0.02em;
+    }
+    .value {
+      flex: 1;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 0;
+      word-break: break-all;
+    }
+    .actions {
+      display: flex;
+      gap: 4px;
+      padding-top: 5px;
+    }
+    .actions img {
+      width: 11px;
+      height: 11px;
+      display: block;
+      opacity: 0.85;
+    }
+    .actions .x {
+      width: 8px;
+      height: 8px;
+      margin-top: 1.5px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #00000010;
+      cursor: pointer;
+    }
+    .row:hover { border-color: #0071e3aa; }
+    .row.selected {
+      border-color: #0071e3;
+      box-shadow: 0 0 0 2px #0071e333;
+    }
+    .badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #f0f1f3;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .row.selected .badge { background: #d6e9ff; color: #0071e3; }
+    .meta { display: grid; gap: 6px; }
+    .meta .name { font-weight: 650; font-size: 13px; }
+    .meta .sym { font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+    .meta .why { font-size: 12px; color: #3a3a3c; }
+    .preview-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .ship-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .big {
+      width: 44px;
+      height: 44px;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #00000012;
+      display: grid;
+      place-items: center;
+    }
+    .big img { width: 28px; height: 28px; }
+    .now .chip { outline: 1px dashed #d70015; outline-offset: 4px; }
+    .legend { font-size: 11px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="note">
+      <strong>Matcher chip · Copy to another rule icon</strong><br>
+      Keep <code>doc.on.clipboard</code> for Copy value. Replace current
+      <code>arrow.right.doc.on.clipboard</code> (muddy at ship size — red dashed).
+      Click a candidate; chip preview updates. Lean marked <span class="lean">green</span>.
+    </div>
+
+    <div class="card now">
+      <h2>Current (ship)</h2>
+      <div class="preview-label">~8–11pt trailing cluster</div>
+      <div class="chip" aria-label="Current chip">
+        <span class="mode">EXACT</span>
+        <span class="value">propertylet-update-donotreply@openrent.co.uk</span>
+        <span class="actions">
+          <img src="icons/doc-on-clipboard-11.png" alt="Copy value">
+          <img src="icons/arrow-right-doc-on-clipboard-11.png" alt="Copy to another rule (current)">
+          <img class="x" src="icons/xmark-11.png" alt="Remove">
+        </span>
+      </div>
+      <p class="legend">Symbol: <code>arrow.right.doc.on.clipboard</code> — stock, but illegible/wrong at chip density.</p>
+    </div>
+
+    <div class="card">
+      <h1>Stock candidates</h1>
+      <div id="options"></div>
+    </div>
+
+    <div class="card">
+      <h2>Live preview</h2>
+      <div class="ship-row">
+        <div>
+          <div class="preview-label">Chip (edit)</div>
+          <div class="chip" id="live-chip">
+            <span class="mode">EXACT</span>
+            <span class="value">propertylet-update-donotreply@openrent.co.uk</span>
+            <span class="actions">
+              <img src="icons/doc-on-clipboard-11.png" alt="Copy value">
+              <img id="live-mid" src="icons/plus-rectangle-on-rectangle-11.png" alt="Copy to another rule">
+              <img class="x" src="icons/xmark-11.png" alt="Remove">
+            </span>
+          </div>
+        </div>
+        <div class="big"><img id="live-big" src="icons/plus-rectangle-on-rectangle-44.png" alt=""></div>
+        <div>
+          <div class="preview-label">Selected</div>
+          <div id="live-name" style="font-weight:650">A · plus.rectangle.on.rectangle</div>
+          <div id="live-sym" class="legend"><code>plus.rectangle.on.rectangle</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const options = [
+      {
+        id: "A",
+        lean: true,
+        symbol: "plus.rectangle.on.rectangle",
+        file: "plus-rectangle-on-rectangle",
+        why: "Append onto another container — closest to “add this matcher to another rule” without looking like pasteboard copy."
+      },
+      {
+        id: "B",
+        lean: false,
+        symbol: "doc.on.doc",
+        file: "doc-on-doc",
+        why: "Stock duplicate. Clear at tiny size; slightly close to “copy value” meaning."
+      },
+      {
+        id: "C",
+        lean: false,
+        symbol: "square.on.square",
+        file: "square-on-square",
+        why: "Stock layers/duplicate. Very clear at 8pt; less “document” than From/Subject matchers."
+      },
+      {
+        id: "D",
+        lean: false,
+        symbol: "arrow.right.square",
+        file: "arrow-right-square",
+        why: "Send to… Minimal and stock. Reads as navigate more than copy."
+      },
+      {
+        id: "E",
+        lean: false,
+        symbol: "doc.badge.plus",
+        file: "doc-badge-plus",
+        why: "Add to a document. Stock; badge may muddy under 11pt."
+      },
+      {
+        id: "F",
+        lean: false,
+        symbol: "rectangle.portrait.and.arrow.right",
+        file: "rectangle-portrait-and-arrow-right",
+        why: "Export/share-out metaphor. Stock; “leave this rule” more than “append onto another”."
+      }
+    ];
+
+    let selected = "A";
+    const root = document.getElementById("options");
+
+    function render() {
+      root.innerHTML = options.map(o => `
+        <div class="row ${selected === o.id ? "selected" : ""}" data-id="${o.id}" role="button" tabindex="0">
+          <div class="badge">${o.id}</div>
+          <div class="meta">
+            <div class="name">${o.lean ? '<span class="lean">Lean · </span>' : ""}${o.symbol}</div>
+            <div class="sym">${o.symbol}</div>
+            <div class="why">${o.why}</div>
+            <div class="ship-row" style="margin-top:4px">
+              <div class="chip" style="max-width:360px">
+                <span class="mode">EXACT</span>
+                <span class="value">donotreply@…</span>
+                <span class="actions">
+                  <img src="icons/doc-on-clipboard-11.png" alt="">
+                  <img src="icons/${o.file}-11.png" alt="">
+                  <img class="x" src="icons/xmark-11.png" alt="">
+                </span>
+              </div>
+              <div class="big"><img src="icons/${o.file}-44.png" alt=""></div>
+            </div>
+          </div>
+        </div>
+      `).join("");
+
+      root.querySelectorAll(".row").forEach(el => {
+        el.addEventListener("click", () => { selected = el.dataset.id; updateLive(); render(); });
+        el.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selected = el.dataset.id; updateLive(); render(); }
+        });
+      });
+    }
+
+    function updateLive() {
+      const o = options.find(x => x.id === selected);
+      document.getElementById("live-mid").src = `icons/${o.file}-11.png`;
+      document.getElementById("live-big").src = `icons/${o.file}-44.png`;
+      document.getElementById("live-name").textContent = `${o.id} · ${o.symbol}`;
+      document.getElementById("live-sym").innerHTML = `<code>${o.symbol}</code>`;
+    }
+
+    render();
+    updateLive();
+  </script>
+</body>
+</html>
