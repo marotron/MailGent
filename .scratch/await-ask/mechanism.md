@@ -5,8 +5,8 @@ Companion pattern: `propose_send` + `await_propose_send` (shipped).
 Incident motivation: Grok Bot read-timeout evidence canvas
 (`a8f0f4f8-8205-4793-8048-d6221a6b20d6`, 8 Nov 2026) — client `urlopen` timeouts 40s then 30s on blocking `get`; no pending-access state; not proven as a MailGent defect.
 
-**Status:** Mechanism locked; matrix A–E green on `feat/await-ask`. No version bump until ship (0.24.0).
-**Next:** Slice 6 ship closeout on user confirm (`0.24.0` + CHANGELOG + full README + signed tag).
+**Status:** Mechanism locked; matrix A–E green. Version docs bumped to **0.24.0** on `feat/await-ask` (signed tag on ship).
+**Next:** Merge PR → signed tag `v0.24.0` when user says ship.
 
 ---
 
