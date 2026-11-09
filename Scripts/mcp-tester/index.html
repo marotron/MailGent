@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MailGent MCP Tester</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <header class="conn-bar">
+      <label class="field grow">
+        <span>URL</span>
+        <input id="url" type="text" spellcheck="false" />
+      </label>
+      <label class="field grow">
+        <span>Bearer</span>
+        <input id="bearer" type="password" spellcheck="false" placeholder="MAILGENT_BEARER" />
+      </label>
+      <button id="connect" type="button">Connect</button>
+      <div id="conn-status" class="conn-status muted">Not connected</div>
+    </header>
+
+    <div class="shortcuts">
+      <button type="button" data-shortcut="status" disabled>Status</button>
+      <button type="button" data-shortcut="list" disabled>List</button>
+      <button type="button" data-shortcut="list_new" disabled>List new</button>
+      <button type="button" data-shortcut="search" disabled>Search…</button>
+      <button type="button" data-shortcut="update" disabled>Update</button>
+      <button type="button" data-shortcut="await_ask" disabled>Await ask (last askId)</button>
+    </div>
+
+    <div class="workspace">
+      <aside class="tools-pane">
+        <div class="pane-title">Tools</div>
+        <input id="tool-filter" type="search" placeholder="Filter…" disabled />
+        <ul id="tool-list" class="tool-list"></ul>
+      </aside>
+
+      <section class="center-pane">
+        <div class="pane-title-row">
+          <div class="pane-title" id="selected-tool">Select a tool</div>
+          <div id="call-meta" class="muted"></div>
+        </div>
+        <div id="id-strip" class="id-strip empty"></div>
+        <div id="schema-form" class="schema-form"></div>
+        <label class="field block">
+          <span>Arguments (JSON)</span>
+          <textarea id="args-json" spellcheck="false" rows="7">{}</textarea>
+        </label>
+        <div class="call-row">
+          <button id="call" type="button" disabled>Call</button>
+          <button id="copy-response" type="button" disabled>Copy response</button>
+        </div>
+        <div class="field block">
+          <span>Response</span>
+          <div id="response" class="response">Connect to load tools.</div>
+        </div>
+      </section>
+
+      <aside class="history-pane">
+        <div class="pane-title-row">
+          <div class="pane-title">History</div>
+          <div id="history-summary" class="muted history-summary"></div>
+        </div>
+        <div class="history-actions">
+          <button id="export-session" type="button" title="Write exports/last-session.json + stamped copy">Export</button>
+          <button id="copy-session" type="button" title="Copy session JSON to clipboard">Copy log</button>
+          <button id="clear-history" type="button" title="Clear history">Clear</button>
+        </div>
+        <ul id="history" class="history-list"></ul>
+        <div id="export-status" class="muted export-status"></div>
+      </aside>
+    </div>
+  </body>
+</html>

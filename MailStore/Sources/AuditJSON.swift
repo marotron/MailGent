@@ -236,6 +236,7 @@ extension AuditKind {
         case "open_in_mail", "openInMail": self = .openInMail
         case "propose_send", "proposeSend": self = .proposeSend
         case "await_propose_send", "awaitProposeSend": self = .awaitProposeSend
+        case "await_ask", "awaitAsk": self = .awaitAsk
         case "list_secrets", "listSecrets": self = .listSecrets
         case "create_draft": self = .createDraft
         case "update_draft": self = .updateDraft

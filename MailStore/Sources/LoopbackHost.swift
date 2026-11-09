@@ -23,7 +23,7 @@ public final class LoopbackHost: @unchecked Sendable {
     private var revealAccountsWithNoPlacements = false
     /// Off by default — master Secret constants Settings toggle.
     private var secretConstantsEnabled = false
-    /// Off by default — Access log skips soft `await_propose_send` `awaiting_user` polls.
+    /// Off by default — Access log skips soft `await_propose_send` / `await_ask` `awaiting_user` polls.
     private var logAwaitProposeSendSoftWaits = false
     /// Snapshot refreshed by the companion when the sealed catalog changes.
     private var secretConstantsCatalog = SecretConstantsCatalog()
@@ -31,6 +31,8 @@ public final class LoopbackHost: @unchecked Sendable {
     private var sendProposalPrompter: (@Sendable (SendProposal) async -> SendProposalDecision)?
     /// Pending propose_send confirmations (ack + soft await + hard expire).
     public let pendingProposals: PendingProposalRegistry
+    /// Pending Conditional Ask prompts (ack + soft await + hard expire + post-allow lease).
+    public let pendingAsks: PendingAskRegistry
     private var indexState = LoopbackIndexSnapshot.notStarted
 
     public init(
@@ -38,13 +40,15 @@ public final class LoopbackHost: @unchecked Sendable {
         audit: AuditLog? = nil,
         grants: GrantGate,
         ledger: DraftLedger = DraftLedger(),
-        pendingProposals: PendingProposalRegistry = PendingProposalRegistry()
+        pendingProposals: PendingProposalRegistry = PendingProposalRegistry(),
+        pendingAsks: PendingAskRegistry = PendingAskRegistry()
     ) {
         self.pairing = pairing
         self.audit = audit
         self.grants = grants
         self.ledger = ledger
         self.pendingProposals = pendingProposals
+        self.pendingAsks = pendingAsks
     }
 
     public func authenticate(_ credential: String?) throws -> PairedAgent {
@@ -205,8 +209,10 @@ public final class LoopbackHost: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Shared human-wait hard deadline for propose_send and Conditional Ask.
     public func setProposeSendHardTimeoutSeconds(_ seconds: TimeInterval) {
         pendingProposals.setHardTimeoutSeconds(seconds)
+        pendingAsks.setHardTimeoutSeconds(seconds)
     }
 
     public func readProposeSendHardTimeoutSeconds() -> TimeInterval {

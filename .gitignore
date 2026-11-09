@@ -37,6 +37,16 @@ DerivedData/
 # JS deps (also covers nested clones under .scratch/)
 node_modules/
 
+# Python bytecode (scripted transport harnesses)
+__pycache__/
+*.py[cod]
+
+# Local MCP tester (Tauri) — never ship; keep build artifacts out of git
+Scripts/mcp-tester/node_modules/
+Scripts/mcp-tester/dist/
+Scripts/mcp-tester/src-tauri/target/
+Scripts/mcp-tester/exports/
+
 # Local icon recon; product assets live in Design/IconPack and MailGent/Resources
 .scratch/_icon-trace/
 .scratch/_icon-preview/

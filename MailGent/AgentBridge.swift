@@ -37,6 +37,8 @@ final class AgentBridge {
     let conditionalAccessPrompt = ConditionalAccessPromptCoordinator()
     let attachmentContentAskCache = AttachmentContentAskCache()
     let fieldAskDecisionCache: FieldAskDecisionCache
+    /// askIds with a detached present Task in flight (before the window is registered).
+    private var presentingAskIDs = Set<String>()
 
     private(set) var pairedAgents: [PairedAgentCredential] = []
     private(set) var selectedAgentID: String?
@@ -114,7 +116,8 @@ final class AgentBridge {
     static func isAgentRequest(_ kind: AuditKind) -> Bool {
         switch kind {
         case .search, .list, .listNew, .listAccounts, .get, .getAttachment, .openInMail, .proposeSend,
-            .awaitProposeSend, .listSecrets, .createDraft, .updateDraft, .updateIndex, .status, .setSource:
+            .awaitProposeSend, .awaitAsk, .listSecrets, .createDraft, .updateDraft, .updateIndex, .status,
+            .setSource:
             return true
         case .pair, .revoke:
             return false
@@ -977,9 +980,11 @@ final class AgentBridge {
                 fieldAskDecisionCache: fieldAskDecisionCache,
                 allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
                 askDecisionCachePolicy: MailGentPreferences.askDecisionCachePolicy,
-                conditionalAccessPrompter: { @MainActor [weak self] context in
-                    guard let self else { return .block }
-                    return await self.askDecision(for: context)
+                pendingAsks: host.pendingAsks,
+                onConditionalAskOpened: { [weak self] context, askId in
+                    Task { @MainActor in
+                        await self?.handleConditionalAskOpened(askId: askId, context: context)
+                    }
                 }
             )
             host.setGateway(gateway, indexUpdater: indexUpdater)
@@ -1034,6 +1039,11 @@ final class AgentBridge {
         host.pendingProposals.setExpirationHandler { id in
             Task { @MainActor in
                 DetachedWindowHost.shared.expireSendProposal(id: id)
+            }
+        }
+        host.pendingAsks.setExpirationHandler { id in
+            Task { @MainActor in
+                DetachedWindowHost.shared.expireConditionalAsk(id: id)
             }
         }
         host.setSendProposalPrompter { [weak self] proposal in
@@ -1573,9 +1583,11 @@ final class AgentBridge {
             fieldAskDecisionCache: fieldAskDecisionCache,
             allowConditionalAccessPrompts: MailGentPreferences.allowConditionalAccessPrompts,
             askDecisionCachePolicy: MailGentPreferences.askDecisionCachePolicy,
-            conditionalAccessPrompter: { @MainActor [weak self] context in
-                guard let self else { return .block }
-                return await self.askDecision(for: context)
+            pendingAsks: existing.pendingAsks,
+            onConditionalAskOpened: { [weak self] context, askId in
+                Task { @MainActor in
+                    await self?.handleConditionalAskOpened(askId: askId, context: context)
+                }
             }
         )
         host.setGateway(updated, indexUpdater: host.readIndexUpdater())
@@ -1633,7 +1645,26 @@ final class AgentBridge {
         refreshGatewayLeakGuard()
     }
 
-    private func askDecision(for context: ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome {
+    /// Detached Ask present (non-blocking get). Dedupes while a dialog / Task is already open.
+    private func handleConditionalAskOpened(
+        askId: String,
+        context: ConditionalAccessPromptContext
+    ) async {
+        if DetachedWindowHost.shared.hasOpenAsk(id: askId) {
+            DetachedWindowHost.shared.raisePendingAsk(id: askId)
+            return
+        }
+        guard presentingAskIDs.insert(askId).inserted else { return }
+        defer { presentingAskIDs.remove(askId) }
+
+        let outcome = await askDecision(for: context, askId: askId)
+        applyAskUIOutcome(askId: askId, context: context, outcome: outcome)
+    }
+
+    private func askDecision(
+        for context: ConditionalAccessPromptContext,
+        askId: String
+    ) async -> ConditionalAccessPromptOutcome {
         let support = ConditionalAccessAskRuleSupport(
             allRules: { [rules] in rules.allRules() },
             allEnablements: { [rules] in rules.allEnablements() },
@@ -1650,8 +1681,49 @@ final class AgentBridge {
         )
         return await conditionalAccessPrompt.requestDecision(
             context: context,
+            askId: askId,
+            accountLabel: CompanionAccounts.label(context.accountID),
             ruleSupport: support
         )
+    }
+
+    /// Allow / Block write registry (+ optional cache). Recheck → superseded. No-ops if already terminal
+    /// (e.g. hard expiry already marked `expired` before the UI waiter woke).
+    private func applyAskUIOutcome(
+        askId: String,
+        context: ConditionalAccessPromptContext,
+        outcome: ConditionalAccessPromptOutcome
+    ) {
+        guard let host = loopbackHost else { return }
+        switch outcome {
+        case .allow:
+            guard host.pendingAsks.resolve(askId: askId, decision: .allow) else { return }
+            writeAskDecisionCache(context: context, decision: .allow)
+        case .block:
+            guard host.pendingAsks.resolve(askId: askId, decision: .block) else { return }
+            writeAskDecisionCache(context: context, decision: .block)
+        case .recheck:
+            _ = host.pendingAsks.resolve(askId: askId, decision: .superseded)
+        }
+    }
+
+    private func writeAskDecisionCache(
+        context: ConditionalAccessPromptContext,
+        decision: ConditionalAccessDecision
+    ) {
+        let policy = MailGentPreferences.askDecisionCachePolicy
+        guard policy.enabled else { return }
+        for label in context.requestedFields {
+            fieldAskDecisionCache.store(
+                decision,
+                agentID: context.agentID,
+                accountID: context.accountID,
+                placement: context.placement,
+                messageID: context.messageID,
+                field: label,
+                policy: policy
+            )
+        }
     }
 
     /// Keep Cursor's local MCP entry aligned with the Cursor Bearer (machine-local only).
