@@ -11,6 +11,7 @@ public enum AuditKind: String, Codable, Equatable, Hashable, Sendable {
     case openInMail = "open_in_mail"
     case proposeSend = "propose_send"
     case awaitProposeSend = "await_propose_send"
+    case awaitAsk = "await_ask"
     case listSecrets = "list_secrets"
     case createDraft
     case updateDraft

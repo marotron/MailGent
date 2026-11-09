@@ -119,6 +119,39 @@ public struct ConditionalAccessPromptContext: Equatable, Sendable {
     }
 }
 
+/// Non-blocking Ask open: `get` / `get_attachment` return this instead of waiting on the human.
+/// Call `await_ask` with `askId`, then re-call get (lease / terminal lookup).
+public struct ConditionalAskPending: Error, Equatable, Sendable {
+    public let askId: String
+    public let expiresAt: Date
+    public let pendingFields: [String]
+    public let accountID: String
+    public let placement: String
+    public let messageID: String
+    public let filename: String?
+    public let promptContext: ConditionalAccessPromptContext
+
+    public init(
+        askId: String,
+        expiresAt: Date,
+        pendingFields: [String],
+        accountID: String,
+        placement: String,
+        messageID: String,
+        filename: String? = nil,
+        promptContext: ConditionalAccessPromptContext
+    ) {
+        self.askId = askId
+        self.expiresAt = expiresAt
+        self.pendingFields = pendingFields
+        self.accountID = accountID
+        self.placement = placement
+        self.messageID = messageID
+        self.filename = filename
+        self.promptContext = promptContext
+    }
+}
+
 /// Process-lifetime Ask decisions for Attachment content (agent + message).
 /// Shared across `AgentReadAPI` value copies so gateway rebuilds keep Allow after `get`.
 public final class AttachmentContentAskCache: @unchecked Sendable {
@@ -230,6 +263,11 @@ public struct AgentReadAPI {
     public let accountsDatabases: [URL]?
     public var allowConditionalAccessPrompts: Bool
     public var askDecisionCachePolicy: AskDecisionCachePolicy
+    /// Pending Conditional Ask registry (soft await + post-allow lease). Shared with MCP host.
+    public let pendingAsks: PendingAskRegistry
+    /// Fired synchronously when an Ask is opened (UI bridge / test capture). Does not decide.
+    public var onConditionalAskOpened: (@Sendable (ConditionalAccessPromptContext, String) -> Void)?
+    /// Legacy blocking prompter — unused for decisions in non-blocking Ask; kept for call-site churn.
     public var conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)?
 
     public init(
@@ -244,6 +282,8 @@ public struct AgentReadAPI {
         accountsDatabases: [URL]? = nil,
         allowConditionalAccessPrompts: Bool = false,
         askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
+        pendingAsks: PendingAskRegistry = PendingAskRegistry(),
+        onConditionalAskOpened: (@Sendable (ConditionalAccessPromptContext, String) -> Void)? = nil,
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)? = nil
     ) {
         self.read = read
@@ -257,6 +297,8 @@ public struct AgentReadAPI {
         self.accountsDatabases = accountsDatabases
         self.allowConditionalAccessPrompts = allowConditionalAccessPrompts
         self.askDecisionCachePolicy = askDecisionCachePolicy
+        self.pendingAsks = pendingAsks
+        self.onConditionalAskOpened = onConditionalAskOpened
         self.conditionalAccessPrompter = conditionalAccessPrompter
     }
 
@@ -276,16 +318,22 @@ public struct AgentReadAPI {
         let prompted: GrantFields
     }
 
+    private enum ConditionalResolve {
+        case resolved(ConditionalFieldResolution)
+        case pending(ConditionalAskPending)
+    }
+
     /// Resolves Ask mode fields for this get.
     /// When allow is off: Ask → denied (classic On/Off behavior; no popup).
-    /// When allow is on: prompt for Ask fields; `recheck` re-reads grant→rules and may re-prompt leftovers.
+    /// When allow is on and Ask fields need a human: submit registry + return pending (non-blocking).
     /// `limitingAskTo` restricts which Ask fields are prompted (e.g. Attachment content only on `get_attachment`).
     private func resolveConditionalFields(
         agentID: String,
         agentName: String,
         message: ReadMessage,
-        limitingAskTo: Set<String>? = nil
-    ) async -> ConditionalFieldResolution {
+        limitingAskTo: Set<String>? = nil,
+        filename: String? = nil
+    ) -> ConditionalResolve {
         func isAsk(_ mode: FieldAccessMode, label: String) -> Bool {
             mode == .ask && (limitingAskTo?.contains(label) ?? true)
         }
@@ -322,140 +370,246 @@ public struct AgentReadAPI {
         )
         let policy = askDecisionCachePolicy
 
-        while true {
-            guard let fields = effectiveFields(for: probe, agentID: agentID) else {
-                return ConditionalFieldResolution(
+        guard let fields = effectiveFields(for: probe, agentID: agentID) else {
+            return .resolved(
+                ConditionalFieldResolution(
                     fields: .none,
                     confirmed: .none,
                     blocked: .none,
                     prompted: .none
                 )
-            }
-            if !allowConditionalAccessPrompts {
-                // Feature off → Ask denied (same as classic grants without conditional).
-                return denyAsks(fields)
-            }
+            )
+        }
+        if !allowConditionalAccessPrompts {
+            return .resolved(denyAsks(fields))
+        }
 
-            let askMask = Self.askMask(fields, limitingAskTo: limitingAskTo)
-            let askLabels = collectAskFields(fields).filter { limitingAskTo?.contains($0) ?? true }
-            guard !askLabels.isEmpty else {
-                return ConditionalFieldResolution(
+        let askMask = Self.askMask(fields, limitingAskTo: limitingAskTo)
+        let askLabels = collectAskFields(fields).filter { limitingAskTo?.contains($0) ?? true }
+        guard !askLabels.isEmpty else {
+            return .resolved(
+                ConditionalFieldResolution(
                     fields: fields,
                     confirmed: .none,
                     blocked: .none,
                     prompted: .none
                 )
-            }
+            )
+        }
 
-            var cachedAllow: Set<String> = []
-            var cachedBlock: Set<String> = []
-            var needPrompt: [String] = []
-            for label in askLabels {
-                if let cached = fieldAskDecisionCache.decision(
-                    agentID: agentID,
-                    accountID: message.accountID,
-                    placement: message.placement,
-                    messageID: message.id,
-                    field: label,
-                    policy: policy
-                ) {
-                    if cached == .allow {
-                        cachedAllow.insert(label)
-                    } else {
-                        cachedBlock.insert(label)
-                    }
-                } else {
-                    needPrompt.append(label)
-                }
-            }
-
-            if needPrompt.isEmpty {
-                let allowLabels = cachedAllow
-                let blockLabels = cachedBlock
-                return ConditionalFieldResolution(
-                    fields: Self.applyingAskDecisions(
-                        fields,
-                        allowLabels: allowLabels,
-                        blockLabels: blockLabels,
-                        limitingAskTo: limitingAskTo
-                    ),
-                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
-                    blocked: Self.mask(forLabels: blockLabels, in: askMask),
-                    prompted: .none
-                )
-            }
-
-            guard let prompter = conditionalAccessPrompter else {
-                // No prompter → allow remaining Ask fields (fallback; not user-confirmed).
-                let allowLabels = cachedAllow.union(needPrompt)
-                return ConditionalFieldResolution(
-                    fields: Self.applyingAskDecisions(
-                        fields,
-                        allowLabels: allowLabels,
-                        blockLabels: cachedBlock,
-                        limitingAskTo: limitingAskTo
-                    ),
-                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
-                    blocked: Self.mask(forLabels: cachedBlock, in: askMask),
-                    prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
-                )
-            }
-
-            let context = ConditionalAccessPromptContext(
+        var cachedAllow: Set<String> = []
+        var cachedBlock: Set<String> = []
+        var needPrompt: [String] = []
+        for label in askLabels {
+            if let cached = fieldAskDecisionCache.decision(
                 agentID: agentID,
-                agentName: agentName,
                 accountID: message.accountID,
                 placement: message.placement,
                 messageID: message.id,
-                internetMessageID: message.internetMessageID,
-                requestedFields: needPrompt,
-                fieldPreviews: Self.fieldPreviews(message: message, askLabels: needPrompt),
-                // Raw HTML for Ask message preview (not prettyHTMLBody — prefix heuristic can nil it).
-                htmlBody: message.htmlBody,
-                envelope: ConditionalMessageEnvelope(
-                    subject: message.subject,
-                    from: message.from,
-                    to: message.to,
-                    cc: message.cc,
-                    date: message.date
-                )
-            )
-            let outcome = await prompter(context)
-            switch outcome {
-            case .recheck:
-                continue
-            case .allow, .block:
-                guard let decision = outcome.decision else { continue }
-                if policy.enabled {
-                    for label in needPrompt {
-                        fieldAskDecisionCache.store(
-                            decision,
-                            agentID: agentID,
-                            accountID: message.accountID,
-                            placement: message.placement,
-                            messageID: message.id,
-                            field: label,
-                            policy: policy
-                        )
-                    }
+                field: label,
+                policy: policy
+            ) {
+                if cached == .allow {
+                    cachedAllow.insert(label)
+                } else {
+                    cachedBlock.insert(label)
                 }
-                let promptedAllow: Set<String> = decision == .allow ? Set(needPrompt) : []
-                let promptedBlock: Set<String> = decision == .block ? Set(needPrompt) : []
-                let allowLabels = cachedAllow.union(promptedAllow)
-                let blockLabels = cachedBlock.union(promptedBlock)
-                let promptedLabels = promptedAllow.union(promptedBlock)
-                return ConditionalFieldResolution(
+            } else {
+                needPrompt.append(label)
+            }
+        }
+
+        if needPrompt.isEmpty {
+            return .resolved(
+                ConditionalFieldResolution(
                     fields: Self.applyingAskDecisions(
                         fields,
-                        allowLabels: allowLabels,
-                        blockLabels: blockLabels,
+                        allowLabels: cachedAllow,
+                        blockLabels: cachedBlock,
                         limitingAskTo: limitingAskTo
                     ),
-                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
-                    blocked: Self.mask(forLabels: blockLabels, in: askMask),
-                    prompted: Self.mask(forLabels: promptedLabels, in: askMask)
+                    confirmed: Self.mask(forLabels: cachedAllow, in: askMask),
+                    blocked: Self.mask(forLabels: cachedBlock, in: askMask),
+                    prompted: .none
+                )
+            )
+        }
+
+        let request = PendingAskRequest(
+            agentID: agentID,
+            accountID: message.accountID,
+            placement: message.placement,
+            messageID: message.id,
+            fields: needPrompt,
+            filename: filename
+        )
+
+        if let terminal = pendingAsks.lookupTerminal(agentID: agentID, request: request) {
+            switch terminal {
+            case .allow:
+                let allowLabels = cachedAllow.union(needPrompt)
+                return .resolved(
+                    ConditionalFieldResolution(
+                        fields: Self.applyingAskDecisions(
+                            fields,
+                            allowLabels: allowLabels,
+                            blockLabels: cachedBlock,
+                            limitingAskTo: limitingAskTo
+                        ),
+                        confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+                        blocked: Self.mask(forLabels: cachedBlock, in: askMask),
+                        prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
+                    )
+                )
+            case .block, .expired:
+                let blockLabels = cachedBlock.union(needPrompt)
+                return .resolved(
+                    ConditionalFieldResolution(
+                        fields: Self.applyingAskDecisions(
+                            fields,
+                            allowLabels: cachedAllow,
+                            blockLabels: blockLabels,
+                            limitingAskTo: limitingAskTo
+                        ),
+                        confirmed: Self.mask(forLabels: cachedAllow, in: askMask),
+                        blocked: Self.mask(forLabels: blockLabels, in: askMask),
+                        prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
+                    )
+                )
+            case .superseded, .stillAwaiting, .unknown:
+                break
+            }
+        }
+
+        let context = ConditionalAccessPromptContext(
+            agentID: agentID,
+            agentName: agentName,
+            accountID: message.accountID,
+            placement: message.placement,
+            messageID: message.id,
+            internetMessageID: message.internetMessageID,
+            requestedFields: needPrompt,
+            fieldPreviews: Self.fieldPreviews(message: message, askLabels: needPrompt),
+            htmlBody: message.htmlBody,
+            envelope: ConditionalMessageEnvelope(
+                subject: message.subject,
+                from: message.from,
+                to: message.to,
+                cc: message.cc,
+                date: message.date
+            )
+        )
+        let submit = pendingAsks.submit(request)
+        let askId: String
+        let expiresAt: Date
+        let pendingFields: [String]
+        switch submit {
+        case let .created(id, expires, fields):
+            askId = id
+            expiresAt = expires
+            pendingFields = fields
+        case let .deduped(id, expires, fields):
+            askId = id
+            expiresAt = expires
+            pendingFields = fields
+        }
+        onConditionalAskOpened?(context, askId)
+        // Non-blocking open. Unbound (nil) prompter never auto-allows — pending until UI/registry resolve.
+        return .pending(
+            ConditionalAskPending(
+                askId: askId,
+                expiresAt: expiresAt,
+                pendingFields: pendingFields,
+                accountID: message.accountID,
+                placement: message.placement,
+                messageID: message.id,
+                filename: filename,
+                promptContext: context
+            )
+        )
+    }
+
+    /// Legacy bridge: await blocking prompter, resolve registry, re-evaluate (lease/terminal hit).
+    private func settlePendingAsk(
+        _ pending: ConditionalAskPending,
+        agentID: String,
+        agentName: String,
+        message: ReadMessage,
+        limitingAskTo: Set<String>? = nil,
+        filename: String? = nil
+    ) async -> ConditionalFieldResolution? {
+        guard let prompter = conditionalAccessPrompter else { return nil }
+        let outcome = await prompter(pending.promptContext)
+        switch outcome {
+        case .recheck:
+            _ = pendingAsks.resolve(askId: pending.askId, decision: .superseded)
+            switch resolveConditionalFields(
+                agentID: agentID,
+                agentName: agentName,
+                message: message,
+                limitingAskTo: limitingAskTo,
+                filename: filename
+            ) {
+            case let .resolved(resolution):
+                return resolution
+            case let .pending(again):
+                return await settlePendingAsk(
+                    again,
+                    agentID: agentID,
+                    agentName: agentName,
+                    message: message,
+                    limitingAskTo: limitingAskTo,
+                    filename: filename
                 )
             }
+        case .allow, .block:
+            guard let decision = outcome.decision else { return nil }
+            if askDecisionCachePolicy.enabled {
+                for label in pending.pendingFields {
+                    fieldAskDecisionCache.store(
+                        decision,
+                        agentID: agentID,
+                        accountID: pending.accountID,
+                        placement: pending.placement,
+                        messageID: pending.messageID,
+                        field: label,
+                        policy: askDecisionCachePolicy
+                    )
+                }
+            }
+            _ = pendingAsks.resolve(
+                askId: pending.askId,
+                decision: decision == .allow ? .allow : .block
+            )
+            // Synthesize this turn's resolution (prompted, not remembered) before cache/lease re-get path.
+            let probe = IndexedMessage(
+                id: message.id,
+                accountID: message.accountID,
+                placement: message.placement,
+                from: message.from,
+                to: message.to,
+                cc: message.cc,
+                date: message.date,
+                subject: message.subject,
+                body: "",
+                isPartial: message.isPartial
+            )
+            guard let fields = effectiveFields(for: probe, agentID: agentID) else { return nil }
+            let askMask = Self.askMask(fields, limitingAskTo: limitingAskTo)
+            let promptedLabels = Set(pending.pendingFields)
+            let allowLabels: Set<String> = decision == .allow ? promptedLabels : []
+            let blockLabels: Set<String> = decision == .block ? promptedLabels : []
+            return ConditionalFieldResolution(
+                fields: Self.applyingAskDecisions(
+                    fields,
+                    allowLabels: allowLabels,
+                    blockLabels: blockLabels,
+                    limitingAskTo: limitingAskTo
+                ),
+                confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+                blocked: Self.mask(forLabels: blockLabels, in: askMask),
+                prompted: Self.mask(forLabels: promptedLabels, in: askMask)
+            )
         }
     }
 
@@ -633,8 +787,9 @@ public struct AgentReadAPI {
         fields: GrantFields,
         agentID: String,
         agentName: String,
-        message: ReadMessage
-    ) async -> (allowed: Bool, askBlocked: Bool) {
+        message: ReadMessage,
+        filename: String
+    ) async throws -> (allowed: Bool, askBlocked: Bool) {
         switch fields.attachmentContentMode {
         case .on:
             return (true, false)
@@ -650,14 +805,30 @@ public struct AgentReadAPI {
             if let cached = attachmentContentAskCache.decision(for: key) {
                 return (cached == .allow, cached == .block)
             }
-            let resolution = await resolveConditionalFields(
+            switch resolveConditionalFields(
                 agentID: agentID,
                 agentName: agentName,
                 message: message,
-                limitingAskTo: ["Attachment content"]
-            )
-            rememberAttachmentContentAsk(agentID: agentID, message: message, resolution: resolution)
-            return (resolution.fields.attachmentContent, resolution.blocked.attachmentContent)
+                limitingAskTo: ["Attachment content"],
+                filename: filename
+            ) {
+            case let .pending(pending):
+                if let settled = await settlePendingAsk(
+                    pending,
+                    agentID: agentID,
+                    agentName: agentName,
+                    message: message,
+                    limitingAskTo: ["Attachment content"],
+                    filename: filename
+                ) {
+                    rememberAttachmentContentAsk(agentID: agentID, message: message, resolution: settled)
+                    return (settled.fields.attachmentContent, settled.blocked.attachmentContent)
+                }
+                throw pending
+            case let .resolved(resolution):
+                rememberAttachmentContentAsk(agentID: agentID, message: message, resolution: resolution)
+                return (resolution.fields.attachmentContent, resolution.blocked.attachmentContent)
+            }
         }
     }
 
@@ -859,11 +1030,39 @@ public struct AgentReadAPI {
                 )
                 throw PairingError.unauthorized
             }
-            let resolution = await resolveConditionalFields(
+            let resolve = resolveConditionalFields(
                 agentID: agent.id,
                 agentName: agent.name,
                 message: message
             )
+            let resolution: ConditionalFieldResolution
+            switch resolve {
+            case let .pending(pending):
+                if let settled = await settlePendingAsk(
+                    pending,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    message: message
+                ) {
+                    resolution = settled
+                } else {
+                    record(
+                        kind: .get,
+                        agent: agent,
+                        started: started,
+                        detail: "awaiting_user · \(pending.askId)",
+                        requestSummary: request,
+                        responseSummary: AuditJSON.json([
+                            "status": "awaiting_user",
+                            "askId": pending.askId,
+                            "pendingFields": pending.pendingFields
+                        ])
+                    )
+                    throw pending
+                }
+            case let .resolved(resolved):
+                resolution = resolved
+            }
             rememberAttachmentContentAsk(
                 agentID: agent.id,
                 message: message,
@@ -924,6 +1123,8 @@ public struct AgentReadAPI {
             return agentMessage
         } catch let error as PairingError where error == .unauthorized {
             throw error
+        } catch let pending as ConditionalAskPending {
+            throw pending
         } catch {
             record(
                 kind: .get,
@@ -1037,11 +1238,12 @@ public struct AgentReadAPI {
                 return result
             }
 
-            let contentAccess = await resolveAttachmentContentAllowed(
+            let contentAccess = try await resolveAttachmentContentAllowed(
                 fields: fields,
                 agentID: agent.id,
                 agentName: agent.name,
-                message: message
+                message: message,
+                filename: meta.filename
             )
 
             let result: AttachmentAccessResult
@@ -1124,6 +1326,21 @@ public struct AgentReadAPI {
             return result
         } catch let error as PairingError where error == .unauthorized {
             throw error
+        } catch let pending as ConditionalAskPending {
+            record(
+                kind: .getAttachment,
+                agent: agent,
+                started: started,
+                detail: "awaiting_user · \(pending.askId)",
+                requestSummary: request,
+                responseSummary: AuditJSON.json([
+                    "status": "awaiting_user",
+                    "askId": pending.askId,
+                    "pendingFields": pending.pendingFields,
+                    "filename": pending.filename as Any
+                ])
+            )
+            throw pending
         } catch {
             record(
                 kind: .getAttachment,

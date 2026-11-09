@@ -60,7 +60,8 @@ public struct LoopbackMCPServer {
             pairing: gateway.pairing,
             audit: gateway.audit,
             grants: gateway.grants,
-            ledger: ledger
+            ledger: ledger,
+            pendingAsks: gateway.pendingAsks
         )
         box.setGateway(gateway, indexUpdater: indexUpdater ?? LocalIndexUpdater(index: gateway.read.index))
         box.setSourceController(sourceController)
@@ -124,7 +125,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.23.5"
+                        "version": "0.24.0"
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -149,10 +150,11 @@ public struct LoopbackMCPServer {
                 }
                 do {
                     let text = try await callTool(name: name, arguments: arguments, credential: credential)
-                    // list_secrets / await_propose_send own their audit rows (incl. soft-wait skip).
+                    // list_secrets / soft-await tools own their audit rows (incl. soft-wait skip).
                     if let kind = AuditKind(toolName: name),
                        kind != .listSecrets,
-                       kind != .awaitProposeSend
+                       kind != .awaitProposeSend,
+                       kind != .awaitAsk
                     {
                         host.audit?.updateLast(
                             kind: kind,
@@ -249,13 +251,17 @@ public struct LoopbackMCPServer {
             else {
                 throw CallError.badArguments
             }
-            let message = try await gateway.get(
-                credential: credential,
-                accountID: accountID,
-                placement: placement,
-                id: messageID
-            )
-            return try jsonString(AuditJSON.messageDetail(message))
+            do {
+                let message = try await gateway.get(
+                    credential: credential,
+                    accountID: accountID,
+                    placement: placement,
+                    id: messageID
+                )
+                return try jsonString(AuditJSON.messageDetail(message))
+            } catch let pending as ConditionalAskPending {
+                return try jsonString(Self.awaitingAskPayload(pending))
+            }
         case "get_attachment":
             guard
                 let accountID = arguments["accountID"] as? String,
@@ -265,14 +271,18 @@ public struct LoopbackMCPServer {
             else {
                 throw CallError.badArguments
             }
-            let result = try await gateway.getAttachment(
-                credential: credential,
-                accountID: accountID,
-                placement: placement,
-                id: messageID,
-                filename: filename
-            )
-            return try jsonString(AuditJSON.attachmentResult(result))
+            do {
+                let result = try await gateway.getAttachment(
+                    credential: credential,
+                    accountID: accountID,
+                    placement: placement,
+                    id: messageID,
+                    filename: filename
+                )
+                return try jsonString(AuditJSON.attachmentResult(result))
+            } catch let pending as ConditionalAskPending {
+                return try jsonString(Self.awaitingAskPayload(pending))
+            }
         case "create_draft":
             let started = Date()
             let body = arguments["body"] as? String ?? ""
@@ -322,6 +332,8 @@ public struct LoopbackMCPServer {
             return try await proposeSend(arguments: arguments, credential: credential)
         case "await_propose_send", "awaitProposeSend":
             return try await awaitProposeSend(arguments: arguments, credential: credential)
+        case "await_ask", "awaitAsk":
+            return try await awaitAsk(arguments: arguments, credential: credential)
         case "set_source":
             return try await setSource(arguments: arguments, credential: credential)
         case "update":
@@ -771,6 +783,168 @@ public struct LoopbackMCPServer {
         }
     }
 
+    private func awaitAsk(arguments: [String: Any], credential: String?) async throws -> String {
+        let agent = try host.authenticate(credential)
+        guard let askId = arguments["askId"] as? String,
+              !askId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw CallError.badArguments
+        }
+        let softRaw: TimeInterval
+        if let n = arguments["timeout"] as? Double {
+            softRaw = n
+        } else if let n = arguments["timeout"] as? Int {
+            softRaw = TimeInterval(n)
+        } else if let n = arguments["timeout"] as? NSNumber {
+            softRaw = n.doubleValue
+        } else {
+            softRaw = PendingAskRegistry.defaultSoftTimeoutSeconds
+        }
+        let started = Date()
+        let request = AuditJSON.request([
+            "askId": askId,
+            "timeout": softRaw
+        ])
+
+        let result = await host.pendingAsks.awaitDecision(
+            askId: askId,
+            agentID: agent.id,
+            softTimeout: softRaw
+        )
+        switch result {
+        case .unknown:
+            recordProposeSendFailure(
+                kind: .awaitAsk,
+                agent: agent,
+                started: started,
+                request: request,
+                detail: askId,
+                error: .unknownAsk
+            )
+            throw CallError.unknownAsk
+        case .stillAwaiting:
+            var payload: [String: Any] = [
+                "status": "awaiting_user",
+                "askId": askId,
+                "message": "Still waiting for human conditional access. Call await_ask again."
+            ]
+            if let expiresAt = host.pendingAsks.expiresAt(askId: askId) {
+                payload["expiresAt"] = Self.iso8601(expiresAt)
+            }
+            if host.readLogAwaitProposeSendSoftWaits() {
+                host.audit?.append(
+                    AuditEntry(
+                        kind: .awaitAsk,
+                        agentID: agent.id,
+                        agentName: agent.name,
+                        detail: "awaiting_user · \(askId)",
+                        at: started,
+                        finishedAt: Date(),
+                        requestSummary: request,
+                        responseSummary: AuditJSON.json(payload)
+                    )
+                )
+            }
+            return try jsonString(payload)
+
+        case let .allow(fields):
+            let payload: [String: Any] = [
+                "outcome": "allow",
+                "askId": askId,
+                "fields": fields
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .awaitAsk,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "allow · \(askId)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case let .block(fields):
+            let payload: [String: Any] = [
+                "outcome": "block",
+                "askId": askId,
+                "fields": fields
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .awaitAsk,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "block · \(askId)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case .expired:
+            let payload: [String: Any] = [
+                "outcome": "expired",
+                "askId": askId
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .awaitAsk,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "expired · \(askId)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case .superseded:
+            let payload: [String: Any] = [
+                "outcome": "superseded",
+                "askId": askId
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .awaitAsk,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "superseded · \(askId)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+        }
+    }
+
+    private static func awaitingAskPayload(_ pending: ConditionalAskPending) -> [String: Any] {
+        var payload: [String: Any] = [
+            "status": "awaiting_user",
+            "askId": pending.askId,
+            "expiresAt": iso8601(pending.expiresAt),
+            "pendingFields": pending.pendingFields,
+            "accountID": pending.accountID,
+            "placement": pending.placement,
+            "id": pending.messageID,
+            "message":
+                "Waiting for human conditional access. Call await_ask with this askId; do not treat this as denied."
+        ]
+        if let filename = pending.filename {
+            payload["filename"] = filename
+        }
+        return payload
+    }
+
     private func deliverProposeSendDecision(
         agent: PairedAgent,
         proposal: SendProposal,
@@ -1057,6 +1231,7 @@ public struct LoopbackMCPServer {
         case outgoingNotBound
         case outgoingFailed(String)
         case unknownProposal
+        case unknownAsk
         case secretConstantsDisabled
         case secretConstantNotAllowlisted([String])
         case secretConstantMissing([String])
@@ -1094,6 +1269,8 @@ public struct LoopbackMCPServer {
                 return message
             case .unknownProposal:
                 return "Unknown or expired propose_send proposalId."
+            case .unknownAsk:
+                return "Unknown or expired await_ask askId."
             case .secretConstantsDisabled:
                 return "Secret constants are disabled. Enable them in MailGent Settings → General (then omit [[mg:]] placeholders until enabled)."
             case .secretConstantNotAllowlisted(let names):
@@ -1240,7 +1417,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "get",
                 "description":
-                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. When the message has an RFC Message-ID, also returns mailURL (message://…) for opening that message in Apple Mail, plus internetMessageID. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant, leak_guard, conditional (user Allowed an Ask prompt), or conditional_blocked (user Blocked an Ask prompt). conditionalAccessFields / conditionalBlockedFields list fields decided on that prompt. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty. When attachments are listed and content is granted, use get_attachment to fetch file bytes.",
+                    "Fetch one granted message by account, placement, and id (use ids from search/list/list_new). Returns body when the grant allows: plain text, or HTML stripped to plain for HTML-only mail. When Conditional Ask is needed, returns immediately with { status: awaiting_user, askId, expiresAt, pendingFields, … } (not an error) — call await_ask, then re-call get after allow (do not treat awaiting_user as denied). When the message has an RFC Message-ID, also returns mailURL (message://…) for opening that message in Apple Mail, plus internetMessageID. subjectAccess / bodyAccess: granted, not_granted, sanitized, or withheld_confidential. Reasons: grant, leak_guard, conditional (user Allowed an Ask prompt), or conditional_blocked (user Blocked an Ask prompt). conditionalAccessFields / conditionalBlockedFields list fields decided on that prompt. sanitized includes sanitizedRules when disclosed. bodyAccess not_granted means the grant denies body — ask the user to enable body on the grant. bodyAccess granted with no body field means truly empty. When attachments are listed and content is granted, use get_attachment to fetch file bytes.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1254,7 +1431,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "get_attachment",
                 "description":
-                    "Fetch one attachment’s bytes for a granted message (use filenames from get). Writes a unique local temp file and returns its path — not base64. Requires the message in Scope and fields.attachmentContent. Rejects files over 25 MiB (too_large). Partial/undownloaded parts return not_available. attachmentContentAccess: granted, not_granted, not_available, or too_large.",
+                    "Fetch one attachment’s bytes for a granted message (use filenames from get). Writes a unique local temp file and returns its path — not base64. Requires the message in Scope and fields.attachmentContent. When Conditional Ask is needed for attachment content, returns { status: awaiting_user, askId, filename, … } — call await_ask, then re-call get_attachment after allow. Rejects files over 25 MiB (too_large). Partial/undownloaded parts return not_available. attachmentContentAccess: granted, not_granted, not_available, or too_large.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1264,6 +1441,22 @@ public struct LoopbackMCPServer {
                         "filename": ["type": "string", "description": "Attachment filename from get"]
                     ],
                     "required": ["accountID", "placement", "id", "filename"]
+                ]
+            ],
+            [
+                "name": "await_ask",
+                "description":
+                    "Soft-wait for a pending Conditional Ask from get / get_attachment. Pass askId from the awaiting_user ack. Optional timeout seconds (default 25, clamped 1…120, never longer than the remaining hard deadline) — keep under the client socket budget (e.g. ≤25 for ~30s urllib). Returns { outcome: allow | block | expired | superseded }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. After allow, re-call get / get_attachment (await_ask never returns body). Unknown askId errors. Never auto-allows or auto-blocks on soft timeout.",
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "askId": ["type": "string"],
+                        "timeout": [
+                            "type": "number",
+                            "description": "Soft wait seconds (default 25, max 120). Stay under the client transport budget."
+                        ]
+                    ],
+                    "required": ["askId"]
                 ]
             ],
             [

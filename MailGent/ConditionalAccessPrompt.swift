@@ -35,12 +35,17 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
     /// Request a decision from the user. Suspends until Allow / Block / rematch recheck for this request.
     /// Concurrent gets each open their own dialog; one decision never resolves another.
     /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
+    /// - Parameter askId: Registry id from non-blocking Ask open; keys the dialog + queue row.
     public func requestDecision(
         context: ConditionalAccessPromptContext,
+        askId: String? = nil,
         accountLabel: String? = nil,
         ruleSupport: ConditionalAccessAskRuleSupport? = nil
     ) async -> ConditionalAccessPromptOutcome {
-        let request = ConditionalAccessPromptRequest(context: context)
+        let request = ConditionalAccessPromptRequest(
+            id: askId ?? UUID().uuidString,
+            context: context
+        )
         let mailboxLabel = accountLabel.flatMap { $0.isEmpty ? nil : $0 } ?? context.accountID
         let fieldsText = context.requestedFields.joined(separator: ", ")
 

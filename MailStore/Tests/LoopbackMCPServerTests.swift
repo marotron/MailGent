@@ -540,6 +540,8 @@ struct LoopbackMCPServerTests {
         #expect(response.body.contains("\"name\":\"open_in_mail\""))
         #expect(response.body.contains("\"name\":\"propose_send\""))
         #expect(response.body.contains("\"name\":\"await_propose_send\""))
+        #expect(response.body.contains("\"name\":\"await_ask\""))
+        #expect(response.body.contains("client socket budget") || response.body.contains("client transport budget"))
         #expect(response.body.contains("\"name\":\"list_accounts\""))
         #expect(!response.body.contains("\"name\":\"listNew\""))
         #expect(!response.body.contains("\"name\":\"list_placements\""))
@@ -548,6 +550,7 @@ struct LoopbackMCPServerTests {
         #expect(!response.body.contains("\"name\":\"openInMail\""))
         #expect(!response.body.contains("\"name\":\"proposeSend\""))
         #expect(!response.body.contains("\"name\":\"awaitProposeSend\""))
+        #expect(!response.body.contains("\"name\":\"awaitAsk\""))
         #expect(response.body.contains("\"name\":\"create_draft\""))
         #expect(response.body.contains("\"name\":\"update_draft\""))
         #expect(response.body.contains("\"name\":\"set_source\""))
@@ -694,6 +697,269 @@ struct LoopbackMCPServerTests {
         #expect(env.audit.entries().contains {
             $0.kind == .awaitProposeSend && $0.detail.hasPrefix("awaiting_user")
         })
+    }
+
+    @Test func getAskNeededReturnsAwaitingUserNotError() async throws {
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+
+        let started = ContinuousClock.now
+        let payload = try await Self.getAskAck(env)
+        let elapsed = ContinuousClock.now - started
+
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(payload["askId"] is String)
+        #expect(payload["expiresAt"] is String)
+        #expect(payload["pendingFields"] as? [String] == ["Body"])
+        #expect(payload["accountID"] as? String == env.accountID)
+        #expect(payload["placement"] as? String == "INBOX")
+        #expect(payload["id"] as? String == "1")
+        #expect(payload["message"] is String)
+        #expect(elapsed < .seconds(1))
+        #expect(env.server.host.pendingAsks.snapshot(askId: payload["askId"] as! String)?.isPending == true)
+    }
+
+    @Test func awaitAskDefaultSoftTimeoutIs25WhenOmitted() async throws {
+        let probe = AwaitAskSleepProbe()
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true,
+            pendingAsks: PendingAskRegistry(sleep: probe.sleep)
+        )
+        defer { env.remove() }
+
+        let ack = try await Self.getAskAck(env)
+        let askId = try #require(ack["askId"] as? String)
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(name: "await_ask", arguments: ["askId": askId])
+            )
+        )
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(probe.lastSeconds == PendingAskRegistry.defaultSoftTimeoutSeconds)
+        #expect(PendingAskRegistry.defaultSoftTimeoutSeconds == 25)
+    }
+
+    @Test func awaitAskSoftWaitNotLoggedByDefault() async throws {
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+        let ack = try await Self.getAskAck(env)
+        let askId = try #require(ack["askId"] as? String)
+        let before = env.audit.entries().filter { $0.kind == .awaitAsk }.count
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_ask",
+                    arguments: ["askId": askId, "timeout": 1]
+                )
+            )
+        )
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(env.audit.entries().filter { $0.kind == .awaitAsk }.count == before)
+    }
+
+    @Test func awaitAskSoftWaitLoggedWhenEnabled() async throws {
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+        env.server.host.setLogAwaitProposeSendSoftWaits(true)
+        let ack = try await Self.getAskAck(env)
+        let askId = try #require(ack["askId"] as? String)
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_ask",
+                    arguments: ["askId": askId, "timeout": 1]
+                )
+            )
+        )
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(env.audit.entries().contains {
+            $0.kind == .awaitAsk && $0.detail.hasPrefix("awaiting_user")
+        })
+    }
+
+    @Test func awaitAskTerminalOutcomesAreAudited() async throws {
+        for decision in [PendingAskDecision.allow, .block, .superseded] {
+            let env = try LoopbackFixture(
+                grantFields: Self.askBodyGrantFields,
+                allowConditionalAccessPrompts: true
+            )
+            defer { env.remove() }
+            let ack = try await Self.getAskAck(env)
+            let askId = try #require(ack["askId"] as? String)
+            #expect(env.server.host.pendingAsks.resolve(askId: askId, decision: decision))
+            let payload = try await Self.awaitAskPayload(
+                env.server,
+                credential: env.credential,
+                askId: askId,
+                timeout: 1
+            )
+            let outcome: String = switch decision {
+            case .allow: "allow"
+            case .block: "block"
+            case .superseded: "superseded"
+            }
+            #expect(payload["outcome"] as? String == outcome)
+            #expect(env.audit.entries().contains {
+                $0.kind == .awaitAsk && $0.detail.hasPrefix(outcome)
+            })
+            if decision == .allow || decision == .block {
+                #expect(payload["fields"] as? [String] == ["Body"])
+            }
+        }
+
+        let clock = AwaitAskFakeClock(Date(timeIntervalSince1970: 1_000))
+        let clockRegistry = PendingAskRegistry(
+            hardTimeoutSeconds: 300,
+            now: clock.now,
+            sleep: { _ in }
+        )
+        let clockEnv = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true,
+            pendingAsks: clockRegistry
+        )
+        defer { clockEnv.remove() }
+        let clockAck = try await Self.getAskAck(clockEnv)
+        let clockId = try #require(clockAck["askId"] as? String)
+        clock.instant = Date(timeIntervalSince1970: 1_000 + 301)
+        clockRegistry.expireIfNeeded()
+        let expiredPayload = try await Self.awaitAskPayload(
+            clockEnv.server,
+            credential: clockEnv.credential,
+            askId: clockId,
+            timeout: 1
+        )
+        #expect(expiredPayload["outcome"] as? String == "expired")
+        #expect(clockEnv.audit.entries().contains {
+            $0.kind == .awaitAsk && $0.detail.hasPrefix("expired")
+        })
+    }
+
+    @Test func awaitAskUnknownIdErrors() async throws {
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_ask",
+                    arguments: ["askId": "missing-ask", "timeout": 1]
+                )
+            )
+        )
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Unknown or expired await_ask askId"))
+    }
+
+    @Test func awaitAskWrongAgentIsUnknown() async throws {
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+        let ack = try await Self.getAskAck(env)
+        let askId = try #require(ack["askId"] as? String)
+
+        let otherCredential = "other-agent-token"
+        let other = try env.pairing.register(
+            name: "Other",
+            trustClass: .machineLocal,
+            credential: otherCredential
+        )
+        try env.grants.allow(
+            agentID: other.id,
+            accountID: env.accountID,
+            fields: Self.askBodyGrantFields
+        )
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(otherCredential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "await_ask",
+                    arguments: ["askId": askId, "timeout": 1]
+                )
+            )
+        )
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Unknown or expired await_ask askId"))
+        #expect(!response.body.contains("\"outcome\""))
+    }
+
+    @Test func identicalSecondGetWhilePendingReturnsSameAskId() async throws {
+        let env = try LoopbackFixture(
+            grantFields: Self.askBodyGrantFields,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+        let first = try await Self.getAskAck(env)
+        let second = try await Self.getAskAck(env)
+        #expect(first["askId"] as? String == second["askId"] as? String)
+        #expect(first["expiresAt"] as? String == second["expiresAt"] as? String)
+    }
+
+    @Test func getAttachmentAskPendingIncludesFilename() async throws {
+        let env = try AttachmentLoopbackFixture(
+            attachmentContentMode: .ask,
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "get_attachment",
+                    arguments: [
+                        "accountID": env.accountID,
+                        "placement": "INBOX",
+                        "id": "1",
+                        "filename": "statement.pdf"
+                    ]
+                )
+            )
+        )
+        #expect(!response.body.contains("isError"))
+        let payload = try Self.toolPayload(response.body)
+        #expect(payload["status"] as? String == "awaiting_user")
+        #expect(payload["filename"] as? String == "statement.pdf")
+        #expect(payload["pendingFields"] as? [String] == ["Attachment content"])
+        #expect(payload["askId"] is String)
     }
 
     @Test func createDraftRejectsTokensWhenSecretConstantsDisabled() async throws {
@@ -1902,6 +2168,58 @@ struct LoopbackMCPServerTests {
         return try JSONSerialization.data(withJSONObject: envelope)
     }
 
+    private static let askBodyGrantFields = GrantFields(
+        subjectMode: .on,
+        fromMode: .on,
+        toMode: .on,
+        ccMode: .on,
+        dateMode: .on,
+        bodyMode: .ask
+    )
+
+    private static func getAskAck(_ env: LoopbackFixture) async throws -> [String: Any] {
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try toolCallJSONObject(
+                    name: "get",
+                    arguments: [
+                        "accountID": env.accountID,
+                        "placement": "INBOX",
+                        "id": "1"
+                    ]
+                )
+            )
+        )
+        #expect(!response.body.contains("isError"))
+        return try toolPayload(response.body)
+    }
+
+    private static func awaitAskPayload(
+        _ server: LoopbackMCPServer,
+        credential: String,
+        askId: String,
+        timeout: Double = 1
+    ) async throws -> [String: Any] {
+        let response = await server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(credential)"],
+                body: try toolCallJSONObject(
+                    name: "await_ask",
+                    arguments: ["askId": askId, "timeout": timeout]
+                )
+            )
+        )
+        if response.body.contains("isError") {
+            return try toolPayload(response.body)
+        }
+        return try toolPayload(response.body)
+    }
+
     private static func proposeSendAck(
         _ server: LoopbackMCPServer,
         credential: String,
@@ -2000,6 +2318,7 @@ private struct LoopbackFixture {
     let root: FixtureTree
     let db: URL
     let credential = "secret-token"
+    let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     let audit: AuditLog
     let pairing: Pairing
     let grants: GrantGate
@@ -2007,6 +2326,9 @@ private struct LoopbackFixture {
 
     init(
         bodyGranted: Bool = true,
+        grantFields: GrantFields? = nil,
+        allowConditionalAccessPrompts: Bool = false,
+        pendingAsks: PendingAskRegistry = PendingAskRegistry(),
         sourceController: (any MailSourceControlling)? = nil,
         appleMailOpener: (any AppleMailOpening)? = nil,
         agentMayOpenInMail: Bool = false,
@@ -2020,7 +2342,6 @@ private struct LoopbackFixture {
         leakGuard: OutboundLeakGuard = OutboundLeakGuard()
     ) throws {
         root = try FixtureTree()
-        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         let messageIDHeader = internetMessageID.map { "Message-ID: \($0)\n" } ?? ""
         try root.writeEmlx(
             named: "1.emlx",
@@ -2051,17 +2372,20 @@ private struct LoopbackFixture {
             credential: credential
         )
         grants = GrantGate()
+        let fields = grantFields ?? GrantFields(envelope: true, body: bodyGranted)
         try grants.allow(
             agentID: agent.id,
             accountID: accountID,
-            fields: GrantFields(envelope: true, body: bodyGranted)
+            fields: fields
         )
         let gateway = AgentReadAPI(
             read: ReadAPI(index: index),
             pairing: pairing,
             grants: grants,
             leakGuard: leakGuard,
-            audit: audit
+            audit: audit,
+            allowConditionalAccessPrompts: allowConditionalAccessPrompts,
+            pendingAsks: pendingAsks
         )
         server = LoopbackMCPServer(
             gateway: gateway,
@@ -2078,6 +2402,34 @@ private struct LoopbackFixture {
     func remove() {
         root.remove()
         try? FileManager.default.removeItem(at: db)
+    }
+}
+
+private final class AwaitAskSleepProbe: @unchecked Sendable {
+    nonisolated(unsafe) var lastSeconds: TimeInterval?
+
+    var sleep: @Sendable (Duration) async throws -> Void {
+        { [self] duration in
+            let seconds = Double(duration.components.seconds)
+                + Double(duration.components.attoseconds) / 1e18
+            self.lastSeconds = seconds
+        }
+    }
+}
+
+private final class AwaitAskFakeClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _instant: Date
+
+    var instant: Date {
+        get { lock.lock(); defer { lock.unlock() }; return _instant }
+        set { lock.lock(); _instant = newValue; lock.unlock() }
+    }
+
+    init(_ instant: Date) { _instant = instant }
+
+    var now: @Sendable () -> Date {
+        { [self] in self.instant }
     }
 }
 
@@ -2212,13 +2564,17 @@ private struct AttachmentLoopbackFixture {
     let root: FixtureTree
     let db: URL
     let credential = "secret-token"
+    let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
     let pdfBytes = Data("%PDF-1.4\nattachment-bytes".utf8)
     let audit: AuditLog
     let server: LoopbackMCPServer
 
-    init(attachmentContent: Bool) throws {
+    init(
+        attachmentContent: Bool = true,
+        attachmentContentMode: FieldAccessMode? = nil,
+        allowConditionalAccessPrompts: Bool = false
+    ) throws {
         root = try FixtureTree()
-        let accountID = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
         let pdfB64 = pdfBytes.base64EncodedString()
         try root.writeEmlx(
             named: "1.emlx",
@@ -2260,21 +2616,37 @@ private struct AttachmentLoopbackFixture {
             credential: credential
         )
         let grants = GrantGate()
-        try grants.allow(
-            agentID: agent.id,
-            accountID: accountID,
-            fields: GrantFields(
+        let fields: GrantFields
+        if let attachmentContentMode {
+            fields = GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .on,
+                attachmentMetadataMode: .on,
+                attachmentContentMode: attachmentContentMode
+            )
+        } else {
+            fields = GrantFields(
                 envelope: true,
                 body: true,
                 attachmentMetadata: true,
                 attachmentContent: attachmentContent
             )
+        }
+        try grants.allow(
+            agentID: agent.id,
+            accountID: accountID,
+            fields: fields
         )
         let gateway = AgentReadAPI(
             read: ReadAPI(index: index),
             pairing: pairing,
             grants: grants,
-            audit: audit
+            audit: audit,
+            allowConditionalAccessPrompts: allowConditionalAccessPrompts
         )
         server = LoopbackMCPServer(gateway: gateway)
     }

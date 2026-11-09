@@ -862,6 +862,363 @@ struct AgentReadAPITests {
         #expect(message.body == .notGranted)
     }
 
+    @Test func getAskNeededReturnsPendingWithoutAwaitingHuman() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending")
+        } catch let pending as ConditionalAskPending {
+            #expect(pending.pendingFields == ["Body"])
+            #expect(!pending.askId.isEmpty)
+            #expect(env.lastAskContext?.requestedFields == ["Body"])
+            #expect(env.gateway.pendingAsks.snapshot(askId: pending.askId)?.isPending == true)
+        }
+    }
+
+    @Test func getAfterSupersededOpensNewAskNotSilentBody() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: .disabled
+        )
+        defer { env.remove() }
+
+        let firstID: String
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending")
+            return
+        } catch let pending as ConditionalAskPending {
+            firstID = pending.askId
+        }
+        #expect(env.gateway.pendingAsks.resolve(askId: firstID, decision: .superseded))
+
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected new ConditionalAskPending after superseded")
+        } catch let pending as ConditionalAskPending {
+            #expect(pending.askId != firstID)
+            #expect(pending.pendingFields == ["Body"])
+        }
+    }
+
+    @Test func getUnboundPrompterDoesNotAutoAllow() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected pending, not auto-allow body")
+        } catch is ConditionalAskPending {
+            // fail-closed vs legacy auto-allow
+        }
+    }
+
+    @Test func getLeaseAllowsRegetWithCacheDisabled() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: .disabled
+        )
+        defer { env.remove() }
+
+        let first = try await env.getWithAskDecision(.allow, writeDecisionCache: false)
+        #expect(first.body == .text("Please pay"))
+        let second = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(second.body == .text("Please pay"))
+    }
+
+    @Test func getAfterBlockDeniesAskBodyWithoutSecondDialog() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: .disabled
+        )
+        defer { env.remove() }
+
+        let message = try await env.getWithAskDecision(.block, writeDecisionCache: false)
+        #expect(message.body == .notGranted)
+        #expect(env.lastAskContext?.requestedFields == ["Body"])
+        let askId = try #require(env.lastAskId)
+        #expect(env.gateway.pendingAsks.snapshot(askId: askId)?.isPending == false)
+
+        let again = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(again.body == .notGranted)
+        // Terminal block retained — no second Ask open.
+        #expect(env.lastAskId == askId)
+    }
+
+    @Test func getAfterExpiredDeniesAskBody() async throws {
+        let clock = AgentReadFakeClock(Date(timeIntervalSince1970: 1_000))
+        let registry = PendingAskRegistry(
+            hardTimeoutSeconds: 300,
+            now: clock.now,
+            sleep: { _ in }
+        )
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: .disabled,
+            pendingAsks: registry
+        )
+        defer { env.remove() }
+
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending")
+            return
+        } catch let pending as ConditionalAskPending {
+            #expect(env.gateway.pendingAsks.snapshot(askId: pending.askId)?.isPending == true)
+            clock.instant = Date(timeIntervalSince1970: 1_301)
+            env.gateway.pendingAsks.expireIfNeeded()
+            #expect(env.gateway.pendingAsks.isExpired(askId: pending.askId))
+        }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(message.body == .notGranted)
+    }
+
+    @Test func getLeaseReevaluatesGrantsBeforeBody() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: .disabled
+        )
+        defer { env.remove() }
+
+        let allowed = try await env.getWithAskDecision(.allow, writeDecisionCache: false)
+        #expect(allowed.body == .text("Please pay"))
+
+        // Mid-flight Scope change: Body Ask → Off. Lease must not resurrect body.
+        try env.gateway.grants.allow(
+            agentID: env.agentID,
+            accountID: env.accountID,
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .off
+            )
+        )
+        let afterGrantChange = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(afterGrantChange.body == .notGranted)
+
+        // Restore Ask, re-allow via lease, then Block rule must strip body on re-get.
+        try env.gateway.grants.allow(
+            agentID: env.agentID,
+            accountID: env.accountID,
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            )
+        )
+        let leasedAgain = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(leasedAgain.body == .text("Please pay"))
+
+        env.rules.upsert(
+            GrantRule(
+                id: "b1",
+                name: "Strip body",
+                nick: "B",
+                polarity: .block,
+                subjectRules: [MatchRule(value: "invoice", mode: .contains)],
+                fields: GrantFields(envelope: false, body: true)
+            )
+        )
+        env.rules.setEnabled(
+            true,
+            ruleID: "b1",
+            agentID: env.agentID,
+            accountID: env.accountID,
+            placement: "INBOX"
+        )
+        let afterBlockRule = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        #expect(afterBlockRule.body == .notGranted)
+    }
+
+    @Test func getAttachmentAskNeededReturnsPendingWithFilenameInFingerprint() async throws {
+        let env = try AttachmentReadFixture(
+            fields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .on,
+                attachmentMetadataMode: .on,
+                attachmentContentMode: .ask
+            ),
+            allowConditionalAccessPrompts: true
+        )
+        defer { env.remove() }
+
+        let askId: String
+        do {
+            _ = try await env.gateway.getAttachment(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1",
+                filename: "statement.pdf"
+            )
+            Issue.record("expected ConditionalAskPending")
+            return
+        } catch let pending as ConditionalAskPending {
+            askId = pending.askId
+            #expect(pending.filename == "statement.pdf")
+            #expect(pending.pendingFields == ["Attachment content"])
+            #expect(env.gateway.pendingAsks.snapshot(askId: askId)?.isPending == true)
+        }
+
+        let agent = try env.gateway.authenticate(env.credential)
+        let same = PendingAskRequest(
+            agentID: agent.id,
+            accountID: env.accountID,
+            placement: "INBOX",
+            messageID: "1",
+            fields: ["Attachment content"],
+            filename: "statement.pdf"
+        )
+        let otherFile = PendingAskRequest(
+            agentID: agent.id,
+            accountID: env.accountID,
+            placement: "INBOX",
+            messageID: "1",
+            fields: ["Attachment content"],
+            filename: "other.pdf"
+        )
+        #expect(PendingAskRegistry.fingerprint(for: same) != PendingAskRegistry.fingerprint(for: otherFile))
+        switch env.gateway.pendingAsks.submit(same) {
+        case let .deduped(id, _, _):
+            #expect(id == askId)
+        case .created:
+            Issue.record("expected dedupe for identical attachment fingerprint")
+        }
+        switch env.gateway.pendingAsks.submit(otherFile) {
+        case let .created(id, _, _):
+            #expect(id != askId)
+        case .deduped:
+            Issue.record("different filename must open a new ask")
+        }
+    }
+
     @Test func getPromptsAndAllowsAskBodyWhenConditionalEnabled() async throws {
         final class PromptCapture: @unchecked Sendable {
             var fields: [String] = []
@@ -1665,6 +2022,12 @@ private struct AgentReadFixture {
     let rules: RuleStore
     let audit: AuditLog?
     let gateway: AgentReadAPI
+    private let askOpenCapture: AskOpenCapture
+    private let fieldAskDecisionCache: FieldAskDecisionCache
+    private let askDecisionCachePolicy: AskDecisionCachePolicy
+
+    var lastAskContext: ConditionalAccessPromptContext? { askOpenCapture.context }
+    var lastAskId: String? { askOpenCapture.askId }
 
     init(
         rfc822: String? = nil,
@@ -1673,6 +2036,7 @@ private struct AgentReadFixture {
         allowConditionalAccessPrompts: Bool = false,
         askDecisionCachePolicy: AskDecisionCachePolicy = .disabled,
         fieldAskDecisionCache: FieldAskDecisionCache = FieldAskDecisionCache(),
+        pendingAsks: PendingAskRegistry = PendingAskRegistry(),
         conditionalAccessPrompter: (@Sendable (ConditionalAccessPromptContext) async -> ConditionalAccessPromptOutcome)? = nil
     ) throws {
         root = try FixtureTree()
@@ -1711,6 +2075,10 @@ private struct AgentReadFixture {
             try grants.allow(agentID: agent.id, accountID: accountID, fields: grantFields)
         }
         rules = RuleStore()
+        let opened = AskOpenCapture()
+        askOpenCapture = opened
+        self.fieldAskDecisionCache = fieldAskDecisionCache
+        self.askDecisionCachePolicy = askDecisionCachePolicy
         gateway = AgentReadAPI(
             read: ReadAPI(index: index),
             pairing: pairing,
@@ -1720,13 +2088,80 @@ private struct AgentReadFixture {
             fieldAskDecisionCache: fieldAskDecisionCache,
             allowConditionalAccessPrompts: allowConditionalAccessPrompts,
             askDecisionCachePolicy: askDecisionCachePolicy,
+            pendingAsks: pendingAsks,
+            onConditionalAskOpened: { context, askId in
+                opened.context = context
+                opened.askId = askId
+            },
             conditionalAccessPrompter: conditionalAccessPrompter
         )
+    }
+
+    /// Open Ask → resolve → re-get (non-blocking protocol). Optionally mirrors UI cache write.
+    func getWithAskDecision(
+        _ decision: PendingAskDecision,
+        placement: String = "INBOX",
+        id: String = "1",
+        writeDecisionCache: Bool = true
+    ) async throws -> ReadMessage {
+        do {
+            return try await gateway.get(
+                credential: credential,
+                accountID: accountID,
+                placement: placement,
+                id: id
+            )
+        } catch let pending as ConditionalAskPending {
+            if writeDecisionCache, askDecisionCachePolicy.enabled,
+               decision == .allow || decision == .block
+            {
+                let cached: ConditionalAccessDecision = decision == .allow ? .allow : .block
+                for label in pending.pendingFields {
+                    fieldAskDecisionCache.store(
+                        cached,
+                        agentID: agentID,
+                        accountID: pending.accountID,
+                        placement: pending.placement,
+                        messageID: pending.messageID,
+                        field: label,
+                        policy: askDecisionCachePolicy
+                    )
+                }
+            }
+            #expect(gateway.pendingAsks.resolve(askId: pending.askId, decision: decision))
+            return try await gateway.get(
+                credential: credential,
+                accountID: accountID,
+                placement: placement,
+                id: id
+            )
+        }
     }
 
     func remove() {
         root.remove()
         try? FileManager.default.removeItem(at: db)
+    }
+}
+
+private final class AskOpenCapture: @unchecked Sendable {
+    var context: ConditionalAccessPromptContext?
+    var askId: String?
+}
+
+private final class AgentReadFakeClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _instant: Date
+
+    var instant: Date {
+        get { lock.lock(); defer { lock.unlock() }; return _instant }
+        set { lock.lock(); _instant = newValue; lock.unlock() }
+    }
+
+    init(_ instant: Date) { _instant = instant }
+
+    var now: @Sendable () -> Date {
+        { [self] in self.instant }
     }
 }
 

@@ -200,6 +200,32 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         finishAsk(id: id, outcome: outcome)
     }
 
+    /// True when an Ask dialog for this registry askId is already on screen.
+    func hasOpenAsk(id: String) -> Bool {
+        asks[id] != nil
+    }
+
+    /// Hard-timeout path: dismiss Ask without Block. Registry already marked `expired`.
+    /// Resumes any UI waiter with `.block` so a fire-and-forget Task can finish; callers must
+    /// treat resolve-as-block as a no-op when the ask is already terminal.
+    func expireConditionalAsk(id: String) {
+        guard let record = asks[id] else { return }
+        if record.finished {
+            MailGentLog.trace("ask expire ignored (already decided) id=\(id)")
+            return
+        }
+        MailGentLog.trace("ask expired id=\(id)")
+        record.finished = true
+        record.pokeToken += 1
+        _ = AskQueueIndicator.shared.remove(id: id)
+        let continuation = record.continuation
+        record.continuation = nil
+        asks[id] = nil
+        dismissAskWindow(record.window)
+        // Wake the detached present Task; AgentBridge skips registry write when already expired.
+        continuation?.resume(returning: .block)
+    }
+
     /// After an armed rule commit, recheck other open Asks for the same agent when the rule can change them.
     func rematchPendingAsks(
         excluding id: String,

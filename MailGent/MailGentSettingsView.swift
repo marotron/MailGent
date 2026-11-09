@@ -116,7 +116,7 @@ struct MailGentSettingsView: View {
 
     private var proposeSendHardTimeoutPicker: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Picker("Confirm wait limit", selection: $proposeSendHardTimeoutSeconds) {
+            Picker("Human wait limit", selection: $proposeSendHardTimeoutSeconds) {
                 Text("15 minutes").tag(900)
                 Text("30 minutes").tag(1_800)
                 Text("1 hour").tag(3_600)
@@ -124,9 +124,11 @@ struct MailGentSettingsView: View {
                 Text("4 hours").tag(14_400)
                 Text("8 hours").tag(28_800)
             }
-            Text("If you do not decide within this time, the proposal expires with no send.")
-                .foregroundStyle(.secondary)
-                .font(.callout)
+            Text(
+                "If you do not decide within this time, propose_send expires with no send and Conditional Ask expires without access."
+            )
+            .foregroundStyle(.secondary)
+            .font(.callout)
         }
         .onChange(of: proposeSendHardTimeoutSeconds) { _, newValue in
             applyProposeSendHardTimeout(newValue)
@@ -150,7 +152,7 @@ struct MailGentSettingsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle("Log soft-wait polls", isOn: $logAwaitProposeSendSoftWaits)
             Text(
-                "Off by default. Soft await_propose_send polls that return awaiting_user stay out of the log; Send / Cancel / expire / errors still appear. On logs every poll."
+                "Off by default. Soft await_propose_send / await_ask polls that return awaiting_user stay out of the log; terminal outcomes and errors still appear. On logs every poll."
             )
             .foregroundStyle(.secondary)
             .font(.callout)

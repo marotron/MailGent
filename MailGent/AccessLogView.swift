@@ -1862,6 +1862,7 @@ enum AccessLogFormat {
         case .openInMail: "Open a message in Apple Mail."
         case .proposeSend: "Propose sending a new message via Apple Mail."
         case .awaitProposeSend: "Wait for propose-send confirmation."
+        case .awaitAsk: "Wait for conditional Ask decision."
         case .listSecrets: "List allowlisted secret-constant names."
         case .search: "Search messages."
         case .list: "List messages."

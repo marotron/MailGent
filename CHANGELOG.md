@@ -6,6 +6,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump mu
 
 Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
 
+## [0.24.0] - 2026-11-09
+
+### Added
+
+- MCP `await_ask` — soft-wait for a pending Conditional Ask from `get` / `get_attachment` (`askId`, optional `timeout` default **25**s clamped 1…120, never longer than remaining hard wait). Returns `{ outcome: allow | block | expired | superseded }` or `{ status: awaiting_user, … }` so agents can poll under short client socket budgets without holding one HTTP call open for the whole human wait
+- After **Allow**, a short-lived idempotent lease lets the agent re-call `get` / `get_attachment` for the same fingerprint without a second dialog (`await_ask` returns outcome only — never body)
+- Fingerprint dedupe while pending: same agent + message + Ask fields (and attachment filename when applicable) reuses one `askId` / dialog
+- Access log rows for terminal `await_ask` outcomes (and soft polls when **Log soft-wait polls** is on)
+- Local dogfood helpers: `Scripts/tests/await-ask/` harness + `Scripts/mcp-tester/` Tauri GUI (not shipped in the DMG)
+
+### Changed
+
+- Settings → **Human wait limit** copy covers Conditional Ask as well as propose-send (shared hard deadline; default 1 hour)
+- Settings → Access log → **Log soft-wait polls** applies to both `await_propose_send` and `await_ask`
+- Armed-rule rematch of an open Ask resolves the pending await as `superseded` (agent must re-call `get` / `get_attachment`)
+
+### Breaking
+
+- When Conditional Ask is needed, `get` / `get_attachment` no longer block the MCP HTTP call until Allow / Block. They return immediately with `{ status: awaiting_user, askId, expiresAt, pendingFields, … }` (normal result, not `isError`). Agents must call `await_ask`, then re-call `get` / `get_attachment` after `allow`. Soft timeout never auto-allows or auto-blocks; client disconnect does not dismiss the Ask
+
 ## [0.23.5] - 2026-11-05
 
 ### Added
