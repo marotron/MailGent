@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). While a line is a **rel
 
 Release section headings use semver only (`## [0.4.0]`). **alpha** stays in README / About / GitHub titles. **`-rc.N`** is display/MCP only — never in `MARKETING_VERSION` or ship tags.
 
-## [Unreleased]
+## [0.24.1] - 2026-11-10
 
 ### Added
 
