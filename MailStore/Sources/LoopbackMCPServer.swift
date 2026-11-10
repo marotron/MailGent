@@ -489,8 +489,27 @@ public struct LoopbackMCPServer {
         } else {
             context = nil
         }
+        let revises = arguments["revises"] as? [String: Any]
+        var revisesId = (revises?["proposalId"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let ambiguousAwaitingRevisionIDs: [String]
+        if revisesId?.isEmpty != false {
+            let awaiting = host.pendingProposals.awaitingRevisionIDs(agentID: agent.id)
+            if awaiting.count == 1 {
+                revisesId = awaiting[0]
+                ambiguousAwaitingRevisionIDs = []
+            } else if awaiting.count > 1 {
+                ambiguousAwaitingRevisionIDs = awaiting
+            } else {
+                ambiguousAwaitingRevisionIDs = []
+            }
+        } else {
+            ambiguousAwaitingRevisionIDs = []
+        }
+        let previous = revisesId.flatMap { host.pendingProposals.proposal(id: $0) }
         let resolvedBody = resolveSecretConstantsForHuman(body: body)
         let proposal = SendProposal(
+            id: (revisesId?.isEmpty == false) ? revisesId! : UUID().uuidString,
             agentName: agent.name,
             to: to,
             subject: subject,
@@ -498,9 +517,10 @@ public struct LoopbackMCPServer {
             cc: cc,
             bcc: bcc,
             sender: (sender?.isEmpty == false) ? sender : nil,
-            context: context,
+            context: context ?? previous?.context,
             secretConstantSpans: resolvedBody.spans,
-            secretConstantMissing: resolvedBody.missing
+            secretConstantMissing: resolvedBody.missing,
+            tokenizedBody: body
         )
         var requestFields: [String: Any] = [
             "to": to,
@@ -524,6 +544,19 @@ public struct LoopbackMCPServer {
                 error: .proposeSendDenied
             )
             throw CallError.proposeSendDenied
+        }
+        if !ambiguousAwaitingRevisionIDs.isEmpty {
+            let call = CallError.revisionRejected(
+                "Multiple proposals are waiting for a revised draft (\(ambiguousAwaitingRevisionIDs.joined(separator: ", "))). Pass revises.proposalId to choose one."
+            )
+            recordProposeSendFailure(
+                agent: agent,
+                started: started,
+                request: request,
+                detail: detail,
+                error: call
+            )
+            throw call
         }
         if let sender = proposal.sender {
             guard let gateway = host.readGateway() else {
@@ -549,6 +582,65 @@ public struct LoopbackMCPServer {
                 )
                 throw error
             }
+        }
+        if let revisesId, !revisesId.isEmpty {
+            let references = host.pendingProposals.agentPayload(id: revisesId)?.references ?? []
+            let results: [ProposalInstructionResult]
+            do {
+                results = try ProposalInstructionResult.parseList(
+                    revises?["results"],
+                    references: references
+                )
+            } catch let error as ProposalInstructionResultError {
+                let call = CallError.invalidRevisionResults(String(describing: error))
+                recordProposeSendFailure(
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: detail,
+                    error: call
+                )
+                throw call
+            }
+            do {
+                try host.pendingProposals.applyRevision(
+                    agentID: agent.id,
+                    proposalId: revisesId,
+                    proposal: proposal,
+                    results: results
+                )
+            } catch let error as ProposalRevisionApplyError {
+                let call = CallError.revisionRejected(Self.revisionFailure(error))
+                recordProposeSendFailure(
+                    agent: agent,
+                    started: started,
+                    request: request,
+                    detail: detail,
+                    error: call
+                )
+                throw call
+            }
+            let expiresAt = host.pendingProposals.expiresAt(id: revisesId) ?? Date()
+            let payload: [String: Any] = [
+                "status": "awaiting_user",
+                "proposalId": revisesId,
+                "expiresAt": Self.iso8601(expiresAt),
+                "message":
+                    "Updated the open confirm with this draft. Call await_propose_send with the same proposalId."
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "revised · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
         }
         guard let prompter = host.readSendProposalPrompter() else {
             recordProposeSendFailure(
@@ -587,13 +679,11 @@ public struct LoopbackMCPServer {
             Task {
                 let decision = await prompter(stored)
                 if registry.resolve(id: proposalId, decision: decision) {
-                    let payload = Self.outcomePayload(decision)
-                    let outcomeKey: String
-                    switch decision {
-                    case .cancel: outcomeKey = "cancelled"
-                    case .send: outcomeKey = "send"
-                    case .openInMail: outcomeKey = "opened_in_mail"
-                    }
+                    let payload = Self.outcomePayload(
+                        decision,
+                        agentPayload: registry.agentPayload(id: proposalId)
+                    )
+                    let outcomeKey = Self.outcomeKey(decision)
                     audit?.append(
                         AuditEntry(
                             kind: .proposeSend,
@@ -735,7 +825,25 @@ public struct LoopbackMCPServer {
                 throw CallError.unknownProposal
             }
             let detail = "\(proposal.subject) → \(proposal.to.joined(separator: ", "))"
-            let payload = Self.outcomePayload(decision)
+            let storedPayload = host.pendingProposals.agentPayload(id: proposalId)
+            let payload = Self.outcomePayload(decision, agentPayload: storedPayload)
+            if decision == .reviseRequested || decision == .attentionRequested {
+                let refs = storedPayload?.references.count ?? 0
+                let edits = storedPayload?.userEdits?.count ?? storedPayload?.changes?.count ?? 0
+                host.audit?.append(
+                    AuditEntry(
+                        kind: .awaitProposeSend,
+                        agentID: agent.id,
+                        agentName: agent.name,
+                        detail: "\(Self.outcomeKey(decision)) · \(refs) references · \(edits) edits",
+                        at: started,
+                        finishedAt: Date(),
+                        requestSummary: request,
+                        responseSummary: AuditJSON.json(payload)
+                    )
+                )
+                return try jsonString(payload)
+            }
             guard host.pendingProposals.claimDelivery(id: proposalId) else {
                 // Only echo a successful outcome when deliver actually completed.
                 if host.pendingProposals.isDeliverySucceeded(id: proposalId) {
@@ -775,11 +883,13 @@ public struct LoopbackMCPServer {
         }
     }
 
-    private static func outcomePayload(_ decision: SendProposalDecision) -> [String: Any] {
+    private static func outcomeKey(_ decision: SendProposalDecision) -> String {
         switch decision {
-        case .cancel: ["outcome": "cancelled"]
-        case .send: ["outcome": "send"]
-        case .openInMail: ["outcome": "opened_in_mail"]
+        case .cancel: "cancelled"
+        case .send: "send"
+        case .openInMail: "opened_in_mail"
+        case .reviseRequested: "revise_requested"
+        case .attentionRequested: "attention_requested"
         }
     }
 
@@ -945,6 +1055,25 @@ public struct LoopbackMCPServer {
         return payload
     }
 
+    private static func revisionFailure(_ error: ProposalRevisionApplyError) -> String {
+        switch error {
+        case .unknown: "Unknown proposal."
+        case .wrongAgent: "That proposal belongs to another agent."
+        case .notWaitingForRevision: "That proposal is not waiting for a revised draft."
+        case .expired: "That proposal has expired."
+        }
+    }
+
+    private static func outcomePayload(
+        _ decision: SendProposalDecision,
+        agentPayload: ProposalAgentPayload?
+    ) -> [String: Any] {
+        if let agentPayload {
+            return agentPayload.dictionary()
+        }
+        return ["outcome": outcomeKey(decision)]
+    }
+
     private func deliverProposeSendDecision(
         agent: PairedAgent,
         proposal: SendProposal,
@@ -963,6 +1092,25 @@ public struct LoopbackMCPServer {
                     agentID: agent.id,
                     agentName: agent.name,
                     detail: "cancelled · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case .reviseRequested, .attentionRequested:
+            let payload = Self.outcomePayload(
+                decision,
+                agentPayload: host.pendingProposals.agentPayload(id: proposal.id)
+            )
+            host.audit?.append(
+                AuditEntry(
+                    kind: .awaitProposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "\(Self.outcomeKey(decision)) · \(detail)",
                     at: started,
                     finishedAt: Date(),
                     requestSummary: request,
@@ -1235,6 +1383,8 @@ public struct LoopbackMCPServer {
         case secretConstantsDisabled
         case secretConstantNotAllowlisted([String])
         case secretConstantMissing([String])
+        case invalidRevisionResults(String)
+        case revisionRejected(String)
 
         var description: String {
             switch self {
@@ -1277,6 +1427,10 @@ public struct LoopbackMCPServer {
                 return "Secret constant not allowlisted for this agent: \(names.joined(separator: ", "))."
             case .secretConstantMissing(let names):
                 return "Unknown secret constant placeholder: \(names.joined(separator: ", "))."
+            case .invalidRevisionResults(let message):
+                return "Invalid revises.results: \(message)."
+            case .revisionRejected(let message):
+                return message
             }
         }
     }
@@ -1476,7 +1630,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId (do not re-propose the same mail — fingerprint dedupes while awaiting). Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? } so MailGent can show a vault/mail timeline beside the draft (agent supplies structure; MailGent pulls mail via get and vault files under the configured Personal root). Max 40 events.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId (do not re-propose the same mail — fingerprint dedupes while awaiting). Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. If outcome is send with edited true, the human changed the draft; treat sentBody as what was sent. If outcome is revise_requested, rewrite per revision.instructionText, keep userEdits unless they conflict, and call propose_send again with revises.proposalId (same window, cap 5, original expiry kept). If outcome is attention_requested, read references and reply the same way; do not treat either outcome as sent or cancelled. Do not re-propose the same mail unchanged. No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? }. events[].source may be omitted (agent note). Max 40 events.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1511,7 +1665,36 @@ public struct LoopbackMCPServer {
                         "context": [
                             "type": "object",
                             "description":
-                                "Experimental. Ignored unless Settings → Experimental → Propose-send context thread is on. Assembly C: agent chooses structure (events + links); MailGent resolves content. casePath is relative to the Personal vault root. events[].kind mail|phone|video|note|log; scope private|shared; ownership them|you|both; source.mail {accountID,placement,id} or source.vault {path,anchor?}."
+                                "Experimental. Ignored unless Settings → Experimental → Propose-send context thread is on. Assembly C: agent chooses structure (events + links); MailGent resolves content. casePath is relative to the Personal vault root. events[].kind mail|phone|video|note|log; scope private|shared; ownership them|you|both. source is optional: omit it for an agent note. source.mail {accountID,placement,id} or source.vault {path,anchor?}."
+                        ],
+                        "revises": [
+                            "type": "object",
+                            "description":
+                                "When replacing a draft the human asked to revise or look at. proposalId must be that proposal, same agent, still inside the original hard deadline. Optional results report pass/fail and typed Ask answers for referenceId + instructionId pairs. Omit unreported results; never infer them from body changes. Cap 5 round-trips.",
+                            "properties": [
+                                "proposalId": ["type": "string"],
+                                "results": [
+                                    "type": "array",
+                                    "items": [
+                                        "type": "object",
+                                        "properties": [
+                                            "referenceId": ["type": "string"],
+                                            "instructionId": ["type": "string"],
+                                            "status": [
+                                                "type": "string",
+                                                "enum": ["pass", "fail"],
+                                            ],
+                                            "answer": [
+                                                "type": "object",
+                                                "description":
+                                                    "Typed answer matching the instruction's declared answerShape: yes_no boolean, number, choice, or text.",
+                                            ],
+                                        ],
+                                        "required": ["referenceId", "instructionId"],
+                                    ],
+                                ],
+                            ],
+                            "required": ["proposalId"],
                         ]
                     ],
                     "required": ["to", "subject", "body"]
@@ -1520,7 +1703,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "await_propose_send",
                 "description":
-                    "Soft-wait for a pending propose_send proposal. Pass proposalId from propose_send. Optional timeout seconds (default 60, clamped 1…120, never longer than the remaining hard deadline). Returns { outcome: send | opened_in_mail | cancelled | expired }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. Unknown proposalId errors. Never auto-sends on timeout.",
+                    "Soft-wait for a pending propose_send proposal. Pass proposalId from propose_send. Optional timeout seconds (default 60, clamped 1…120, never longer than the remaining hard deadline). Returns { outcome: send | opened_in_mail | cancelled | expired | revise_requested | attention_requested }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. revise_requested and attention_requested leave the confirm open; call propose_send with revises.proposalId to swap the draft. Unknown proposalId errors. Never auto-sends on timeout.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [

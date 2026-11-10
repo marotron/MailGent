@@ -17,6 +17,8 @@ public struct SendProposal: Equatable, Sendable {
     public let secretConstantSpans: [SecretConstantResolveSpan]
     /// Human-only: placeholder names that could not be resolved (fail closed).
     public let secretConstantMissing: [String]
+    /// Body with `[[mg:name]]` still in place. Agent-facing diffs use this, not the resolved body.
+    public let tokenizedBody: String
 
     public init(
         id: String = UUID().uuidString,
@@ -29,7 +31,8 @@ public struct SendProposal: Equatable, Sendable {
         sender: String? = nil,
         context: SendProposalContext? = nil,
         secretConstantSpans: [SecretConstantResolveSpan] = [],
-        secretConstantMissing: [String] = []
+        secretConstantMissing: [String] = [],
+        tokenizedBody: String? = nil
     ) {
         self.id = id
         self.agentName = agentName
@@ -42,6 +45,7 @@ public struct SendProposal: Equatable, Sendable {
         self.context = context
         self.secretConstantSpans = secretConstantSpans
         self.secretConstantMissing = secretConstantMissing
+        self.tokenizedBody = tokenizedBody ?? body
     }
 
     public var canDeliverSecretConstants: Bool {
@@ -54,6 +58,10 @@ public enum SendProposalDecision: String, Equatable, Sendable {
     case send
     case openInMail
     case cancel
+    /// Human asked for a new draft. Not a send and not a cancel.
+    case reviseRequested
+    /// Human pinned passages and asked the agent to look. Not a send and not a cancel.
+    case attentionRequested
 }
 
 /// How to hand the message to Mail.app after confirmation.

@@ -56,8 +56,10 @@ import Testing
         let resolved = await resolver.resolve(context: context, proposal: proposal)
         let mail = resolved.items.first { $0.id == "m1" }
         let vault = resolved.items.first { $0.id == "v1" }
-        #expect(mail?.unavailableReason == "Mail unavailable")
-        #expect(vault?.unavailableReason == "Vault file unavailable")
+        #expect(mail?.unavailableReason == "Source unavailable")
+        #expect(mail?.original == nil)
+        #expect(vault?.unavailableReason == "Source unavailable")
+        #expect(vault?.original == nil)
         #expect(mail?.summary == "mail miss")
     }
 
@@ -146,6 +148,30 @@ import Testing
 
         let reader = PersonalVaultFileReader(rootURL: root)
         #expect(reader.readVaultFile(relativePath: "cases/acme/LOG.md") == "# prep\nhello")
+    }
+
+    @Test func omittedSourceIsAnAgentNote() async throws {
+        let context = try SendProposalContext.parse([
+            "casePath": "cases/acme",
+            "events": [
+                [
+                    "id": "n1",
+                    "kind": "note",
+                    "scope": "private",
+                    "ownership": "you",
+                    "at": "2026-10-20T11:40:00Z",
+                    "summary": "Remember the Thursday call"
+                ]
+            ]
+        ])
+        let resolver = ProposeSendContextResolver(mail: FakeMail(), vault: FakeVault(files: [:]))
+        let proposal = SendProposal(agentName: "Cursor", to: ["a@b.c"], subject: "S", body: "B")
+        let resolved = await resolver.resolve(context: context, proposal: proposal)
+        let note = resolved.items.first { $0.id == "n1" }
+        #expect(note?.isAgentNote == true)
+        #expect(note?.original == nil)
+        #expect(note?.unavailableReason == nil)
+        #expect(note?.summary == "Remember the Thursday call")
     }
 }
 

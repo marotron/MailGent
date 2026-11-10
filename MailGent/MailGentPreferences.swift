@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MailStore
 
@@ -23,6 +24,10 @@ enum MailGentPreferences {
     static let askDecisionCacheShareScopeKey = "askDecisionCacheShareScope"
     /// Experimental: show Assembly-C context thread on `propose_send` when agent sends `context`.
     static let proposeSendContextExperimentalKey = "proposeSendContextExperimental"
+    /// Experimental: editable propose-send draft, passage pins, ask to revise.
+    static let proposeSendEditExperimentalKey = "proposeSendEditExperimental"
+    static let proposeSendReferShortcutKey = "proposeSendReferShortcut"
+    static let proposeSendNotePresetsKey = "proposeSendNotePresets"
     /// Security-scoped bookmark data for Personal vault root (used by experimental context resolve).
     static let personalVaultRootBookmarkKey = "personalVaultRootBookmark"
     /// Master toggle for secret constants (MCP `list_secrets`, placeholders, resolve, value leak hits).
@@ -68,6 +73,39 @@ enum MailGentPreferences {
 
     static var proposeSendContextExperimental: Bool {
         UserDefaults.standard.bool(forKey: proposeSendContextExperimentalKey)
+    }
+
+    static var proposeSendEditExperimental: Bool {
+        UserDefaults.standard.bool(forKey: proposeSendEditExperimentalKey)
+    }
+
+    static var proposeSendReferShortcut: ProposalReferShortcut {
+        guard let data = UserDefaults.standard.data(forKey: proposeSendReferShortcutKey),
+              let shortcut = try? JSONDecoder().decode(ProposalReferShortcut.self, from: data)
+        else {
+            return .defaultShortcut
+        }
+        return shortcut
+    }
+
+    static func setProposeSendReferShortcut(_ shortcut: ProposalReferShortcut) {
+        guard let data = try? JSONEncoder().encode(shortcut) else { return }
+        UserDefaults.standard.set(data, forKey: proposeSendReferShortcutKey)
+    }
+
+    static var proposeSendNotePresets: [String] {
+        guard UserDefaults.standard.object(forKey: proposeSendNotePresetsKey) != nil,
+              let data = UserDefaults.standard.data(forKey: proposeSendNotePresetsKey),
+              let presets = try? JSONDecoder().decode([String].self, from: data)
+        else {
+            return ProposalNoteFuzzy.defaultPresets
+        }
+        return presets
+    }
+
+    static func setProposeSendNotePresets(_ presets: [String]) {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        UserDefaults.standard.set(data, forKey: proposeSendNotePresetsKey)
     }
 
     static var secretConstantsEnabled: Bool {
@@ -159,5 +197,40 @@ enum MailGentPreferences {
 
     private static func positiveSeconds(_ key: String) -> TimeInterval? {
         positiveInt(key).map(TimeInterval.init)
+    }
+}
+
+struct ProposalReferShortcut: Codable, Equatable {
+    var key: String
+    var command: Bool
+    var shift: Bool
+    var option: Bool
+    var control: Bool
+
+    static let defaultShortcut = ProposalReferShortcut(
+        key: "a",
+        command: true,
+        shift: true,
+        option: false,
+        control: false
+    )
+
+    var keycap: String {
+        var parts = ""
+        if control { parts += "⌃" }
+        if option { parts += "⌥" }
+        if shift { parts += "⇧" }
+        if command { parts += "⌘" }
+        parts += key.uppercased()
+        return parts
+    }
+
+    func matches(characters: String?, modifierFlags: NSEvent.ModifierFlags) -> Bool {
+        guard characters?.lowercased() == key.lowercased() else { return false }
+        let flags = modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return flags.contains(.command) == command
+            && flags.contains(.shift) == shift
+            && flags.contains(.option) == option
+            && flags.contains(.control) == control
     }
 }

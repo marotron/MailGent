@@ -202,6 +202,127 @@ import Testing
         registry.markDeliverySucceeded(id: id)
         #expect(registry.isDeliverySucceeded(id: id))
     }
+
+    @Test func reviseWakesAwaiterWithoutExpiringOrResettingDeadline() async throws {
+        let clock = FakeClock(Date(timeIntervalSince1970: 1_000))
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600, now: clock.now)
+        let proposal = makeProposal(id: "p1")
+        guard case let .created(id, expiresAt, _) = registry.submit(agentID: "agent-1", proposal: proposal) else {
+            Issue.record("expected created")
+            return
+        }
+        async let wait = registry.awaitDecision(id: id, softTimeout: 60)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        let payload = ProposalAgentPayload(outcome: "revise_requested", proposalId: id)
+        #expect(registry.publishInterim(id: id, decision: .reviseRequested, payload: payload))
+        let result = await wait
+        #expect(result == .decided(.reviseRequested))
+        #expect(registry.expiresAt(id: id) == expiresAt)
+        #expect(registry.isExpired(id: id) == false)
+        #expect(await registry.awaitDecision(id: id, softTimeout: 1) == .stillAwaiting)
+
+        let revised = makeProposal(id: id, subject: "Next", body: "Draft v2")
+        try registry.applyRevision(agentID: "agent-1", proposalId: id, proposal: revised)
+        #expect(registry.proposal(id: id)?.body == "Draft v2")
+        #expect(registry.expiresAt(id: id) == expiresAt)
+
+        #expect(throws: ProposalRevisionApplyError.wrongAgent) {
+            try registry.applyRevision(agentID: "other", proposalId: id, proposal: revised)
+        }
+        #expect(throws: ProposalRevisionApplyError.notWaitingForRevision) {
+            try registry.applyRevision(agentID: "agent-1", proposalId: id, proposal: revised)
+        }
+    }
+
+    @Test func revisionKeepsTypedInstructionResultsForTheReplacementDraft() throws {
+        let registry = PendingProposalRegistry()
+        let proposal = makeProposal(id: "p1")
+        _ = registry.submit(agentID: "agent-1", proposal: proposal)
+        let reference = ProposalReferenceRecord(
+            id: "r1",
+            quote: "Hello",
+            note: nil,
+            stale: false,
+            instructions: [
+                ProposalPassageInstruction(
+                    id: "accurate",
+                    kind: .ask,
+                    label: "Check this is accurate",
+                    answerShape: .yesNo
+                ),
+            ]
+        )
+        let payload = ProposalAgentPayload(
+            outcome: "attention_requested",
+            proposalId: proposal.id,
+            references: [reference]
+        )
+        #expect(registry.publishInterim(id: proposal.id, decision: .attentionRequested, payload: payload))
+        let result = ProposalInstructionResult(
+            referenceID: "r1",
+            instructionID: "accurate",
+            status: .pass,
+            answer: .yesNo(true)
+        )
+
+        try registry.applyRevision(
+            agentID: "agent-1",
+            proposalId: proposal.id,
+            proposal: makeProposal(id: proposal.id, body: "Hello"),
+            results: [result]
+        )
+
+        #expect(registry.revisionResults(id: proposal.id) == [result])
+    }
+
+    @Test func revisionCapStopsTheSixthRoundTrip() {
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600)
+        let proposal = makeProposal(id: "p1")
+        guard case let .created(id, _, _) = registry.submit(agentID: "agent-1", proposal: proposal) else {
+            Issue.record("expected created")
+            return
+        }
+        let payload = ProposalAgentPayload(outcome: "attention_requested", proposalId: id)
+        for _ in 0..<PendingProposalRegistry.revisionCap {
+            #expect(registry.publishInterim(id: id, decision: .attentionRequested, payload: payload))
+            let revised = makeProposal(id: id, body: "v")
+            try? registry.applyRevision(agentID: "agent-1", proposalId: id, proposal: revised)
+        }
+        #expect(registry.canRequestRevision(id: id) == false)
+        #expect(!registry.publishInterim(id: id, decision: .reviseRequested, payload: payload))
+        #expect(registry.resolve(id: id, decision: .send))
+    }
+
+    @Test func awaitingRevisionIDsListsOnlyThisAgentsOpenRevisions() {
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600)
+        let first = makeProposal(id: "p1", subject: "One")
+        let second = makeProposal(id: "p2", subject: "Two")
+        let other = makeProposal(id: "p3", subject: "Other")
+        _ = registry.submit(agentID: "agent-1", proposal: first)
+        _ = registry.submit(agentID: "agent-1", proposal: second)
+        _ = registry.submit(agentID: "agent-2", proposal: other)
+        #expect(registry.awaitingRevisionIDs(agentID: "agent-1").isEmpty)
+
+        let payload = ProposalAgentPayload(outcome: "attention_requested", proposalId: "p1")
+        #expect(registry.publishInterim(id: "p1", decision: .attentionRequested, payload: payload))
+        #expect(registry.awaitingRevisionIDs(agentID: "agent-1") == ["p1"])
+        #expect(registry.awaitingRevisionIDs(agentID: "agent-2").isEmpty)
+
+        #expect(registry.publishInterim(
+            id: "p2",
+            decision: .reviseRequested,
+            payload: ProposalAgentPayload(outcome: "revise_requested", proposalId: "p2")
+        ))
+        #expect(registry.awaitingRevisionIDs(agentID: "agent-1") == ["p1", "p2"])
+
+        #expect(registry.publishInterim(
+            id: "p3",
+            decision: .attentionRequested,
+            payload: ProposalAgentPayload(outcome: "attention_requested", proposalId: "p3")
+        ))
+        #expect(registry.awaitingRevisionIDs(agentID: "agent-2") == ["p3"])
+        #expect(registry.awaitingRevisionIDs(agentID: "agent-1") == ["p1", "p2"])
+    }
 }
 
 private final class FakeClock: @unchecked Sendable {

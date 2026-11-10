@@ -24,6 +24,8 @@ public final class PendingProposalRegistry: @unchecked Sendable {
     public static let softTimeoutMaxSeconds: TimeInterval = 120
     /// Keep terminal outcomes briefly so a late `await_propose_send` still sees them.
     public static let terminalRetentionSeconds: TimeInterval = 120
+    /// Revise and look round-trips per proposal. The original hard expiry is not reset.
+    public static let revisionCap = 5
 
     private struct Waiter {
         let id: UUID
@@ -33,10 +35,18 @@ public final class PendingProposalRegistry: @unchecked Sendable {
     private struct Entry {
         let proposalId: String
         let agentID: String
-        let fingerprint: String
+        var fingerprint: String
         var proposal: SendProposal
         let expiresAt: Date
         var decision: SendProposalDecision?
+        /// One-shot outcome for the next `await_propose_send`. Not terminal.
+        var pendingInterim: SendProposalDecision?
+        var agentPayload: ProposalAgentPayload?
+        var awaitingRevision: Bool
+        /// Survives the one-shot interim delivery so `revises` can still be accepted.
+        var revisionKind: SendProposalDecision?
+        var revisionRoundTrips: Int
+        var revisionResults: [ProposalInstructionResult]
         var expired: Bool
         /// Single-flight deliver: idle → inFlight → succeeded (or back to idle on failure).
         var deliveryPhase: DeliveryPhase
@@ -56,6 +66,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
     private var entries: [String: Entry] = [:]
     private var fingerprintIndex: [String: String] = [:]
     private var expirationHandler: (@Sendable (String) -> Void)?
+    private var revisionHandler: (@Sendable (String, SendProposal, [ProposalInstructionResult]) -> Void)?
     private var expiryTasks: [String: Task<Void, Never>] = [:]
 
     public init(
@@ -154,6 +165,12 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             proposal: proposal,
             expiresAt: expiresAt,
             decision: nil,
+            pendingInterim: nil,
+            agentPayload: nil,
+            awaitingRevision: false,
+            revisionKind: nil,
+            revisionRoundTrips: 0,
+            revisionResults: [],
             expired: false,
             deliveryPhase: .idle,
             waiters: [],
@@ -195,7 +212,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
 
     private func peekAwaitState(id: String, soft: TimeInterval) -> PeekAwait {
         lock.lock()
-        guard let entry = entries[id] else {
+        guard var entry = entries[id] else {
             lock.unlock()
             return .finished(.unknown)
         }
@@ -206,6 +223,12 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         if let decision = entry.decision {
             lock.unlock()
             return .finished(.decided(decision))
+        }
+        if let interim = entry.pendingInterim {
+            entry.pendingInterim = nil
+            entries[id] = entry
+            lock.unlock()
+            return .finished(.decided(interim))
         }
         let remainingHard = entry.expiresAt.timeIntervalSince(now())
         lock.unlock()
@@ -227,20 +250,38 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         guard var live = entries[id] else { return .unknown }
         if live.expired { return .expired }
         if let decision = live.decision { return .decided(decision) }
+        if let interim = live.pendingInterim {
+            live.pendingInterim = nil
+            entries[id] = live
+            return .decided(interim)
+        }
         live.waiters.append(Waiter(id: waiterID, continuation: continuation))
         entries[id] = live
         return nil
     }
 
-    /// Record a human decision. Second resolve is a no-op. Returns whether this call took effect.
+    /// Record a terminal human decision (`send`, `openInMail`, `cancel`). Second resolve is a no-op.
     @discardableResult
-    public func resolve(id: String, decision: SendProposalDecision) -> Bool {
+    public func resolve(
+        id: String,
+        decision: SendProposalDecision,
+        payload: ProposalAgentPayload? = nil
+    ) -> Bool {
         lock.lock()
         guard var entry = entries[id], !entry.expired, entry.decision == nil else {
             lock.unlock()
             return false
         }
         entry.decision = decision
+        entry.pendingInterim = nil
+        entry.awaitingRevision = false
+        entry.revisionKind = nil
+        switch decision {
+        case .send, .reviseRequested, .attentionRequested:
+            if let payload { entry.agentPayload = payload }
+        case .cancel, .openInMail:
+            entry.agentPayload = payload
+        }
         entry.terminalAt = now()
         let waiters = entry.waiters
         entry.waiters = []
@@ -267,6 +308,12 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             expire(id: id)
         }
         sweepTerminal()
+    }
+
+    public func agentID(for id: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[id]?.agentID
     }
 
     public func proposal(id: String) -> SendProposal? {
@@ -330,6 +377,180 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         return entries[id]?.expired == true
     }
 
+    /// Keep an agent payload on the open proposal until `resolve` or the next interim.
+    public func stagePayload(id: String, payload: ProposalAgentPayload) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var entry = entries[id], !entry.expired, entry.decision == nil else { return }
+        entry.agentPayload = payload
+        entries[id] = entry
+    }
+
+    /// Replace the draft that delivery will use. Does not decide or reset the deadline.
+    public func updateDraft(id: String, proposal: SendProposal) {
+        lock.lock()
+        guard var entry = entries[id], !entry.expired, entry.decision == nil, proposal.id == id else {
+            lock.unlock()
+            return
+        }
+        fingerprintIndex[entry.fingerprint] = nil
+        let fp = Self.fingerprint(
+            agentID: entry.agentID,
+            to: proposal.to,
+            cc: proposal.cc,
+            bcc: proposal.bcc,
+            sender: proposal.sender,
+            subject: proposal.subject,
+            body: proposal.body
+        )
+        entry.fingerprint = fp
+        entry.proposal = proposal
+        fingerprintIndex[fp] = id
+        entries[id] = entry
+        lock.unlock()
+    }
+
+    public func agentPayload(id: String) -> ProposalAgentPayload? {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[id]?.agentPayload
+    }
+
+    public func revisionRoundTrips(id: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[id]?.revisionRoundTrips ?? 0
+    }
+
+    public func revisionResults(id: String) -> [ProposalInstructionResult] {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[id]?.revisionResults ?? []
+    }
+
+    /// Further Ask to revise / Ask to look. Send, Open in Mail, and Cancel stay available.
+    public func canRequestRevision(id: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[id], !entry.expired, entry.decision == nil else { return false }
+        return entry.revisionRoundTrips < Self.revisionCap
+    }
+
+    /// Proposal ids for this agent that are waiting on `propose_send` with `revises`.
+    public func awaitingRevisionIDs(agentID: String) -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.values
+            .filter {
+                $0.agentID == agentID
+                    && $0.awaitingRevision
+                    && !$0.expired
+                    && $0.decision == nil
+            }
+            .map(\.proposalId)
+            .sorted()
+    }
+
+    public func setRevisionHandler(
+        _ handler: (@Sendable (String, SendProposal, [ProposalInstructionResult]) -> Void)?
+    ) {
+        lock.lock()
+        revisionHandler = handler
+        lock.unlock()
+    }
+
+    /// Wake `await_propose_send` with revise or attention. Does not deliver mail, cancel, or move the deadline.
+    @discardableResult
+    public func publishInterim(
+        id: String,
+        decision: SendProposalDecision,
+        payload: ProposalAgentPayload
+    ) -> Bool {
+        guard decision == .reviseRequested || decision == .attentionRequested else { return false }
+        lock.lock()
+        guard var entry = entries[id], !entry.expired, entry.decision == nil else {
+            lock.unlock()
+            return false
+        }
+        guard entry.revisionRoundTrips < Self.revisionCap else {
+            lock.unlock()
+            return false
+        }
+        entry.revisionRoundTrips += 1
+        entry.awaitingRevision = true
+        entry.revisionKind = decision
+        entry.agentPayload = payload
+        entry.pendingInterim = decision
+        let waiters = entry.waiters
+        entry.waiters = []
+        if !waiters.isEmpty {
+            entry.pendingInterim = nil
+        }
+        let expiresAt = entry.expiresAt
+        entries[id] = entry
+        lock.unlock()
+        _ = expiresAt
+        for waiter in waiters {
+            waiter.continuation.resume(returning: .decided(decision))
+        }
+        return true
+    }
+
+    /// Swap the draft in place after `propose_send` `revises`. Same id, same hard deadline.
+    public func applyRevision(
+        agentID: String,
+        proposalId: String,
+        proposal: SendProposal,
+        results: [ProposalInstructionResult] = []
+    ) throws {
+        lock.lock()
+        guard var entry = entries[proposalId] else {
+            lock.unlock()
+            throw ProposalRevisionApplyError.unknown
+        }
+        if entry.expired {
+            lock.unlock()
+            throw ProposalRevisionApplyError.expired
+        }
+        guard entry.agentID == agentID else {
+            lock.unlock()
+            throw ProposalRevisionApplyError.wrongAgent
+        }
+        guard entry.awaitingRevision,
+              entry.decision == nil,
+              entry.revisionKind == .reviseRequested || entry.revisionKind == .attentionRequested
+        else {
+            lock.unlock()
+            throw ProposalRevisionApplyError.notWaitingForRevision
+        }
+        guard proposal.id == proposalId else {
+            lock.unlock()
+            throw ProposalRevisionApplyError.unknown
+        }
+        fingerprintIndex[entry.fingerprint] = nil
+        let fp = Self.fingerprint(
+            agentID: agentID,
+            to: proposal.to,
+            cc: proposal.cc,
+            bcc: proposal.bcc,
+            sender: proposal.sender,
+            subject: proposal.subject,
+            body: proposal.body
+        )
+        entry.fingerprint = fp
+        entry.proposal = proposal
+        entry.awaitingRevision = false
+        entry.revisionKind = nil
+        entry.pendingInterim = nil
+        entry.agentPayload = nil
+        entry.revisionResults = results
+        fingerprintIndex[fp] = proposalId
+        entries[proposalId] = entry
+        let handler = revisionHandler
+        lock.unlock()
+        handler?(proposalId, proposal, results)
+    }
+
     // MARK: - Private
 
     private func softTimeout(id: String, waiterID: UUID) {
@@ -347,6 +568,14 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             entries[id] = entry
             lock.unlock()
             waiter.continuation.resume(returning: .expired)
+            return
+        }
+        if let interim = entry.pendingInterim {
+            entry.pendingInterim = nil
+            let waiter = entry.waiters.remove(at: idx)
+            entries[id] = entry
+            lock.unlock()
+            waiter.continuation.resume(returning: .decided(interim))
             return
         }
         if let decision = entry.decision {

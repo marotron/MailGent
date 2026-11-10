@@ -45,6 +45,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private final class SendProposalRecord {
         let window: NSWindow
         let model: SendProposalConfirmModel
+        var editModel: SendProposalEditModel?
         var continuation: CheckedContinuation<SendProposalDecision, Never>?
         /// Continuation resumed (agent may see outcome); window may still be open for Done.
         var decisionReported = false
@@ -60,6 +61,23 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             self.model = model
             self.continuation = continuation
         }
+    }
+
+    func replaceSendProposalDraft(
+        id: String,
+        proposal: SendProposal,
+        roundTrips: Int,
+        resolved: ProposeSendResolvedContext?,
+        results: [ProposalInstructionResult]
+    ) {
+        guard let record = sendProposals[id], let edit = record.editModel else { return }
+        edit.applyAgentDraft(
+            proposal,
+            roundTrips: roundTrips,
+            resolved: resolved,
+            results: results
+        )
+        record.window.title = edit.windowTitle
     }
 
     /// Runs AppleScript send while the confirm stays open. Returns nil on success, else error copy.
@@ -308,31 +326,79 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         expiresAt: Date,
         resolvedContext: ProposeSendResolvedContext? = nil,
         onOpenContextOriginal: @escaping (ContextThreadOriginal) -> Void = { _ in },
-        handoffSend: SendProposalHandoff? = nil
+        handoffSend: SendProposalHandoff? = nil,
+        edit: SendProposalEditLaunch? = nil,
+        onStageSend: ((SendProposal, ProposalAgentPayload) -> Void)? = nil,
+        onStageOpen: ((SendProposal) -> Void)? = nil,
+        onInterim: ((SendProposalDecision, ProposalAgentPayload) -> Void)? = nil
     ) async -> SendProposalDecision {
         await withCheckedContinuation { continuation in
             let model = SendProposalConfirmModel()
-            let dialog = SendProposalPromptDialog(
-                model: model,
-                proposal: proposal,
-                resolvedContext: resolvedContext,
-                onSend: { [weak self] in
-                    self?.beginSendHandoff(id: proposal.id, proposal: proposal, handoff: handoffSend)
-                },
-                onOpenInMail: { [weak self] in
-                    self?.finishSendProposal(id: proposal.id, decision: .openInMail)
-                },
-                onCancel: { [weak self] in
-                    self?.finishSendProposal(id: proposal.id, decision: .cancel)
-                },
-                onRetry: { [weak self] in
-                    self?.beginSendHandoff(id: proposal.id, proposal: proposal, handoff: handoffSend)
-                },
-                onDone: { [weak self] in
-                    self?.dismissSendProposalWindow(id: proposal.id)
-                },
-                onOpenContextOriginal: onOpenContextOriginal
-            )
+            let editModel: SendProposalEditModel?
+            let root: AnyView
+            if let edit {
+                let experimental = SendProposalEditModel(
+                    proposal: proposal,
+                    constants: edit.constants,
+                    agentID: edit.agentID
+                )
+                experimental.resolved = resolvedContext
+                experimental.revisionRoundTrips = edit.roundTrips
+                editModel = experimental
+                root = AnyView(
+                    SendProposalEditDialog(
+                        model: experimental,
+                        shortcut: edit.shortcut,
+                        notePresets: edit.notePresets,
+                        onSend: { [weak self] delivered, payload in
+                            onStageSend?(delivered, payload)
+                            self?.beginSendHandoff(id: delivered.id, proposal: delivered, handoff: handoffSend)
+                        },
+                        onOpenInMail: { [weak self] delivered in
+                            onStageOpen?(delivered)
+                            self?.finishSendProposal(id: delivered.id, decision: .openInMail)
+                        },
+                        onCancel: { [weak self] in
+                            self?.finishSendProposal(id: proposal.id, decision: .cancel)
+                        },
+                        onRetry: { [weak self] delivered in
+                            self?.beginSendHandoff(id: delivered.id, proposal: delivered, handoff: handoffSend)
+                        },
+                        onDone: { [weak self] in
+                            self?.dismissSendProposalWindow(id: proposal.id)
+                        },
+                        onInterim: { decision, payload in
+                            onInterim?(decision, payload)
+                        },
+                        onOpenContextOriginal: onOpenContextOriginal
+                    )
+                )
+            } else {
+                editModel = nil
+                root = AnyView(
+                    SendProposalPromptDialog(
+                        model: model,
+                        proposal: proposal,
+                        resolvedContext: resolvedContext,
+                        onSend: { [weak self] in
+                            self?.beginSendHandoff(id: proposal.id, proposal: proposal, handoff: handoffSend)
+                        },
+                        onOpenInMail: { [weak self] in
+                            self?.finishSendProposal(id: proposal.id, decision: .openInMail)
+                        },
+                        onCancel: { [weak self] in
+                            self?.finishSendProposal(id: proposal.id, decision: .cancel)
+                        },
+                        onRetry: { [weak self] in
+                            self?.beginSendHandoff(id: proposal.id, proposal: proposal, handoff: handoffSend)
+                        },
+                        onDone: { [weak self] in
+                            self?.dismissSendProposalWindow(id: proposal.id)
+                        },
+                        onOpenContextOriginal: onOpenContextOriginal
+                    )
+                )
+            }
             let withContext = resolvedContext != nil
             let size = withContext
                 ? SendProposalPromptDialog.contextWindowSize
@@ -344,20 +410,22 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 beginPresentation()
             }
             let window = makeWindow(
-                title: model.windowTitle,
+                title: editModel?.windowTitle ?? model.windowTitle,
                 size: size,
                 minSize: minSize,
-                root: dialog
+                root: root
             )
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: withContext ? 1100 : 900, height: 900)
             attachProposeSendExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: sendProposals.count)
-            sendProposals[proposal.id] = SendProposalRecord(
+            let record = SendProposalRecord(
                 window: window,
                 model: model,
                 continuation: continuation
             )
+            record.editModel = editModel
+            sendProposals[proposal.id] = record
             AskQueueIndicator.shared.register(
                 id: proposal.id,
                 agent: proposal.agentName,
@@ -667,7 +735,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         if case .sending = record.model.phase { return }
         record.handoffTask?.cancel()
         record.model.phase = .sending
-        record.window.title = record.model.windowTitle
+        record.editModel?.phase = .sending
+        record.window.title = record.editModel?.windowTitle ?? record.model.windowTitle
         hideProposeSendExpiryTitlebar(on: record.window)
         let handoffSend = handoff
         record.handoffTask = Task { @MainActor [weak self] in
@@ -680,17 +749,20 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             guard let self, let live = self.sendProposals[id], !live.decisionReported else { return }
             if Task.isCancelled {
                 live.model.phase = .failed("Send was cancelled.")
-                live.window.title = live.model.windowTitle
+                live.editModel?.phase = .failed("Send was cancelled.")
+                live.window.title = live.editModel?.windowTitle ?? live.model.windowTitle
                 return
             }
             if let errorMessage {
                 live.model.phase = .failed(errorMessage)
-                live.window.title = live.model.windowTitle
+                live.editModel?.phase = .failed(errorMessage)
+                live.window.title = live.editModel?.windowTitle ?? live.model.windowTitle
                 MailGentLog.trace("send proposal handoff failed id=\(id) \(errorMessage)")
                 return
             }
             live.model.phase = .handedOff
-            live.window.title = live.model.windowTitle
+            live.editModel?.phase = .handedOff
+            live.window.title = live.editModel?.windowTitle ?? live.model.windowTitle
             live.handoffTask = nil
             self.reportSendProposalDecision(id: id, decision: .send)
         }
@@ -1809,4 +1881,12 @@ private struct CompanionReadPage: View {
             }
         }
     }
+}
+
+struct SendProposalEditLaunch {
+    var constants: [SecretConstant]
+    var agentID: String
+    var shortcut: ProposalReferShortcut
+    var notePresets: [String]
+    var roundTrips: Int
 }
