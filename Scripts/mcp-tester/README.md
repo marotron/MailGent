@@ -28,12 +28,24 @@ npm run tauri dev
 | `MAILGENT_BEARER` | _(empty)_ | Prefills Bearer; required against real MailGent |
 | `MAILGENT_MCP_URL` | `http://127.0.0.1:8788/mcp` | Prefills URL |
 
-Fake server (no real mail):
+Fake servers (no real mail):
 
 ```bash
 python3 Scripts/tests/await-ask/fake_mailgent.py --port 8798
 # Connect to http://127.0.0.1:8798/mcp — any bearer
+
+python3 Scripts/tests/propose-send-envelope/fake_mailgent.py --port 8799
+# Connect to http://127.0.0.1:8799/mcp — bearer test (Cursor) or other (Admin)
 ```
+
+Scripted self-checks (no GUI):
+
+```bash
+python3 Scripts/tests/await-ask/fake_mailgent.py --self-check
+python3 Scripts/tests/propose-send-envelope/fake_mailgent.py --self-check
+```
+
+When changing MCP tools or propose/await behaviour, update this tester **and** the matching `Scripts/tests/*` harness.
 
 ## Flow
 
@@ -42,7 +54,7 @@ python3 Scripts/tests/await-ask/fake_mailgent.py --port 8798
 3. Soft timeout defaults: `await_ask` **25**, `await_propose_send` **60**. HTTP client budget is at least ~35s (soft + 10).
 4. `list` / `search` / `list_new` render a hit list: **Get** fires `get` immediately; **Fill** only seeds args; **Open** calls `open_in_mail`. Double-click a row = Get.
 5. Identicons on account / message / ask IDs (same seed → same face) so you can match the Ask dialog’s account prefix at a glance.
-6. Shortcuts: Status · List · List new · Search… · Update · Await ask (last `askId`).
+6. Shortcuts: Status · List · List new · Search… · Update · Await ask (last `askId`) · Propose send · Await propose (last `proposalId`).
 7. **Session export** (History pane): each call auto-saves to `Scripts/mcp-tester/exports/last-session.json`. **Export** also writes a stamped copy + copies JSON to the clipboard. **Copy log** copies only. Bearer is never written.
 
 ### Agent verification

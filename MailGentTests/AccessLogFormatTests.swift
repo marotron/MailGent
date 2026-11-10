@@ -203,6 +203,30 @@ struct AccessLogFormatTests {
         #expect(AccessLogFormat.compactResponse(#"{"secrets":[]}"#) == "0 secrets")
     }
 
+    @Test func compactResponsePrefersProposeSendStatusAndShortId() {
+        #expect(
+            AccessLogFormat.compactResponse(
+                #"{"status":"awaiting_user","proposalId":"AAEE6134-1234-5678","expiresAt":"x","message":"long"}"#
+            ) == "awaiting_user · AAEE6134"
+        )
+        #expect(
+            AccessLogFormat.compactResponse(
+                #"{"status":"already_sent","proposalId":"D91C0311-abcd","outcome":"send"}"#
+            ) == "already_sent · send · D91C0311"
+        )
+    }
+
+    @Test func shortProposalIdFromEntry() {
+        let entry = AuditEntry(
+            kind: .proposeSend,
+            agentID: "a",
+            agentName: "Grok Bot",
+            requestSummary: #"{"proposalId":"8E33A48D-ffff","human":true}"#,
+            responseSummary: #"{"outcome":"send"}"#
+        )
+        #expect(AccessLogFormat.shortProposalId(for: entry) == "8E33A48D")
+    }
+
     @Test func displaySecretsParsesAllowlistItems() {
         let entry = AuditEntry(
             kind: .listSecrets,

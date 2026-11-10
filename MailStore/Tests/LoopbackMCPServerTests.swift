@@ -1422,6 +1422,96 @@ struct LoopbackMCPServerTests {
         #expect(first["proposalId"] as? String == second["proposalId"] as? String)
     }
 
+    @Test func proposeSendDedupesSameEnvelopeDifferentBody() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let first = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Draft A"]
+        )
+        let second = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Fresh copy"]
+        )
+        #expect(first["proposalId"] as? String == second["proposalId"] as? String)
+        #expect(second["status"] as? String == "awaiting_user")
+        #expect((second["message"] as? String)?.contains("already open") == true)
+    }
+
+    @Test func proposeSendAlreadySentAfterSend() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in .send }
+        )
+        defer { env.remove() }
+
+        let first = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Draft A"]
+        )
+        let proposalId = try #require(first["proposalId"] as? String)
+        let outcome = try await Self.awaitProposeSendPayload(
+            env.server,
+            credential: env.credential,
+            proposalId: proposalId
+        )
+        #expect(outcome["outcome"] as? String == "send")
+
+        let second = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Fresh copy"]
+        )
+        #expect(second["status"] as? String == "already_sent")
+        #expect(second["proposalId"] as? String == proposalId)
+        #expect(second["outcome"] as? String == "send")
+    }
+
+    @Test func proposeSendConflictAcrossAgents() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let otherCredential = "other-token"
+        _ = try env.pairing.register(
+            name: "Admin",
+            trustClass: .machineLocal,
+            credential: otherCredential
+        )
+
+        let first = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Draft A"]
+        )
+        let second = try await Self.proposeSendAck(
+            env.server,
+            credential: otherCredential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Other draft"]
+        )
+        #expect(second["status"] as? String == "conflict")
+        #expect(second["proposalId"] as? String == first["proposalId"] as? String)
+        #expect(second["agentName"] as? String == "Cursor")
+    }
+
     @Test func awaitProposeSendUnknownIdErrors() async throws {
         let env = try LoopbackFixture(
             mailOutgoingSender: FakeMailOutgoingSender(),

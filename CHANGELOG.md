@@ -2,9 +2,22 @@
 
 All notable changes to MailGent are documented here.
 
-Format: [Keep a Changelog](https://keepachangelog.com/). **Every version bump must add a new `## [X.Y.Z]` section here** (same commit as `project.yml` / README / MCP version). See `.cursor/rules/versioning.mdc`.
+Format: [Keep a Changelog](https://keepachangelog.com/). While a line is a **release candidate**, keep bullets under `## [Unreleased]`. On ship, promote that block to a dated `## [X.Y.Z]` (same commit as clearing `releaseCandidate`, README, PRIVACY). See `.cursor/rules/versioning.mdc`.
 
-Release sections use semver only (`## [0.4.0]`). The **alpha** stage is called out in README, About, and GitHub Release titles — not in `MARKETING_VERSION` or git tags.
+Release section headings use semver only (`## [0.4.0]`). **alpha** stays in README / About / GitHub titles. **`-rc.N`** is display/MCP only — never in `MARKETING_VERSION` or ship tags.
+
+## [Unreleased]
+
+### Added
+
+- Propose-send **envelope guards**: same to/cc/bcc/sender/subject reuses one open proposal (body changes do not mint a second confirm); after send, bare re-propose returns `already_sent` for the hard-timeout window; another agent on the same open envelope gets `conflict`
+- Access Log shows short `proposalId` chips, clearer `status · outcome` compact responses, and call duration labels
+- Local dogfood: `Scripts/tests/propose-send-envelope/` harness (`--self-check`) + mcp-tester **Propose send** / **Await propose** shortcuts
+- Versioning candidates: About / menu bar / MCP show `X.Y.Z-rc.N` while dogfooding (`MailGentReleaseCandidate`); Apple marketing string stays plain `X.Y.Z`
+
+### Changed
+
+- `propose_send` / `await_propose_send` tool copy steers agents to keep polling the same `proposalId` instead of bare re-proposing
 
 ## [0.24.0] - 2026-11-09
 

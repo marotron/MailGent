@@ -65,9 +65,9 @@ A GitHub Release is created **only** by the Release workflow after a matching ta
 
 ### Human steps (before Actions)
 
-1. On a `feat/…` / `fix/…` / `hotfix/…` branch: bump `MARKETING_VERSION` + build number in `project.yml`, regenerate the Xcode project, update `CHANGELOG.md` and the full `README.md` feature sections. Commit only after confirm (see `.cursor/rules/versioning.mdc`).
-2. Merge to `main`.
-3. On the ship commit, create a **signed** annotated tag matching `MARKETING_VERSION`, verify, push:
+1. On a `feat/…` / `fix/…` / `hotfix/…` branch: open or bump a **candidate** (`MARKETING_VERSION` + `MailGentReleaseCandidate` / `MailGentVersion`, build number), keep CHANGELOG under `## [Unreleased]`, regenerate via `xcodegen`. Do **not** ship-tag while `releaseCandidate > 0` (see `.cursor/rules/versioning.mdc`).
+2. On ship: set `releaseCandidate` to `0`, promote Unreleased → dated `## [X.Y.Z]`, full README + PRIVACY, merge to `main` as needed.
+3. On the ship commit, create a **signed** annotated tag matching `MARKETING_VERSION` (candidate must be `0`), verify, push:
 
 ```bash
 git tag -s v0.13.2 -m "0.13.2 alpha"

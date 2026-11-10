@@ -24,11 +24,15 @@ Apache-2.0 + `NOTICE`; name and icon stay ours. Homebrew cask is **future** (aft
 
 ### Versioning
 
-Bump `MARKETING_VERSION` only when a user-facing change is ready to land. **Always update root `CHANGELOG.md` and the full `README.md` (headline + ## Features subsections, not headline-only) in the same commit** — see `.cursor/rules/versioning.mdc`.
+Open the next version as a **candidate** when user-facing work starts: `X.Y.Z-rc.1` → `rc.2` → ship `X.Y.Z` (Apple `MARKETING_VERSION` stays plain `X.Y.Z`; `-rc.N` is display/MCP only). While candidate, keep notes under `## [Unreleased]`; promote CHANGELOG + full README + PRIVACY only on ship. See `.cursor/rules/versioning.mdc` (MailGent dogfood — not global yet).
 
-Ship tags must be **signed**: `git tag -s vX.Y.Z -m "…"`, then `git verify-tag` before push. Never lightweight or unsigned annotated release tags.
+Ship tags must be **signed** and only when `releaseCandidate == 0`: `git tag -s vX.Y.Z -m "…"`, then `git verify-tag` before push. Never lightweight or unsigned annotated ship tags.
 
 After bumping version, run `python3 ../scripts/update-dev-index.py` (from repo root: `python3 ~/dev/scripts/update-dev-index.py`) to refresh `~/dev/INDEX.md`.
+
+### MCP dogfood
+
+When changing MCP tools / propose-await behaviour: update `Scripts/mcp-tester/` and matching `Scripts/tests/*` harnesses (`--self-check`). See `.cursor/rules/mcp-dogfood.mdc`.
 
 ### CI/CD
 

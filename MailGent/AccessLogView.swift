@@ -271,6 +271,15 @@ private struct AccessLogRow: View {
             AuditKindBadge(kind: entry.kind, compact: true)
                 .fixedSize()
             AgentGlyph(name: entry.agentName, size: 13)
+            if let proposalChip = proposalIdChip {
+                Text(proposalChip)
+                    .font(.system(size: 9, weight: .semibold).monospaced())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.12), in: Capsule())
+                    .fixedSize()
+            }
             if !requestValue.isEmpty {
                 Text(requestValue)
                     .font(.caption)
@@ -359,6 +368,15 @@ private struct AccessLogRow: View {
         return entry.requestSummary
     }
 
+    private var proposalIdChip: String? {
+        switch entry.kind {
+        case .proposeSend, .awaitProposeSend:
+            return AccessLogFormat.shortProposalId(for: entry)
+        default:
+            return nil
+        }
+    }
+
     private var responseShort: String {
         switch entry.outcome {
         case .ok:
@@ -379,10 +397,16 @@ private struct AccessLogRow: View {
     }
 
     private var timeLabel: String {
+        let clock: String
         if Calendar.current.isDateInToday(entry.at) {
-            return entry.at.formatted(date: .omitted, time: .shortened)
+            clock = entry.at.formatted(date: .omitted, time: .shortened)
+        } else {
+            clock = entry.at.formatted(date: .numeric, time: .shortened)
         }
-        return entry.at.formatted(date: .numeric, time: .shortened)
+        if let duration = AccessLogFormat.compactDuration(for: entry) {
+            return "\(clock) · \(duration)"
+        }
+        return clock
     }
 
     private var accessibilityText: String {
@@ -1541,10 +1565,61 @@ enum AccessLogFormat {
         if let source = obj["source"] as? String {
             return "source=\(source)"
         }
+        // propose_send / await_propose_send: prefer status or outcome over raw JSON.
+        if obj["status"] != nil || obj["outcome"] != nil {
+            var parts: [String] = []
+            if let status = obj["status"] as? String, !status.isEmpty {
+                parts.append(status)
+            }
+            if let outcome = obj["outcome"] as? String, !outcome.isEmpty {
+                if parts.last != outcome {
+                    parts.append(outcome)
+                }
+            }
+            if let id = obj["proposalId"] as? String, !id.isEmpty {
+                parts.append(shortProposalId(id))
+            }
+            if !parts.isEmpty {
+                return parts.joined(separator: " · ")
+            }
+        }
         if let error = obj["error"] as? String {
             return error
         }
         return text
+    }
+
+    /// Short proposal id chip for propose / await Access Log rows.
+    static func shortProposalId(for entry: AuditEntry) -> String? {
+        if let id = jsonString(entry.responseSummary, key: "proposalId"), !id.isEmpty {
+            return shortProposalId(id)
+        }
+        if let id = jsonString(entry.requestSummary, key: "proposalId"), !id.isEmpty {
+            return shortProposalId(id)
+        }
+        return nil
+    }
+
+    static func shortProposalId(_ id: String) -> String {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 8 else { return trimmed }
+        return String(trimmed.prefix(8))
+    }
+
+    /// Compact duration when `finishedAt` is present (e.g. `1.2s`, `45s`, `3m`).
+    static func compactDuration(for entry: AuditEntry) -> String? {
+        guard let seconds = entry.duration, seconds >= 0 else { return nil }
+        if seconds < 10 {
+            return String(format: "%.1fs", seconds)
+        }
+        if seconds < 60 {
+            return "\(Int(seconds.rounded()))s"
+        }
+        let minutes = Int((seconds / 60).rounded())
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+        return "\(minutes / 60)h"
     }
 
     /// Successful search / list / list_new / placements call that returned zero items.
