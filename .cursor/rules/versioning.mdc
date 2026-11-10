@@ -162,6 +162,8 @@ Closeout must propose the signed form, e.g. `Proposed tag: git tag -s vX.Y.Z -m 
 
 Workflow sets release title from the ship tag: strip leading `v`, append ` alpha`. Release notes start with every `CHANGELOG.md` section since the previous tag through this version (`Scripts/release/notes.sh`), then `.github/RELEASE_BODY.md`.
 
+**Release-note images:** do **not** embed screenshots (e.g. `install-window.png`) in every release. Include an image only when that ship’s CHANGELOG window actually changed what the image shows (e.g. DMG install-guide layout → 0.23.5). `notes.sh` gates the DMG guide image on CHANGELOG keywords; keep `RELEASE_BODY.md` text-only for Install / Gatekeeper.
+
 ## Closeout
 
 Every version / feature closeout report in chat **must** include a **Dogfood (mcp-tester)** section with visual **Do → Expect** scenarios for this change (UI labels, JSON statuses, Access Log chips). Point at `Scripts/mcp-tester/README.md`. See also `.cursor/rules/mcp-dogfood.mdc`.

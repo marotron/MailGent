@@ -6,10 +6,6 @@
 2. Open the disk image — the window shows drag-to-Applications, **Open MailGent**, optional Keychain guidance for Secret constants, plus Gatekeeper notes.
 3. Drag **MailGent** to **Applications**, then double-click **Open MailGent** (or open it from Applications). If Gatekeeper blocks first launch, follow the optional steps on the background.
 
-### DMG install guide
-
-<img src="https://raw.githubusercontent.com/marotron/MailGent/v@VERSION@/Scripts/release/dmg-assets/install-window.png" alt="MailGent DMG install guide" width="512">
-
 ## macOS Gatekeeper warning
 
 **This DMG is unsigned/ad-hoc unless the release workflow had `MAILGENT_SIGN_IDENTITY` and `MAILGENT_NOTARY_PROFILE` repository secrets set.** On other Macs, Gatekeeper may show *“MailGent Not Opened”* / *“was blocked to protect your Mac”* on first launch.

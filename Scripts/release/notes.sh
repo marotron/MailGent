@@ -94,6 +94,14 @@ if [[ -z "$CHANGES" ]]; then
   exit 1
 fi
 
+# Optional release screenshots: only when this version’s CHANGELOG window
+# actually mentions them. Do not embed install-window.png on every ship.
+DMG_GUIDE_IMAGE=""
+INCLUDE_DMG_GUIDE_IMAGE=0
+if printf '%s\n' "$CHANGES" | grep -qiE 'DMG install guide|pretty DMG|dmg-assets|install-window\.png|DMG Finder window|Finder window hides its path bar'; then
+  INCLUDE_DMG_GUIDE_IMAGE=1
+fi
+
 mkdir -p dist
 {
   if [[ -n "${PREV_VERSION}" && "${PREV_VERSION}" != "${VERSION}" ]]; then
@@ -101,7 +109,26 @@ mkdir -p dist
   fi
   printf '%s\n' "$CHANGES"
   echo
-  sed "s/@VERSION@/${VERSION}/g" .github/RELEASE_BODY.md
+  # Optional screenshots only when CHANGELOG for this ship mentions them.
+  if [[ "$INCLUDE_DMG_GUIDE_IMAGE" -eq 1 ]]; then
+    sed "s/@VERSION@/${VERSION}/g" .github/RELEASE_BODY.md \
+      | awk -v ver="$VERSION" '
+          /^## macOS Gatekeeper warning$/ {
+            print ""
+            print "### DMG install guide"
+            print ""
+            print "<img src=\"https://raw.githubusercontent.com/marotron/MailGent/v" ver "/Scripts/release/dmg-assets/install-window.png\" alt=\"MailGent DMG install guide\" width=\"512\">"
+            print ""
+          }
+          { print }
+        '
+  else
+    sed "s/@VERSION@/${VERSION}/g" .github/RELEASE_BODY.md
+  fi
 } > dist/RELEASE_NOTES.md
 
-echo "Wrote dist/RELEASE_NOTES.md for ${VERSION} (since ${PREV_VERSION:-beginning})"
+if [[ "$INCLUDE_DMG_GUIDE_IMAGE" -eq 1 ]]; then
+  echo "Wrote dist/RELEASE_NOTES.md for ${VERSION} (since ${PREV_VERSION:-beginning}; +DMG install guide image)"
+else
+  echo "Wrote dist/RELEASE_NOTES.md for ${VERSION} (since ${PREV_VERSION:-beginning})"
+fi

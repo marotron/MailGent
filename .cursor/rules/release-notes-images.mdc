@@ -1,0 +1,20 @@
+---
+description: Release-note screenshots only when CHANGELOG for that ship makes them relevant.
+globs: .github/RELEASE_BODY.md,Scripts/release/notes.sh,CHANGELOG.md
+alwaysApply: true
+---
+
+# Release-note images
+
+Do **not** embed screenshots in every GitHub Release body.
+
+| Image | Include when |
+|-------|----------------|
+| `Scripts/release/dmg-assets/install-window.png` | That ship’s CHANGELOG mentions a DMG install-guide / Finder layout change (e.g. `0.23.5`) |
+
+## Rules
+
+1. Keep [`.github/RELEASE_BODY.md`](../../.github/RELEASE_BODY.md) **text-only** (Install / Gatekeeper / Requirements).
+2. Optional images are gated in [`Scripts/release/notes.sh`](../../Scripts/release/notes.sh) against the CHANGELOG window for the tag — not hard-coded into every release.
+3. When a future ship changes the DMG guide, update `install-window.png` **and** ensure the CHANGELOG bullet matches the gate keywords so the image appears once for that version.
+4. Editing an unrelated ship’s release notes → strip leftover images that belong to an older CHANGELOG only.

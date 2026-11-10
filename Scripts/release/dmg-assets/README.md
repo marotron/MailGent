@@ -6,7 +6,7 @@ Used by `Scripts/release/dmg.sh` for the Finder install window (drag → Applica
 |------|------|
 | `background.png` | Finder window background (2× Retina @ 144 DPI; height measured from `#canvas`) |
 | `DS_Store` | Optional Finder layout blob (written by first local `make dmg`; used on CI) |
-| `install-window.png` | Real Finder screenshot of the mounted DMG; embedded in the GitHub release body |
+| `install-window.png` | Real Finder screenshot of the mounted DMG; optional in GitHub release notes only when that ship’s CHANGELOG mentions a DMG install-guide change (`Scripts/release/notes.sh`) |
 | `export.html` | Source for re-rendering the background |
 | `render-background.swift` | Regenerates `background.png` (also prints icon-slot centers) |
 | `Open MailGent` | Fallback Finder alias → `/Applications/MailGent.app` (CI / when AppleScript cannot remake it) |
