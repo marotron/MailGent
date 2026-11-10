@@ -19,7 +19,7 @@ The packaging script requests Finder hide its path bar. If Finder keeps it visib
 
 ## User-facing steps (document the same everywhere)
 
-Keep README, `.github/RELEASE_BODY.md`, and the DMG background in sync:
+Keep README, `.github/RELEASE_BODY.md` (text steps), and the DMG background in sync. Do **not** put `install-window.png` in every GitHub release — `notes.sh` embeds it only when that ship’s CHANGELOG mentions a DMG install-guide change:
 
 1. Drag **MailGent** → **Applications**, then double-click **Open MailGent**
 2. If macOS shows *Not Opened* (optional): click **Done** → **System Settings** → **Privacy & Security** → **Open Anyway** → confirm → Touch ID / password
