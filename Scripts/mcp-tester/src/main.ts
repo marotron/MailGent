@@ -167,6 +167,8 @@ function setConnected(ok: boolean, message: string) {
     const name = btn.dataset.shortcut!;
     if (name === "await_ask") {
       btn.disabled = !ok || !lastAskId || inFlight;
+    } else if (name === "await_propose_send") {
+      btn.disabled = !ok || !lastProposalId || inFlight;
     } else if (name === "search") {
       btn.disabled = !ok || inFlight || !tools.some((t) => t.name === "search");
     } else {
@@ -935,6 +937,26 @@ async function onShortcut(name: string) {
   if (name === "await_ask") {
     if (!lastAskId) return;
     await fireAwaitAsk(lastAskId);
+    return;
+  }
+  if (name === "await_propose_send") {
+    if (!lastProposalId) return;
+    const args = {
+      proposalId: lastProposalId,
+      timeout: SOFT_DEFAULTS.await_propose_send,
+    };
+    selectTool("await_propose_send", args);
+    await callTool("await_propose_send", args);
+    return;
+  }
+  if (name === "propose_send") {
+    const args: Record<string, Json> = {
+      to: "alex@example.com",
+      subject: "Envelope dogfood",
+      body: "Hello from mcp-tester",
+    };
+    selectTool("propose_send", args);
+    await callTool("propose_send", args);
     return;
   }
   if (name === "search") {

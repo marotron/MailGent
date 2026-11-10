@@ -1,4 +1,5 @@
 import AppKit
+import MailStore
 import SwiftUI
 
 enum MailGentAboutInfo {
@@ -6,7 +7,26 @@ enum MailGentAboutInfo {
     static let releaseStage = "alpha"
 
     static var marketingVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? MailGentVersion.marketing
+    }
+
+    /// Info.plist `MailGentReleaseCandidate`; falls back to `MailGentVersion.releaseCandidate`.
+    static var releaseCandidate: Int {
+        if let raw = Bundle.main.object(forInfoDictionaryKey: "MailGentReleaseCandidate") as? String,
+           let value = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+        {
+            return value
+        }
+        if let value = Bundle.main.object(forInfoDictionaryKey: "MailGentReleaseCandidate") as? Int {
+            return value
+        }
+        return MailGentVersion.releaseCandidate
+    }
+
+    /// SemVer label including `-rc.N` while candidate.
+    static var versionLabel: String {
+        MailGentVersion.label(marketing: marketingVersion, releaseCandidate: releaseCandidate)
     }
 
     static var buildNumber: String {
@@ -14,13 +34,13 @@ enum MailGentAboutInfo {
     }
 
     static var versionLine: String {
-        "Version \(marketingVersion) \(releaseStage) (\(buildNumber))"
+        "Version \(versionLabel) \(releaseStage) (\(buildNumber))"
     }
 
     /// Compact menu-bar label; full stage string is in About and release metadata.
     static var menuBarVersionLabel: String {
-        guard !marketingVersion.isEmpty, marketingVersion != "—" else { return "—" }
-        return "v\(marketingVersion)"
+        guard !versionLabel.isEmpty, versionLabel != "—" else { return "—" }
+        return "v\(versionLabel)"
     }
 
     static let tagline = "macOS menu-bar companion beside Apple Mail."
