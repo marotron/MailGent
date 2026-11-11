@@ -1520,6 +1520,11 @@ struct LoopbackMCPServerTests {
             arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
         )
         let proposalID = try #require(ack["proposalId"] as? String)
+        // Prompter runs in a fire-and-forget Task after propose_send ack.
+        for _ in 0..<40 where prompterCalls.count < 1 {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(prompterCalls.count == 1)
         #expect(
             env.server.host.pendingProposals.publishInterim(
                 id: proposalID,
