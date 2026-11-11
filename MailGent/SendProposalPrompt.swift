@@ -269,7 +269,11 @@ struct SendProposalPromptDialog: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Unknown secret constants")
                     .font(.caption.weight(.semibold))
-                Text(proposal.secretConstantMissing.map { "[[mg:\($0)]]" }.joined(separator: ", "))
+                Text(
+                    proposal.secretConstantMissing
+                        .map { SecretConstantPlaceholders.token(for: $0) }
+                        .joined(separator: ", ")
+                )
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

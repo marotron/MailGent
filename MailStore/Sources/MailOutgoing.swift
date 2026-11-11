@@ -17,7 +17,7 @@ public struct SendProposal: Equatable, Sendable {
     public let secretConstantSpans: [SecretConstantResolveSpan]
     /// Human-only: placeholder names that could not be resolved (fail closed).
     public let secretConstantMissing: [String]
-    /// Body with `[[mg:name]]` still in place. Agent-facing diffs use this, not the resolved body.
+    /// Body with `{{mg:name}}` still in place. Agent-facing diffs use this, not the resolved body.
     public let tokenizedBody: String
 
     public init(

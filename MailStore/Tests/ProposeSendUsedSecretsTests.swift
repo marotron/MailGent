@@ -38,7 +38,7 @@ struct ProposeSendUsedSecretsTests {
 
     @Test func missingNamesAreNotListedAsReplaced() {
         // Fail-closed path: unresolved tokens produce no spans (and no strip rows).
-        let body = "Hi [[mg:missing]]"
+        let body = "Hi {{mg:missing}}"
         #expect(ProposeSendUsedSecrets.summaries(body: body, spans: []).isEmpty)
     }
 }

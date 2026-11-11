@@ -1,9 +1,9 @@
 import Foundation
 
-/// Body token grammar: `[[mg:name]]` with `name` matching `[a-z][a-z0-9_]*`.
+/// Body token grammar: `{{mg:name}}` with `name` matching `[a-z][a-z0-9_]*`.
 public enum SecretConstantPlaceholders {
-    public static let tokenPrefix = "[[mg:"
-    public static let tokenSuffix = "]]"
+    public static let tokenPrefix = "{{mg:"
+    public static let tokenSuffix = "}}"
 
     public static func isValidName(_ name: String) -> Bool {
         guard !name.isEmpty else { return false }
@@ -20,7 +20,7 @@ public enum SecretConstantPlaceholders {
 
     public static func find(in body: String) -> [SecretConstantPlaceholderMatch] {
         guard let regex = try? NSRegularExpression(
-            pattern: #"\[\[mg:([a-z][a-z0-9_]*)\]\]"#,
+            pattern: #"\{\{mg:([a-z][a-z0-9_]*)\}\}"#,
             options: []
         ) else {
             return []

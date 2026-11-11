@@ -64,7 +64,7 @@ import Testing
             constants: constants,
             agentID: "cursor"
         )
-        #expect(body == "Call me on [[mg:phone_mobile]] today")
+        #expect(body == "Call me on {{mg:phone_mobile}} today")
 
         let changes = ProposalPayloadBuilder.changes(
             beforeTo: ["Jo <jo@acme.example>"],
@@ -76,14 +76,14 @@ import Testing
             beforeSubject: "Hello",
             afterSubject: "Meet at +1 555 0142",
             beforeBody: "Hello +1 555 0142",
-            afterBody: "Hello [[mg:phone_mobile]]",
+            afterBody: "Hello {{mg:phone_mobile}}",
             constants: constants,
             agentID: "cursor"
         )
         #expect(changes.to == nil)
         #expect(changes.subject == ProposalFieldSwap(before: "Hello", after: "Meet at [redacted:phone_mobile]"))
         #expect(changes.body == [
-            ProposalTextHunk(before: "[redacted:phone_mobile]", after: "[[mg:phone_mobile]]")
+            ProposalTextHunk(before: "[redacted:phone_mobile]", after: "{{mg:phone_mobile}}")
         ])
         let redactedHome = ProposalRedaction.redact("Ship to 1 Secret Lane", constants: constants, agentID: "cursor")
         #expect(redactedHome == "Ship to [redacted]")
@@ -91,33 +91,33 @@ import Testing
     }
 
     @Test func selectionSnapAndQuoteKeepTheToken() {
-        let text = "Reach me at [[mg:phone_mobile]] tomorrow"
-        let token = "[[mg:phone_mobile]]"
+        let text = "Reach me at {{mg:phone_mobile}} tomorrow"
+        let token = "{{mg:phone_mobile}}"
         let tokenStart = text.distance(from: text.startIndex, to: text.range(of: token)!.lowerBound)
         let inside = tokenStart + 4
         let snapped = ProposalBodyTokens.snap(in: text, start: inside, end: inside + 3)
         #expect(snapped.start == tokenStart)
         #expect(snapped.end == tokenStart + token.count)
         let quote = ProposalBodyTokens.substring(text, start: snapped.start, end: snapped.end)
-        #expect(quote == "[[mg:phone_mobile]]")
+        #expect(quote == "{{mg:phone_mobile}}")
 
         let shown = "I'd like you at +1 555 0142 tomorrow"
         let tokenized = ProposalBodyTokens.literalsToTokens(shown, constants: [phone()], agentID: "cursor")
         let agent = ProposalRedaction.redact(tokenized, constants: [phone(), home()], agentID: "cursor")
-        #expect(agent == "I'd like you at [[mg:phone_mobile]] tomorrow")
+        #expect(agent == "I'd like you at {{mg:phone_mobile}} tomorrow")
         #expect(!agent.contains("+1 555 0142"))
     }
 
     @Test func missingPassageIsStaleAndQuoteStaysTokenized() {
         let pins = [
-            ProposalPin(id: "r1", quote: "call [[mg:phone_mobile]]", note: "check +1 555 0142"),
+            ProposalPin(id: "r1", quote: "call {{mg:phone_mobile}}", note: "check +1 555 0142"),
             ProposalPin(id: "r2", quote: "gone passage", note: "")
         ]
-        let refs = ProposalPins.anchor(pins, in: "Please call [[mg:phone_mobile]] soon") { text in
+        let refs = ProposalPins.anchor(pins, in: "Please call {{mg:phone_mobile}} soon") { text in
             ProposalRedaction.redact(text, constants: [phone()], agentID: "cursor")
         }
         #expect(refs[0].stale == false)
-        #expect(refs[0].quote == "call [[mg:phone_mobile]]")
+        #expect(refs[0].quote == "call {{mg:phone_mobile}}")
         #expect(refs[0].note == "check [redacted:phone_mobile]")
         #expect(!((refs[0].note ?? "").contains("+1 555 0142")))
         #expect(refs[1].stale == true)
@@ -242,7 +242,7 @@ import Testing
             proposalId: "p_8f2c",
             presets: ["Warmer"],
             note: "keep the Thursday time",
-            currentBody: "Hi [[mg:phone_mobile]]",
+            currentBody: "Hi {{mg:phone_mobile}}",
             userEdits: edits,
             references: [],
             context: nil,
@@ -255,7 +255,7 @@ import Testing
                 == "Regenerate the whole draft. Make it warmer. Note from the user: keep the Thursday time. The user also edited the draft by hand (userEdits). Keep those edits unless they conflict with the note."
         )
         #expect(payload.userEdits == edits)
-        #expect(payload.currentBody == "Hi [[mg:phone_mobile]]")
+        #expect(payload.currentBody == "Hi {{mg:phone_mobile}}")
         #expect(payload.message == ProposalAgentPayload.reviseNextStepMessage)
         let json = payload.dictionary()
         #expect(json["outcome"] as? String == "revise_requested")

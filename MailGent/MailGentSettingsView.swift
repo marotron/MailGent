@@ -170,7 +170,7 @@ struct MailGentSettingsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle("Enable secret constants", isOn: $secretConstantsEnabled)
             Text(
-                "Off by default. Agents always see the list_secrets tool; while off it errors as disabled. When on, allowlisted names work for list_secrets and [[mg:name]] in drafts / propose_send. Values stay local — resolved only for you on confirm and in Apple Mail."
+                "Off by default. Agents always see the list_secrets tool; while off it errors as disabled. When on, allowlisted names work for list_secrets and {{mg:name}} in drafts / propose_send. Values stay local — resolved only for you on confirm and in Apple Mail."
             )
             .foregroundStyle(.secondary)
             .font(.callout)

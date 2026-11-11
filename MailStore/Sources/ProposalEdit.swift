@@ -294,7 +294,7 @@ public enum ProposalEnvelopeDiff {
 }
 
 public enum ProposalBodyTokens {
-    /// Allowlisted constant values typed into the body become `[[mg:name]]`. Longer values win.
+    /// Allowlisted constant values typed into the body become `{{mg:name}}`. Longer values win.
     /// Existing tokens are left alone. Envelope fields must not call this.
     public static func literalsToTokens(
         _ text: String,
@@ -325,7 +325,7 @@ public enum ProposalBodyTokens {
         return out
     }
 
-    /// Expand `start..<end` (character offsets) to cover any `[[mg:name]]` it touches.
+    /// Expand `start..<end` (character offsets) to cover any `{{mg:name}}` it touches.
     public static func snap(in text: String, start: Int, end: Int) -> (start: Int, end: Int) {
         guard end > start else { return (start, end) }
         var lo = start
@@ -356,7 +356,7 @@ public enum ProposalBodyTokens {
 }
 
 /// Secret-constant redaction for agent-facing propose-send strings.
-/// Uses `SecretConstantValueDetector` (the leak guard's secret path). Hits inside `[[mg:]]` tokens are kept.
+/// Uses `SecretConstantValueDetector` (the leak guard's secret path). Hits inside `{{mg:}}` tokens are kept.
 public enum ProposalRedaction {
     public static func redact(_ text: String, constants: [SecretConstant], agentID: String) -> String {
         let hits = SecretConstantValueDetector.collect(in: text, constants: constants, agentID: agentID)

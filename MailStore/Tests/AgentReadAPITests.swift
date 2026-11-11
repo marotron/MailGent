@@ -1841,6 +1841,48 @@ struct AgentReadAPITests {
         #expect(counter.byAgent[grok.id] == nil)
     }
 
+    @Test func getPrefersHTMLAlternativeSoAnchorsBecomeMarkdown() async throws {
+        let env = try AgentReadFixture(
+            rfc822: """
+            From: Recruiter <recruiter@example.com>
+            To: Bob <bob@example.com>
+            Subject: Pick a slot
+            Date: Mon, 1 Jan 2024 00:00:00 +0000
+            MIME-Version: 1.0
+            Content-Type: multipart/alternative; boundary="alt"
+
+            --alt
+            Content-Type: text/plain; charset=utf-8
+
+            Please pick a slot. Wybierz termin
+
+            --alt
+            Content-Type: text/html; charset=utf-8
+
+            <p>Please pick a slot.
+            <a href="https://system.erecruiter.pl/web2/appointmentAction.html#pl/select/1">Wybierz termin</a>
+            </p>
+            --alt--
+            """
+        )
+        defer { env.remove() }
+
+        let message = try await env.gateway.get(
+            credential: env.credential,
+            accountID: env.accountID,
+            placement: "INBOX",
+            id: "1"
+        )
+        guard case .text(let body) = message.body else {
+            Issue.record("expected granted text body")
+            return
+        }
+        #expect(body.contains(
+            "[Wybierz termin](https://system.erecruiter.pl/web2/appointmentAction.html#pl/select/1)"
+        ))
+        #expect(!body.contains("Please pick a slot. Wybierz termin\n\nPlease pick"))
+    }
+
     @Test func askBodyPreviewDerivesPlainFromHTMLOnlyMail() async throws {
         final class PromptCapture: @unchecked Sendable {
             var bodyPreview = ""

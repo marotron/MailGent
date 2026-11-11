@@ -292,9 +292,85 @@ public enum MailMIME: Sendable {
     }
 
     /// Plain text for agents / Ask previews (style/script removed, tags stripped, entities decoded).
+    /// HTML anchors become Markdown `[label](url)` for `http` / `https` / `mailto` before tags are stripped.
     public static func plainText(fromHTML html: String) -> String {
         let cleaned = stripNonBodyBlocks(html)
-        return collapsed(decodeHTMLEntities(stripTags(cleaned)))
+        let withLinks = rewriteAnchorsAsMarkdown(cleaned)
+        return collapsed(decodeHTMLEntities(stripTags(withLinks)))
+    }
+
+    /// Rewrite `<a href="…">…</a>` → `[label](url)` (or label-only when the scheme is disallowed).
+    static func rewriteAnchorsAsMarkdown(_ html: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?is)<a\b([^>]*)>(.*?)</a>"#,
+            options: []
+        ) else {
+            return html
+        }
+        let ns = html as NSString
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: ns.length))
+        var out = html
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3 else { continue }
+            let attrs = ns.substring(with: match.range(at: 1))
+            let inner = ns.substring(with: match.range(at: 2))
+            var label = collapsed(decodeHTMLEntities(stripTags(inner)))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if label.isEmpty {
+                label = "link"
+            }
+            label = label.replacingOccurrences(of: "]", with: "")
+            if label.isEmpty {
+                label = "link"
+            }
+            let hrefRaw = extractAnchorHref(from: attrs).map(decodeHTMLEntities)
+            let replacement: String
+            if let href = hrefRaw,
+               let url = allowedMarkdownLinkURL(href),
+               !url.contains(")")
+            {
+                replacement = "[\(label)](\(url))"
+            } else {
+                replacement = label
+            }
+            out = (out as NSString).replacingCharacters(in: match.range, with: replacement)
+        }
+        return out
+    }
+
+    static func extractAnchorHref(from attributes: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"href\s*=\s*(?:"([^"]*)"|'([^']*)')"#,
+            options: [.caseInsensitive]
+        ),
+              let match = regex.firstMatch(
+                  in: attributes,
+                  range: NSRange(attributes.startIndex..., in: attributes)
+              )
+        else {
+            return nil
+        }
+        let ns = attributes as NSString
+        if match.range(at: 1).location != NSNotFound {
+            return ns.substring(with: match.range(at: 1))
+        }
+        if match.range(at: 2).location != NSNotFound {
+            return ns.substring(with: match.range(at: 2))
+        }
+        return nil
+    }
+
+    /// Allow only `http`, `https`, and `mailto`. Empty / other schemes → nil (caller keeps label).
+    static func allowedMarkdownLinkURL(_ href: String) -> String? {
+        let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https", "mailto"].contains(scheme)
+        else {
+            return nil
+        }
+        return trimmed
     }
 
     /// Drop a leading `.emlx` byte-count token (`96 It’ll be…` → `It’ll be…`).

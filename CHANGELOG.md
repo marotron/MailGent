@@ -6,7 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/). While a line is a **rel
 
 Release section headings use semver only (`## [0.4.0]`). **alpha** stays in README / About / GitHub titles. **`-rc.N`** is display/MCP only — never in `MARKETING_VERSION` or ship tags.
 
-## [Unreleased]
+## [0.25.0] - 2026-11-11
+
+### Breaking
+
+- Secret placeholders are `{{mg:name}}` (was `[[mg:name]]`); legacy `[[mg:…]]` is plain text and is not resolved
+
+### Added
+
+- HTML anchors in agent plain bodies become Markdown `[label](url)` for `http` / `https` / `mailto` (other schemes keep the label only)
+
+### Fixed
+
+- MCP `initialize` `serverInfo.version` follows `MailGentVersion.label` (was stuck at hardcoded `0.24.0`)
+- Agent `get` body prefers the HTML alternative (Markdown links) over a link-less `text/plain` part
 
 ## [0.24.4] - 2026-11-11
 

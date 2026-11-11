@@ -15,11 +15,11 @@ struct SecretConstantPlaceholdersTests {
     }
 
     @Test func tokenForName() {
-        #expect(SecretConstantPlaceholders.token(for: "phone_mobile") == "[[mg:phone_mobile]]")
+        #expect(SecretConstantPlaceholders.token(for: "phone_mobile") == "{{mg:phone_mobile}}")
     }
 
     @Test func findMatchesValidTokens() {
-        let body = "Call [[mg:phone_mobile]] or [[mg:home_address]]."
+        let body = "Call {{mg:phone_mobile}} or {{mg:home_address}}."
         let matches = SecretConstantPlaceholders.find(in: body)
         #expect(matches.map(\.name) == ["phone_mobile", "home_address"])
         #expect(matches[0].start == 5)
@@ -27,18 +27,25 @@ struct SecretConstantPlaceholdersTests {
     }
 
     @Test func findIgnoresInvalidNames() {
-        let body = "Bad [[mg:Phone]] and [[mg:1x]] and good [[mg:ok]]."
+        let body = "Bad {{mg:Phone}} and {{mg:1x}} and good {{mg:ok}}."
         let matches = SecretConstantPlaceholders.find(in: body)
         #expect(matches.map(\.name) == ["ok"])
     }
 
     @Test func uniqueNamesPreservesFirstSeenOrder() {
-        let body = "[[mg:b]] then [[mg:a]] then [[mg:b]] again"
+        let body = "{{mg:b}} then {{mg:a}} then {{mg:b}} again"
         #expect(SecretConstantPlaceholders.uniqueNames(in: body) == ["b", "a"])
     }
 
     @Test func findEmptyWhenNone() {
         #expect(SecretConstantPlaceholders.find(in: "plain text").isEmpty)
         #expect(SecretConstantPlaceholders.uniqueNames(in: "plain").isEmpty)
+    }
+
+    @Test func findIgnoresLegacyBracketSyntax() {
+        let body = "Legacy [[mg:phone_mobile]] stays plain; only {{mg:home_address}} resolves."
+        let matches = SecretConstantPlaceholders.find(in: body)
+        #expect(matches.map(\.name) == ["home_address"])
+        #expect(SecretConstantPlaceholders.uniqueNames(in: body) == ["home_address"])
     }
 }

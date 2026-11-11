@@ -1,6 +1,6 @@
 import Foundation
 
-/// One secret shown under the propose-send body as `[[mg:name]] → value`.
+/// One secret shown under the propose-send body as `{{mg:name}} → value`.
 public struct ProposeSendUsedSecretSummary: Equatable, Identifiable, Sendable {
     public var name: String
     public var value: String

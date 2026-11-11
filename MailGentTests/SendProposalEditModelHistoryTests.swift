@@ -30,7 +30,7 @@ struct SendProposalEditModelHistoryTests {
             agentID: "agent"
         )
 
-        #expect(model.tokenizedBody == "Call me on [[mg:phone]].")
+        #expect(model.tokenizedBody == "Call me on {{mg:phone}}.")
         #expect(model.changes.isEmpty)
     }
 
@@ -123,7 +123,7 @@ struct SendProposalEditModelHistoryTests {
             allowedAgentIDs: ["agent"]
         )
         let model = SendProposalEditModel(
-            proposal: makeProposal(body: "Call [[mg:phone]]."),
+            proposal: makeProposal(body: "Call {{mg:phone}}."),
             constants: [phone],
             agentID: "agent"
         )
@@ -153,7 +153,7 @@ struct SendProposalEditModelHistoryTests {
 
     @Test func missingSecretYieldsNoReplacedStripRows() {
         let model = SendProposalEditModel(
-            proposal: makeProposal(body: "Call [[mg:missing]]."),
+            proposal: makeProposal(body: "Call {{mg:missing}}."),
             constants: [],
             agentID: "agent"
         )

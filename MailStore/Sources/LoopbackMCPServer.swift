@@ -125,7 +125,7 @@ public struct LoopbackMCPServer {
                     ],
                     "serverInfo": [
                         "name": "mailgent",
-                        "version": "0.24.0"
+                        "version": MailGentVersion.label
                     ]
                 ]
                 return try rpcOK(id: id ?? NSNull(), result: result)
@@ -1493,7 +1493,7 @@ public struct LoopbackMCPServer {
             case .unknownAsk:
                 return "Unknown or expired await_ask askId."
             case .secretConstantsDisabled:
-                return "Secret constants are disabled. Enable them in MailGent Settings → General (then omit [[mg:]] placeholders until enabled)."
+                return "Secret constants are disabled. Enable them in MailGent Settings → General (then omit {{mg:}} placeholders until enabled)."
             case .secretConstantNotAllowlisted(let names):
                 return "Secret constant not allowlisted for this agent: \(names.joined(separator: ", "))."
             case .secretConstantMissing(let names):
@@ -1512,7 +1512,7 @@ public struct LoopbackMCPServer {
         let missing: [String]
     }
 
-    /// Resolve `[[mg:]]` for confirm UI / Apple Mail only. Agent-facing audit still logged tokenized above.
+    /// Resolve `{{mg:}}` for confirm UI / Apple Mail only. Agent-facing audit still logged tokenized above.
     private func resolveSecretConstantsForHuman(body: String) -> HumanSecretResolve {
         let names = SecretConstantPlaceholders.uniqueNames(in: body)
         guard !names.isEmpty, host.readSecretConstantsEnabled() else {
@@ -1579,7 +1579,7 @@ public struct LoopbackMCPServer {
         return try jsonString(payload)
     }
 
-    /// Fail closed when body uses `[[mg:]]` tokens the agent may not insert.
+    /// Fail closed when body uses `{{mg:}}` tokens the agent may not insert.
     private func validateSecretConstantInsert(body: String, agentID: String) throws {
         let names = SecretConstantPlaceholders.uniqueNames(in: body)
         guard !names.isEmpty else { return }
@@ -1701,7 +1701,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId. Bare re-propose of the same envelope (to/cc/bcc/sender/subject — body ignored) while awaiting returns the existing proposalId (no second window). After a successful send, bare re-propose of that envelope returns { status: already_sent } for the hard-timeout window (default 1 hour). If another agent already has an open confirm for the same envelope, returns { status: conflict, proposalId, agentName }. Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. If outcome is send with edited true, the human changed the draft; treat sentBody as what was sent. If outcome is revise_requested, rewrite per revision.instructionText, keep userEdits unless they conflict, and call propose_send again with revises.proposalId (same window, cap 5, original expiry kept). If outcome is attention_requested, read references and reply the same way; do not treat either outcome as sent or cancelled. No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? }. events[].source may be omitted (agent note). Max 40 events.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId. Bare re-propose of the same envelope (to/cc/bcc/sender/subject — body ignored) while awaiting returns the existing proposalId (no second window). After a successful send, bare re-propose of that envelope returns { status: already_sent } for the hard-timeout window (default 1 hour). If another agent already has an open confirm for the same envelope, returns { status: conflict, proposalId, agentName }. Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. If outcome is send with edited true, the human changed the draft; treat sentBody as what was sent. If outcome is revise_requested, rewrite per revision.instructionText, keep userEdits unless they conflict, and call propose_send again with revises.proposalId (same window, cap 5, original expiry kept). If outcome is attention_requested, read references and reply the same way; do not treat either outcome as sent or cancelled. No attachments or reply threading. Body may include {{mg:name}} secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? }. events[].source may be omitted (agent note). Max 40 events.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1790,7 +1790,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "create_draft",
                 "description":
-                    "Create a MailGent-owned draft and its first version. Does not write Apple Mail. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and the name is allowlisted for this agent; tool results stay tokenized.",
+                    "Create a MailGent-owned draft and its first version. Does not write Apple Mail. Body may include {{mg:name}} secret-constant placeholders when Secret constants are enabled and the name is allowlisted for this agent; tool results stay tokenized.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1802,7 +1802,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "update_draft",
                 "description":
-                    "Append a new version to an existing MailGent draft. Does not write Apple Mail. Body may include [[mg:name]] secret-constant placeholders when enabled and allowlisted; tool results stay tokenized.",
+                    "Append a new version to an existing MailGent draft. Does not write Apple Mail. Body may include {{mg:name}} secret-constant placeholders when enabled and allowlisted; tool results stay tokenized.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1836,7 +1836,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "list_secrets",
                 "description":
-                    "List secret constants this agent may reference in draft / propose_send bodies as [[mg:name]] placeholders. Returns name, optional label, and optional hint (phone|address|id|other). Values are never included. Empty list when none are allowlisted for this agent. Errors if Secret constants are disabled in MailGent Settings → General.",
+                    "List secret constants this agent may reference in draft / propose_send bodies as {{mg:name}} placeholders. Returns name, optional label, and optional hint (phone|address|id|other). Values are never included. Empty list when none are allowlisted for this agent. Errors if Secret constants are disabled in MailGent Settings → General.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [:] as [String: Any]

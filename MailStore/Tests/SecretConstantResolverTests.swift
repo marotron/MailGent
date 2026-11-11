@@ -24,7 +24,7 @@ struct SecretConstantResolverTests {
             "phone_mobile": constant(name: "phone_mobile", value: "+1-555-0100"),
             "home_address": constant(name: "home_address", value: "1 Main St"),
         ]
-        let body = "Call [[mg:phone_mobile]] at [[mg:home_address]]."
+        let body = "Call {{mg:phone_mobile}} at {{mg:home_address}}."
         let result = try SecretConstantResolver.resolve(body: body, catalog: catalog)
 
         #expect(result.resolved == "Call +1-555-0100 at 1 Main St.")
@@ -40,7 +40,7 @@ struct SecretConstantResolverTests {
 
     @Test func resolveFailsClosedOnMissingNames() {
         let catalog = ["phone_mobile": constant(name: "phone_mobile", value: "x")]
-        let body = "[[mg:phone_mobile]] and [[mg:missing_one]] plus [[mg:also_gone]]"
+        let body = "{{mg:phone_mobile}} and {{mg:missing_one}} plus {{mg:also_gone}}"
         #expect(throws: SecretConstantResolveError.missingNames(["missing_one", "also_gone"])) {
             try SecretConstantResolver.resolve(body: body, catalog: catalog)
         }
@@ -60,7 +60,7 @@ struct SecretConstantResolverTests {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
         ]
-        let body = "[[mg:phone_mobile]] / [[mg:home_address]]"
+        let body = "{{mg:phone_mobile}} / {{mg:home_address}}"
         let result = try SecretConstantResolver.resolve(
             body: body,
             catalog: catalog,
@@ -81,7 +81,7 @@ struct SecretConstantResolverTests {
             "home_address": constant(name: "home_address", value: "1 Main\nApt 2"),
         ]
         let result = try SecretConstantResolver.resolve(
-            body: "Addr: [[mg:home_address]]",
+            body: "Addr: {{mg:home_address}}",
             catalog: catalog
         )
         #expect(result.resolved == "Addr: 1 Main\nApt 2")

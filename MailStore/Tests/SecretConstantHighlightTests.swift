@@ -10,7 +10,7 @@ struct SecretConstantHighlightTests {
                 SecretConstantResolveSpan(name: "phone_mobile", start: 5, end: 11, updatedSinceDraft: false),
             ]
         )
-        #expect(html.contains("<mark title=\"Secret constant [[mg:phone_mobile]]\">+1-555</mark>"))
+        #expect(html.contains("<mark title=\"Secret constant {{mg:phone_mobile}}\">+1-555</mark>"))
         #expect(html.contains("mark{background:\(SecretConstantHighlight.markBackgroundCSS)"))
         #expect(html.contains("Call "))
         #expect(html.contains(" at home"))
@@ -23,7 +23,7 @@ struct SecretConstantHighlightTests {
                 SecretConstantResolveSpan(name: "a", start: 0, end: 1, updatedSinceDraft: true),
             ]
         )
-        #expect(html.contains("<mark class=\"updated\" title=\"Secret constant [[mg:a]]\">x</mark>"))
+        #expect(html.contains("<mark class=\"updated\" title=\"Secret constant {{mg:a}}\">x</mark>"))
         #expect(html.contains("mark.updated{background:\(SecretConstantHighlight.markUpdatedBackgroundCSS)"))
     }
 
