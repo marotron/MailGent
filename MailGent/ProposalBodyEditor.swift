@@ -466,11 +466,8 @@ struct ProposalBodyEditor: NSViewRepresentable {
                     ))
                 }
                 let display = catalog[match.name] ?? "[unknown]"
-                let attachment = ProposalTokenAttachment(
-                    name: match.name,
-                    display: display,
-                    fontScale: fontScale
-                )
+                let attachment = ProposalTokenAttachment(name: match.name)
+                attachment.attachmentCell = ProposalTokenCell(display: display, fontScale: fontScale)
                 let piece = NSMutableAttributedString(attachment: attachment)
                 piece.addAttribute(.font, value: font, range: NSRange(location: 0, length: piece.length))
                 piece.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: piece.length))
@@ -494,10 +491,11 @@ private final class ProposalBodyTextView: NSTextView {
 final class ProposalTokenAttachment: NSTextAttachment {
     let tokenName: String
 
-    init(name: String, display: String, fontScale: CGFloat = 1) {
+    /// Cell is assigned by the MainActor caller (`attributed`) — NSTextAttachment's
+    /// designated init is nonisolated on Xcode 16.4 and cannot construct MainActor cells.
+    init(name: String) {
         self.tokenName = name
         super.init(data: nil, ofType: nil)
-        attachmentCell = ProposalTokenCell(display: display, fontScale: fontScale)
     }
 
     @available(*, unavailable)
@@ -507,9 +505,9 @@ final class ProposalTokenAttachment: NSTextAttachment {
 }
 
 final class ProposalReferenceMarkerAttachment: NSTextAttachment {
-    init(number: Int) {
+    /// Cell is assigned by the MainActor caller.
+    init() {
         super.init(data: nil, ofType: nil)
-        attachmentCell = ProposalReferenceMarkerCell(number: number)
     }
 
     @available(*, unavailable)
