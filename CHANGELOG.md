@@ -23,6 +23,7 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 - Propose-send From `+` / Cc·Bcc `×` sit on the same vertical center as the row’s caption text (Menu chrome no longer rides high)
 - Ask envelope **From** **Add to rule** centers on the first line with the name/badge (no longer sits low); still stays on line 1 when name and address stack
+- Ask access-lead clearance under “wants access…” matches the chrome pad above (ScrollView no longer stacks a second top gap before the first card)
 
 ## [0.24.3] - 2026-11-11
 

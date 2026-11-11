@@ -119,7 +119,7 @@ enum ConditionalAskLayout {
     }
 
     /// Collapsed centered access-lead row (icon + one-liner + More).
-    /// Vertical clearance matches chrome `pad` above and VStack `gap` below (both 12).
+    /// Clearance above (chrome `pad`) and below (same `pad` into the card scroll) stay equal.
     static let whyHelpCollapsedHeight: CGFloat = 24
 
     /// Window height from measured left scroll-content + why-help chrome, capped for a popup.
@@ -130,7 +130,7 @@ enum ConditionalAskLayout {
         let chrome =
             pad * 2
             + whyHelpHeight
-            + gap
+            + pad
             + contentHeight
             + gap
             + footerBlockHeight
@@ -472,7 +472,10 @@ struct ConditionalAccessPromptDialog: View {
     }
 
     private var leftColumn: some View {
-        VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
+        // Explicit pad under the access-lead (not column `gap`) so title→card matches
+        // chrome pad above the title. ScrollView’s automatic top content margin is zeroed
+        // so it does not stack a second gap.
+        VStack(alignment: .leading, spacing: 0) {
             whyThisWindowHelp
 
             // Scroll the whole card stack. Attachment fields sit above Body so a long
@@ -517,6 +520,8 @@ struct ConditionalAccessPromptDialog: View {
                         }
                     )
                 }
+                .contentMargins(.top, 0, for: .scrollContent)
+                .padding(.top, ConditionalAskLayout.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .onPreferenceChange(AskLeftScrollContentHeightKey.self) { height in
                     guard height > 0 else { return }
@@ -540,6 +545,7 @@ struct ConditionalAccessPromptDialog: View {
             }
 
             askFooter
+                .padding(.top, ConditionalAskLayout.gap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onPreferenceChange(AskWhyHelpHeightKey.self) { height in
