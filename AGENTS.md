@@ -24,7 +24,7 @@ Apache-2.0 + `NOTICE`; name and icon stay ours. Homebrew cask is **future** (aft
 
 ### Versioning
 
-Open the next version as a **candidate** when user-facing work starts: `X.Y.Z-rc.1` → `rc.2` → ship `X.Y.Z` (Apple `MARKETING_VERSION` stays plain `X.Y.Z`; `-rc.N` is display/MCP only). While candidate, keep notes under `## [Unreleased]`; promote CHANGELOG + full README + PRIVACY only on ship. See `.cursor/rules/versioning.mdc` (MailGent dogfood — not global yet).
+Open the next version as a **candidate** when user-facing work starts: `X.Y.Z-rc.1` → `rc.2` → ship `X.Y.Z` (Apple `MARKETING_VERSION` stays plain `X.Y.Z`; `-rc.N` is display/MCP only). While candidate, **every** product/test/Unreleased change bumps **rc.N** + build in the same turn — do not leave About on a stale rc. Promote CHANGELOG + full README + PRIVACY only on ship. See `.cursor/rules/versioning.mdc` (MailGent dogfood — not global yet).
 
 Ship tags must be **signed** and only when `releaseCandidate == 0`: `git tag -s vX.Y.Z -m "…"`, then `git verify-tag` before push. Never lightweight or unsigned annotated ship tags.
 

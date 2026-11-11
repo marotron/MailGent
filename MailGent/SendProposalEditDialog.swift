@@ -24,13 +24,41 @@ struct SendProposalEditDialog: View {
     @State private var spotlightDraft = true
     @State private var bodyHovered = false
     @State private var pageZoom: CGFloat = 1
+    @State private var revealedCc = false
+    @State private var revealedBcc = false
+    @FocusState private var focusedEnvelopeField: OptionalEnvelopeVisibility.Field?
 
     private static let envelopeLabelWidth: CGFloat = 52
+    /// Trailing + / × column — keep short so From matches To/Subject row height.
+    private static let envelopePlusWidth: CGFloat = 14
+    private static let envelopeRowHeight: CGFloat = 16
     private static let zoomStep: CGFloat = 0.25
     private static let minZoom: CGFloat = 0.5
     private static let maxZoom: CGFloat = 1.5
     private var resolvedContext: ProposeSendResolvedContext? { model.resolved }
     private var showsContext: Bool { resolvedContext != nil }
+
+    private var canEditEnvelope: Bool { model.isReview && !model.viewingPast }
+
+    private var displayedCcLine: String {
+        if let past = model.viewedVersion { return past.ccLine }
+        return model.ccLine
+    }
+
+    private var displayedBccLine: String {
+        if let past = model.viewedVersion { return past.bccLine }
+        return model.bccLine
+    }
+
+    private var envelopeVisibility: OptionalEnvelopeVisibility.Snapshot {
+        OptionalEnvelopeVisibility.resolve(
+            ccEmpty: displayedCcLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            bccEmpty: displayedBccLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            revealedCc: revealedCc,
+            revealedBcc: revealedBcc,
+            canEdit: canEditEnvelope
+        )
+    }
 
     /// Follows the browsed draft (`deliveredProposal`), including past versions.
     private var usedSecretSummaries: [ProposeSendUsedSecretSummary] {
@@ -201,15 +229,26 @@ struct SendProposalEditDialog: View {
     }
 
     private var envelope: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            field(
-                "From",
-                text: .constant(model.proposal.sender ?? "Apple Mail default account"),
-                editable: false
-            )
+        let visibility = envelopeVisibility
+        return VStack(alignment: .leading, spacing: 6) {
+            fromRow(showPlus: visibility.showPlus, addable: visibility.addable)
             field("To", text: envelopeBinding(.to))
-            field("Cc", text: envelopeBinding(.cc))
-            field("Bcc", text: envelopeBinding(.bcc))
+            if visibility.showCc {
+                field(
+                    "Cc",
+                    text: envelopeBinding(.cc),
+                    focusField: .cc,
+                    onRemove: visibility.removable.contains(.cc) ? { removeEnvelopeField(.cc) } : nil
+                )
+            }
+            if visibility.showBcc {
+                field(
+                    "Bcc",
+                    text: envelopeBinding(.bcc),
+                    focusField: .bcc,
+                    onRemove: visibility.removable.contains(.bcc) ? { removeEnvelopeField(.bcc) } : nil
+                )
+            }
             field("Subject", text: envelopeBinding(.subject))
             if !model.viewingPast, !model.addedRecipients.isEmpty {
                 Text("Added: \(model.addedRecipients.joined(separator: ", "))")
@@ -218,6 +257,84 @@ struct SendProposalEditDialog: View {
             }
         }
         .padding(10)
+        .onChange(of: model.ccLine) { _, newValue in
+            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                revealedCc = false
+            }
+        }
+        .onChange(of: model.bccLine) { _, newValue in
+            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                revealedBcc = false
+            }
+        }
+    }
+
+    private func fromRow(showPlus: Bool, addable: [OptionalEnvelopeVisibility.Field]) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("From")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: Self.envelopeLabelWidth, alignment: .leading)
+            Text(model.proposal.sender ?? "Apple Mail default account")
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+            // Always reserve the trailing slot so To/Subject right edges match +.
+            ZStack {
+                Color.clear
+                    .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
+                if showPlus {
+                    Menu {
+                        ForEach(addable, id: \.self) { field in
+                            Button(field == .cc ? "Cc" : "Bcc") {
+                                revealEnvelopeField(field)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
+                            .contentShape(Rectangle())
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.plain)
+                    .controlSize(.mini)
+                    .help("Add field")
+                    .accessibilityLabel("Add field")
+                }
+            }
+            .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
+            .clipped()
+        }
+        .frame(height: Self.envelopeRowHeight)
+    }
+
+    private func revealEnvelopeField(_ field: OptionalEnvelopeVisibility.Field) {
+        switch field {
+        case .cc: revealedCc = true
+        case .bcc: revealedBcc = true
+        }
+        // Menu dismissal steals focus; defer so the new TextField can take it.
+        DispatchQueue.main.async {
+            focusedEnvelopeField = field
+        }
+    }
+
+    private func removeEnvelopeField(_ field: OptionalEnvelopeVisibility.Field) {
+        switch field {
+        case .cc:
+            model.ccLine = ""
+            revealedCc = false
+        case .bcc:
+            model.bccLine = ""
+            revealedBcc = false
+        }
+        if focusedEnvelopeField == field {
+            focusedEnvelopeField = nil
+        }
     }
 
     /// Live binding for the current draft; a read-only binding when previewing a past version.
@@ -236,7 +353,13 @@ struct SendProposalEditDialog: View {
         }
     }
 
-    private func field(_ label: String, text: Binding<String>, editable: Bool = true) -> some View {
+    private func field(
+        _ label: String,
+        text: Binding<String>,
+        editable: Bool = true,
+        focusField: OptionalEnvelopeVisibility.Field? = nil,
+        onRemove: (() -> Void)? = nil
+    ) -> some View {
         HStack(alignment: .center, spacing: 8) {
             Text(label)
                 .font(.caption)
@@ -245,8 +368,25 @@ struct SendProposalEditDialog: View {
             TextField("", text: text)
                 .textFieldStyle(.plain)
                 .font(.caption)
-                .disabled(!editable || !model.isReview || model.viewingPast)
+                .disabled(!editable || !canEditEnvelope)
+                .focused($focusedEnvelopeField, equals: focusField)
+            // Optional rows only: × sits in the same trailing column as From’s +.
+            // To/Subject omit this so their right edge matches the + right edge.
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .controlSize(.mini)
+                .help("Remove \(label)")
+                .accessibilityLabel("Remove \(label)")
+            }
         }
+        .frame(height: Self.envelopeRowHeight)
     }
 
     private var referencesStrip: some View {
@@ -463,7 +603,8 @@ struct SendProposalEditDialog: View {
                 fontScale: pageZoom,
                 onRefer: { _ in }
             )
-            .padding(.horizontal, 8)
+            // Same inset on all sides so top matches the left gutter.
+            .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ProposalBodyEditor(
@@ -479,7 +620,8 @@ struct SendProposalEditDialog: View {
                 fontScale: pageZoom,
                 onRefer: { quote in model.refer(quote: quote) }
             )
-            .padding(.horizontal, 8)
+            // Same inset on all sides so top matches the left gutter.
+            .padding(8)
             .frame(minHeight: 110)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

@@ -8,6 +8,12 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ## [Unreleased]
 
+## [0.24.3] - 2026-11-11
+
+### Added
+
+- Editable propose-send confirm hides empty Cc/Bcc; `+` on From adds a missing field; × removes an optional row (or clear the line)
+
 ## [0.24.2] - 2026-11-11
 
 ### Added
