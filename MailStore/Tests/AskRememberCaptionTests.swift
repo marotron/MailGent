@@ -6,7 +6,7 @@ import Testing
         #expect(AskRememberCaption.note(for: .disabled) == nil)
     }
 
-    @Test func formatsDurationAndShareScope() {
+    @Test func formatsActionLabelWithDurationAndShareScope() {
         let thirtyDays = AskDecisionCachePolicy(
             enabled: true,
             ttlSeconds: 2_592_000,
@@ -15,7 +15,7 @@ import Testing
         )
         #expect(
             AskRememberCaption.note(for: thirtyDays)
-                == "will stay cached for 30 days (this agent)"
+                == "Remember for 30 days (this agent)"
         )
 
         let foreverAll = AskDecisionCachePolicy(
@@ -26,7 +26,7 @@ import Testing
         )
         #expect(
             AskRememberCaption.note(for: foreverAll)
-                == "will stay cached for Forever (all agents)"
+                == "Remember for Forever (all agents)"
         )
 
         let untilQuit = AskDecisionCachePolicy(
@@ -37,8 +37,21 @@ import Testing
         )
         #expect(
             AskRememberCaption.note(for: untilQuit)
-                == "will stay cached for Until MailGent quits (this agent)"
+                == "Remember for Until MailGent quits (this agent)"
         )
+    }
+
+    @Test func shouldWriteRequiresSettingsAndCheckbox() {
+        let enabled = AskDecisionCachePolicy(
+            enabled: true,
+            ttlSeconds: 2_592_000,
+            persistAcrossLaunches: true,
+            shareScope: .perAgent
+        )
+        #expect(AskRememberCaption.shouldWrite(policy: enabled, rememberThisDecision: true))
+        #expect(!AskRememberCaption.shouldWrite(policy: enabled, rememberThisDecision: false))
+        #expect(!AskRememberCaption.shouldWrite(policy: .disabled, rememberThisDecision: true))
+        #expect(!AskRememberCaption.shouldWrite(policy: .disabled, rememberThisDecision: false))
     }
 
     @Test func settingsTTLTagsMatchLabels() {

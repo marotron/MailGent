@@ -16,7 +16,7 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ### Added
 
-- Ask window shows a small inline Remember note after Allow/Block when **Remember Ask decisions** is on (`will stay cached for … (this agent)`)
+- Ask footer Remember checkbox when **Remember Ask decisions** is on (`Remember for … (this agent)`), checked by default; uncheck to Allow/Block once without writing cache (Settings unchanged). Hidden when Remember is off
 - Email access request (Conditional Ask) shows the same live titlebar countdown (`Expires in …`) as propose-send, driven by Settings → **Human wait limit**
 
 ### Fixed

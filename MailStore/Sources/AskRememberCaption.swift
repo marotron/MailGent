@@ -2,12 +2,20 @@ import Foundation
 
 /// Ask-window caption when Settings → Remember Ask decisions is on.
 public enum AskRememberCaption {
-    /// e.g. `will stay cached for 30 days (this agent)`
+    /// e.g. `Remember for 30 days (this agent)` — checkbox label; `nil` when Settings is off.
     public static func note(for policy: AskDecisionCachePolicy) -> String? {
         guard policy.enabled else { return nil }
         let duration = durationLabel(ttlSeconds: policy.ttlSeconds, persist: policy.persistAcrossLaunches)
         let scope = shareLabel(policy.shareScope)
-        return "will stay cached for \(duration) (\(scope))"
+        return "Remember for \(duration) (\(scope))"
+    }
+
+    /// Write Remember only when Settings is on **and** this Ask’s checkbox stayed checked.
+    public static func shouldWrite(
+        policy: AskDecisionCachePolicy,
+        rememberThisDecision: Bool
+    ) -> Bool {
+        policy.enabled && rememberThisDecision
     }
 
     public static func durationLabel(ttlSeconds: TimeInterval?, persist: Bool) -> String {

@@ -25,7 +25,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private final class AskRecord {
         let window: NSWindow
         let context: ConditionalAccessPromptContext
-        var continuation: CheckedContinuation<ConditionalAccessPromptOutcome, Never>?
+        var continuation: CheckedContinuation<ConditionalAccessPromptFinish, Never>?
         var finished = false
         var pokeToken = 0
         let presentedAt = Date()
@@ -33,7 +33,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         init(
             window: NSWindow,
             context: ConditionalAccessPromptContext,
-            continuation: CheckedContinuation<ConditionalAccessPromptOutcome, Never>
+            continuation: CheckedContinuation<ConditionalAccessPromptFinish, Never>
         ) {
             self.window = window
             self.context = context
@@ -212,10 +212,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Menu Block / Allow — same once-only path as the dialog buttons.
+    /// Menu Block / Allow — same once-only path as the dialog buttons (Remember follows Settings).
     func decidePendingAsk(id: String, decision: ConditionalAccessDecision) {
-        let outcome: ConditionalAccessPromptOutcome = decision == .allow ? .allow : .block
-        finishAsk(id: id, outcome: outcome)
+        let finish: ConditionalAccessPromptFinish = decision == .allow ? .allow : .block
+        finishAsk(id: id, finish: finish)
     }
 
     /// True when an Ask dialog for this registry askId is already on screen.
@@ -260,7 +260,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             return askID
         }
         for askID in targets {
-            finishAsk(id: askID, outcome: .recheck)
+            finishAsk(id: askID, finish: .recheck)
         }
     }
 
@@ -310,7 +310,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         accountLabel: String,
         ruleSupport: ConditionalAccessAskRuleSupport? = nil,
         expiresAt: Date
-    ) async -> ConditionalAccessPromptOutcome {
+    ) async -> ConditionalAccessPromptFinish {
         await presentConditionalAsk(
             request: request,
             accountLabel: accountLabel,
@@ -457,7 +457,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         accountLabel: String,
         ruleSupport: ConditionalAccessAskRuleSupport?,
         expiresAt: Date
-    ) async -> ConditionalAccessPromptOutcome {
+    ) async -> ConditionalAccessPromptFinish {
         await withCheckedContinuation { continuation in
             AskQueueIndicator.shared.register(
                 id: request.id,
@@ -468,11 +468,11 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             let dialog = ConditionalAccessPromptDialog(
                 request: request,
                 accountLabel: accountLabel,
-                onAllow: { [weak self] in
-                    self?.finishAsk(id: request.id, outcome: .allow)
+                onAllow: { [weak self] remember in
+                    self?.finishAsk(id: request.id, finish: .allow(remember: remember))
                 },
-                onBlock: { [weak self] in
-                    self?.finishAsk(id: request.id, outcome: .block)
+                onBlock: { [weak self] remember in
+                    self?.finishAsk(id: request.id, finish: .block(remember: remember))
                 },
                 ruleSupport: ruleSupport,
                 showOpenInMail: request.context.mailURL != nil,
@@ -552,8 +552,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let dialog = ConditionalAccessPromptDialog(
             request: request,
             accountLabel: "iCloud",
-            onAllow: { [weak self] in self?.dismissAskLayoutSandbox() },
-            onBlock: { [weak self] in self?.dismissAskLayoutSandbox() },
+            onAllow: { [weak self] _ in self?.dismissAskLayoutSandbox() },
+            onBlock: { [weak self] _ in self?.dismissAskLayoutSandbox() },
             ruleSupport: AskSandboxRuleBox.support(for: request.context),
             showOpenInMail: true,
             onOpenInMail: {},
@@ -715,14 +715,14 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    private func finishAsk(id: String, outcome: ConditionalAccessPromptOutcome) {
+    private func finishAsk(id: String, finish: ConditionalAccessPromptFinish) {
         guard let record = asks[id] else { return }
         if record.finished {
             MailGentLog.trace("ask finish ignored (already decided) id=\(id)")
             return
         }
         let removed: Bool
-        switch outcome {
+        switch finish.outcome {
         case .allow:
             removed = AskQueueIndicator.shared.resolve(id: id, with: .allow) != nil
         case .block:
@@ -737,7 +737,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         record.continuation = nil
         asks[id] = nil
         dismissAskWindow(record.window)
-        continuation?.resume(returning: outcome)
+        continuation?.resume(returning: finish)
     }
 
     private func beginSendHandoff(
@@ -1047,7 +1047,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
         if let id = asks.first(where: { $0.value.window === sender })?.key {
             // Traffic-light / ⌘W → dismissed (not Block); no Remember; agent may re-prompt.
-            finishAsk(id: id, outcome: .dismissed)
+            finishAsk(id: id, finish: .dismissed)
             return false
         }
         if let id = sendProposals.first(where: { $0.value.window === sender })?.key {

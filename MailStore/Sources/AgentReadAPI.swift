@@ -23,6 +23,33 @@ public enum ConditionalAccessPromptOutcome: String, Sendable, Codable {
     }
 }
 
+/// UI finish for one Ask: outcome plus the Remember checkbox (menu defaults `rememberThisDecision` to true).
+public struct ConditionalAccessPromptFinish: Sendable, Equatable {
+    public let outcome: ConditionalAccessPromptOutcome
+    public let rememberThisDecision: Bool
+
+    public init(
+        outcome: ConditionalAccessPromptOutcome,
+        rememberThisDecision: Bool = true
+    ) {
+        self.outcome = outcome
+        self.rememberThisDecision = rememberThisDecision
+    }
+
+    public static let allow = Self(outcome: .allow)
+    public static let block = Self(outcome: .block)
+    public static let recheck = Self(outcome: .recheck, rememberThisDecision: false)
+    public static let dismissed = Self(outcome: .dismissed, rememberThisDecision: false)
+
+    public static func allow(remember: Bool) -> Self {
+        Self(outcome: .allow, rememberThisDecision: remember)
+    }
+
+    public static func block(remember: Bool) -> Self {
+        Self(outcome: .block, rememberThisDecision: remember)
+    }
+}
+
 /// One Ask-field value shown to the human before Allow / Block.
 public struct ConditionalFieldPreviewLine: Equatable, Sendable {
     public let label: String

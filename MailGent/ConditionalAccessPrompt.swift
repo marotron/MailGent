@@ -43,7 +43,7 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         accountLabel: String? = nil,
         ruleSupport: ConditionalAccessAskRuleSupport? = nil,
         expiresAt: Date
-    ) async -> ConditionalAccessPromptOutcome {
+    ) async -> ConditionalAccessPromptFinish {
         let request = ConditionalAccessPromptRequest(
             id: askId ?? UUID().uuidString,
             context: context
@@ -51,7 +51,7 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         let mailboxLabel = accountLabel.flatMap { $0.isEmpty ? nil : $0 } ?? context.accountID
         let fieldsText = context.requestedFields.joined(separator: ", ")
 
-        let outcome = await DetachedWindowHost.shared.runConditionalAsk(
+        let finish = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
             accountLabel: mailboxLabel,
             ruleSupport: ruleSupport,
@@ -59,7 +59,7 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         )
 
         let label: String
-        switch outcome {
+        switch finish.outcome {
         case .allow: label = "allow"
         case .block: label = "block"
         case .recheck: label = "recheck"
@@ -68,7 +68,7 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         MailGentLog.trace(
             "conditional access \(label) agent=\(context.agentName) fields=\(fieldsText)"
         )
-        return outcome
+        return finish
     }
 }
 
@@ -91,7 +91,7 @@ enum ConditionalAskLayout {
     static let fieldPreviewExpandedHeight: CGFloat = 200
     /// Body card text area cap inside the scrolling left column (keep compact; full body is on the right).
     static let bodyPreviewMaxHeight: CGFloat = 120
-    /// Block / Allow row (+ optional inline Remember caption).
+    /// Block / Allow row (+ optional Remember checkbox when Settings is on).
     static let footerBlockHeight: CGFloat = 28
     /// Breathing room between left cards and the HSplitView divider.
     static let splitTrailingGap: CGFloat = 10
@@ -393,8 +393,9 @@ struct AskPreviewZoomControls: View {
 struct ConditionalAccessPromptDialog: View {
     let request: ConditionalAccessPromptRequest
     let accountLabel: String
-    let onAllow: () -> Void
-    let onBlock: () -> Void
+    /// `remember` is the Ask checkbox (true when Settings Remember is off / hidden).
+    let onAllow: (_ remember: Bool) -> Void
+    let onBlock: (_ remember: Bool) -> Void
     var ruleSupport: ConditionalAccessAskRuleSupport? = nil
     var showOpenInMail: Bool = false
     var onOpenInMail: (() -> Void)? = nil
@@ -413,6 +414,8 @@ struct ConditionalAccessPromptDialog: View {
     @State private var whyThisWindowExpanded = false
     @State private var leftScrollContentHeight: CGFloat = 0
     @State private var whyHelpHeight: CGFloat = ConditionalAskLayout.whyHelpCollapsedHeight
+    /// Default on when Settings Remember is enabled; unused when the checkbox is hidden.
+    @State private var rememberThisDecision = true
     @StateObject private var ruleDraft = ConditionalAccessAskRuleDraft()
 
     private var envelope: ConditionalMessageEnvelope { request.context.envelope }
@@ -776,14 +779,18 @@ struct ConditionalAccessPromptDialog: View {
             .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
             .keyboardShortcut(.defaultAction)
 
-            if let rememberNote = AskRememberCaption.note(
+            if let rememberLabel = AskRememberCaption.note(
                 for: MailGentPreferences.askDecisionCachePolicy
             ) {
-                Text(rememberNote)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: $rememberThisDecision) {
+                    Text(rememberLabel)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .toggleStyle(.checkbox)
+                .help("Uncheck to apply Allow or Block once without writing Remember for this decision.")
             }
 
             if ruleSupport != nil, ruleDraft.isArmed {
@@ -824,9 +831,12 @@ struct ConditionalAccessPromptDialog: View {
                 enablements: ruleSupport.allEnablements()
             )
         }
+        // When Settings Remember is off, checkbox is hidden; still pass true — write gate
+        // checks policy.enabled.
+        let remember = rememberThisDecision
         switch decision {
-        case .allow: onAllow()
-        case .block: onBlock()
+        case .allow: onAllow(remember)
+        case .block: onBlock(remember)
         }
     }
 
@@ -1381,8 +1391,8 @@ enum AskLayoutSandboxSamples {
     ConditionalAccessPromptDialog(
         request: AskLayoutSandboxSamples.request(),
         accountLabel: "iCloud",
-        onAllow: {},
-        onBlock: {},
+        onAllow: { _ in },
+        onBlock: { _ in },
         showOpenInMail: true,
         onOpenInMail: {}
     )
@@ -1397,8 +1407,8 @@ enum AskLayoutSandboxSamples {
     ConditionalAccessPromptDialog(
         request: AskLayoutSandboxSamples.request(),
         accountLabel: "iCloud",
-        onAllow: {},
-        onBlock: {},
+        onAllow: { _ in },
+        onBlock: { _ in },
         showOpenInMail: true,
         onOpenInMail: {},
         showsMessagePreview: false
@@ -1414,8 +1424,8 @@ enum AskLayoutSandboxSamples {
     ConditionalAccessPromptDialog(
         request: AskLayoutSandboxSamples.request(longBody: true),
         accountLabel: "iCloud",
-        onAllow: {},
-        onBlock: {},
+        onAllow: { _ in },
+        onBlock: { _ in },
         showOpenInMail: true,
         onOpenInMail: {}
     )
