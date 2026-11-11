@@ -13,6 +13,7 @@ public enum PendingAskAwaitResult: Equatable, Sendable {
     case block(fields: [String])
     case expired
     case superseded
+    case dismissed
     case unknown
 }
 
@@ -21,6 +22,8 @@ public enum PendingAskDecision: Equatable, Sendable {
     case allow
     case block
     case superseded
+    /// Traffic-light / ⌘W close — not Block; never Remember-cached.
+    case dismissed
 }
 
 /// Request fingerprint inputs for conditional Ask dedupe + lease.
@@ -70,6 +73,7 @@ public final class PendingAskRegistry: @unchecked Sendable {
         case block
         case expired
         case superseded
+        case dismissed
     }
 
     private struct Lease {
@@ -238,6 +242,8 @@ public final class PendingAskRegistry: @unchecked Sendable {
             entry.terminal = .block
         case .superseded:
             entry.terminal = .superseded
+        case .dismissed:
+            entry.terminal = .dismissed
         }
         entry.terminalAt = now()
         let waiters = entry.waiters
@@ -248,6 +254,7 @@ public final class PendingAskRegistry: @unchecked Sendable {
         case .allow: .allow(fields: fields)
         case .block: .block(fields: fields)
         case .superseded: .superseded
+        case .dismissed: .dismissed
         }
         entries[askId] = entry
         cancelExpiryTaskLocked(id: askId)
@@ -333,15 +340,16 @@ public final class PendingAskRegistry: @unchecked Sendable {
         return true
     }
 
-    /// Re-get path: match a retained terminal outcome by exact fingerprint + agent (no askId required).
+    /// Fresh-get auto-apply: only a retained **allow** lease short-circuits a new Ask.
+    /// Block / expired / dismissed / superseded never suppress a re-prompt (Remember cache is separate).
     public func lookupTerminal(agentID: String, request: PendingAskRequest) -> PendingAskAwaitResult? {
         expireIfNeeded()
         let fp = Self.fingerprint(for: request)
         lock.lock()
         defer { lock.unlock() }
         for entry in entries.values where entry.agentID == agentID && entry.fingerprint == fp {
-            guard let terminal = entry.terminal else { continue }
-            return awaitResult(terminal: terminal, fields: entry.pendingFields)
+            guard entry.terminal == .allow else { continue }
+            return .allow(fields: entry.pendingFields)
         }
         return nil
     }
@@ -517,6 +525,7 @@ public final class PendingAskRegistry: @unchecked Sendable {
         case .block: .block(fields: fields)
         case .expired: .expired
         case .superseded: .superseded
+        case .dismissed: .dismissed
         }
     }
 

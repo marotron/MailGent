@@ -803,7 +803,7 @@ struct LoopbackMCPServerTests {
     }
 
     @Test func awaitAskTerminalOutcomesAreAudited() async throws {
-        for decision in [PendingAskDecision.allow, .block, .superseded] {
+        for decision in [PendingAskDecision.allow, .block, .superseded, .dismissed] {
             let env = try LoopbackFixture(
                 grantFields: Self.askBodyGrantFields,
                 allowConditionalAccessPrompts: true
@@ -822,6 +822,7 @@ struct LoopbackMCPServerTests {
             case .allow: "allow"
             case .block: "block"
             case .superseded: "superseded"
+            case .dismissed: "dismissed"
             }
             #expect(payload["outcome"] as? String == outcome)
             #expect(env.audit.entries().contains {

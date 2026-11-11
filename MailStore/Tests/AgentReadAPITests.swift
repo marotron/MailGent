@@ -988,7 +988,7 @@ struct AgentReadAPITests {
         #expect(second.body == .text("Please pay"))
     }
 
-    @Test func getAfterBlockDeniesAskBodyWithoutSecondDialog() async throws {
+    @Test func getAfterBlockWithoutRememberReopensAsk() async throws {
         let env = try AgentReadFixture(
             grantFields: GrantFields(
                 subjectMode: .on,
@@ -1003,24 +1003,91 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
-        let message = try await env.getWithAskDecision(.block, writeDecisionCache: false)
-        #expect(message.body == .notGranted)
-        #expect(env.lastAskContext?.requestedFields == ["Body"])
-        let askId = try #require(env.lastAskId)
-        #expect(env.gateway.pendingAsks.snapshot(askId: askId)?.isPending == false)
+        var firstAskId: String?
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending")
+            return
+        } catch let pending as ConditionalAskPending {
+            firstAskId = pending.askId
+            #expect(pending.pendingFields == ["Body"])
+            #expect(env.gateway.pendingAsks.resolve(askId: pending.askId, decision: .block))
+            #expect(
+                await env.gateway.pendingAsks.awaitDecision(
+                    askId: pending.askId,
+                    agentID: env.agentID,
+                    softTimeout: 1
+                ) == .block(fields: ["Body"])
+            )
+        }
 
-        let again = try await env.gateway.get(
-            credential: env.credential,
-            accountID: env.accountID,
-            placement: "INBOX",
-            id: "1"
-        )
-        #expect(again.body == .notGranted)
-        // Terminal block retained — no second Ask open.
-        #expect(env.lastAskId == askId)
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected second ConditionalAskPending")
+        } catch let again as ConditionalAskPending {
+            #expect(again.askId != firstAskId)
+            #expect(again.pendingFields == ["Body"])
+        }
     }
 
-    @Test func getAfterExpiredDeniesAskBody() async throws {
+    @Test func getAfterDismissedReopensAsk() async throws {
+        let env = try AgentReadFixture(
+            grantFields: GrantFields(
+                subjectMode: .on,
+                fromMode: .on,
+                toMode: .on,
+                ccMode: .on,
+                dateMode: .on,
+                bodyMode: .ask
+            ),
+            allowConditionalAccessPrompts: true,
+            askDecisionCachePolicy: .disabled
+        )
+        defer { env.remove() }
+
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending")
+            return
+        } catch let pending as ConditionalAskPending {
+            #expect(env.gateway.pendingAsks.resolve(askId: pending.askId, decision: .dismissed))
+            let awaitResult = await env.gateway.pendingAsks.awaitDecision(
+                askId: pending.askId,
+                agentID: env.agentID,
+                softTimeout: 1
+            )
+            #expect(awaitResult == .dismissed)
+        }
+
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending after dismiss")
+        } catch let again as ConditionalAskPending {
+            #expect(again.pendingFields == ["Body"])
+        }
+    }
+
+    @Test func getAfterExpiredReopensAsk() async throws {
         let clock = AgentReadFakeClock(Date(timeIntervalSince1970: 1_000))
         let registry = PendingAskRegistry(
             hardTimeoutSeconds: 300,
@@ -1042,6 +1109,7 @@ struct AgentReadAPITests {
         )
         defer { env.remove() }
 
+        var firstAskId: String?
         do {
             _ = try await env.gateway.get(
                 credential: env.credential,
@@ -1052,19 +1120,25 @@ struct AgentReadAPITests {
             Issue.record("expected ConditionalAskPending")
             return
         } catch let pending as ConditionalAskPending {
+            firstAskId = pending.askId
             #expect(env.gateway.pendingAsks.snapshot(askId: pending.askId)?.isPending == true)
             clock.instant = Date(timeIntervalSince1970: 1_301)
             env.gateway.pendingAsks.expireIfNeeded()
             #expect(env.gateway.pendingAsks.isExpired(askId: pending.askId))
         }
 
-        let message = try await env.gateway.get(
-            credential: env.credential,
-            accountID: env.accountID,
-            placement: "INBOX",
-            id: "1"
-        )
-        #expect(message.body == .notGranted)
+        do {
+            _ = try await env.gateway.get(
+                credential: env.credential,
+                accountID: env.accountID,
+                placement: "INBOX",
+                id: "1"
+            )
+            Issue.record("expected ConditionalAskPending after expire")
+        } catch let again as ConditionalAskPending {
+            #expect(again.askId != firstAskId)
+            #expect(again.pendingFields == ["Body"])
+        }
     }
 
     @Test func getLeaseReevaluatesGrantsBeforeBody() async throws {

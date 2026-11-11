@@ -154,6 +154,65 @@ import Testing
         #expect(result == .superseded)
         #expect(result != .block(fields: ["Body"]))
         #expect(result != .expired)
+        #expect(result != .dismissed)
+    }
+
+    @Test func resolveDismissedWakesWaiterAndIsDistinctFromBlock() async {
+        let registry = PendingAskRegistry(sleep: hangUntilCancelledSleep)
+        guard case let .created(id, _, _) = registry.submit(makeRequest()) else {
+            Issue.record("expected created")
+            return
+        }
+        async let wait = registry.awaitDecision(askId: id, agentID: "agent-1", softTimeout: 60)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        #expect(registry.resolve(askId: id, decision: .dismissed))
+        let result = await wait
+        #expect(result == .dismissed)
+        #expect(result != .block(fields: ["Body"]))
+        #expect(result != .expired)
+    }
+
+    @Test func lookupTerminalReturnsOnlyAllowLease() {
+        let registry = PendingAskRegistry(sleep: immediateSleep)
+        let request = makeRequest()
+
+        guard case let .created(allowId, _, _) = registry.submit(request) else {
+            Issue.record("expected created")
+            return
+        }
+        #expect(registry.resolve(askId: allowId, decision: .allow))
+        #expect(registry.lookupTerminal(agentID: "agent-1", request: request) == .allow(fields: ["Body"]))
+
+        let nonAllow: [(PendingAskDecision, String)] = [
+            (.block, "m-block"),
+            (.dismissed, "m-dismissed"),
+            (.superseded, "m-superseded"),
+        ]
+        for (decision, messageID) in nonAllow {
+            let other = makeRequest(messageID: messageID)
+            guard case let .created(id, _, _) = registry.submit(other) else {
+                Issue.record("expected created")
+                return
+            }
+            #expect(registry.resolve(askId: id, decision: decision))
+            #expect(registry.lookupTerminal(agentID: "agent-1", request: other) == nil)
+        }
+
+        let clock = FakeClock(Date(timeIntervalSince1970: 1_000))
+        let expireRegistry = PendingAskRegistry(
+            hardTimeoutSeconds: 300,
+            now: clock.now,
+            sleep: immediateSleep
+        )
+        let expireRequest = makeRequest(messageID: "expire")
+        guard case let .created(expireId, _, _) = expireRegistry.submit(expireRequest) else {
+            Issue.record("expected created")
+            return
+        }
+        clock.instant = Date(timeIntervalSince1970: 1_301)
+        expireRegistry.expireIfNeeded()
+        #expect(expireRegistry.isExpired(askId: expireId))
+        #expect(expireRegistry.lookupTerminal(agentID: "agent-1", request: expireRequest) == nil)
     }
 
     @Test func noWaiterLeftDoesNotCancelAndHardExpiryStillRuns() {
@@ -291,9 +350,10 @@ import Testing
         let task = Task {
             await registry.awaitDecision(askId: id, agentID: "agent-1", softTimeout: 60)
         }
-        // Allow enqueue + sleep scheduling.
+        // Soft await sleeps remaining hard (10). Expiry schedule may also sleep (300) —
+        // wait for the capped soft value, not merely the first probe write.
         let deadline = Date().addingTimeInterval(1)
-        while slept.lastSeconds == nil, Date() < deadline {
+        while slept.lastSeconds != 10, Date() < deadline {
             Thread.sleep(forTimeInterval: 0.01)
         }
         task.cancel()

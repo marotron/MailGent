@@ -7,16 +7,18 @@ public enum ConditionalAccessDecision: String, Sendable, Codable {
 }
 
 /// Prompter result for one Ask window. `recheck` re-runs grant→rules→Ask and is never cached.
+/// `dismissed` is traffic-light / ⌘W (or hard-expire wake); never Remember-cached.
 public enum ConditionalAccessPromptOutcome: String, Sendable, Codable {
     case allow
     case block
     case recheck
+    case dismissed
 
     public var decision: ConditionalAccessDecision? {
         switch self {
         case .allow: return .allow
         case .block: return .block
-        case .recheck: return nil
+        case .recheck, .dismissed: return nil
         }
     }
 }
@@ -444,41 +446,22 @@ public struct AgentReadAPI {
             filename: filename
         )
 
-        if let terminal = pendingAsks.lookupTerminal(agentID: agentID, request: request) {
-            switch terminal {
-            case .allow:
-                let allowLabels = cachedAllow.union(needPrompt)
-                return .resolved(
-                    ConditionalFieldResolution(
-                        fields: Self.applyingAskDecisions(
-                            fields,
-                            allowLabels: allowLabels,
-                            blockLabels: cachedBlock,
-                            limitingAskTo: limitingAskTo
-                        ),
-                        confirmed: Self.mask(forLabels: allowLabels, in: askMask),
-                        blocked: Self.mask(forLabels: cachedBlock, in: askMask),
-                        prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
-                    )
+        // Allow-lease only — block / expired / dismissed never suppress a fresh Ask here.
+        if case .allow = pendingAsks.lookupTerminal(agentID: agentID, request: request) {
+            let allowLabels = cachedAllow.union(needPrompt)
+            return .resolved(
+                ConditionalFieldResolution(
+                    fields: Self.applyingAskDecisions(
+                        fields,
+                        allowLabels: allowLabels,
+                        blockLabels: cachedBlock,
+                        limitingAskTo: limitingAskTo
+                    ),
+                    confirmed: Self.mask(forLabels: allowLabels, in: askMask),
+                    blocked: Self.mask(forLabels: cachedBlock, in: askMask),
+                    prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
                 )
-            case .block, .expired:
-                let blockLabels = cachedBlock.union(needPrompt)
-                return .resolved(
-                    ConditionalFieldResolution(
-                        fields: Self.applyingAskDecisions(
-                            fields,
-                            allowLabels: cachedAllow,
-                            blockLabels: blockLabels,
-                            limitingAskTo: limitingAskTo
-                        ),
-                        confirmed: Self.mask(forLabels: cachedAllow, in: askMask),
-                        blocked: Self.mask(forLabels: blockLabels, in: askMask),
-                        prompted: Self.mask(forLabels: Set(needPrompt), in: askMask)
-                    )
-                )
-            case .superseded, .stillAwaiting, .unknown:
-                break
-            }
+            )
         }
 
         let context = ConditionalAccessPromptContext(
@@ -610,6 +593,9 @@ public struct AgentReadAPI {
                 blocked: Self.mask(forLabels: blockLabels, in: askMask),
                 prompted: Self.mask(forLabels: promptedLabels, in: askMask)
             )
+        case .dismissed:
+            _ = pendingAsks.resolve(askId: pending.askId, decision: .dismissed)
+            return nil
         }
     }
 

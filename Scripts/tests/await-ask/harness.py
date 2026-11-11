@@ -115,7 +115,8 @@ class ScriptedAskMailGent:
                 entry = self._asks[ask_id]
                 if entry["terminal"] is None:
                     return self._awaiting(entry)
-            # Terminal allow lease → body
+            # Terminal allow lease → body. Block / expired / dismissed / superseded
+            # never suppress a fresh Ask (Remember cache is out of scope for this fake).
             for entry in self._asks.values():
                 if (
                     entry["fingerprint"] == fp
@@ -129,27 +130,6 @@ class ScriptedAskMailGent:
                         "body": self.bodies.get(message_id, BODY_TEXT),
                         "status": "ok",
                     }
-            if any(
-                e["fingerprint"] == fp
-                and e["agent"] == agent
-                and e["terminal"] in ("block", "expired")
-                for e in self._asks.values()
-            ):
-                return {
-                    "id": message_id,
-                    "accountID": account_id,
-                    "placement": placement,
-                    "body": None,
-                    "status": "denied",
-                }
-            if any(
-                e["fingerprint"] == fp
-                and e["agent"] == agent
-                and e["terminal"] == "superseded"
-                for e in self._asks.values()
-            ):
-                # Fall through → new ask (agent must re-evaluate)
-                pass
 
             ask_id = str(uuid.uuid4())
             now = time.time()
@@ -198,6 +178,8 @@ class ScriptedAskMailGent:
                 return {"outcome": "expired", "askId": ask_id}
             if entry["terminal"] == "superseded":
                 return {"outcome": "superseded", "askId": ask_id}
+            if entry["terminal"] == "dismissed":
+                return {"outcome": "dismissed", "askId": ask_id}
             remaining = max(0.0, entry["expiresAt"] - time.time())
             wait = min(soft, remaining) if remaining else soft
             if self.allow_delay > 0:
@@ -238,6 +220,8 @@ class ScriptedAskMailGent:
                 }
             if terminal == "expired":
                 return {"outcome": "expired", "askId": ask_id}
+            if terminal == "dismissed":
+                return {"outcome": "dismissed", "askId": ask_id}
             return {"outcome": "superseded", "askId": ask_id}
 
     def resolve(self, ask_id: str, decision: str) -> bool:

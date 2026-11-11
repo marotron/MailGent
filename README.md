@@ -87,7 +87,7 @@ What this alpha can do today. Fold new `CHANGELOG` items into the matching secti
 - Help row names the agent; expand More for field / Allow·Block detail
 - HTML-only Body shows an **HTML only** badge on the title row; plain preview is derived from HTML when needed
 - Preview canvas has − / + zoom (default 75%); dialog height stays compact (~560pt max)
-- Concurrent `get`s each open their own **Email access request** window. Allow, Block, or closing a window decides only that request (close / ⌘W = Block, not expired)
+- Concurrent `get`s each open their own **Email access request** window. Allow, Block, or closing a window decides only that request (close / ⌘W = `dismissed`, not Block; hard timeout = `expired`)
 - Red badge on the menu-bar icon (and Dock when visible) shows how many human actions are waiting (Ask **and** open propose-send confirms)
 - The status menu lists them under **Needs your action** (count, kind-aware rows: Ask as `Agent · subject`, send as `Agent · Send · subject`). Ask rows keep **Block** / **Allow**; send rows only raise the confirm. Clicking a row raises that window and does not decide it. Opening the menu raises every pending window without taking focus; closing it leaves the selected one in front
 - Optional rule from Ask: Subject / From **Add to rule** picks open a right-pane editor (New or Existing). **Allow** / **Block** writes the rule when armed; closing the window still blocks this read without writing a rule

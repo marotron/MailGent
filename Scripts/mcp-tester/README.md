@@ -51,7 +51,7 @@ When changing MCP tools or propose/await behaviour, update this tester **and** t
 
 1. Connect → `initialize` + `tools/list` (live tool list; no hardcoded allow-list).
 2. Pick a tool → edit schema fields and/or Raw JSON → Call.
-3. Soft timeout defaults: `await_ask` **25**, `await_propose_send` **60**. HTTP client budget is at least ~35s (soft + 10).
+3. Soft timeout defaults: `await_ask` **25**, `await_propose_send` **60**. HTTP client budget is at least ~35s (soft + 10). `await_ask` terminals: `allow` | `block` | `expired` | `superseded` | `dismissed` (close / ⌘W).
 4. `list` / `search` / `list_new` render a hit list: **Get** fires `get` immediately; **Fill** only seeds args; **Open** calls `open_in_mail`. Double-click a row = Get.
 5. Identicons on account / message / ask IDs (same seed → same face) so you can match the Ask dialog’s account prefix at a glance.
 6. Shortcuts: Status · List · List new · Search… · Update · Await ask (last `askId`) · Propose send · Await propose (last `proposalId`).

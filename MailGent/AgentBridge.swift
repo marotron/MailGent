@@ -1724,7 +1724,8 @@ final class AgentBridge {
         )
     }
 
-    /// Allow / Block write registry (+ optional cache). Recheck → superseded. No-ops if already terminal
+    /// Allow / Block write registry (+ optional Remember cache). Recheck → superseded.
+    /// Dismissed (close / hard-expire wake) never writes Remember. No-ops if already terminal
     /// (e.g. hard expiry already marked `expired` before the UI waiter woke).
     private func applyAskUIOutcome(
         askId: String,
@@ -1741,6 +1742,8 @@ final class AgentBridge {
             writeAskDecisionCache(context: context, decision: .block)
         case .recheck:
             _ = host.pendingAsks.resolve(askId: askId, decision: .superseded)
+        case .dismissed:
+            _ = host.pendingAsks.resolve(askId: askId, decision: .dismissed)
         }
     }
 

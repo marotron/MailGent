@@ -32,9 +32,9 @@ public struct ConditionalAccessPromptRequest: Identifiable, Sendable {
 public final class ConditionalAccessPromptCoordinator: ObservableObject {
     public init() {}
 
-    /// Request a decision from the user. Suspends until Allow / Block / rematch recheck for this request.
+    /// Request a decision from the user. Suspends until Allow / Block / dismiss / rematch recheck.
     /// Concurrent gets each open their own dialog; one decision never resolves another.
-    /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
+    /// Always returns (never throws). Traffic-light / ⌘W is dismissed (not Block).
     /// - Parameter askId: Registry id from non-blocking Ask open; keys the dialog + queue row.
     public func requestDecision(
         context: ConditionalAccessPromptContext,
@@ -60,6 +60,7 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         case .allow: label = "allow"
         case .block: label = "block"
         case .recheck: label = "recheck"
+        case .dismissed: label = "dismissed"
         }
         MailGentLog.trace(
             "conditional access \(label) agent=\(context.agentName) fields=\(fieldsText)"
@@ -87,7 +88,7 @@ enum ConditionalAskLayout {
     static let fieldPreviewExpandedHeight: CGFloat = 200
     /// Body card text area cap inside the scrolling left column (keep compact; full body is on the right).
     static let bodyPreviewMaxHeight: CGFloat = 120
-    /// Block / Allow row.
+    /// Block / Allow row (+ optional inline Remember caption).
     static let footerBlockHeight: CGFloat = 28
     /// Breathing room between left cards and the HSplitView divider.
     static let splitTrailingGap: CGFloat = 10
@@ -735,6 +736,16 @@ struct ConditionalAccessPromptDialog: View {
             }
             .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
             .keyboardShortcut(.defaultAction)
+
+            if let rememberNote = AskRememberCaption.note(
+                for: MailGentPreferences.askDecisionCachePolicy
+            ) {
+                Text(rememberNote)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if ruleSupport != nil, ruleDraft.isArmed {
                 Text(ruleDraft.fateLabel)

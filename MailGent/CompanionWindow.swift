@@ -223,9 +223,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         asks[id] != nil
     }
 
-    /// Hard-timeout path: dismiss Ask without Block. Registry already marked `expired`.
-    /// Resumes any UI waiter with `.block` so a fire-and-forget Task can finish; callers must
-    /// treat resolve-as-block as a no-op when the ask is already terminal.
+    /// Hard-timeout path: close Ask without Block / Remember. Registry already marked `expired`.
+    /// Resumes the UI waiter with `.dismissed` (non-cache); resolve is a no-op when already terminal.
     func expireConditionalAsk(id: String) {
         guard let record = asks[id] else { return }
         if record.finished {
@@ -240,8 +239,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         record.continuation = nil
         asks[id] = nil
         dismissAskWindow(record.window)
-        // Wake the detached present Task; AgentBridge skips registry write when already expired.
-        continuation?.resume(returning: .block)
+        continuation?.resume(returning: .dismissed)
     }
 
     /// After an armed rule commit, recheck other open Asks for the same agent when the rule can change them.
@@ -717,7 +715,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             removed = AskQueueIndicator.shared.resolve(id: id, with: .allow) != nil
         case .block:
             removed = AskQueueIndicator.shared.resolve(id: id, with: .block) != nil
-        case .recheck:
+        case .recheck, .dismissed:
             removed = AskQueueIndicator.shared.remove(id: id)
         }
         guard removed else { return }
@@ -1036,8 +1034,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             return false
         }
         if let id = asks.first(where: { $0.value.window === sender })?.key {
-            // Traffic-light / ⌘W on this Ask → Block (fail-closed) for this request only.
-            finishAsk(id: id, outcome: .block)
+            // Traffic-light / ⌘W → dismissed (not Block); no Remember; agent may re-prompt.
+            finishAsk(id: id, outcome: .dismissed)
             return false
         }
         if let id = sendProposals.first(where: { $0.value.window === sender })?.key {

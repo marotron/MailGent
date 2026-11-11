@@ -8,6 +8,16 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ## [Unreleased]
 
+### Changed
+
+- Conditional Ask close (traffic light / ⌘W) is `await_ask` outcome `dismissed` — not Block; never writes Remember; a fresh `get` / `get_attachment` re-prompts
+- Hard Ask timeout stays `expired` (one-shot deny for that ask) and never writes Remember; a fresh get re-prompts
+- Fresh get after intentional Block without Remember re-prompts (only the short Allow lease, or Remember / Pass·Block rules, suppress a new Ask)
+
+### Added
+
+- Ask window shows a small inline Remember note after Allow/Block when **Remember Ask decisions** is on (`will stay cached for … (this agent)`)
+
 ## [0.24.3] - 2026-11-11
 
 ### Added
