@@ -77,7 +77,8 @@ struct ProposalBodyEditor: NSViewRepresentable {
         Coordinator(parent: self)
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate, @unchecked Sendable {
+    @MainActor
+    final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ProposalBodyEditor
         var shortcut: ProposalReferShortcut
         weak var textView: NSTextView?
@@ -165,16 +166,22 @@ struct ProposalBodyEditor: NSViewRepresentable {
         func startShortcutMonitor() {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, let textView = self.textView else { return event }
-                guard textView.window?.firstResponder === textView else { return event }
-                guard self.shortcut.matches(
-                    characters: event.charactersIgnoringModifiers,
-                    modifierFlags: event.modifierFlags
-                ) else {
-                    return event
+                guard let self else { return event }
+                let characters = event.charactersIgnoringModifiers
+                let modifiers = event.modifierFlags
+                let handled = MainActor.assumeIsolated { () -> Bool in
+                    guard let textView = self.textView else { return false }
+                    guard textView.window?.firstResponder === textView else { return false }
+                    guard self.shortcut.matches(
+                        characters: characters,
+                        modifierFlags: modifiers
+                    ) else {
+                        return false
+                    }
+                    self.referSelection()
+                    return true
                 }
-                self.referSelection()
-                return nil
+                return handled ? nil : event
             }
         }
 
@@ -532,35 +539,41 @@ private final class ProposalTokenCell: NSTextAttachmentCell {
     }
 
     override func cellSize() -> NSSize {
-        let width = (display as NSString).size(withAttributes: [.font: tokenFont]).width
-        let height = ceil(tokenFont.ascender - tokenFont.descender) + verticalPadding * 2
-        return NSSize(width: ceil(width) + horizontalPadding * 2, height: height)
+        MainActor.assumeIsolated {
+            let width = (display as NSString).size(withAttributes: [.font: tokenFont]).width
+            let height = ceil(tokenFont.ascender - tokenFont.descender) + verticalPadding * 2
+            return NSSize(width: ceil(width) + horizontalPadding * 2, height: height)
+        }
     }
 
     /// Pin the attachment baseline to the surrounding text baseline (not the cell mid-Y).
     override func cellBaselineOffset() -> NSPoint {
-        NSPoint(x: 0, y: tokenFont.descender - verticalPadding)
+        MainActor.assumeIsolated {
+            NSPoint(x: 0, y: tokenFont.descender - verticalPadding)
+        }
     }
 
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
-        let path = NSBezierPath(
-            roundedRect: cellFrame,
-            xRadius: 4 * fontScale,
-            yRadius: 4 * fontScale
-        )
-        NSColor(srgbRed: 1, green: 0.851, blue: 0.639, alpha: 1).setFill()
-        path.fill()
-        let color = NSColor(srgbRed: 0.420, green: 0.227, blue: 0, alpha: 1)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: tokenFont,
-            .foregroundColor: color,
-        ]
-        // Flipped NSTextView: origin is top-left; top padding keeps glyphs on the shared baseline.
-        let origin = NSPoint(
-            x: cellFrame.minX + horizontalPadding,
-            y: cellFrame.minY + verticalPadding
-        )
-        (display as NSString).draw(at: origin, withAttributes: attrs)
+        MainActor.assumeIsolated {
+            let path = NSBezierPath(
+                roundedRect: cellFrame,
+                xRadius: 4 * fontScale,
+                yRadius: 4 * fontScale
+            )
+            NSColor(srgbRed: 1, green: 0.851, blue: 0.639, alpha: 1).setFill()
+            path.fill()
+            let color = NSColor(srgbRed: 0.420, green: 0.227, blue: 0, alpha: 1)
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: tokenFont,
+                .foregroundColor: color,
+            ]
+            // Flipped NSTextView: origin is top-left; top padding keeps glyphs on the shared baseline.
+            let origin = NSPoint(
+                x: cellFrame.minX + horizontalPadding,
+                y: cellFrame.minY + verticalPadding
+            )
+            (display as NSString).draw(at: origin, withAttributes: attrs)
+        }
     }
 }
 
@@ -582,16 +595,18 @@ private final class ProposalReferenceMarkerCell: NSTextAttachmentCell {
     }
 
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
-        let rect = cellFrame.insetBy(dx: 1, dy: 1)
-        NSColor(srgbRed: 0.42, green: 0.25, blue: 0.82, alpha: 1).setFill()
-        NSBezierPath(ovalIn: rect).fill()
-        let font = NSFont.systemFont(ofSize: 9, weight: .bold)
-        let number = "\(number)" as NSString
-        let size = number.size(withAttributes: [.font: font])
-        number.draw(
-            at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
-            withAttributes: [.font: font, .foregroundColor: NSColor.white]
-        )
+        MainActor.assumeIsolated {
+            let rect = cellFrame.insetBy(dx: 1, dy: 1)
+            NSColor(srgbRed: 0.42, green: 0.25, blue: 0.82, alpha: 1).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            let font = NSFont.systemFont(ofSize: 9, weight: .bold)
+            let number = "\(number)" as NSString
+            let size = number.size(withAttributes: [.font: font])
+            number.draw(
+                at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+                withAttributes: [.font: font, .foregroundColor: NSColor.white]
+            )
+        }
     }
 }
 
