@@ -119,7 +119,7 @@ enum ConditionalAskLayout {
     }
 
     /// Collapsed centered access-lead row (icon + one-liner + More).
-    /// Clearance above (chrome `pad`) and below (same `pad` into the card scroll) stay equal.
+    /// Clearance below the lead is chrome `pad` *outside* the scroll; scroll content itself has 0 top inset.
     static let whyHelpCollapsedHeight: CGFloat = 24
 
     /// Window height from measured left scroll-content + why-help chrome, capped for a popup.
@@ -270,6 +270,35 @@ struct AskPreviewHoverTracker: NSViewRepresentable {
                     isHovering = hovering
                 }
             }
+        }
+    }
+}
+
+/// SwiftUI `contentMargins(…, 0)` alone can leave AppKit `NSScrollView.contentInsets`
+/// in place on macOS — that inset sits *inside* the scroll and reads as a large
+/// title→card gap that shrinks when you scroll. Zero the enclosing scroll view.
+private struct AskScrollContentInsetClearer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.isHidden = true
+        DispatchQueue.main.async { Self.clearEnclosingScroll(from: view) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { Self.clearEnclosingScroll(from: nsView) }
+    }
+
+    private static func clearEnclosingScroll(from view: NSView) {
+        var current: NSView? = view
+        while let node = current {
+            if let scroll = node as? NSScrollView {
+                scroll.automaticallyAdjustsContentInsets = false
+                scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+                scroll.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+                return
+            }
+            current = node.superview
         }
     }
 }
@@ -472,9 +501,9 @@ struct ConditionalAccessPromptDialog: View {
     }
 
     private var leftColumn: some View {
-        // Explicit pad under the access-lead (not column `gap`) so title→card matches
-        // chrome pad above the title. ScrollView’s automatic top content margin is zeroed
-        // so it does not stack a second gap.
+        // Title bottom: chrome `pad` *outside* the ScrollView. Scroll content top: 0 —
+        // do not put a zero-height scroll anchor above the first card (VStack `gap`
+        // would still insert a scroll-away top margin). Pin scroll via first card id.
         VStack(alignment: .leading, spacing: 0) {
             whyThisWindowHelp
 
@@ -483,9 +512,8 @@ struct ConditionalAccessPromptDialog: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
-                        Color.clear.frame(height: 0).id("ask-left-top")
-
                         messageCard
+                            .id("ask-left-top")
 
                         if request.fieldPreviews.isEmpty {
                             ConditionalAskCard {
@@ -519,8 +547,10 @@ struct ConditionalAccessPromptDialog: View {
                             )
                         }
                     )
+                    .background(AskScrollContentInsetClearer())
                 }
                 .contentMargins(.top, 0, for: .scrollContent)
+                .contentMargins(.top, 0, for: .scrollIndicators)
                 .padding(.top, ConditionalAskLayout.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .onPreferenceChange(AskLeftScrollContentHeightKey.self) { height in

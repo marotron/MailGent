@@ -1,0 +1,49 @@
+---
+description: >-
+  Swift / SwiftUI visual spacing, padding, margin, or scroll-away gap bugs —
+  name layers first, content tree before AppKit; if first dogfood try fails,
+  propose a simple pointing prototype for shared language
+globs: "**/*.swift"
+alwaysApply: false
+---
+
+# Visual spacing debug (MailGent)
+
+**When:** Swift / SwiftUI layout work **and** the bug is **where space sits** (title↔card, scroll-away gap, “too much pad”, “zero the top of X”). Skip for non-Swift UI, and for building a new visual feature from scratch (`ui-inventory.mdc` / HTML feature proto).
+
+## 1. Name layers before editing
+
+Write the layers in chat and get agreement on **which one** changes:
+
+| Layer | Meaning |
+|-------|---------|
+| **A** | Outside a scroll/stack — e.g. pad under a title **before** the scroll box |
+| **B** | Inside scroll/stack content — space **above the first card** that moves when you scroll |
+| **C** | Card-internal pad / inter-card `gap` / footer gap (only if named) |
+
+Do **not** code until the target layer is named. User “top of the scrolled box” → **B**; “under the title” → **A**.
+
+## 2. Content tree before AppKit
+
+For anything that **shrinks or vanishes when scrolling**:
+
+1. List the first ~3 views inside the `ScrollView` / stack.
+2. If a non-content first child exists (`Color.clear`, spacer, zero-height anchor), treat that + `VStack`/`HStack` **spacing** as the prime suspect — zero-height views still take spacing.
+3. One-line differential: remove that child or set top spacing to 0 → dogfood.
+4. Only then reach for `contentMargins`, `contentInsets`, or `NSViewRepresentable` clearers.
+
+Prefer **delete / relocate** over AppKit bridges.
+
+## 3. One hypothesis → one dogfood
+
+Do not stack inset-clearer + margin zero + outside-pad remove in one pass. On “still wrong,” **reset**: re-read the layout block cold, restate A/B/C — do not patch the previous patch.
+
+## 4. After one failed try → pointing prototype
+
+If the first focused fix does not match dogfood (or language is already fuzzy), **stop stacking Swift fixes** and propose a **simple** HTML map under `.scratch/<feature>/` (e.g. `spacing-map.html`):
+
+- Same regions as the live UI (title, scroll box, first card, footer) — boxes + short labels (**A** / **B** / …), not a full redesign
+- User points (“B is too big”, “keep A”) so chat shares names with the map
+- Implement only after that pointing pass (or an explicit “skip proto, just fix B”)
+
+Keep it throwaway and minimal; feature protos / inventory rules still win for new chrome.
