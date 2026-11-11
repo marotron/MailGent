@@ -55,9 +55,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.mailgent.MailGent
         MARKETING_VERSION: "0.24.2"
-        CURRENT_PROJECT_VERSION: 67
+        CURRENT_PROJECT_VERSION: 69
         # 0 = shipped marketing line; N>0 → About/menu show X.Y.Z-rc.N (not in MARKETING_VERSION).
-        INFOPLIST_KEY_MailGentReleaseCandidate: "1"
+        INFOPLIST_KEY_MailGentReleaseCandidate: "3"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: MailGent
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity

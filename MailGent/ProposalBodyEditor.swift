@@ -515,6 +515,11 @@ private final class ProposalTokenCell: NSTextAttachmentCell {
     let display: String
     let fontScale: CGFloat
 
+    /// Same size as plain body text so glyph baselines match on the line.
+    private var tokenFont: NSFont { NSFont.systemFont(ofSize: 13 * fontScale) }
+    private var horizontalPadding: CGFloat { 5 * fontScale }
+    private var verticalPadding: CGFloat { 1.5 * fontScale }
+
     init(display: String, fontScale: CGFloat) {
         self.display = display
         self.fontScale = fontScale
@@ -527,33 +532,35 @@ private final class ProposalTokenCell: NSTextAttachmentCell {
     }
 
     override func cellSize() -> NSSize {
-        let font = NSFont.systemFont(ofSize: 12 * fontScale)
-        let width = (display as NSString).size(withAttributes: [.font: font]).width
-        return NSSize(width: width + 10 * fontScale, height: 16 * fontScale)
+        let width = (display as NSString).size(withAttributes: [.font: tokenFont]).width
+        let height = ceil(tokenFont.ascender - tokenFont.descender) + verticalPadding * 2
+        return NSSize(width: ceil(width) + horizontalPadding * 2, height: height)
+    }
+
+    /// Pin the attachment baseline to the surrounding text baseline (not the cell mid-Y).
+    override func cellBaselineOffset() -> NSPoint {
+        NSPoint(x: 0, y: tokenFont.descender - verticalPadding)
     }
 
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
-        let rect = cellFrame.insetBy(dx: 0, dy: fontScale)
         let path = NSBezierPath(
-            roundedRect: rect,
+            roundedRect: cellFrame,
             xRadius: 4 * fontScale,
             yRadius: 4 * fontScale
         )
         NSColor(srgbRed: 1, green: 0.851, blue: 0.639, alpha: 1).setFill()
         path.fill()
-        let font = NSFont.systemFont(ofSize: 12 * fontScale)
         let color = NSColor(srgbRed: 0.420, green: 0.227, blue: 0, alpha: 1)
-        let size = (display as NSString).size(withAttributes: [.font: font])
-        let textRect = NSRect(
-            x: rect.minX + 5 * fontScale,
-            y: rect.midY - size.height / 2,
-            width: size.width,
-            height: size.height
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: tokenFont,
+            .foregroundColor: color,
+        ]
+        // Flipped NSTextView: origin is top-left; top padding keeps glyphs on the shared baseline.
+        let origin = NSPoint(
+            x: cellFrame.minX + horizontalPadding,
+            y: cellFrame.minY + verticalPadding
         )
-        (display as NSString).draw(
-            in: textRect,
-            withAttributes: [.font: font, .foregroundColor: color]
-        )
+        (display as NSString).draw(at: origin, withAttributes: attrs)
     }
 }
 

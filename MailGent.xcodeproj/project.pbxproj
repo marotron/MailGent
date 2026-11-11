@@ -1078,7 +1078,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 67;
+				CURRENT_PROJECT_VERSION = 69;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1087,7 +1087,7 @@
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_MailGentReleaseCandidate = 1;
+				INFOPLIST_KEY_MailGentReleaseCandidate = 3;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "MailGent sends or opens proposed messages in Apple Mail when you confirm.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026";
 				INFOPLIST_KEY_NSPrincipalClass = MailGentApplication;
@@ -1124,7 +1124,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 67;
+				CURRENT_PROJECT_VERSION = 69;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1133,7 +1133,7 @@
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_MailGentReleaseCandidate = 1;
+				INFOPLIST_KEY_MailGentReleaseCandidate = 3;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "MailGent sends or opens proposed messages in Apple Mail when you confirm.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026";
 				INFOPLIST_KEY_NSPrincipalClass = MailGentApplication;

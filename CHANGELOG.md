@@ -12,6 +12,10 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 - Experimental propose-send edit / revise confirm (Settings → Experimental): editable draft, Ask to look / Ask to revise, draft version history; Send and Open in Mail use the browsed draft version
 
+### Fixed
+
+- Secret-constant pills in the editable propose-send body align on the same baseline as surrounding text (no longer sit high in the line)
+
 ## [0.24.1] - 2026-11-10
 
 ### Added
