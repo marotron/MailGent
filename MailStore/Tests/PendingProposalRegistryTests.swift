@@ -39,10 +39,95 @@ import Testing
         #expect(idA == "p1")
     }
 
+    @Test func envelopeDedupeIgnoresBodyChanges() {
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600)
+        let first = makeProposal(id: "p1", subject: "Thanks", body: "Draft A")
+        let second = makeProposal(id: "p2", subject: "Thanks", body: "Draft B fresh copy")
+
+        let a = registry.submit(agentID: "agent-1", proposal: first)
+        let b = registry.submit(agentID: "agent-1", proposal: second)
+
+        guard case let .created(idA, _, stored) = a,
+              case let .deduped(idB, _, kept) = b
+        else {
+            Issue.record("expected envelope dedupe")
+            return
+        }
+        #expect(idA == idB)
+        #expect(kept.body == "Draft A")
+        #expect(stored.body == "Draft A")
+    }
+
+    @Test func envelopeConflictAcrossAgentsWhileAwaiting() {
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600)
+        let first = makeProposal(id: "p1", subject: "Hi", body: "Hello", agentName: "Jobby")
+        let second = makeProposal(id: "p2", subject: "Hi", body: "Other body", agentName: "Admin")
+
+        let a = registry.submit(agentID: "agent-1", proposal: first)
+        let b = registry.submit(agentID: "agent-2", proposal: second)
+
+        guard case let .created(idA, _, _) = a else {
+            Issue.record("expected created")
+            return
+        }
+        guard case let .conflict(idB, agentName, _) = b else {
+            Issue.record("expected conflict")
+            return
+        }
+        #expect(idA == idB)
+        #expect(agentName == "Jobby")
+    }
+
+    @Test func alreadySentBlocksBareReproposeWithinHardTimeout() {
+        let clock = FakeClock(Date(timeIntervalSince1970: 1_000))
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600, now: clock.now)
+        let first = makeProposal(id: "p1", subject: "Hi", body: "Hello")
+        guard case let .created(id, _, _) = registry.submit(agentID: "agent-1", proposal: first) else {
+            Issue.record("expected created")
+            return
+        }
+        #expect(registry.resolve(id: id, decision: .send))
+
+        let again = makeProposal(id: "p2", subject: "Hi", body: "Fresh copy")
+        let result = registry.submit(agentID: "agent-1", proposal: again)
+        guard case let .alreadySent(sentId, stored) = result else {
+            Issue.record("expected alreadySent")
+            return
+        }
+        #expect(sentId == id)
+        #expect(stored.subject == "Hi")
+
+        clock.instant = Date(timeIntervalSince1970: 1_000 + 3_601)
+        let afterTTL = registry.submit(agentID: "agent-1", proposal: makeProposal(id: "p3", subject: "Hi", body: "Later"))
+        guard case .created = afterTTL else {
+            Issue.record("expected create after envelope TTL")
+            return
+        }
+    }
+
+    @Test func cancelDoesNotArmAlreadySentEnvelope() {
+        let registry = PendingProposalRegistry(hardTimeoutSeconds: 3_600)
+        let first = makeProposal(id: "p1", subject: "Hi", body: "Hello")
+        guard case let .created(id, _, _) = registry.submit(agentID: "agent-1", proposal: first) else {
+            Issue.record("expected created")
+            return
+        }
+        #expect(registry.resolve(id: id, decision: .cancel))
+
+        let again = registry.submit(
+            agentID: "agent-1",
+            proposal: makeProposal(id: "p2", subject: "Hi", body: "Retry")
+        )
+        guard case .created = again else {
+            Issue.record("expected create after cancel")
+            return
+        }
+    }
+
     @Test func fingerprintIgnoresContext() {
         let registry = PendingProposalRegistry()
         let withContext = makeProposal(id: "a")
-        // Context is not on SendProposal factory here — fingerprint API ignores it by construction.
+        // Context is not on SendProposal factory here — envelope API ignores it by construction.
         let again = makeProposal(id: "b", subject: withContext.subject, body: withContext.body)
         let a = registry.submit(agentID: "agent-1", proposal: withContext)
         let b = registry.submit(agentID: "agent-1", proposal: again)
@@ -349,11 +434,12 @@ private func makeProposal(
     id: String = UUID().uuidString,
     subject: String = "Hi",
     body: String = "Hello",
-    to: [String] = ["alex@example.com"]
+    to: [String] = ["alex@example.com"],
+    agentName: String = "Cursor"
 ) -> SendProposal {
     SendProposal(
         id: id,
-        agentName: "Cursor",
+        agentName: agentName,
         to: to,
         subject: subject,
         body: body

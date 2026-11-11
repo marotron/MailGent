@@ -1,12 +1,25 @@
 ---
-description: Bump versions and CHANGELOG together — never one without the other.
-globs: CHANGELOG.md,project.yml,README.md,PRIVACY.md,MailStore/Sources/LoopbackMCPServer.swift
+description: SemVer + rc candidates — bump early, ship only when RELEASE_CANDIDATE is 0.
+globs: CHANGELOG.md,project.yml,README.md,PRIVACY.md,MailStore/Sources/LoopbackMCPServer.swift,MailStore/Sources/MailGentVersion.swift,MailGent/MailGentAboutView.swift
 alwaysApply: true
 ---
 
 # Versioning
 
-MailGent is **0.x alpha** until v1. Follow global SemVer (`MAJOR.MINOR.PATCH`).
+MailGent is **0.x alpha** until v1. Follow SemVer (`MAJOR.MINOR.PATCH`) with **release candidates** for dogfood.
+
+> **Scope:** MailGent-local dogfood of the rc workflow. Do **not** copy to `~/.cursor/rules/versioning.mdc` or other repos until this repo proves it out.
+
+## Progression (required)
+
+```
+0.24.0  →  0.24.1-rc.1  →  0.24.1-rc.2  →  0.24.1
+ (ship)     (candidate)     (candidate)     (ship)
+```
+
+1. When user-facing work starts on a `feat/…` / `fix/…` / `hotfix/…` branch → open the **next** marketing version as **rc.1** (do not leave About on the previous ship).
+2. Each meaningful dogfood binary of that line → bump **rc.N** and **build**.
+3. On ship → clear candidate (`RELEASE_CANDIDATE = 0`), keep the same `MARKETING_VERSION`, promote CHANGELOG / README, signed tag `vX.Y.Z`.
 
 ## SemVer while alpha (`0.x`)
 
@@ -16,55 +29,83 @@ MailGent is **0.x alpha** until v1. Follow global SemVer (`MAJOR.MINOR.PATCH`).
 | Change, refinement, or fix *within* an existing feature | PATCH |
 | Docs / chore / internal-only | none |
 
-**MINOR** = something new (e.g. `propose_send` → `0.20.0`). **PATCH** = change to something that already shipped (e.g. hide empty-placement accounts by default → `0.20.1`). When unsure, prefer PATCH. **Breaking** (defaults or APIs change incompatibly) = MINOR while `0.x`, and still list it under `### Breaking` in the CHANGELOG (e.g. `0.23.4` → `0.24.0`).
+**MINOR** = something new (e.g. `propose_send` → `0.20.0`). **PATCH** = change to something that already shipped. When unsure, prefer PATCH. **Breaking** (defaults or APIs change incompatibly) = MINOR while `0.x`, and still list it under `### Breaking` in the CHANGELOG.
 
-## Version bump = CHANGELOG entry (same commit)
+**Size rule:** bump follows size; CHANGELOG section follows kind. Small addition to an existing feature → PATCH under `### Added`. Bigger addition → ask PATCH vs MINOR. Unclear → ask before bump/tag/ship.
 
-**Never bump `MARKETING_VERSION` without updating root `CHANGELOG.md` in the same commit.**
+## Apple vs SemVer label (hard split)
 
-1. Add a `## [X.Y.Z] - YYYY-MM-DD` section at the top (below the title blurb).
-2. Group bullets under `### Added`, `### Fixed`, `### Changed`, or `### Breaking`.
-3. One section per release; do not edit past sections except typos.
+| Field | Holds | Example (candidate) | Example (ship) |
+|-------|--------|---------------------|----------------|
+| `MARKETING_VERSION` / `CFBundleShortVersionString` | Three integers only (Apple) | `0.24.1` | `0.24.1` |
+| `MailGentReleaseCandidate` / `MailGentVersion.releaseCandidate` | `0` = ship line; `N>0` = rc | `1` | `0` |
+| `CURRENT_PROJECT_VERSION` / build | Monotonic build id | `65` | `67` |
+| Display / MCP `serverInfo.version` | SemVer label | `0.24.1-rc.1` | `0.24.1` |
 
-Backfill missing history when you discover a gap (as with 0.1.0–0.1.3 before `CHANGELOG.md` existed).
+**Never** put `-rc.N`, `-alpha`, or `-candidate` inside `MARKETING_VERSION` / git ship tags / DMG filename.
+
+## Candidate open (not a ship)
+
+When opening or bumping an rc on a branch:
+
+1. Set `MARKETING_VERSION` to the intended next `X.Y.Z` (if not already).
+2. Set `MailGentReleaseCandidate` / `MailGentVersion.releaseCandidate` to `1` (first open) or `N+1` (next dogfood).
+3. Increment `CURRENT_PROJECT_VERSION`.
+4. Sync `MailGentVersion.swift` (`marketing` + `releaseCandidate`) — MCP reads this.
+5. Run `xcodegen generate` (or `make generate`).
+6. Add / keep notable bullets under `## [Unreleased]` in `CHANGELOG.md` (do **not** add a dated `## [X.Y.Z] - …` yet).
+7. Do **not** rewrite README headline / Features, PRIVACY ship blurb, or create `vX.Y.Z`.
+
+About: `Version 0.24.1-rc.1 alpha (65)`. Menu bar: `v0.24.1-rc.1`.
+
+## Ship (candidate → release)
+
+**Precondition:** `releaseCandidate == 0` after the ship bump (clear rc in the same commit).
+
+1. Set `releaseCandidate` / Info.plist candidate key to `0`.
+2. Increment build.
+3. Promote `## [Unreleased]` → `## [X.Y.Z] - YYYY-MM-DD` (group under Added / Fixed / Changed / Breaking).
+4. Full README update (headline + Features subsections — not headline-only).
+5. PRIVACY `This X.Y.Z alpha binary…` (+ behavior blurb when privacy-relevant).
+6. MCP / `MailGentVersion` show plain `X.Y.Z`.
+7. Signed tag only now (see below).
+
+**Never bump to a dated CHANGELOG section + tag while still rc.**
 
 ## Files to keep in sync
 
 | File | Field |
 |------|-------|
-| `project.yml` | `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` |
+| `project.yml` | `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`, `INFOPLIST_KEY_MailGentReleaseCandidate` |
+| `MailStore/Sources/MailGentVersion.swift` | `marketing`, `releaseCandidate` (MCP + single source for label) |
 | `MailGent.xcodeproj/project.pbxproj` | regenerate via `xcodegen generate` after `project.yml` |
-| `README.md` | **full** update — see below (not headline-only) |
-| `PRIVACY.md` | `This X.Y.Z alpha binary…` (+ behavior blurb when the release changes privacy-relevant flows) |
+| `CHANGELOG.md` | `Unreleased` while rc; dated `## [X.Y.Z]` on ship |
+| `README.md` | **full** update on **ship** only |
+| `PRIVACY.md` | ship only |
 | GitHub Release **title** | `X.Y.Z alpha` (pre-release until v1) |
-| Git tag | `vX.Y.Z` (semver only — no `-alpha` suffix) |
-| About window | `Version X.Y.Z alpha (build)` |
-| Menu-bar version label | `vX.Y.Z` (compact; stage in About / release title) |
-| `MailStore/Sources/LoopbackMCPServer.swift` | MCP `initialize` → `serverInfo.version` (semver only) |
-| `CHANGELOG.md` | new top section for the bump |
+| Git ship tag | signed `vX.Y.Z` (semver only — no `-rc` / `-alpha`) |
+| About window | `Version {label} alpha (build)` |
+| Menu-bar version label | `v{label}` |
+| `LoopbackMCPServer` `serverInfo.version` | `MailGentVersion.label` |
 
-### README (required on every bump)
-
-**Never** bump with only the `**X.Y.Z alpha**` headline changed. In the **same commit**, update `README.md` fully:
+### README (required on every **ship**)
 
 1. Headline → `**X.Y.Z alpha**`
-2. **## Features** — fold every user-facing item from that version’s `CHANGELOG.md` into the matching subsection (`Local mail`, `Agents`, `Grants`, `Ask`, `Rules`, `Leak guard`, `Access log`, `Drafts`). Add a subsection only when a new capability cluster appears. Keep bullets plain and scannable; do not leave shipped features out.
-3. Tool lists / Settings callouts / other README claims that the release changed
-4. Cross-check against `CHANGELOG` Added / Fixed / Changed / Breaking before closeout
-
-Increment `CURRENT_PROJECT_VERSION` on every release build.
+2. **## Features** — fold every user-facing item from that version’s CHANGELOG into the matching subsection
+3. Tool lists / Settings callouts / other README claims the release changed
+4. Cross-check against CHANGELOG Added / Fixed / Changed / Breaking before closeout
 
 ## Git
 
-- Do not land versioned work on `main` — branch `feat/…` or `fix/…` first.
-- Tag the release commit with a **signed** annotated tag `vX.Y.Z` when shipping (see below).
+- Do not land versioned work on `main` — branch `feat/…` / `fix/…` / `hotfix/…` first.
+- Optional non-ship annotated tags `vX.Y.Z-rc.N` are allowed for dogfood bookmarks; they must **not** trigger Release / DMG as a ship. Prefer unsigned or clearly non-release; **ship tags** remain signed `vX.Y.Z` only.
 - Docs/chore/internal-only: no version bump, no CHANGELOG entry.
 
-## Signed release tags (required)
+## Signed release tags (required for ship)
 
-GitHub **Verified** on the Tags page requires a cryptographically signed tag. Unsigned annotated tags and lightweight tags do **not** count (lightweight may look Verified only because the pointed-to merge commit is GitHub-signed — do not rely on that).
+GitHub **Verified** on the Tags page requires a cryptographically signed tag. Unsigned annotated tags and lightweight tags do **not** count.
 
-**Always** create release tags as:
+**Always** create ship tags as:
 
 ```bash
     git tag -s "vX.Y.Z" -m "X.Y.Z alpha"
@@ -76,6 +117,7 @@ GitHub **Verified** on the Tags page requires a cryptographically signed tag. Un
 
 - `git tag vX.Y.Z` (lightweight)
 - `git tag -a` without signing
+- Tagging while `MailGentVersion.releaseCandidate > 0`
 - Pushing a tag when `git verify-tag` fails
 - Falling back to unsigned if signing is misconfigured — **stop** and fix signing first
 
@@ -92,39 +134,92 @@ If `git tag -s` fails with "gpg failed to sign the data", signing is not configu
    echo "$(git config user.email) $(cat ~/.ssh/id_ed25519_github.pub)" > ~/.git_allowed_signers
    ```
 
-5. GitHub → Settings → SSH and GPG keys → **New SSH key** → Key type **Signing Key** (same pubkey can already exist as Authentication)
-6. Optional: `git config --global tag.gpgsign true` so plain `git tag -s` always signs
+5. GitHub → Settings → SSH and GPG keys → **New SSH key** → Key type **Signing Key**
+6. Optional: `git config --global tag.gpgsign true`
 
 ### Pre-tag checklist
 
-Before creating the tag, run:
-
 ```bash
-    git config --get gpg.format          # must be ssh
-    git config --get user.signingkey     # must point to your SSH signing key
-    git config --get gpg.ssh.allowedSignersFile   # must exist
+    git config --get gpg.format
+    git config --get user.signingkey
+    git config --get gpg.ssh.allowedSignersFile
     test -f "$(git config gpg.ssh.allowedSignersFile)"
+    # releaseCandidate must be 0 in MailGentVersion.swift / project.yml
 ```
-
-If any check fails, run the signing setup above. Then create the tag, verify it, and only then push.
 
 Closeout must propose the signed form, e.g. `Proposed tag: git tag -s vX.Y.Z -m "X.Y.Z alpha"`.
 
 ## Tags vs GitHub Releases (alpha until v1)
 
-All **0.1.x** ships as **pre-release alpha**. Same semver everywhere in code; **alpha** appears in user-facing titles only.
-
 | Surface | Format | Example |
 |---------|--------|---------|
-| Git tag | signed `vX.Y.Z` (`git tag -s`) | `v0.1.8` |
-| GitHub Release **title** | `X.Y.Z alpha` | `0.1.8 alpha` |
+| Git ship tag | signed `vX.Y.Z` | `v0.24.1` |
+| GitHub Release **title** | `X.Y.Z alpha` | `0.24.1 alpha` |
 | GitHub **pre-release** | always checked | — |
-| DMG filename | `MailGent-X.Y.Z.dmg` | `MailGent-0.1.8.dmg` |
-| `MARKETING_VERSION` / MCP / bundle | `X.Y.Z` | `0.1.8` |
+| DMG filename | `MailGent-X.Y.Z.dmg` | `MailGent-0.24.1.dmg` |
+| `MARKETING_VERSION` / bundle short version | `X.Y.Z` | `0.24.1` |
+| Candidate display / MCP | `X.Y.Z-rc.N` | `0.24.1-rc.1` |
 
-**Do not** put `-alpha` on new git tags (legacy exception: `v0.1.0-alpha.1` — first alpha; keep the tag, title is `0.1.0 alpha`).
+Workflow sets release title from the ship tag: strip leading `v`, append ` alpha`. Release notes start with every `CHANGELOG.md` section since the previous tag through this version (`Scripts/release/notes.sh`), then `.github/RELEASE_BODY.md`.
 
-Workflow sets release title from the tag: strip leading `v`, append ` alpha`. Release notes start with every `CHANGELOG.md` section since the previous tag through this version (`Scripts/release/notes.sh`), then the install notes in `.github/RELEASE_BODY.md`.
+**Release-note images:** do **not** embed screenshots (e.g. `install-window.png`) in every release. Include an image only when that ship’s CHANGELOG window actually changed what the image shows (e.g. DMG install-guide layout → 0.23.5). `notes.sh` gates the DMG guide image on CHANGELOG keywords; keep `RELEASE_BODY.md` text-only for Install / Gatekeeper.
+
+## Closeout
+
+Every version / feature closeout report in chat **must** include a **Dogfood (mcp-tester)** section with visual **Do → Expect** scenarios for this change (UI labels, JSON statuses, Access Log chips). Point at `Scripts/mcp-tester/README.md`. See also `.cursor/rules/mcp-dogfood.mdc`.
+
+**Default:** live MailGent + mcp-tester only. Do **not** include `fake_mailgent.py` / fake-harness steps in closeout unless the user asks for them. Do **not** write vague “run the shortcuts / expect it to work” dogfood.
+
+**Layout:** keep the closeout / commit block in a fenced code box. Put **Dogfood (mcp-tester)** **outside** that box as normal chat markdown (scannable, copy-paste commands). Do not bury dogfood inside the commit-message fence.
+
+### Candidate open / rc bump
+
+```
+Version closeout — X.Y.Z-rc.N (candidate)
+Branch: feat/… or fix/…
+Ship tag: none yet (releaseCandidate=N)
+
+Proposed commit message:
+<subject>
+
+<body>
+
+If you are happy with these changes, say so and I will stage and commit.
+I will not commit until you confirm.
+```
+
+Then **outside** the fence (example shape — fill with this change’s real labels):
+
+```
+## Dogfood (mcp-tester)
+
+**Setup:** MailGent running · `cd Scripts/mcp-tester && npm run tauri dev` · Connect `http://127.0.0.1:8788/mcp` + bearer
+
+**Sanity:** …
+**Scenario A — …**
+- Do: …
+- Expect: …
+```
+
+### Ship
+
+```
+Version closeout — vX.Y.Z
+Branch: feat/… or fix/…
+Proposed tag: git tag -s vX.Y.Z -m "X.Y.Z alpha"   # only when releaseCandidate=0
+
+Proposed commit message:
+<subject>
+
+<body>
+
+If you are happy with these changes, say so and I will stage and commit.
+I will not commit until you confirm.
+```
+
+Then **outside** the fence: same **Dogfood (mcp-tester)** section.
+
+Do not stage/commit/tag until the user confirms (unless they say **ship it**).
 
 ## Screenshots (DEBUG, local only)
 

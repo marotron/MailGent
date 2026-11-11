@@ -256,14 +256,29 @@ final class SendProposalEditModel: ObservableObject {
     }
 
     func sendPayload() -> ProposalAgentPayload {
-        let edits = changes
+        let snap = deliverySnapshot()
+        let edits = ProposalPayloadBuilder.changes(
+            beforeTo: baseline.to,
+            afterTo: snap.to,
+            beforeCc: baseline.cc,
+            afterCc: snap.cc,
+            beforeBcc: baseline.bcc,
+            afterBcc: snap.bcc,
+            beforeSubject: baseline.subject,
+            afterSubject: snap.subject,
+            beforeBody: baseline.body,
+            afterBody: snap.tokenizedBody,
+            constants: constants,
+            agentID: agentID
+        )
         return ProposalPayloadBuilder.send(
             proposalId: proposal.id,
             changes: edits,
             sentBody: edits.isEmpty
                 ? nil
-                : ProposalRedaction.redact(currentTokenizedBody, constants: constants, agentID: agentID),
-            references: anchoredReferences(),
+                : ProposalRedaction.redact(snap.tokenizedBody, constants: constants, agentID: agentID),
+            // Pins belong to the live draft; past previews are read-only with the strip hidden.
+            references: viewingPast ? [] : anchoredReferences(),
             context: replyContext(from: resolved)
         )
     }
@@ -291,8 +306,36 @@ final class SendProposalEditModel: ObservableObject {
         )
     }
 
+    /// Envelope + tokenized body that Send / Open in Mail will hand off.
+    /// When the human stepped back to a past draft, that snapshot wins over the live editor.
+    func deliverySnapshot() -> (
+        to: [String],
+        cc: [String],
+        bcc: [String],
+        subject: String,
+        tokenizedBody: String
+    ) {
+        if let past = viewedVersion {
+            return (
+                ProposalEnvelopeDiff.split(past.toLine),
+                ProposalEnvelopeDiff.split(past.ccLine),
+                ProposalEnvelopeDiff.split(past.bccLine),
+                past.subject.trimmingCharacters(in: .whitespacesAndNewlines),
+                ProposalBodyTokens.literalsToTokens(past.tokenizedBody, constants: constants, agentID: agentID)
+            )
+        }
+        return (
+            ProposalEnvelopeDiff.split(toLine),
+            ProposalEnvelopeDiff.split(ccLine),
+            ProposalEnvelopeDiff.split(bccLine),
+            subject.trimmingCharacters(in: .whitespacesAndNewlines),
+            currentTokenizedBody
+        )
+    }
+
     func deliveredProposal() -> SendProposal {
-        let tokenized = currentTokenizedBody
+        let snap = deliverySnapshot()
+        let tokenized = snap.tokenizedBody
         let catalog = Dictionary(uniqueKeysWithValues: constants.map { ($0.name, $0) })
         let resolved: String
         let spans: [SecretConstantResolveSpan]
@@ -314,11 +357,11 @@ final class SendProposalEditModel: ObservableObject {
         return SendProposal(
             id: proposal.id,
             agentName: proposal.agentName,
-            to: ProposalEnvelopeDiff.split(toLine),
-            subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
+            to: snap.to,
+            subject: snap.subject,
             body: resolved,
-            cc: ProposalEnvelopeDiff.split(ccLine),
-            bcc: ProposalEnvelopeDiff.split(bccLine),
+            cc: snap.cc,
+            bcc: snap.bcc,
             sender: proposal.sender,
             context: proposal.context,
             secretConstantSpans: spans,

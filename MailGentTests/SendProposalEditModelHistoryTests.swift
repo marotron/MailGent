@@ -86,6 +86,35 @@ struct SendProposalEditModelHistoryTests {
         #expect(!model.canStepBack == false)
     }
 
+    @Test func sendAndOpenInMailUseTheBrowsedDraftVersion() {
+        let model = SendProposalEditModel(
+            proposal: makeProposal(body: "Hello one two.", subject: "Kickoff"),
+            constants: [],
+            agentID: "agent"
+        )
+        model.applyAgentDraft(
+            makeProposal(body: "Hello three two.", subject: "Kickoff!"),
+            roundTrips: 1,
+            resolved: nil
+        )
+        #expect(model.deliveredProposal().body == "Hello three two.")
+        #expect(model.deliveredProposal().subject == "Kickoff!")
+
+        model.stepBack()
+        let past = model.deliveredProposal()
+        #expect(past.body == "Hello one two.")
+        #expect(past.subject == "Kickoff")
+        #expect(past.tokenizedBody == "Hello one two.")
+
+        let payload = model.sendPayload()
+        #expect(payload.edited == true)
+        #expect(payload.sentBody == "Hello one two.")
+
+        model.stepForward()
+        #expect(model.deliveredProposal().body == "Hello three two.")
+        #expect(model.deliveredProposal().subject == "Kickoff!")
+    }
+
     @Test func versionChangeCountCountsAgainstThePreviousVersion() {
         let model = SendProposalEditModel(proposal: makeProposal(body: "Hello one two."), constants: [], agentID: "agent")
         #expect(model.versionChangeCount(1) == nil, "v1 has no previous version")

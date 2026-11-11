@@ -1,0 +1,35 @@
+---
+description: When changing MailGent MCP tools or propose/await behaviour, update mcp-tester and Scripts/tests harnesses
+alwaysApply: true
+---
+
+# MCP dogfood surfaces (always)
+
+Whenever you **implement or change** MailGent MCP tools, tool descriptions, propose/await statuses, or agent-facing payload/copy:
+
+1. **Check** whether [`Scripts/mcp-tester/`](../../Scripts/mcp-tester/) needs an update (shortcuts, soft-timeout defaults, seed args, README, last-session fields).
+2. **Check** whether a matching harness under [`Scripts/tests/`](../../Scripts/tests/) needs an update or a new `--self-check` case (e.g. `await-ask/`, `propose-send-envelope/`).
+3. Prefer extending an existing harness over inventing a parallel one. Keep fakes **synthetic** (no personal mail).
+4. Run the relevant `python3 Scripts/tests/…/fake_mailgent.py --self-check` when you touch that protocol path.
+5. Unit tests in `MailStore/Tests` stay required; harnesses are transport/dogfood, not a substitute.
+
+Do not skip this checklist because “Swift tests already cover it.”
+
+## Closeout reports (always)
+
+When printing a version/feature **closeout** (candidate or ship), include a **Dogfood (mcp-tester)** section for the change just landed — not only “tests passed.”
+
+**Default target:** live MailGent + [`Scripts/mcp-tester/`](../../Scripts/mcp-tester/) only. Do **not** mention `fake_mailgent.py` / `Scripts/tests/*/fake_mailgent.py` in closeout unless the user explicitly asks for the fake harness.
+
+**Be specific and visual.** Do not stop at “run Propose send / expect guards.” Write short scenarios: what to click or type, then what should appear in mcp-tester, MailGent UI, and Access Log. Prefer **Do → Expect** pairs (UI labels, status strings, chip text, dialog behavior).
+
+Minimum shape:
+
+1. **Setup** — launch MailGent + tester; URL `http://127.0.0.1:8788/mcp` + bearer; any Settings toggle required for this change
+2. **Sanity** — one glance check that this binary is the candidate (About / menu `vX.Y.Z-rc.N`, MCP `initialize` version) when versioning changed
+3. **Scenarios** — numbered cases for *this* change only. Each case: **Do** (button / fields / human action) → **Expect** (JSON `status`/`outcome`, confirm window open/reuse/close, Access Log chips/compact line/duration)
+4. Skip unrelated tools
+
+**Layout:** Dogfood goes **outside** the fenced version-closeout / commit-message box (normal chat markdown). Never inside that fence.
+
+Stored in closeout templates under `.cursor/rules/versioning.mdc`.

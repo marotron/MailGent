@@ -3,7 +3,12 @@ import Foundation
 /// Result of submitting a send proposal into the pending registry.
 public enum PendingProposalSubmitResult: Equatable, Sendable {
     case created(proposalId: String, expiresAt: Date, proposal: SendProposal)
+    /// Same agent already has an open confirm for this envelope (headers only).
     case deduped(proposalId: String, expiresAt: Date, proposal: SendProposal)
+    /// Same agent already sent this envelope within the hard-timeout retention window.
+    case alreadySent(proposalId: String, proposal: SendProposal)
+    /// Another agent already has an open confirm for this envelope.
+    case conflict(proposalId: String, agentName: String, expiresAt: Date)
 }
 
 /// Soft-wait result for `await_propose_send`.
@@ -14,7 +19,7 @@ public enum PendingProposalAwaitResult: Equatable, Sendable {
     case unknown
 }
 
-/// In-memory pending `propose_send` proposals: fingerprint dedupe, soft wait, hard expire.
+/// In-memory pending `propose_send` proposals: envelope dedupe, soft wait, hard expire.
 public final class PendingProposalRegistry: @unchecked Sendable {
     public static let defaultHardTimeoutSeconds: TimeInterval = 3_600
     public static let hardTimeoutMinSeconds: TimeInterval = 300
@@ -35,7 +40,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
     private struct Entry {
         let proposalId: String
         let agentID: String
-        var fingerprint: String
+        var envelopeKey: String
         var proposal: SendProposal
         let expiresAt: Date
         var decision: SendProposalDecision?
@@ -54,6 +59,12 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         var terminalAt: Date?
     }
 
+    private struct TerminalEnvelope {
+        let proposalId: String
+        let proposal: SendProposal
+        let retainUntil: Date
+    }
+
     private enum DeliveryPhase: Equatable {
         case idle
         case inFlight
@@ -64,7 +75,10 @@ public final class PendingProposalRegistry: @unchecked Sendable {
     private var hardTimeoutSeconds: TimeInterval
     private let now: @Sendable () -> Date
     private var entries: [String: Entry] = [:]
-    private var fingerprintIndex: [String: String] = [:]
+    /// Open (undecided) proposals by envelope key. Key excludes agent so cross-agent conflicts surface.
+    private var envelopeIndex: [String: String] = [:]
+    /// After a successful send, block bare re-propose of the same envelope for the hard-timeout window.
+    private var envelopeTerminalIndex: [String: TerminalEnvelope] = [:]
     private var expirationHandler: (@Sendable (String) -> Void)?
     private var revisionHandler: (@Sendable (String, SendProposal, [ProposalInstructionResult]) -> Void)?
     private var expiryTasks: [String: Task<Void, Never>] = [:]
@@ -85,7 +99,30 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         min(max(seconds, softTimeoutMinSeconds), softTimeoutMaxSeconds)
     }
 
-    /// Fingerprint for dedupe: agent + normalized to/cc/bcc/sender/subject/body (not context).
+    /// Envelope key for conflict / already-sent guards: normalized to/cc/bcc/sender/subject (not body, not agent).
+    public static func envelopeKey(
+        to: [String],
+        cc: [String],
+        bcc: [String],
+        sender: String?,
+        subject: String
+    ) -> String {
+        func norm(_ s: String) -> String {
+            s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        func list(_ values: [String]) -> String {
+            values.map(norm).joined(separator: "\u{1e}")
+        }
+        return [
+            list(to),
+            list(cc),
+            list(bcc),
+            norm(sender ?? ""),
+            norm(subject)
+        ].joined(separator: "\u{1f}")
+    }
+
+    /// Legacy name — same as `envelopeKey` (body ignored). Prefer `envelopeKey`.
     public static func fingerprint(
         agentID: String,
         to: [String],
@@ -95,21 +132,9 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         subject: String,
         body: String
     ) -> String {
-        func norm(_ s: String) -> String {
-            s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        }
-        func list(_ values: [String]) -> String {
-            values.map(norm).joined(separator: "\u{1e}")
-        }
-        return [
-            agentID,
-            list(to),
-            list(cc),
-            list(bcc),
-            norm(sender ?? ""),
-            norm(subject),
-            body.trimmingCharacters(in: .whitespacesAndNewlines)
-        ].joined(separator: "\u{1f}")
+        _ = agentID
+        _ = body
+        return envelopeKey(to: to, cc: cc, bcc: bcc, sender: sender, subject: subject)
     }
 
     public func setHardTimeoutSeconds(_ seconds: TimeInterval) {
@@ -133,25 +158,36 @@ public final class PendingProposalRegistry: @unchecked Sendable {
     @discardableResult
     public func submit(agentID: String, proposal: SendProposal) -> PendingProposalSubmitResult {
         expireIfNeeded()
-        let fp = Self.fingerprint(
-            agentID: agentID,
+        let key = Self.envelopeKey(
             to: proposal.to,
             cc: proposal.cc,
             bcc: proposal.bcc,
             sender: proposal.sender,
-            subject: proposal.subject,
-            body: proposal.body
+            subject: proposal.subject
         )
         lock.lock()
-        if let existingID = fingerprintIndex[fp],
-           var existing = entries[existingID],
+        if let terminal = envelopeTerminalIndex[key], terminal.retainUntil > now() {
+            let proposalId = terminal.proposalId
+            let stored = terminal.proposal
+            lock.unlock()
+            return .alreadySent(proposalId: proposalId, proposal: stored)
+        }
+        if let existingID = envelopeIndex[key],
+           let existing = entries[existingID],
            !existing.expired,
            existing.decision == nil
         {
-            existing.proposal = proposal
-            entries[existingID] = existing
             let expiresAt = existing.expiresAt
             let stored = existing.proposal
+            if existing.agentID != agentID {
+                lock.unlock()
+                return .conflict(
+                    proposalId: existingID,
+                    agentName: stored.agentName,
+                    expiresAt: expiresAt
+                )
+            }
+            // Same agent: keep the open draft; bare re-propose must not replace it.
             lock.unlock()
             return .deduped(proposalId: existingID, expiresAt: expiresAt, proposal: stored)
         }
@@ -161,7 +197,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         entries[id] = Entry(
             proposalId: id,
             agentID: agentID,
-            fingerprint: fp,
+            envelopeKey: key,
             proposal: proposal,
             expiresAt: expiresAt,
             decision: nil,
@@ -176,7 +212,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             waiters: [],
             terminalAt: nil
         )
-        fingerprintIndex[fp] = id
+        envelopeIndex[key] = id
         lock.unlock()
         scheduleExpiry(id: id, expiresAt: expiresAt)
         return .created(proposalId: id, expiresAt: expiresAt, proposal: proposal)
@@ -282,10 +318,18 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         case .cancel, .openInMail:
             entry.agentPayload = payload
         }
-        entry.terminalAt = now()
+        let terminalInstant = now()
+        entry.terminalAt = terminalInstant
         let waiters = entry.waiters
         entry.waiters = []
-        fingerprintIndex[entry.fingerprint] = nil
+        envelopeIndex[entry.envelopeKey] = nil
+        if decision == .send {
+            envelopeTerminalIndex[entry.envelopeKey] = TerminalEnvelope(
+                proposalId: id,
+                proposal: entry.proposal,
+                retainUntil: terminalInstant.addingTimeInterval(hardTimeoutSeconds)
+            )
+        }
         entries[id] = entry
         cancelExpiryTaskLocked(id: id)
         lock.unlock()
@@ -308,6 +352,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             expire(id: id)
         }
         sweepTerminal()
+        sweepEnvelopeTerminals()
     }
 
     public func agentID(for id: String) -> String? {
@@ -393,19 +438,17 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             lock.unlock()
             return
         }
-        fingerprintIndex[entry.fingerprint] = nil
-        let fp = Self.fingerprint(
-            agentID: entry.agentID,
+        envelopeIndex[entry.envelopeKey] = nil
+        let key = Self.envelopeKey(
             to: proposal.to,
             cc: proposal.cc,
             bcc: proposal.bcc,
             sender: proposal.sender,
-            subject: proposal.subject,
-            body: proposal.body
+            subject: proposal.subject
         )
-        entry.fingerprint = fp
+        entry.envelopeKey = key
         entry.proposal = proposal
-        fingerprintIndex[fp] = id
+        envelopeIndex[key] = id
         entries[id] = entry
         lock.unlock()
     }
@@ -527,24 +570,22 @@ public final class PendingProposalRegistry: @unchecked Sendable {
             lock.unlock()
             throw ProposalRevisionApplyError.unknown
         }
-        fingerprintIndex[entry.fingerprint] = nil
-        let fp = Self.fingerprint(
-            agentID: agentID,
+        envelopeIndex[entry.envelopeKey] = nil
+        let key = Self.envelopeKey(
             to: proposal.to,
             cc: proposal.cc,
             bcc: proposal.bcc,
             sender: proposal.sender,
-            subject: proposal.subject,
-            body: proposal.body
+            subject: proposal.subject
         )
-        entry.fingerprint = fp
+        entry.envelopeKey = key
         entry.proposal = proposal
         entry.awaitingRevision = false
         entry.revisionKind = nil
         entry.pendingInterim = nil
         entry.agentPayload = nil
         entry.revisionResults = results
-        fingerprintIndex[fp] = proposalId
+        envelopeIndex[key] = proposalId
         entries[proposalId] = entry
         let handler = revisionHandler
         lock.unlock()
@@ -610,7 +651,7 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         entry.terminalAt = now()
         let waiters = entry.waiters
         entry.waiters = []
-        fingerprintIndex[entry.fingerprint] = nil
+        envelopeIndex[entry.envelopeKey] = nil
         entries[id] = entry
         cancelExpiryTaskLocked(id: id)
         let handler = expirationHandler
@@ -664,6 +705,15 @@ public final class PendingProposalRegistry: @unchecked Sendable {
         for id in stale {
             entries[id] = nil
             cancelExpiryTaskLocked(id: id)
+        }
+        lock.unlock()
+    }
+
+    private func sweepEnvelopeTerminals() {
+        lock.lock()
+        let instant = now()
+        for (key, terminal) in envelopeTerminalIndex where terminal.retainUntil <= instant {
+            envelopeTerminalIndex[key] = nil
         }
         lock.unlock()
     }

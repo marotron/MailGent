@@ -654,24 +654,55 @@ public struct LoopbackMCPServer {
         }
 
         let submit = host.pendingProposals.submit(agentID: agent.id, proposal: proposal)
-        let proposalId: String
-        let expiresAt: Date
-        let stored: SendProposal
-        let isNew: Bool
         switch submit {
-        case let .created(id, exp, p):
-            proposalId = id
-            expiresAt = exp
-            stored = p
-            isNew = true
-        case let .deduped(id, exp, p):
-            proposalId = id
-            expiresAt = exp
-            stored = p
-            isNew = false
-        }
+        case let .alreadySent(proposalId, stored):
+            var payload: [String: Any] = [
+                "status": "already_sent",
+                "proposalId": proposalId,
+                "outcome": "send",
+                "message":
+                    "This envelope was already sent. Do not propose it again; check Sent or use a different subject if you need a new message."
+            ]
+            payload["subject"] = stored.subject
+            payload["to"] = stored.to
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "already_sent · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
 
-        if isNew {
+        case let .conflict(proposalId, agentName, expiresAt):
+            let payload: [String: Any] = [
+                "status": "conflict",
+                "proposalId": proposalId,
+                "agentName": agentName,
+                "expiresAt": Self.iso8601(expiresAt),
+                "message":
+                    "Another agent already has an open confirm for this envelope (\(agentName)). Await that proposalId or wait for it to finish — do not open a second window."
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "conflict · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+
+        case let .created(proposalId, expiresAt, stored):
             let registry = host.pendingProposals
             let audit = host.audit
             let auditAgent = agent
@@ -712,28 +743,49 @@ public struct LoopbackMCPServer {
                     )
                 }
             }
-        }
-
-        let payload: [String: Any] = [
-            "status": "awaiting_user",
-            "proposalId": proposalId,
-            "expiresAt": Self.iso8601(expiresAt),
-            "message":
-                "Waiting for human confirmation. Call await_propose_send with this proposalId; do not re-propose the same mail."
-        ]
-        host.audit?.append(
-            AuditEntry(
-                kind: .proposeSend,
-                agentID: agent.id,
-                agentName: agent.name,
-                detail: "awaiting_user · \(detail)",
-                at: started,
-                finishedAt: Date(),
-                requestSummary: request,
-                responseSummary: AuditJSON.json(payload)
+            let payload: [String: Any] = [
+                "status": "awaiting_user",
+                "proposalId": proposalId,
+                "expiresAt": Self.iso8601(expiresAt),
+                "message":
+                    "Waiting for human confirmation. Call await_propose_send with this proposalId; do not bare re-propose the same envelope (to/cc/bcc/sender/subject)."
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "awaiting_user · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
             )
-        )
-        return try jsonString(payload)
+            return try jsonString(payload)
+
+        case let .deduped(proposalId, expiresAt, _):
+            let payload: [String: Any] = [
+                "status": "awaiting_user",
+                "proposalId": proposalId,
+                "expiresAt": Self.iso8601(expiresAt),
+                "message":
+                    "Confirm already open for this envelope. Call await_propose_send with this proposalId; do not open a new proposal."
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .proposeSend,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "awaiting_user · \(detail)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
+        }
     }
 
     private func awaitProposeSend(arguments: [String: Any], credential: String?) async throws -> String {
@@ -1630,7 +1682,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "propose_send",
                 "description":
-                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId (do not re-propose the same mail — fingerprint dedupes while awaiting). Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. If outcome is send with edited true, the human changed the draft; treat sentBody as what was sent. If outcome is revise_requested, rewrite per revision.instructionText, keep userEdits unless they conflict, and call propose_send again with revises.proposalId (same window, cap 5, original expiry kept). If outcome is attention_requested, read references and reply the same way; do not treat either outcome as sent or cancelled. Do not re-propose the same mail unchanged. No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? }. events[].source may be omitted (agent note). Max 40 events.",
+                    "Propose a new plain message for the human to confirm. Denied unless enabled in MailGent Settings → General. Returns immediately with { status: awaiting_user, proposalId, expiresAt, message } while MailGent shows Send / Open in Mail / Cancel. Then call await_propose_send with that proposalId. Bare re-propose of the same envelope (to/cc/bcc/sender/subject — body ignored) while awaiting returns the existing proposalId (no second window). After a successful send, bare re-propose of that envelope returns { status: already_sent } for the hard-timeout window (default 1 hour). If another agent already has an open confirm for the same envelope, returns { status: conflict, proposalId, agentName }. Hard wait limit is set in Settings (default 1 hour); on expiry the proposal is cancelled with no send. Send keeps the confirm open through Automation handoff (success / refuse shown in-dialog); Open in Mail uses Apple Mail via Automation (not SMTP). outcome send means Mail accepted the handoff, not that Sent already shows the message. If outcome is send with edited true, the human changed the draft; treat sentBody as what was sent. If outcome is revise_requested, rewrite per revision.instructionText, keep userEdits unless they conflict, and call propose_send again with revises.proposalId (same window, cap 5, original expiry kept). If outcome is attention_requested, read references and reply the same way; do not treat either outcome as sent or cancelled. No attachments or reply threading. Body may include [[mg:name]] secret-constant placeholders when Secret constants are enabled and allowlisted for this agent; confirm UI resolves values for the human only. Optional experimental context: when Settings → Experimental → Propose-send context thread is on, pass context { casePath, caseLabel?, events[], links? }. events[].source may be omitted (agent note). Max 40 events.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
@@ -1703,7 +1755,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "await_propose_send",
                 "description":
-                    "Soft-wait for a pending propose_send proposal. Pass proposalId from propose_send. Optional timeout seconds (default 60, clamped 1…120, never longer than the remaining hard deadline). Returns { outcome: send | opened_in_mail | cancelled | expired | revise_requested | attention_requested }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. revise_requested and attention_requested leave the confirm open; call propose_send with revises.proposalId to swap the draft. Unknown proposalId errors. Never auto-sends on timeout.",
+                    "Soft-wait for a pending propose_send proposal. Pass proposalId from propose_send. Optional timeout seconds (default 60, clamped 1…120, never longer than the remaining hard deadline). Returns { outcome: send | opened_in_mail | cancelled | expired | revise_requested | attention_requested }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — keep calling with the same proposalId; never bare re-propose because confirm seems lagged. revise_requested and attention_requested leave the confirm open; call propose_send with revises.proposalId to swap the draft. Unknown proposalId errors. Never auto-sends on timeout.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [
