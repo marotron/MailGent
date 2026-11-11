@@ -1086,6 +1086,25 @@ public struct LoopbackMCPServer {
                 )
             )
             return try jsonString(payload)
+
+        case .dismissed:
+            let payload: [String: Any] = [
+                "outcome": "dismissed",
+                "askId": askId
+            ]
+            host.audit?.append(
+                AuditEntry(
+                    kind: .awaitAsk,
+                    agentID: agent.id,
+                    agentName: agent.name,
+                    detail: "dismissed · \(askId)",
+                    at: started,
+                    finishedAt: Date(),
+                    requestSummary: request,
+                    responseSummary: AuditJSON.json(payload)
+                )
+            )
+            return try jsonString(payload)
         }
     }
 
@@ -1652,7 +1671,7 @@ public struct LoopbackMCPServer {
             [
                 "name": "await_ask",
                 "description":
-                    "Soft-wait for a pending Conditional Ask from get / get_attachment. Pass askId from the awaiting_user ack. Optional timeout seconds (default 25, clamped 1…120, never longer than the remaining hard deadline) — keep under the client socket budget (e.g. ≤25 for ~30s urllib). Returns { outcome: allow | block | expired | superseded }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. After allow, re-call get / get_attachment (await_ask never returns body). Unknown askId errors. Never auto-allows or auto-blocks on soft timeout.",
+                    "Soft-wait for a pending Conditional Ask from get / get_attachment. Pass askId from the awaiting_user ack. Optional timeout seconds (default 25, clamped 1…120, never longer than the remaining hard deadline) — keep under the client socket budget (e.g. ≤25 for ~30s urllib). Returns { outcome: allow | block | expired | superseded | dismissed }, or { status: awaiting_user, … } if the human has not decided yet within the soft wait — call again. After allow, re-call get / get_attachment (await_ask never returns body). Close / ⌘W is dismissed (not block); hard timeout is expired — neither writes Remember. Unknown askId errors. Never auto-allows or auto-blocks on soft timeout.",
                 "inputSchema": [
                     "type": "object",
                     "properties": [

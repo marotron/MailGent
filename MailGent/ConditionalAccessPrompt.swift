@@ -32,16 +32,18 @@ public struct ConditionalAccessPromptRequest: Identifiable, Sendable {
 public final class ConditionalAccessPromptCoordinator: ObservableObject {
     public init() {}
 
-    /// Request a decision from the user. Suspends until Allow / Block / rematch recheck for this request.
+    /// Request a decision from the user. Suspends until Allow / Block / dismiss / rematch recheck.
     /// Concurrent gets each open their own dialog; one decision never resolves another.
-    /// Always returns (never throws); Block is fail-closed (user Block / traffic-light close).
+    /// Always returns (never throws). Traffic-light / ⌘W is dismissed (not Block).
     /// - Parameter askId: Registry id from non-blocking Ask open; keys the dialog + queue row.
+    /// - Parameter expiresAt: Hard human-wait deadline for the titlebar countdown (Settings → Human wait limit).
     public func requestDecision(
         context: ConditionalAccessPromptContext,
         askId: String? = nil,
         accountLabel: String? = nil,
-        ruleSupport: ConditionalAccessAskRuleSupport? = nil
-    ) async -> ConditionalAccessPromptOutcome {
+        ruleSupport: ConditionalAccessAskRuleSupport? = nil,
+        expiresAt: Date
+    ) async -> ConditionalAccessPromptFinish {
         let request = ConditionalAccessPromptRequest(
             id: askId ?? UUID().uuidString,
             context: context
@@ -49,22 +51,24 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         let mailboxLabel = accountLabel.flatMap { $0.isEmpty ? nil : $0 } ?? context.accountID
         let fieldsText = context.requestedFields.joined(separator: ", ")
 
-        let outcome = await DetachedWindowHost.shared.runConditionalAsk(
+        let finish = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
             accountLabel: mailboxLabel,
-            ruleSupport: ruleSupport
+            ruleSupport: ruleSupport,
+            expiresAt: expiresAt
         )
 
         let label: String
-        switch outcome {
+        switch finish.outcome {
         case .allow: label = "allow"
         case .block: label = "block"
         case .recheck: label = "recheck"
+        case .dismissed: label = "dismissed"
         }
         MailGentLog.trace(
             "conditional access \(label) agent=\(context.agentName) fields=\(fieldsText)"
         )
-        return outcome
+        return finish
     }
 }
 
@@ -87,7 +91,7 @@ enum ConditionalAskLayout {
     static let fieldPreviewExpandedHeight: CGFloat = 200
     /// Body card text area cap inside the scrolling left column (keep compact; full body is on the right).
     static let bodyPreviewMaxHeight: CGFloat = 120
-    /// Block / Allow row.
+    /// Block / Allow row (+ optional Remember checkbox when Settings is on).
     static let footerBlockHeight: CGFloat = 28
     /// Breathing room between left cards and the HSplitView divider.
     static let splitTrailingGap: CGFloat = 10
@@ -115,7 +119,7 @@ enum ConditionalAskLayout {
     }
 
     /// Collapsed centered access-lead row (icon + one-liner + More).
-    /// Vertical clearance matches chrome `pad` above and VStack `gap` below (both 12).
+    /// Clearance below the lead is chrome `pad` *outside* the scroll; scroll content itself has 0 top inset.
     static let whyHelpCollapsedHeight: CGFloat = 24
 
     /// Window height from measured left scroll-content + why-help chrome, capped for a popup.
@@ -126,7 +130,7 @@ enum ConditionalAskLayout {
         let chrome =
             pad * 2
             + whyHelpHeight
-            + gap
+            + pad
             + contentHeight
             + gap
             + footerBlockHeight
@@ -270,6 +274,35 @@ struct AskPreviewHoverTracker: NSViewRepresentable {
     }
 }
 
+/// SwiftUI `contentMargins(…, 0)` alone can leave AppKit `NSScrollView.contentInsets`
+/// in place on macOS — that inset sits *inside* the scroll and reads as a large
+/// title→card gap that shrinks when you scroll. Zero the enclosing scroll view.
+private struct AskScrollContentInsetClearer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.isHidden = true
+        DispatchQueue.main.async { Self.clearEnclosingScroll(from: view) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { Self.clearEnclosingScroll(from: nsView) }
+    }
+
+    private static func clearEnclosingScroll(from view: NSView) {
+        var current: NSView? = view
+        while let node = current {
+            if let scroll = node as? NSScrollView {
+                scroll.automaticallyAdjustsContentInsets = false
+                scroll.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+                scroll.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+                return
+            }
+            current = node.superview
+        }
+    }
+}
+
 final class AskPreviewHoverNSView: NSView {
     var onHoverChange: ((Bool) -> Void)?
     private var tracking: NSTrackingArea?
@@ -360,8 +393,9 @@ struct AskPreviewZoomControls: View {
 struct ConditionalAccessPromptDialog: View {
     let request: ConditionalAccessPromptRequest
     let accountLabel: String
-    let onAllow: () -> Void
-    let onBlock: () -> Void
+    /// `remember` is the Ask checkbox (true when Settings Remember is off / hidden).
+    let onAllow: (_ remember: Bool) -> Void
+    let onBlock: (_ remember: Bool) -> Void
     var ruleSupport: ConditionalAccessAskRuleSupport? = nil
     var showOpenInMail: Bool = false
     var onOpenInMail: (() -> Void)? = nil
@@ -380,6 +414,8 @@ struct ConditionalAccessPromptDialog: View {
     @State private var whyThisWindowExpanded = false
     @State private var leftScrollContentHeight: CGFloat = 0
     @State private var whyHelpHeight: CGFloat = ConditionalAskLayout.whyHelpCollapsedHeight
+    /// Default on when Settings Remember is enabled; unused when the checkbox is hidden.
+    @State private var rememberThisDecision = true
     @StateObject private var ruleDraft = ConditionalAccessAskRuleDraft()
 
     private var envelope: ConditionalMessageEnvelope { request.context.envelope }
@@ -468,7 +504,10 @@ struct ConditionalAccessPromptDialog: View {
     }
 
     private var leftColumn: some View {
-        VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
+        // Title bottom: chrome `pad` *outside* the ScrollView. Scroll content top: 0 —
+        // do not put a zero-height scroll anchor above the first card (VStack `gap`
+        // would still insert a scroll-away top margin). Pin scroll via first card id.
+        VStack(alignment: .leading, spacing: 0) {
             whyThisWindowHelp
 
             // Scroll the whole card stack. Attachment fields sit above Body so a long
@@ -476,9 +515,8 @@ struct ConditionalAccessPromptDialog: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
-                        Color.clear.frame(height: 0).id("ask-left-top")
-
                         messageCard
+                            .id("ask-left-top")
 
                         if request.fieldPreviews.isEmpty {
                             ConditionalAskCard {
@@ -512,7 +550,11 @@ struct ConditionalAccessPromptDialog: View {
                             )
                         }
                     )
+                    .background(AskScrollContentInsetClearer())
                 }
+                .contentMargins(.top, 0, for: .scrollContent)
+                .contentMargins(.top, 0, for: .scrollIndicators)
+                .padding(.top, ConditionalAskLayout.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .onPreferenceChange(AskLeftScrollContentHeightKey.self) { height in
                     guard height > 0 else { return }
@@ -536,6 +578,7 @@ struct ConditionalAccessPromptDialog: View {
             }
 
             askFooter
+                .padding(.top, ConditionalAskLayout.gap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onPreferenceChange(AskWhyHelpHeightKey.self) { height in
@@ -736,6 +779,20 @@ struct ConditionalAccessPromptDialog: View {
             .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
             .keyboardShortcut(.defaultAction)
 
+            if let rememberLabel = AskRememberCaption.note(
+                for: MailGentPreferences.askDecisionCachePolicy
+            ) {
+                Toggle(isOn: $rememberThisDecision) {
+                    Text(rememberLabel)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .toggleStyle(.checkbox)
+                .help("Uncheck to apply Allow or Block once without writing Remember for this decision.")
+            }
+
             if ruleSupport != nil, ruleDraft.isArmed {
                 Text(ruleDraft.fateLabel)
                     .font(.system(size: 12, weight: .regular))
@@ -774,9 +831,12 @@ struct ConditionalAccessPromptDialog: View {
                 enablements: ruleSupport.allEnablements()
             )
         }
+        // When Settings Remember is off, checkbox is hidden; still pass true — write gate
+        // checks policy.enabled.
+        let remember = rememberThisDecision
         switch decision {
-        case .allow: onAllow()
-        case .block: onBlock()
+        case .allow: onAllow(remember)
+        case .block: onBlock(remember)
         }
     }
 
@@ -835,27 +895,52 @@ struct ConditionalAccessPromptDialog: View {
     ) -> some View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let addresses = MailAddressParts.parseList(trimmed)
-        // Top-align so the + stays on the first line when name/email stacks.
+        let showSlot = showPickSlot || pick != nil
+        // Pick rides on the first line (center with Subject), not top-aligned to a
+        // taller name+badge block — that made Add to rule sit low on one-line From.
         return HStack(alignment: .top, spacing: 8) {
             envelopeLabel(label)
+                .frame(height: SecondaryActionMetrics.controlHeight, alignment: .center)
             Group {
                 if trimmed.isEmpty {
-                    Text("—")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    envelopeAddressFirstLine {
+                        Text("—")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } accessory: {
+                        envelopePickControl(pick: pick, showSlot: showSlot)
+                    }
                 } else if addresses.isEmpty {
-                    Text(trimmed)
-                        .font(.caption2)
-                        .textSelection(.enabled)
-                        .lineLimit(3)
+                    envelopeAddressFirstLine {
+                        Text(trimmed)
+                            .font(.caption2)
+                            .textSelection(.enabled)
+                            .lineLimit(3)
+                    } accessory: {
+                        envelopePickControl(pick: pick, showSlot: showSlot)
+                    }
                 } else {
-                    FlowAddressBadges(addresses: addresses)
-                        .font(.caption2)
+                    FlowAddressBadges(addresses: addresses) {
+                        envelopePickControl(pick: pick, showSlot: showSlot)
+                    }
+                    .font(.caption2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            envelopePickControl(pick: pick, showSlot: showPickSlot || pick != nil)
         }
+    }
+
+    /// Value + trailing pick/slot on one centered band (matches Subject row).
+    private func envelopeAddressFirstLine<Value: View, Accessory: View>(
+        @ViewBuilder value: () -> Value,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            value()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            accessory()
+        }
+        .frame(minHeight: SecondaryActionMetrics.controlHeight, alignment: .center)
     }
 
     @ViewBuilder
@@ -912,47 +997,103 @@ struct AskPrimaryFooterButtonStyle: ButtonStyle {
 }
 
 /// Name + grey email badge side-by-side when they fit; otherwise name on line 1, email on line 2.
+/// Optional `firstLineAccessory` (Ask **Add to rule**) stays on the first line, centered with it.
 /// Callers set `.font(...)` (envelope uses caption2; field cards use caption).
-struct FlowAddressBadges: View {
+struct FlowAddressBadges<Accessory: View>: View {
     let addresses: [MailAddressParts]
+    let attachesFirstLineAccessory: Bool
+    @ViewBuilder var firstLineAccessory: () -> Accessory
+
+    init(
+        addresses: [MailAddressParts],
+        @ViewBuilder firstLineAccessory: @escaping () -> Accessory
+    ) {
+        self.addresses = addresses
+        self.attachesFirstLineAccessory = true
+        self.firstLineAccessory = firstLineAccessory
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
-                addressBlock(parts)
+            ForEach(Array(addresses.enumerated()), id: \.offset) { index, parts in
+                addressBlock(
+                    parts,
+                    includeAccessory: attachesFirstLineAccessory && index == 0
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func addressBlock(_ parts: MailAddressParts) -> some View {
+    private func addressBlock(_ parts: MailAddressParts, includeAccessory: Bool) -> some View {
         switch (parts.name, parts.email) {
         case let (name?, email?):
             // Horizontal candidate must refuse to wrap so ViewThatFits can fall back.
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .center, spacing: 6) {
                     Text(name)
                         .textSelection(.enabled)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                     AddressBadge(email: email, lineLimit: 1)
                         .fixedSize(horizontal: true, vertical: false)
+                    if includeAccessory {
+                        Spacer(minLength: 8)
+                        firstLineAccessory()
+                    }
                 }
+                .frame(minHeight: includeAccessory ? SecondaryActionMetrics.controlHeight : 0, alignment: .center)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .textSelection(.enabled)
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(name)
+                            .textSelection(.enabled)
+                        if includeAccessory {
+                            Spacer(minLength: 0)
+                            firstLineAccessory()
+                        }
+                    }
+                    .frame(minHeight: includeAccessory ? SecondaryActionMetrics.controlHeight : 0, alignment: .center)
                     AddressBadge(email: email)
                 }
             }
         case let (name?, nil):
-            Text(name)
-                .textSelection(.enabled)
+            firstLine(includeAccessory: includeAccessory) {
+                Text(name)
+                    .textSelection(.enabled)
+            }
         case let (nil, email?):
-            AddressBadge(email: email)
+            firstLine(includeAccessory: includeAccessory) {
+                AddressBadge(email: email)
+            }
         case (nil, nil):
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    private func firstLine<Content: View>(
+        includeAccessory: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if includeAccessory {
+            HStack(alignment: .center, spacing: 8) {
+                content()
+                Spacer(minLength: 0)
+                firstLineAccessory()
+            }
+            .frame(minHeight: SecondaryActionMetrics.controlHeight, alignment: .center)
+        } else {
+            content()
+        }
+    }
+}
+
+extension FlowAddressBadges where Accessory == EmptyView {
+    init(addresses: [MailAddressParts]) {
+        self.addresses = addresses
+        self.attachesFirstLineAccessory = false
+        self.firstLineAccessory = { EmptyView() }
     }
 }
 
@@ -1250,8 +1391,8 @@ enum AskLayoutSandboxSamples {
     ConditionalAccessPromptDialog(
         request: AskLayoutSandboxSamples.request(),
         accountLabel: "iCloud",
-        onAllow: {},
-        onBlock: {},
+        onAllow: { _ in },
+        onBlock: { _ in },
         showOpenInMail: true,
         onOpenInMail: {}
     )
@@ -1266,8 +1407,8 @@ enum AskLayoutSandboxSamples {
     ConditionalAccessPromptDialog(
         request: AskLayoutSandboxSamples.request(),
         accountLabel: "iCloud",
-        onAllow: {},
-        onBlock: {},
+        onAllow: { _ in },
+        onBlock: { _ in },
         showOpenInMail: true,
         onOpenInMail: {},
         showsMessagePreview: false
@@ -1283,8 +1424,8 @@ enum AskLayoutSandboxSamples {
     ConditionalAccessPromptDialog(
         request: AskLayoutSandboxSamples.request(longBody: true),
         accountLabel: "iCloud",
-        onAllow: {},
-        onBlock: {},
+        onAllow: { _ in },
+        onBlock: { _ in },
         showOpenInMail: true,
         onOpenInMail: {}
     )

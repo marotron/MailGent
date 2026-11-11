@@ -1694,14 +1694,14 @@ final class AgentBridge {
         guard presentingAskIDs.insert(askId).inserted else { return }
         defer { presentingAskIDs.remove(askId) }
 
-        let outcome = await askDecision(for: context, askId: askId)
-        applyAskUIOutcome(askId: askId, context: context, outcome: outcome)
+        let finish = await askDecision(for: context, askId: askId)
+        applyAskUIOutcome(askId: askId, context: context, finish: finish)
     }
 
     private func askDecision(
         for context: ConditionalAccessPromptContext,
         askId: String
-    ) async -> ConditionalAccessPromptOutcome {
+    ) async -> ConditionalAccessPromptFinish {
         let support = ConditionalAccessAskRuleSupport(
             allRules: { [rules] in rules.allRules() },
             allEnablements: { [rules] in rules.allEnablements() },
@@ -1716,40 +1716,60 @@ final class AgentBridge {
                 )
             }
         )
+        let expiresAt = loopbackHost?.pendingAsks.expiresAt(askId: askId)
+            ?? Date().addingTimeInterval(
+                TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+            )
         return await conditionalAccessPrompt.requestDecision(
             context: context,
             askId: askId,
             accountLabel: CompanionAccounts.label(context.accountID),
-            ruleSupport: support
+            ruleSupport: support,
+            expiresAt: expiresAt
         )
     }
 
-    /// Allow / Block write registry (+ optional cache). Recheck → superseded. No-ops if already terminal
+    /// Allow / Block write registry (+ optional Remember cache). Recheck → superseded.
+    /// Dismissed (close / hard-expire wake) never writes Remember. No-ops if already terminal
     /// (e.g. hard expiry already marked `expired` before the UI waiter woke).
     private func applyAskUIOutcome(
         askId: String,
         context: ConditionalAccessPromptContext,
-        outcome: ConditionalAccessPromptOutcome
+        finish: ConditionalAccessPromptFinish
     ) {
         guard let host = loopbackHost else { return }
-        switch outcome {
+        switch finish.outcome {
         case .allow:
             guard host.pendingAsks.resolve(askId: askId, decision: .allow) else { return }
-            writeAskDecisionCache(context: context, decision: .allow)
+            writeAskDecisionCache(
+                context: context,
+                decision: .allow,
+                rememberThisDecision: finish.rememberThisDecision
+            )
         case .block:
             guard host.pendingAsks.resolve(askId: askId, decision: .block) else { return }
-            writeAskDecisionCache(context: context, decision: .block)
+            writeAskDecisionCache(
+                context: context,
+                decision: .block,
+                rememberThisDecision: finish.rememberThisDecision
+            )
         case .recheck:
             _ = host.pendingAsks.resolve(askId: askId, decision: .superseded)
+        case .dismissed:
+            _ = host.pendingAsks.resolve(askId: askId, decision: .dismissed)
         }
     }
 
     private func writeAskDecisionCache(
         context: ConditionalAccessPromptContext,
-        decision: ConditionalAccessDecision
+        decision: ConditionalAccessDecision,
+        rememberThisDecision: Bool
     ) {
         let policy = MailGentPreferences.askDecisionCachePolicy
-        guard policy.enabled else { return }
+        guard AskRememberCaption.shouldWrite(
+            policy: policy,
+            rememberThisDecision: rememberThisDecision
+        ) else { return }
         for label in context.requestedFields {
             fieldAskDecisionCache.store(
                 decision,

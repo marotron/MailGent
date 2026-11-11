@@ -8,6 +8,25 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ## [Unreleased]
 
+## [0.24.4] - 2026-11-11
+
+### Changed
+
+- Conditional Ask close (traffic light / ⌘W) is `await_ask` outcome `dismissed` — not Block; never writes Remember; a fresh `get` / `get_attachment` re-prompts
+- Hard Ask timeout stays `expired` (one-shot deny for that ask) and never writes Remember; a fresh get re-prompts
+- Fresh get after intentional Block without Remember re-prompts (only the short Allow lease, or Remember / Pass·Block rules, suppress a new Ask)
+
+### Added
+
+- Ask footer Remember checkbox when **Remember Ask decisions** is on (`Remember for … (this agent)`), checked by default; uncheck to Allow/Block once without writing cache (Settings unchanged). Hidden when Remember is off
+- Email access request (Conditional Ask) shows the same live titlebar countdown (`Expires in …`) as propose-send, driven by Settings → **Human wait limit**
+
+### Fixed
+
+- Propose-send From `+` / Cc·Bcc `×` sit on the same vertical center as the row’s caption text (Menu chrome no longer rides high)
+- Ask envelope **From** **Add to rule** centers on the first line with the name/badge (no longer sits low); still stays on line 1 when name and address stack
+- Ask keeps chrome pad under “wants access…”; scroll content has 0 top margin (removed zero-height scroll anchor that still took VStack gap and scrolled away)
+
 ## [0.24.3] - 2026-11-11
 
 ### Added

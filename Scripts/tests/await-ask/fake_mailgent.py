@@ -194,6 +194,24 @@ def self_check() -> int:
         return _fail("superseded re-get did not open new ask", open2)
     report["cases"].append({"name": "superseded", "ok": True})
 
+    # --- E5b: dismissed → re-get opens new Ask ---
+    script_dismiss = ScriptedAskMailGent()
+    open_d = script_dismiss.open_get(
+        {"accountID": ACCOUNT_ID, "placement": PLACEMENT, "id": MESSAGE_ID}
+    )
+    ask_d = open_d["askId"]
+    if not script_dismiss.resolve(ask_d, "dismissed"):
+        return _fail("resolve dismissed failed")
+    dismissed = script_dismiss.await_ask({"askId": ask_d, "timeout": 1})
+    if dismissed.get("outcome") != "dismissed":
+        return _fail("expected dismissed outcome", dismissed)
+    open_d2 = script_dismiss.open_get(
+        {"accountID": ACCOUNT_ID, "placement": PLACEMENT, "id": MESSAGE_ID}
+    )
+    if open_d2.get("status") != "awaiting_user" or open_d2.get("askId") == ask_d:
+        return _fail("dismissed re-get did not open new ask", open_d2)
+    report["cases"].append({"name": "dismissed", "ok": True})
+
     # --- E6: unknown askId ---
     script3 = ScriptedAskMailGent()
     unknown = script3.await_ask({"askId": "does-not-exist", "timeout": 1})

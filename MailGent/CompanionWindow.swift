@@ -25,7 +25,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private final class AskRecord {
         let window: NSWindow
         let context: ConditionalAccessPromptContext
-        var continuation: CheckedContinuation<ConditionalAccessPromptOutcome, Never>?
+        var continuation: CheckedContinuation<ConditionalAccessPromptFinish, Never>?
         var finished = false
         var pokeToken = 0
         let presentedAt = Date()
@@ -33,7 +33,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         init(
             window: NSWindow,
             context: ConditionalAccessPromptContext,
-            continuation: CheckedContinuation<ConditionalAccessPromptOutcome, Never>
+            continuation: CheckedContinuation<ConditionalAccessPromptFinish, Never>
         ) {
             self.window = window
             self.context = context
@@ -212,10 +212,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Menu Block / Allow — same once-only path as the dialog buttons.
+    /// Menu Block / Allow — same once-only path as the dialog buttons (Remember follows Settings).
     func decidePendingAsk(id: String, decision: ConditionalAccessDecision) {
-        let outcome: ConditionalAccessPromptOutcome = decision == .allow ? .allow : .block
-        finishAsk(id: id, outcome: outcome)
+        let finish: ConditionalAccessPromptFinish = decision == .allow ? .allow : .block
+        finishAsk(id: id, finish: finish)
     }
 
     /// True when an Ask dialog for this registry askId is already on screen.
@@ -223,9 +223,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         asks[id] != nil
     }
 
-    /// Hard-timeout path: dismiss Ask without Block. Registry already marked `expired`.
-    /// Resumes any UI waiter with `.block` so a fire-and-forget Task can finish; callers must
-    /// treat resolve-as-block as a no-op when the ask is already terminal.
+    /// Hard-timeout path: close Ask without Block / Remember. Registry already marked `expired`.
+    /// Resumes the UI waiter with `.dismissed` (non-cache); resolve is a no-op when already terminal.
     func expireConditionalAsk(id: String) {
         guard let record = asks[id] else { return }
         if record.finished {
@@ -240,8 +239,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         record.continuation = nil
         asks[id] = nil
         dismissAskWindow(record.window)
-        // Wake the detached present Task; AgentBridge skips registry write when already expired.
-        continuation?.resume(returning: .block)
+        continuation?.resume(returning: .dismissed)
     }
 
     /// After an armed rule commit, recheck other open Asks for the same agent when the rule can change them.
@@ -262,7 +260,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             return askID
         }
         for askID in targets {
-            finishAsk(id: askID, outcome: .recheck)
+            finishAsk(id: askID, finish: .recheck)
         }
     }
 
@@ -310,12 +308,14 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     func runConditionalAsk(
         request: ConditionalAccessPromptRequest,
         accountLabel: String,
-        ruleSupport: ConditionalAccessAskRuleSupport? = nil
-    ) async -> ConditionalAccessPromptOutcome {
+        ruleSupport: ConditionalAccessAskRuleSupport? = nil,
+        expiresAt: Date
+    ) async -> ConditionalAccessPromptFinish {
         await presentConditionalAsk(
             request: request,
             accountLabel: accountLabel,
-            ruleSupport: ruleSupport
+            ruleSupport: ruleSupport,
+            expiresAt: expiresAt
         )
     }
 
@@ -421,7 +421,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: withContext ? 1100 : 900, height: 900)
-            attachProposeSendExpiryTitlebar(expiresAt: expiresAt, to: window)
+            attachHardWaitExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: sendProposals.count)
             let record = SendProposalRecord(
                 window: window,
@@ -442,8 +442,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Trailing titlebar countdown (hard Settings timeout). Footer mid is the dogfood fallback only.
-    private func attachProposeSendExpiryTitlebar(expiresAt: Date, to window: NSWindow) {
+    /// Trailing titlebar countdown for Settings → Human wait limit (Ask + propose_send).
+    private func attachHardWaitExpiryTitlebar(expiresAt: Date, to window: NSWindow) {
         let hosting = NSHostingView(rootView: ProposeSendExpiryTitlebarLabel(expiresAt: expiresAt))
         hosting.frame.size = hosting.fittingSize
         let accessory = NSTitlebarAccessoryViewController()
@@ -455,8 +455,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private func presentConditionalAsk(
         request: ConditionalAccessPromptRequest,
         accountLabel: String,
-        ruleSupport: ConditionalAccessAskRuleSupport?
-    ) async -> ConditionalAccessPromptOutcome {
+        ruleSupport: ConditionalAccessAskRuleSupport?,
+        expiresAt: Date
+    ) async -> ConditionalAccessPromptFinish {
         await withCheckedContinuation { continuation in
             AskQueueIndicator.shared.register(
                 id: request.id,
@@ -467,11 +468,11 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             let dialog = ConditionalAccessPromptDialog(
                 request: request,
                 accountLabel: accountLabel,
-                onAllow: { [weak self] in
-                    self?.finishAsk(id: request.id, outcome: .allow)
+                onAllow: { [weak self] remember in
+                    self?.finishAsk(id: request.id, finish: .allow(remember: remember))
                 },
-                onBlock: { [weak self] in
-                    self?.finishAsk(id: request.id, outcome: .block)
+                onBlock: { [weak self] remember in
+                    self?.finishAsk(id: request.id, finish: .block(remember: remember))
                 },
                 ruleSupport: ruleSupport,
                 showOpenInMail: request.context.mailURL != nil,
@@ -500,6 +501,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: 2400, height: 1600)
+            attachHardWaitExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: index)
             asks[request.id] = AskRecord(
                 window: window,
@@ -550,8 +552,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         let dialog = ConditionalAccessPromptDialog(
             request: request,
             accountLabel: "iCloud",
-            onAllow: { [weak self] in self?.dismissAskLayoutSandbox() },
-            onBlock: { [weak self] in self?.dismissAskLayoutSandbox() },
+            onAllow: { [weak self] _ in self?.dismissAskLayoutSandbox() },
+            onBlock: { [weak self] _ in self?.dismissAskLayoutSandbox() },
             ruleSupport: AskSandboxRuleBox.support(for: request.context),
             showOpenInMail: true,
             onOpenInMail: {},
@@ -563,6 +565,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             }
         )
         let size = ConditionalAskLayout.contentSize(previewVisible: true)
+        let sandboxExpiresAt = Date().addingTimeInterval(
+            TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+        )
         beginPresentation()
         if let askLayoutSandbox {
             askLayoutSandbox.styleMask.insert(.resizable)
@@ -572,6 +577,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             askLayoutSandbox.title = "Email access request"
             install(dialog, in: askLayoutSandbox, contentSize: size)
             askLayoutSandbox.setContentSize(size)
+            hideHardWaitExpiryTitlebar(on: askLayoutSandbox)
+            attachHardWaitExpiryTitlebar(expiresAt: sandboxExpiresAt, to: askLayoutSandbox)
         } else {
             askLayoutSandbox = makeWindow(
                 title: "Email access request",
@@ -580,6 +587,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 root: dialog
             )
             askLayoutSandbox?.styleMask.remove(.miniaturizable)
+            if let askLayoutSandbox {
+                attachHardWaitExpiryTitlebar(expiresAt: sandboxExpiresAt, to: askLayoutSandbox)
+            }
         }
         bringForward(askLayoutSandbox)
     }
@@ -705,19 +715,19 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    private func finishAsk(id: String, outcome: ConditionalAccessPromptOutcome) {
+    private func finishAsk(id: String, finish: ConditionalAccessPromptFinish) {
         guard let record = asks[id] else { return }
         if record.finished {
             MailGentLog.trace("ask finish ignored (already decided) id=\(id)")
             return
         }
         let removed: Bool
-        switch outcome {
+        switch finish.outcome {
         case .allow:
             removed = AskQueueIndicator.shared.resolve(id: id, with: .allow) != nil
         case .block:
             removed = AskQueueIndicator.shared.resolve(id: id, with: .block) != nil
-        case .recheck:
+        case .recheck, .dismissed:
             removed = AskQueueIndicator.shared.remove(id: id)
         }
         guard removed else { return }
@@ -727,7 +737,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         record.continuation = nil
         asks[id] = nil
         dismissAskWindow(record.window)
-        continuation?.resume(returning: outcome)
+        continuation?.resume(returning: finish)
     }
 
     private func beginSendHandoff(
@@ -741,7 +751,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         record.model.phase = .sending
         record.editModel?.phase = .sending
         record.window.title = record.editModel?.windowTitle ?? record.model.windowTitle
-        hideProposeSendExpiryTitlebar(on: record.window)
+        hideHardWaitExpiryTitlebar(on: record.window)
         let handoffSend = handoff
         record.handoffTask = Task { @MainActor [weak self] in
             let errorMessage: String?
@@ -826,7 +836,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         dismissSendProposalWindow(id: id)
     }
 
-    private func hideProposeSendExpiryTitlebar(on window: NSWindow) {
+    private func hideHardWaitExpiryTitlebar(on window: NSWindow) {
         while !window.titlebarAccessoryViewControllers.isEmpty {
             window.removeTitlebarAccessoryViewController(at: 0)
         }
@@ -1036,8 +1046,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             return false
         }
         if let id = asks.first(where: { $0.value.window === sender })?.key {
-            // Traffic-light / ⌘W on this Ask → Block (fail-closed) for this request only.
-            finishAsk(id: id, outcome: .block)
+            // Traffic-light / ⌘W → dismissed (not Block); no Remember; agent may re-prompt.
+            finishAsk(id: id, finish: .dismissed)
             return false
         }
         if let id = sendProposals.first(where: { $0.value.window === sender })?.key {

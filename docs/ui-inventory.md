@@ -172,7 +172,7 @@ Documented in code (`GrantFieldBadgeRow`, `RuleFieldMarkChip`, `HatchDeniedStyle
 | **Job** | Name the agent and explain the ask in one line; expand for field/Allow·Block detail |
 | **Collapsed** | Centered row: larger orange `questionmark.circle.fill` + callout “{agent} wants access to the email below” + orange **More** |
 | **Expanded (click)** | Same centered line + **Less** + short centered copy: Ask fields, Allow (this read) / Block (withhold) |
-| **Spacing** | Same clearance above (chrome pad) and below (column gap) the help row |
+| **Spacing** | Chrome `pad` above and below the help row (below is outside the ScrollView); 0 top margin inside the scroll content (no spacer above the first card) |
 | **Placement** | Top of Ask left column (above the card scroll) |
 | **Swift** | `ConditionalAccessPromptDialog.whyThisWindowHelp` |
 
