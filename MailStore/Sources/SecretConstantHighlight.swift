@@ -23,7 +23,7 @@ public enum SecretConstantHighlight {
             }
             let marked = escape(String(chars[start..<end]))
             let updatedClass = span.updatedSinceDraft ? " class=\"updated\"" : ""
-            let title = escape("Secret constant [[mg:\(span.name)]]")
+            let title = escape("Secret constant \(SecretConstantPlaceholders.token(for: span.name))")
             parts.append("<mark\(updatedClass) title=\"\(title)\">\(marked)</mark>")
             cursor = end
         }

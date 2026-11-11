@@ -515,6 +515,7 @@ struct LoopbackMCPServerTests {
         #expect(response.status == 200)
         #expect(response.body.contains("\"protocolVersion\":\"2025-03-26\""))
         #expect(response.body.contains("\"name\":\"mailgent\""))
+        #expect(response.body.contains("\"version\":\"\(MailGentVersion.label)\""))
         #expect(response.body.contains("\"tools\""))
     }
 
@@ -974,7 +975,7 @@ struct LoopbackMCPServerTests {
                 headers: ["Authorization": "Bearer \(env.credential)"],
                 body: Self.toolCallJSON(
                     name: "create_draft",
-                    arguments: ["body": "Call [[mg:phone_mobile]]"]
+                    arguments: ["body": "Call {{mg:phone_mobile}}"]
                 )
             )
         )
@@ -1006,13 +1007,13 @@ struct LoopbackMCPServerTests {
                 headers: ["Authorization": "Bearer \(env.credential)"],
                 body: Self.toolCallJSON(
                     name: "create_draft",
-                    arguments: ["body": "Call [[mg:phone_mobile]]"]
+                    arguments: ["body": "Call {{mg:phone_mobile}}"]
                 )
             )
         )
         #expect(response.status == 200)
         #expect(!response.body.contains("isError"))
-        #expect(response.body.contains("[[mg:phone_mobile]]"))
+        #expect(response.body.contains("{{mg:phone_mobile}}"))
         #expect(!response.body.contains("+1-555-0100"))
     }
 
@@ -1038,7 +1039,7 @@ struct LoopbackMCPServerTests {
                 headers: ["Authorization": "Bearer \(env.credential)"],
                 body: Self.toolCallJSON(
                     name: "create_draft",
-                    arguments: ["body": "Call [[mg:phone_mobile]]"]
+                    arguments: ["body": "Call {{mg:phone_mobile}}"]
                 )
             )
         )

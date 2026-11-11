@@ -1095,7 +1095,9 @@ final class AgentBridge {
                     }
                     guard proposal.canDeliverSecretConstants else {
                         registry.releaseDeliveryClaim(id: proposal.id)
-                        let names = proposal.secretConstantMissing.map { "[[mg:\($0)]]" }
+                        let names = proposal.secretConstantMissing.map {
+                            SecretConstantPlaceholders.token(for: $0)
+                        }
                             .joined(separator: ", ")
                         return names.isEmpty
                             ? "Unknown secret constants in this message."

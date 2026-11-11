@@ -464,6 +464,47 @@ struct MailStoreTests {
         #expect(plain.contains("Hello!"))
     }
 
+    @Test func plainTextFromHTMLRewritesHttpAnchorsAsMarkdown() {
+        let html = #"<p>See <a href="https://example.com/path">docs</a> please.</p>"#
+        let plain = MailMIME.plainText(fromHTML: html)
+        #expect(plain.contains("[docs](https://example.com/path)"))
+        #expect(plain.contains("See"))
+        #expect(plain.contains("please."))
+    }
+
+    @Test func plainTextFromHTMLAllowsMailtoAndHttpSchemes() {
+        let html = #"<a href="http://example.com">site</a> <a href="mailto:a@b.co">mail</a>"#
+        let plain = MailMIME.plainText(fromHTML: html)
+        #expect(plain.contains("[site](http://example.com)"))
+        #expect(plain.contains("[mail](mailto:a@b.co)"))
+    }
+
+    @Test func plainTextFromHTMLDropsDangerousOrEmptyHrefKeepsLabel() {
+        let html = #"<a href="javascript:alert(1)">bad</a> <a href="">empty</a> <a href="ftp://x">ftp</a>"#
+        let plain = MailMIME.plainText(fromHTML: html)
+        #expect(plain.contains("bad"))
+        #expect(plain.contains("empty"))
+        #expect(plain.contains("ftp"))
+        #expect(!plain.contains("]("))
+        #expect(!plain.contains("javascript:"))
+        #expect(!plain.contains("ftp://"))
+    }
+
+    @Test func plainTextFromHTMLAnchorLabelFallbackAndBracketSanitize() {
+        let html = #"<a href="https://ex.com"><b></b></a> <a href="https://ex.com/a)">weird]</a>"#
+        let plain = MailMIME.plainText(fromHTML: html)
+        #expect(plain.contains("[link](https://ex.com)"))
+        // `)` in URL → label only; `]` stripped from label
+        #expect(plain.contains("weird"))
+        #expect(!plain.contains("](https://ex.com/a)"))
+    }
+
+    @Test func plainTextFromHTMLDecodesEntitiesInAnchorHrefAndLabel() {
+        let html = #"<a href="https://ex.com?a=1&amp;b=2">A&nbsp;B</a>"#
+        let plain = MailMIME.plainText(fromHTML: html)
+        #expect(plain.contains("[A B](https://ex.com?a=1&b=2)"))
+    }
+
     @Test func stripLeadingEmlxByteCountPrefix() {
         #expect(
             MailMIME.stripLeadingByteCountPrefix("96 It’ll be in your bank account")

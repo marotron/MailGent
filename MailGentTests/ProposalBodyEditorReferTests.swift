@@ -64,7 +64,7 @@ struct ProposalBodyEditorReferTests {
             value: "+44 7501 222825",
             allowedAgentIDs: ["test-agent"]
         )
-        let body = "Reach me at [[mg:phone]] today please."
+        let body = "Reach me at {{mg:phone}} today please."
         // The pill occupies one storage character; "today please" starts at 14.
         let box = QuoteBox()
         let coordinator = makeEditor(body, constants: [phone], box: box)
@@ -81,7 +81,7 @@ struct ProposalBodyEditorReferTests {
             allowedAgentIDs: ["test-agent"]
         )
         // One plain attribute run spans from the top to the pill; the quote sits inside it.
-        let body = "Hi Sam,\n\nThanks for the introduction on Tuesday. Reach me at [[mg:phone]] today."
+        let body = "Hi Sam,\n\nThanks for the introduction on Tuesday. Reach me at {{mg:phone}} today."
         var tokenized = body
         let editor = ProposalBodyEditor(
             tokenized: Binding(get: { tokenized }, set: { tokenized = $0 }),
@@ -106,7 +106,7 @@ struct ProposalBodyEditorReferTests {
     }
 
     @Test func focusSquareUsesNoInlineNumberAndAvoidsNativeSelectionColor() {
-        let body = "Hi [[mg:phone]] today."
+        let body = "Hi {{mg:phone}} today."
         let phone = SecretConstant(
             name: "phone",
             label: "Mobile",
@@ -149,7 +149,7 @@ struct ProposalBodyEditorReferTests {
     }
 
     /// Crash regression (0.24.0 dogfood): referring a passage that includes a
-    /// secret pill used the token's character length (`[[mg:phone]]` → 12) as an
+    /// secret pill used the token's character length (`{{mg:phone}}` → 12) as an
     /// NSRange end on a 1-character attachment, and `addAttribute` trapped.
     @Test func pinHighlightAcrossSecretPillDoesNotTrap() {
         let phone = SecretConstant(
@@ -158,8 +158,8 @@ struct ProposalBodyEditorReferTests {
             value: "+44 7501 222825",
             allowedAgentIDs: ["test-agent"]
         )
-        let body = "Reach me at [[mg:phone]] today please."
-        let quote = "at [[mg:phone]] today"
+        let body = "Reach me at {{mg:phone}} today please."
+        let quote = "at {{mg:phone}} today"
         var tokenized = body
         let editor = ProposalBodyEditor(
             tokenized: Binding(get: { tokenized }, set: { tokenized = $0 }),

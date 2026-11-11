@@ -1622,18 +1622,21 @@ public struct AgentReadAPI {
         return (current, subjectField, bodyField)
     }
 
+    /// Agent / leak-guard plain body. Prefer HTML → Markdown when a real HTML alternative exists
+    /// (multipart/alternative often ships a link-less text/plain; Ask preview already preferred HTML).
     private static func plainBodyText(from message: ReadMessage) -> String {
+        if let html = message.prettyHTMLBody,
+           !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return MailMIME.plainText(fromHTML: html)
+        }
         switch message.body {
         case .text(let text):
-            return text
-        case .notAvailable:
-            if let html = message.prettyHTMLBody,
-               !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                return MailMIME.plainText(fromHTML: html)
+            if text.contains("<") || text.contains("body {") || text.contains("&zwnj;") {
+                return MailMIME.plainText(fromHTML: text)
             }
-            return ""
-        case .notGranted:
+            return text
+        case .notAvailable, .notGranted:
             return ""
         }
     }

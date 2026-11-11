@@ -26,7 +26,7 @@ struct ProposeSendSecretUsedStrip: View {
     }
 }
 
-/// Compact wrapping chips: `[[mg:name]] → value` (orangy value matches body `<mark>`).
+/// Compact wrapping chips: `{{mg:name}} → value` (orangy value matches body `<mark>`).
 struct FlowUsedSecrets: View {
     let summaries: [ProposeSendUsedSecretSummary]
 
@@ -35,7 +35,7 @@ struct FlowUsedSecrets: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(summaries) { summary in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("[[mg:\(summary.name)]]")
+                    Text(SecretConstantPlaceholders.token(for: summary.name))
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)

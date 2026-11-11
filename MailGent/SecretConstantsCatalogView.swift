@@ -332,7 +332,7 @@ struct SecretConstantsCatalogView: View {
     private func tokenPreview(name: String) -> some View {
         let token = SecretConstantPlaceholders.isValidName(name)
             ? SecretConstantPlaceholders.token(for: name)
-            : "[[mg:…]]"
+            : "{{mg:…}}"
         return GroupBox {
             HStack {
                 Text(token)
