@@ -321,6 +321,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
 
     /// Present propose-send confirm until Open in Mail / Cancel / traffic-light close,
     /// or Send handoff finishes and the human presses Done.
+    ///
+    /// Shell: `edit != nil` → extended `SendProposalEditDialog` (even when
+    /// `resolvedContext` is nil). `edit == nil` → simple `SendProposalPromptDialog`.
+    /// Callers must not pass `edit == nil` while edit Experimental is on.
     func runSendProposalConfirm(
         proposal: SendProposal,
         expiresAt: Date,

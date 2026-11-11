@@ -329,7 +329,7 @@ struct MailGentSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("Propose-send edit and revise", isOn: $proposeSendEditExperimental)
                     Text(
-                        "Off by default. When on, the confirm window is an editable draft: pin passages for the agent, and ask the agent to revise. Experimental — schema and UI may change."
+                        "Off by default. When on, every propose_send uses the editable confirm (pin passages, ask to look / revise, draft history) — with or without a context rail. The left rail still needs Propose-send context thread plus agent context. Experimental — schema and UI may change."
                     )
                     .foregroundStyle(.secondary)
                     .font(.callout)

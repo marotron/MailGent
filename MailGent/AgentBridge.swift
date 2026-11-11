@@ -1067,19 +1067,15 @@ final class AgentBridge {
                 ?? Date().addingTimeInterval(
                     TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
                 )
-            let editLaunch: SendProposalEditLaunch?
-            if MailGentPreferences.proposeSendEditExperimental {
-                let agentID = host.pendingProposals.agentID(for: proposal.id) ?? ""
-                editLaunch = SendProposalEditLaunch(
-                    constants: host.readSecretConstantsCatalog().constants,
-                    agentID: agentID,
-                    shortcut: MailGentPreferences.proposeSendReferShortcut,
-                    notePresets: MailGentPreferences.proposeSendNotePresets,
-                    roundTrips: host.pendingProposals.revisionRoundTrips(id: proposal.id)
-                )
-            } else {
-                editLaunch = nil
-            }
+            // Shell gate = edit Experimental only. Missing context must not fall back to simple confirm.
+            let editLaunch = ProposeSendConfirmRouting.editLaunch(
+                editExperimental: MailGentPreferences.proposeSendEditExperimental,
+                constants: host.readSecretConstantsCatalog().constants,
+                agentID: host.pendingProposals.agentID(for: proposal.id) ?? "",
+                shortcut: MailGentPreferences.proposeSendReferShortcut,
+                notePresets: MailGentPreferences.proposeSendNotePresets,
+                roundTrips: host.pendingProposals.revisionRoundTrips(id: proposal.id)
+            )
             return await DetachedWindowHost.shared.runSendProposalConfirm(
                 proposal: proposal,
                 expiresAt: expiresAt,

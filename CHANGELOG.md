@@ -11,6 +11,8 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 ### Added
 
 - Experimental propose-send edit / revise confirm (Settings → Experimental): editable draft, Ask to look / Ask to revise, draft version history; Send and Open in Mail use the browsed draft version
+- When edit / revise Experimental is on, every `propose_send` uses that extended confirm shell (context rail remains optional when Context-thread Experimental + agent `context` resolve)
+- Extended confirm shows the secret-constants replaced strip under the body (`[[mg:name]] → value`), driven by the browsed draft version (#78)
 
 ### Fixed
 

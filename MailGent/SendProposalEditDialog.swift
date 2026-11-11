@@ -32,6 +32,15 @@ struct SendProposalEditDialog: View {
     private var resolvedContext: ProposeSendResolvedContext? { model.resolved }
     private var showsContext: Bool { resolvedContext != nil }
 
+    /// Follows the browsed draft (`deliveredProposal`), including past versions.
+    private var usedSecretSummaries: [ProposeSendUsedSecretSummary] {
+        let delivered = model.deliveredProposal()
+        return ProposeSendUsedSecrets.summaries(
+            body: delivered.body,
+            spans: delivered.secretConstantSpans
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ConditionalAskLayout.gap) {
             if model.isReview {
@@ -49,6 +58,9 @@ struct SendProposalEditDialog: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .opacity(model.phase == .handedOff || model.phase == .sending ? 0.72 : 1)
             .allowsHitTesting(model.isReview)
+            if !usedSecretSummaries.isEmpty, model.isReview {
+                ProposeSendSecretUsedStrip(summaries: usedSecretSummaries)
+            }
             footer
         }
         .padding(ConditionalAskLayout.pad)

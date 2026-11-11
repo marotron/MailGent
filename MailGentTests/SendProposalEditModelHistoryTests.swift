@@ -115,6 +115,58 @@ struct SendProposalEditModelHistoryTests {
         #expect(model.deliveredProposal().subject == "Kickoff!")
     }
 
+    @Test func usedSecretStripFollowsBrowsedDraftVersion() {
+        let phone = SecretConstant(
+            name: "phone",
+            label: "Mobile",
+            value: "+44 111",
+            allowedAgentIDs: ["agent"]
+        )
+        let model = SendProposalEditModel(
+            proposal: makeProposal(body: "Call [[mg:phone]]."),
+            constants: [phone],
+            agentID: "agent"
+        )
+        model.applyAgentDraft(
+            makeProposal(body: "No secrets here."),
+            roundTrips: 1,
+            resolved: nil
+        )
+
+        let latest = model.deliveredProposal()
+        #expect(
+            ProposeSendUsedSecrets.summaries(
+                body: latest.body,
+                spans: latest.secretConstantSpans
+            ).isEmpty
+        )
+
+        model.stepBack()
+        let past = model.deliveredProposal()
+        let strip = ProposeSendUsedSecrets.summaries(
+            body: past.body,
+            spans: past.secretConstantSpans
+        )
+        #expect(strip.map(\.name) == ["phone"])
+        #expect(strip.first?.value == "+44 111")
+    }
+
+    @Test func missingSecretYieldsNoReplacedStripRows() {
+        let model = SendProposalEditModel(
+            proposal: makeProposal(body: "Call [[mg:missing]]."),
+            constants: [],
+            agentID: "agent"
+        )
+        let delivered = model.deliveredProposal()
+        #expect(!delivered.secretConstantMissing.isEmpty)
+        #expect(
+            ProposeSendUsedSecrets.summaries(
+                body: delivered.body,
+                spans: delivered.secretConstantSpans
+            ).isEmpty
+        )
+    }
+
     @Test func versionChangeCountCountsAgainstThePreviousVersion() {
         let model = SendProposalEditModel(proposal: makeProposal(body: "Hello one two."), constants: [], agentID: "agent")
         #expect(model.versionChangeCount(1) == nil, "v1 has no previous version")
