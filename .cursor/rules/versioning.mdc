@@ -18,7 +18,7 @@ MailGent is **0.x alpha** until v1. Follow SemVer (`MAJOR.MINOR.PATCH`) with **r
 ```
 
 1. When user-facing work starts on a `feat/…` / `fix/…` / `hotfix/…` branch → open the **next** marketing version as **rc.1** (do not leave About on the previous ship).
-2. Each meaningful dogfood binary of that line → bump **rc.N** and **build**.
+2. **Hard rule — bump rc on every change while candidate:** if `releaseCandidate > 0` and you change product code, tests that ship with the app, or user-facing Unreleased notes for that dogfood pass → increment **rc.N** and **build** in the same turn (sync `project.yml` + `MailGentVersion.swift`, `make generate`, `update-dev-index.py`). Do **not** leave About/MCP on the previous rc after further edits. Docs/chore-only (rules, scratch proto, comments) may skip; when unsure, bump.
 3. On ship → clear candidate (`RELEASE_CANDIDATE = 0`), keep the same `MARKETING_VERSION`, promote CHANGELOG / README, signed tag `vX.Y.Z`.
 
 ## SemVer while alpha (`0.x`)

@@ -35,7 +35,8 @@ struct ProposalBodyEditor: NSViewRepresentable {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 4 * fontScale
         textView.defaultParagraphStyle = paragraph
-        textView.textContainerInset = NSSize(width: 2, height: 4)
+        // Equal inset so top gutter matches left (dialog also pads 8pt around the scroll view).
+        textView.textContainerInset = NSSize(width: 2, height: 2)
         textView.delegate = context.coordinator
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false

@@ -1,0 +1,371 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — editable confirm envelope: hide empty Cc/Bcc, + on From, × to remove.
+  Open: open cc-bcc-plus.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Optional Cc/Bcc via +</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0071e3;
+      --panel: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 24px 16px 80px;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note b { font-weight: 650; }
+    .seeds { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .seeds .lbl { color: #2c3a4a; font-size: 12px; font-weight: 600; }
+    .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 8px;
+      padding: 6px 11px; font-weight: 560;
+    }
+    .btn:hover { background: #fafafa; }
+    .btn[aria-pressed="true"] { background: #e8f1ff; border-color: #8fb8f0; color: #0a4fa3; }
+
+    .window {
+      width: 100%; max-width: 560px; margin: 0 auto;
+      background: var(--panel); border-radius: 10px; border: 1px solid #00000018;
+      box-shadow: 0 18px 50px #00000028; overflow: hidden;
+    }
+    .titlebar {
+      height: 38px; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      font-weight: 650; font-size: 13px; position: relative;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; }
+    .traffic .y { background: #febc2e; }
+    .traffic .g { background: #28c840; }
+
+    .card {
+      margin: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+      overflow: hidden;
+    }
+    .envelope { padding: 10px 12px; display: grid; gap: 6px; }
+    .row {
+      display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; align-items: center;
+      min-height: 24px;
+    }
+    .row.trail {
+      grid-template-columns: 52px minmax(0, 1fr) 14px;
+    }
+    .lbl { color: var(--muted); font-size: 12px; }
+    .fld {
+      border: 0; outline: none; background: transparent; width: 100%;
+      font-size: 12px; font-weight: 500; padding: 2px 4px; border-radius: 4px;
+    }
+    .fld:disabled { color: var(--ink); opacity: 1; -webkit-text-fill-color: var(--ink); }
+    .window[data-mode="edit"] .fld:not(:disabled) {
+      background: #f0f6ff; box-shadow: inset 0 0 0 1px #b8d4fb;
+    }
+    .fld:focus { outline: none; }
+
+    .plus-wrap, .rm-wrap { position: relative; width: 14px; height: 16px; }
+    .plus-wrap.hidden-plus { visibility: hidden; pointer-events: none; }
+    .plus, .rm {
+      width: 14px; height: 16px; border-radius: 4px; border: 1px solid transparent;
+      background: transparent; font-size: 11px; line-height: 1;
+      display: grid; place-items: center; padding: 0;
+    }
+    .plus { color: var(--blue); font-size: 12px; }
+    .rm { color: var(--muted); font-size: 12px; font-weight: 600; }
+    .plus:hover, .plus[aria-expanded="true"] {
+      background: #e8f1ff; border-color: #b8d4fb;
+    }
+    .rm:hover { background: #f2f2f5; color: var(--ink); }
+    .menu {
+      position: absolute; right: 0; top: calc(100% + 2px); z-index: 5;
+      min-width: 120px; background: rgba(255,255,255,.97);
+      border: 1px solid #00000022; border-radius: 8px;
+      box-shadow: 0 10px 30px #00000033; padding: 5px;
+    }
+    .menu button {
+      display: block; width: 100%; text-align: left; border: 0; background: none;
+      padding: 6px 10px; border-radius: 5px; font-size: 13px;
+    }
+    .menu button:hover { background: var(--blue); color: #fff; }
+
+    .divider { height: 1px; background: var(--line); }
+    .body {
+      padding: 12px 14px; color: #333; white-space: pre-wrap; line-height: 1.5;
+      min-height: 120px; font-size: 13px;
+    }
+    .footer {
+      display: flex; align-items: center; gap: 8px; padding: 0 12px 12px;
+    }
+    .footer .spacer { flex: 1; }
+    .btn.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .btn.ghost { background: transparent; border-color: transparent; }
+
+    .state {
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #1d1d1f; color: #e5e5ea; border-radius: 10px; padding: 12px 14px;
+      max-width: 560px; margin: 0 auto; width: 100%;
+    }
+    .state .k { color: #7cc7ff; }
+    .state .s { color: #ffd08a; }
+    .state .b { color: #9a9aa3; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="note">
+    <b>Optional Cc / Bcc via +</b> (throwaway · editable confirm only).
+    Trailing <b>+</b> on <b>From</b> (right-aligned). To/Subject right edges match the <b>+</b> right edge.
+    Optional rows show <b>×</b> to remove. Clear or × → hide + return to menu.
+  </div>
+
+  <div class="seeds">
+    <span class="lbl">Seed</span>
+    <button class="btn" data-seed="empty" aria-pressed="true">Both empty</button>
+    <button class="btn" data-seed="cc">Cc only</button>
+    <button class="btn" data-seed="both">Cc + Bcc</button>
+    <button class="btn" data-seed="past">Past version (read-only)</button>
+  </div>
+
+  <div class="window" id="win" data-mode="edit">
+    <div class="titlebar">
+      <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+      Editing draft
+    </div>
+
+    <div class="card">
+      <div class="envelope" id="envelope">
+        <div class="row trail" id="fromRow">
+          <span class="lbl">From</span>
+          <input class="fld" id="from" value="Alex &lt;alex@acme.example&gt;" disabled>
+          <div class="plus-wrap" id="plusWrap">
+            <button type="button" class="plus" id="plus" aria-label="Add field" aria-haspopup="menu" aria-expanded="false">+</button>
+            <div class="menu" id="menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-add="cc">Cc</button>
+              <button type="button" role="menuitem" data-add="bcc">Bcc</button>
+            </div>
+          </div>
+        </div>
+        <div class="row" id="toRow">
+          <span class="lbl">To</span>
+          <input class="fld" id="to" value="Joanna Chen &lt;joanna@acme.example&gt;">
+        </div>
+        <div class="row trail" id="ccRow" hidden>
+          <span class="lbl">Cc</span>
+          <input class="fld" id="cc" placeholder="Cc" autocomplete="off">
+          <div class="rm-wrap"><button type="button" class="rm" data-rm="cc" aria-label="Remove Cc">×</button></div>
+        </div>
+        <div class="row trail" id="bccRow" hidden>
+          <span class="lbl">Bcc</span>
+          <input class="fld" id="bcc" placeholder="Bcc" autocomplete="off">
+          <div class="rm-wrap"><button type="button" class="rm" data-rm="bcc" aria-label="Remove Bcc">×</button></div>
+        </div>
+        <div class="row">
+          <span class="lbl">Subject</span>
+          <input class="fld" id="subj" value="Re: Staff Engineer role, next steps">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="body">Hi Joanna,
+
+Thanks for the call yesterday. Thursday 2pm works for me.
+
+Best,
+Alex</div>
+    </div>
+
+    <div class="footer">
+      <button class="btn ghost" id="modeToggle">Done editing</button>
+      <span class="spacer"></span>
+      <button class="btn primary" disabled>Send</button>
+    </div>
+  </div>
+
+  <pre class="state" id="state"></pre>
+</div>
+
+<script>
+(() => {
+  const SEEDS = {
+    empty: { cc: '', bcc: '', revealedCc: false, revealedBcc: false, canEdit: true, mode: 'edit', label: 'Both empty' },
+    cc:    { cc: 'Sam Lee <sam@acme.example>', bcc: '', revealedCc: true, revealedBcc: false, canEdit: true, mode: 'edit', label: 'Cc only' },
+    both:  { cc: 'Sam Lee <sam@acme.example>', bcc: 'vault@acme.example', revealedCc: true, revealedBcc: true, canEdit: true, mode: 'edit', label: 'Cc + Bcc' },
+    past:  { cc: '', bcc: 'hidden-in-v1@acme.example', revealedCc: false, revealedBcc: true, canEdit: false, mode: 'review', label: 'Past version (read-only)' }
+  };
+
+  let seed = 'empty';
+  let revealedCc = false;
+  let revealedBcc = false;
+
+  const $ = id => document.getElementById(id);
+  const win = $('win');
+  const cc = $('cc');
+  const bcc = $('bcc');
+  const plusWrap = $('plusWrap');
+  const plus = $('plus');
+  const menu = $('menu');
+  const modeToggle = $('modeToggle');
+
+  function empty(s) { return !(s || '').trim(); }
+
+  function visibility({ ccEmpty, bccEmpty, revealedCc, revealedBcc, canEdit }) {
+    const showCc = !ccEmpty || revealedCc;
+    const showBcc = !bccEmpty || revealedBcc;
+    const addable = [];
+    if (canEdit && !showCc) addable.push('cc');
+    if (canEdit && !showBcc) addable.push('bcc');
+    const removable = [];
+    if (canEdit && showCc) removable.push('cc');
+    if (canEdit && showBcc) removable.push('bcc');
+    return { showCc, showBcc, addable, removable, showPlus: addable.length > 0 };
+  }
+
+  function canEdit() {
+    return win.dataset.mode === 'edit' && SEEDS[seed].canEdit;
+  }
+
+  function syncRows() {
+    const vis = visibility({
+      ccEmpty: empty(cc.value),
+      bccEmpty: empty(bcc.value),
+      revealedCc,
+      revealedBcc,
+      canEdit: canEdit()
+    });
+
+    $('ccRow').hidden = !vis.showCc;
+    $('bccRow').hidden = !vis.showBcc;
+
+    plusWrap.classList.toggle('hidden-plus', !vis.showPlus);
+    plus.disabled = !vis.showPlus;
+    plus.setAttribute('aria-hidden', vis.showPlus ? 'false' : 'true');
+    if (!vis.showPlus) closeMenu();
+
+    for (const btn of menu.querySelectorAll('[data-add]')) {
+      btn.hidden = !vis.addable.includes(btn.dataset.add);
+    }
+    for (const btn of document.querySelectorAll('[data-rm]')) {
+      btn.disabled = !vis.removable.includes(btn.dataset.rm);
+      btn.parentElement.style.visibility = vis.removable.includes(btn.dataset.rm) ? 'visible' : 'hidden';
+    }
+
+    const editable = canEdit();
+    for (const id of ['to', 'cc', 'bcc', 'subj']) {
+      $(id).disabled = !editable;
+    }
+
+    modeToggle.textContent = win.dataset.mode === 'edit' ? 'Done editing' : 'Edit';
+    modeToggle.hidden = !SEEDS[seed].canEdit;
+
+    renderState(vis);
+  }
+
+  function renderState(vis) {
+    const lines = [
+      `{`,
+      `  <span class="k">"seed"</span>: <span class="s">"${SEEDS[seed].label}"</span>,`,
+      `  <span class="k">"mode"</span>: <span class="s">"${win.dataset.mode}"</span>,`,
+      `  <span class="k">"canEdit"</span>: ${canEdit()},`,
+      `  <span class="k">"removable"</span>: [${vis.removable.map(a => `<span class="s">"${a}"</span>`).join(', ')}],`,
+      `  <span class="k">"addable"</span>: [${vis.addable.map(a => `<span class="s">"${a}"</span>`).join(', ')}],`,
+      `  <span class="k">"showPlus"</span>: ${vis.showPlus}`,
+      `}`
+    ];
+    $('state').innerHTML = `<span class="b">// visibility helper output</span>\n` + lines.join('\n');
+  }
+
+  function applySeed(key) {
+    seed = key;
+    const s = SEEDS[key];
+    cc.value = s.cc;
+    bcc.value = s.bcc;
+    revealedCc = s.revealedCc;
+    revealedBcc = s.revealedBcc;
+    win.dataset.mode = s.mode;
+    closeMenu();
+    for (const b of document.querySelectorAll('[data-seed]')) {
+      b.setAttribute('aria-pressed', b.dataset.seed === key ? 'true' : 'false');
+    }
+    syncRows();
+  }
+
+  function openMenu() {
+    if (plusWrap.classList.contains('hidden-plus')) return;
+    menu.hidden = false;
+    plus.setAttribute('aria-expanded', 'true');
+  }
+  function closeMenu() {
+    menu.hidden = true;
+    plus.setAttribute('aria-expanded', 'false');
+  }
+
+  plus.addEventListener('click', e => {
+    e.stopPropagation();
+    if (menu.hidden) openMenu(); else closeMenu();
+  });
+
+  menu.addEventListener('click', e => {
+    const add = e.target.dataset?.add;
+    if (!add) return;
+    if (add === 'cc') { revealedCc = true; syncRows(); cc.focus(); }
+    else if (add === 'bcc') { revealedBcc = true; syncRows(); bcc.focus(); }
+    closeMenu();
+  });
+
+  document.addEventListener('click', e => {
+    if (!plusWrap.contains(e.target)) closeMenu();
+  });
+
+  document.querySelectorAll('[data-rm]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.rm === 'cc') { cc.value = ''; revealedCc = false; }
+      if (btn.dataset.rm === 'bcc') { bcc.value = ''; revealedBcc = false; }
+      syncRows();
+    });
+  });
+
+  cc.addEventListener('input', () => {
+    revealedCc = !empty(cc.value);
+    if (empty(cc.value)) revealedCc = false;
+    syncRows();
+  });
+  bcc.addEventListener('input', () => {
+    revealedBcc = !empty(bcc.value);
+    if (empty(bcc.value)) revealedBcc = false;
+    syncRows();
+  });
+
+  for (const b of document.querySelectorAll('[data-seed]')) {
+    b.addEventListener('click', () => applySeed(b.dataset.seed));
+  }
+
+  modeToggle.addEventListener('click', () => {
+    if (!SEEDS[seed].canEdit) return;
+    win.dataset.mode = win.dataset.mode === 'edit' ? 'review' : 'edit';
+    closeMenu();
+    syncRows();
+  });
+
+  applySeed('empty');
+})();
+</script>
+</body>
+</html>
