@@ -1,7 +1,7 @@
 import MailStore
 import SwiftUI
 
-/// Titlebar-trailing hard-timeout countdown for propose-send confirm.
+/// Titlebar-trailing hard-timeout countdown for human wait (Ask + propose_send).
 struct ProposeSendExpiryTitlebarLabel: View {
     let expiresAt: Date
 

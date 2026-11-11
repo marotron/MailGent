@@ -281,10 +281,12 @@ struct SendProposalEditDialog: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
             // Always reserve the trailing slot so To/Subject right edges match +.
+            // Draw the glyph ourselves — borderless Menu chrome sits high in a short row.
             ZStack {
-                Color.clear
-                    .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
                 if showPlus {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
                     Menu {
                         ForEach(addable, id: \.self) { field in
                             Button(field == .cc ? "Cc" : "Bcc") {
@@ -292,24 +294,20 @@ struct SendProposalEditDialog: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
+                        Color.clear
                             .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
                             .contentShape(Rectangle())
                     }
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .buttonStyle(.plain)
-                    .controlSize(.mini)
                     .help("Add field")
                     .accessibilityLabel("Add field")
                 }
             }
-            .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
-            .clipped()
+            .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight, alignment: .center)
         }
-        .frame(height: Self.envelopeRowHeight)
+        .frame(height: Self.envelopeRowHeight, alignment: .center)
     }
 
     private func revealEnvelopeField(_ field: OptionalEnvelopeVisibility.Field) {
@@ -377,16 +375,15 @@ struct SendProposalEditDialog: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight)
+                        .frame(width: Self.envelopePlusWidth, height: Self.envelopeRowHeight, alignment: .center)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .controlSize(.mini)
                 .help("Remove \(label)")
                 .accessibilityLabel("Remove \(label)")
             }
         }
-        .frame(height: Self.envelopeRowHeight)
+        .frame(height: Self.envelopeRowHeight, alignment: .center)
     }
 
     private var referencesStrip: some View {

@@ -17,6 +17,12 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 ### Added
 
 - Ask window shows a small inline Remember note after Allow/Block when **Remember Ask decisions** is on (`will stay cached for … (this agent)`)
+- Email access request (Conditional Ask) shows the same live titlebar countdown (`Expires in …`) as propose-send, driven by Settings → **Human wait limit**
+
+### Fixed
+
+- Propose-send From `+` / Cc·Bcc `×` sit on the same vertical center as the row’s caption text (Menu chrome no longer rides high)
+- Ask envelope **From** **Add to rule** centers on the first line with the name/badge (no longer sits low); still stays on line 1 when name and address stack
 
 ## [0.24.3] - 2026-11-11
 

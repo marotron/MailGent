@@ -1716,11 +1716,16 @@ final class AgentBridge {
                 )
             }
         )
+        let expiresAt = loopbackHost?.pendingAsks.expiresAt(askId: askId)
+            ?? Date().addingTimeInterval(
+                TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+            )
         return await conditionalAccessPrompt.requestDecision(
             context: context,
             askId: askId,
             accountLabel: CompanionAccounts.label(context.accountID),
-            ruleSupport: support
+            ruleSupport: support,
+            expiresAt: expiresAt
         )
     }
 

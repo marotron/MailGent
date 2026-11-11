@@ -308,12 +308,14 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     func runConditionalAsk(
         request: ConditionalAccessPromptRequest,
         accountLabel: String,
-        ruleSupport: ConditionalAccessAskRuleSupport? = nil
+        ruleSupport: ConditionalAccessAskRuleSupport? = nil,
+        expiresAt: Date
     ) async -> ConditionalAccessPromptOutcome {
         await presentConditionalAsk(
             request: request,
             accountLabel: accountLabel,
-            ruleSupport: ruleSupport
+            ruleSupport: ruleSupport,
+            expiresAt: expiresAt
         )
     }
 
@@ -419,7 +421,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: withContext ? 1100 : 900, height: 900)
-            attachProposeSendExpiryTitlebar(expiresAt: expiresAt, to: window)
+            attachHardWaitExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: sendProposals.count)
             let record = SendProposalRecord(
                 window: window,
@@ -440,8 +442,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Trailing titlebar countdown (hard Settings timeout). Footer mid is the dogfood fallback only.
-    private func attachProposeSendExpiryTitlebar(expiresAt: Date, to window: NSWindow) {
+    /// Trailing titlebar countdown for Settings → Human wait limit (Ask + propose_send).
+    private func attachHardWaitExpiryTitlebar(expiresAt: Date, to window: NSWindow) {
         let hosting = NSHostingView(rootView: ProposeSendExpiryTitlebarLabel(expiresAt: expiresAt))
         hosting.frame.size = hosting.fittingSize
         let accessory = NSTitlebarAccessoryViewController()
@@ -453,7 +455,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     private func presentConditionalAsk(
         request: ConditionalAccessPromptRequest,
         accountLabel: String,
-        ruleSupport: ConditionalAccessAskRuleSupport?
+        ruleSupport: ConditionalAccessAskRuleSupport?,
+        expiresAt: Date
     ) async -> ConditionalAccessPromptOutcome {
         await withCheckedContinuation { continuation in
             AskQueueIndicator.shared.register(
@@ -498,6 +501,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             )
             window.styleMask.remove(.miniaturizable)
             window.maxSize = NSSize(width: 2400, height: 1600)
+            attachHardWaitExpiryTitlebar(expiresAt: expiresAt, to: window)
             cascade(window, index: index)
             asks[request.id] = AskRecord(
                 window: window,
@@ -561,6 +565,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             }
         )
         let size = ConditionalAskLayout.contentSize(previewVisible: true)
+        let sandboxExpiresAt = Date().addingTimeInterval(
+            TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
+        )
         beginPresentation()
         if let askLayoutSandbox {
             askLayoutSandbox.styleMask.insert(.resizable)
@@ -570,6 +577,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             askLayoutSandbox.title = "Email access request"
             install(dialog, in: askLayoutSandbox, contentSize: size)
             askLayoutSandbox.setContentSize(size)
+            hideHardWaitExpiryTitlebar(on: askLayoutSandbox)
+            attachHardWaitExpiryTitlebar(expiresAt: sandboxExpiresAt, to: askLayoutSandbox)
         } else {
             askLayoutSandbox = makeWindow(
                 title: "Email access request",
@@ -578,6 +587,9 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 root: dialog
             )
             askLayoutSandbox?.styleMask.remove(.miniaturizable)
+            if let askLayoutSandbox {
+                attachHardWaitExpiryTitlebar(expiresAt: sandboxExpiresAt, to: askLayoutSandbox)
+            }
         }
         bringForward(askLayoutSandbox)
     }
@@ -739,7 +751,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         record.model.phase = .sending
         record.editModel?.phase = .sending
         record.window.title = record.editModel?.windowTitle ?? record.model.windowTitle
-        hideProposeSendExpiryTitlebar(on: record.window)
+        hideHardWaitExpiryTitlebar(on: record.window)
         let handoffSend = handoff
         record.handoffTask = Task { @MainActor [weak self] in
             let errorMessage: String?
@@ -824,7 +836,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         dismissSendProposalWindow(id: id)
     }
 
-    private func hideProposeSendExpiryTitlebar(on window: NSWindow) {
+    private func hideHardWaitExpiryTitlebar(on window: NSWindow) {
         while !window.titlebarAccessoryViewControllers.isEmpty {
             window.removeTitlebarAccessoryViewController(at: 0)
         }

@@ -36,11 +36,13 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
     /// Concurrent gets each open their own dialog; one decision never resolves another.
     /// Always returns (never throws). Traffic-light / ⌘W is dismissed (not Block).
     /// - Parameter askId: Registry id from non-blocking Ask open; keys the dialog + queue row.
+    /// - Parameter expiresAt: Hard human-wait deadline for the titlebar countdown (Settings → Human wait limit).
     public func requestDecision(
         context: ConditionalAccessPromptContext,
         askId: String? = nil,
         accountLabel: String? = nil,
-        ruleSupport: ConditionalAccessAskRuleSupport? = nil
+        ruleSupport: ConditionalAccessAskRuleSupport? = nil,
+        expiresAt: Date
     ) async -> ConditionalAccessPromptOutcome {
         let request = ConditionalAccessPromptRequest(
             id: askId ?? UUID().uuidString,
@@ -52,7 +54,8 @@ public final class ConditionalAccessPromptCoordinator: ObservableObject {
         let outcome = await DetachedWindowHost.shared.runConditionalAsk(
             request: request,
             accountLabel: mailboxLabel,
-            ruleSupport: ruleSupport
+            ruleSupport: ruleSupport,
+            expiresAt: expiresAt
         )
 
         let label: String
@@ -846,27 +849,52 @@ struct ConditionalAccessPromptDialog: View {
     ) -> some View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let addresses = MailAddressParts.parseList(trimmed)
-        // Top-align so the + stays on the first line when name/email stacks.
+        let showSlot = showPickSlot || pick != nil
+        // Pick rides on the first line (center with Subject), not top-aligned to a
+        // taller name+badge block — that made Add to rule sit low on one-line From.
         return HStack(alignment: .top, spacing: 8) {
             envelopeLabel(label)
+                .frame(height: SecondaryActionMetrics.controlHeight, alignment: .center)
             Group {
                 if trimmed.isEmpty {
-                    Text("—")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    envelopeAddressFirstLine {
+                        Text("—")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } accessory: {
+                        envelopePickControl(pick: pick, showSlot: showSlot)
+                    }
                 } else if addresses.isEmpty {
-                    Text(trimmed)
-                        .font(.caption2)
-                        .textSelection(.enabled)
-                        .lineLimit(3)
+                    envelopeAddressFirstLine {
+                        Text(trimmed)
+                            .font(.caption2)
+                            .textSelection(.enabled)
+                            .lineLimit(3)
+                    } accessory: {
+                        envelopePickControl(pick: pick, showSlot: showSlot)
+                    }
                 } else {
-                    FlowAddressBadges(addresses: addresses)
-                        .font(.caption2)
+                    FlowAddressBadges(addresses: addresses) {
+                        envelopePickControl(pick: pick, showSlot: showSlot)
+                    }
+                    .font(.caption2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            envelopePickControl(pick: pick, showSlot: showPickSlot || pick != nil)
         }
+    }
+
+    /// Value + trailing pick/slot on one centered band (matches Subject row).
+    private func envelopeAddressFirstLine<Value: View, Accessory: View>(
+        @ViewBuilder value: () -> Value,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            value()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            accessory()
+        }
+        .frame(minHeight: SecondaryActionMetrics.controlHeight, alignment: .center)
     }
 
     @ViewBuilder
@@ -923,47 +951,103 @@ struct AskPrimaryFooterButtonStyle: ButtonStyle {
 }
 
 /// Name + grey email badge side-by-side when they fit; otherwise name on line 1, email on line 2.
+/// Optional `firstLineAccessory` (Ask **Add to rule**) stays on the first line, centered with it.
 /// Callers set `.font(...)` (envelope uses caption2; field cards use caption).
-struct FlowAddressBadges: View {
+struct FlowAddressBadges<Accessory: View>: View {
     let addresses: [MailAddressParts]
+    let attachesFirstLineAccessory: Bool
+    @ViewBuilder var firstLineAccessory: () -> Accessory
+
+    init(
+        addresses: [MailAddressParts],
+        @ViewBuilder firstLineAccessory: @escaping () -> Accessory
+    ) {
+        self.addresses = addresses
+        self.attachesFirstLineAccessory = true
+        self.firstLineAccessory = firstLineAccessory
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(addresses.enumerated()), id: \.offset) { _, parts in
-                addressBlock(parts)
+            ForEach(Array(addresses.enumerated()), id: \.offset) { index, parts in
+                addressBlock(
+                    parts,
+                    includeAccessory: attachesFirstLineAccessory && index == 0
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func addressBlock(_ parts: MailAddressParts) -> some View {
+    private func addressBlock(_ parts: MailAddressParts, includeAccessory: Bool) -> some View {
         switch (parts.name, parts.email) {
         case let (name?, email?):
             // Horizontal candidate must refuse to wrap so ViewThatFits can fall back.
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .center, spacing: 6) {
                     Text(name)
                         .textSelection(.enabled)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                     AddressBadge(email: email, lineLimit: 1)
                         .fixedSize(horizontal: true, vertical: false)
+                    if includeAccessory {
+                        Spacer(minLength: 8)
+                        firstLineAccessory()
+                    }
                 }
+                .frame(minHeight: includeAccessory ? SecondaryActionMetrics.controlHeight : 0, alignment: .center)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .textSelection(.enabled)
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(name)
+                            .textSelection(.enabled)
+                        if includeAccessory {
+                            Spacer(minLength: 0)
+                            firstLineAccessory()
+                        }
+                    }
+                    .frame(minHeight: includeAccessory ? SecondaryActionMetrics.controlHeight : 0, alignment: .center)
                     AddressBadge(email: email)
                 }
             }
         case let (name?, nil):
-            Text(name)
-                .textSelection(.enabled)
+            firstLine(includeAccessory: includeAccessory) {
+                Text(name)
+                    .textSelection(.enabled)
+            }
         case let (nil, email?):
-            AddressBadge(email: email)
+            firstLine(includeAccessory: includeAccessory) {
+                AddressBadge(email: email)
+            }
         case (nil, nil):
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    private func firstLine<Content: View>(
+        includeAccessory: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if includeAccessory {
+            HStack(alignment: .center, spacing: 8) {
+                content()
+                Spacer(minLength: 0)
+                firstLineAccessory()
+            }
+            .frame(minHeight: SecondaryActionMetrics.controlHeight, alignment: .center)
+        } else {
+            content()
+        }
+    }
+}
+
+extension FlowAddressBadges where Accessory == EmptyView {
+    init(addresses: [MailAddressParts]) {
+        self.addresses = addresses
+        self.attachesFirstLineAccessory = false
+        self.firstLineAccessory = { EmptyView() }
     }
 }
 

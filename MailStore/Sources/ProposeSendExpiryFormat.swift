@@ -1,6 +1,6 @@
 import Foundation
 
-/// Hard-timeout countdown copy for the propose-send confirm dialog.
+/// Hard-timeout countdown copy for human wait (Ask + propose_send).
 public enum ProposeSendExpiryFormat {
     /// `Expires in H:MM:SS` when ≥ 1 hour, otherwise `Expires in M:SS`.
     public static func countdownLabel(remaining: TimeInterval) -> String {
