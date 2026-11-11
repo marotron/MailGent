@@ -390,7 +390,7 @@ struct SendProposalEditDialog: View {
         Group {
             if !model.pins.isEmpty, model.phase != .handedOff, !model.viewingPast {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Passages for Cursor's attention · \(model.pins.count) · sent on Ask to look, Ask to revise, or Send")
+                    Text("Passages for Cursor's attention · \(model.pins.count) · sent on Ask to look or Ask to revise")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color(red: 0.42, green: 0.25, blue: 0.82))
                     ForEach(Array(model.anchoredReferences().enumerated()), id: \.element.id) { index, reference in
@@ -401,10 +401,12 @@ struct SendProposalEditDialog: View {
                             choices: ProposalPassageInstructions.choices(from: notePresets),
                             selected: selectedInstructions(reference.id),
                             expanded: model.expandedReferenceID == reference.id,
+                            preferAskToLookOnSubmit: model.preferAskToLookDefault,
                             onFocus: { model.focusReference(reference.id) },
                             onToggleExpanded: { model.toggleReferenceExpansion(reference.id) },
                             onToggleInstruction: { toggleInstruction($0, referenceID: reference.id) },
-                            onRemove: { model.removeReference(reference.id) }
+                            onRemove: { model.removeReference(reference.id) },
+                            onNoteSubmit: { askToLook() }
                         )
                     }
                 }
@@ -634,7 +636,8 @@ struct SendProposalEditDialog: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer(minLength: 8)
                 Button("Ask agent to look") { askToLook() }
-                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: model.preferAskToLookDefault))
+                    .modifier(DefaultActionWhen(model.preferAskToLookDefault))
                     .disabled(!model.canRevise || model.pins.isEmpty || !model.isReview)
                 Button("Ask to revise…") { showRevise = true }
                     .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
@@ -646,8 +649,8 @@ struct SendProposalEditDialog: View {
                     .buttonStyle(AskPrimaryFooterButtonStyle(prominent: false))
                     .disabled(!model.deliveredProposal().canDeliverSecretConstants)
                 Button(model.changes.isEmpty ? "Send" : "Send edited") { onSend(model.deliveredProposal(), model.sendPayload()) }
-                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
-                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(AskPrimaryFooterButtonStyle(prominent: !model.preferAskToLookDefault))
+                    .modifier(DefaultActionWhen(!model.preferAskToLookDefault))
                     .disabled(!model.deliveredProposal().canDeliverSecretConstants || !model.isReview && model.phase != .waitingRevise && model.phase != .waitingAttention)
             }
         case .sending:
@@ -727,6 +730,23 @@ private struct FlowPresets: View {
     }
 }
 
+/// Applies `.keyboardShortcut(.defaultAction)` only when `active` so Enter tracks Look vs Send.
+private struct DefaultActionWhen: ViewModifier {
+    let active: Bool
+
+    init(_ active: Bool) {
+        self.active = active
+    }
+
+    func body(content: Content) -> some View {
+        if active {
+            content.keyboardShortcut(.defaultAction)
+        } else {
+            content
+        }
+    }
+}
+
 private struct FocusReferenceRow: View {
     let number: Int
     let reference: ProposalReferenceRecord
@@ -734,10 +754,12 @@ private struct FocusReferenceRow: View {
     let choices: [ProposalPassageInstruction]
     let selected: [ProposalPassageInstruction]
     let expanded: Bool
+    let preferAskToLookOnSubmit: Bool
     var onFocus: () -> Void
     var onToggleExpanded: () -> Void
     var onToggleInstruction: (ProposalPassageInstruction) -> Void
     var onRemove: () -> Void
+    var onNoteSubmit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -762,6 +784,10 @@ private struct FocusReferenceRow: View {
                     TextField("Anything else for this passage?", text: $note)
                         .textFieldStyle(.roundedBorder)
                         .font(.caption)
+                        .onSubmit {
+                            guard preferAskToLookOnSubmit else { return }
+                            onNoteSubmit()
+                        }
                 }
                 .padding(.leading, 26)
             }
