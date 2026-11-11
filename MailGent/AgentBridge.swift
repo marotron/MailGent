@@ -1046,6 +1046,19 @@ final class AgentBridge {
                 DetachedWindowHost.shared.expireConditionalAsk(id: id)
             }
         }
+        host.pendingProposals.setRevisionHandler { [weak self] id, proposal, results in
+            Task { @MainActor in
+                let resolved = await self?.resolveProposeSendContext(proposal)
+                let rounds = host.pendingProposals.revisionRoundTrips(id: id)
+                DetachedWindowHost.shared.replaceSendProposalDraft(
+                    id: id,
+                    proposal: proposal,
+                    roundTrips: rounds,
+                    resolved: resolved,
+                    results: results
+                )
+            }
+        }
         host.setSendProposalPrompter { [weak self] proposal in
             let resolved = await self?.resolveProposeSendContext(proposal)
             let opener = await self?.makeProposeSendOriginalOpener()
@@ -1054,6 +1067,15 @@ final class AgentBridge {
                 ?? Date().addingTimeInterval(
                     TimeInterval(MailGentPreferences.proposeSendHardTimeoutSeconds)
                 )
+            // Shell gate = edit Experimental only. Missing context must not fall back to simple confirm.
+            let editLaunch = ProposeSendConfirmRouting.editLaunch(
+                editExperimental: MailGentPreferences.proposeSendEditExperimental,
+                constants: host.readSecretConstantsCatalog().constants,
+                agentID: host.pendingProposals.agentID(for: proposal.id) ?? "",
+                shortcut: MailGentPreferences.proposeSendReferShortcut,
+                notePresets: MailGentPreferences.proposeSendNotePresets,
+                roundTrips: host.pendingProposals.revisionRoundTrips(id: proposal.id)
+            )
             return await DetachedWindowHost.shared.runSendProposalConfirm(
                 proposal: proposal,
                 expiresAt: expiresAt,
@@ -1092,6 +1114,21 @@ final class AgentBridge {
                         return (error as? MailOutgoingError)?.description
                             ?? String(describing: error)
                     }
+                },
+                edit: editLaunch,
+                onStageSend: { delivered, payload in
+                    host.pendingProposals.updateDraft(id: delivered.id, proposal: delivered)
+                    host.pendingProposals.stagePayload(id: delivered.id, payload: payload)
+                },
+                onStageOpen: { delivered in
+                    host.pendingProposals.updateDraft(id: delivered.id, proposal: delivered)
+                },
+                onInterim: { decision, payload in
+                    host.pendingProposals.publishInterim(
+                        id: proposal.id,
+                        decision: decision,
+                        payload: payload
+                    )
                 }
             )
         }

@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/). While a line is a **rel
 
 Release section headings use semver only (`## [0.4.0]`). **alpha** stays in README / About / GitHub titles. **`-rc.N`** is display/MCP only — never in `MARKETING_VERSION` or ship tags.
 
+## [Unreleased]
+
+## [0.24.2] - 2026-11-11
+
+### Added
+
+- Experimental propose-send edit / revise confirm (Settings → Experimental): editable draft, Ask to look / Ask to revise, draft version history; Send and Open in Mail use the browsed draft version
+- When edit / revise Experimental is on, every `propose_send` uses that extended confirm shell (context rail remains optional when Context-thread Experimental + agent `context` resolve)
+- Extended confirm shows the secret-constants replaced strip under the body (`[[mg:name]] → value`), driven by the browsed draft version (#78)
+
+### Fixed
+
+- Secret-constant pills in the editable propose-send body align on the same baseline as surrounding text (no longer sit high in the line)
+
 ## [0.24.1] - 2026-11-10
 
 ### Added

@@ -22,11 +22,15 @@ struct MailGentSettingsView: View {
     @AppStorage(MailGentPreferences.auditMaxCountKey) private var auditMaxCount = 0
     @AppStorage(MailGentPreferences.auditMaxBytesKey) private var auditMaxBytes = 0
     @AppStorage(MailGentPreferences.proposeSendContextExperimentalKey) private var proposeSendContextExperimental = false
+    @AppStorage(MailGentPreferences.proposeSendEditExperimentalKey) private var proposeSendEditExperimental = false
     @AppStorage(MailGentPreferences.secretConstantsEnabledKey) private var secretConstantsEnabled = false
     @AppStorage(MailGentPreferences.logAwaitProposeSendSoftWaitsKey) private var logAwaitProposeSendSoftWaits = false
     @State private var confirmClearAll = false
     @State private var confirmClear24h = false
     @State private var vaultRootPath: String = PersonalVaultBookmark.displayPath() ?? ""
+    @State private var notePresets: [String] = MailGentPreferences.proposeSendNotePresets
+    @State private var referShortcut: ProposalReferShortcut = MailGentPreferences.proposeSendReferShortcut
+    @State private var recordingReferShortcut = false
 
     var body: some View {
         TabView {
@@ -322,6 +326,18 @@ struct MailGentSettingsView: View {
                         .font(.callout)
                     }
                 }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Propose-send edit and revise", isOn: $proposeSendEditExperimental)
+                    Text(
+                        "Off by default. When on, every propose_send uses the editable confirm (pin passages, ask to look / revise, draft history) — with or without a context rail. The left rail still needs Propose-send context thread plus agent context. Experimental — schema and UI may change."
+                    )
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                }
+                if proposeSendEditExperimental {
+                    referShortcutRow
+                    notePresetEditor
+                }
             }
         }
         .formStyle(.grouped)
@@ -329,6 +345,76 @@ struct MailGentSettingsView: View {
         .onAppear {
             vaultRootPath = PersonalVaultBookmark.displayPath() ?? ""
         }
+    }
+
+    private var referShortcutRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            LabeledContent("Refer shortcut") {
+                Text(referShortcut.keycap)
+                    .font(.body.monospaced())
+            }
+            HStack {
+                Button(recordingReferShortcut ? "Press a shortcut…" : "Record") {
+                    recordingReferShortcut = true
+                }
+                .background {
+                    ReferShortcutRecorder(isRecording: $recordingReferShortcut) { shortcut in
+                        referShortcut = shortcut
+                        MailGentPreferences.setProposeSendReferShortcut(shortcut)
+                    }
+                }
+                Button("Reset") {
+                    recordingReferShortcut = false
+                    referShortcut = .defaultShortcut
+                    MailGentPreferences.setProposeSendReferShortcut(.defaultShortcut)
+                }
+            }
+            Text("Shown on the refer bubble and the context menu. With no body selection the shortcut does nothing.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+        }
+    }
+
+    private var notePresetEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Passage note presets")
+                .font(.body)
+            ForEach(notePresets.indices, id: \.self) { index in
+                HStack {
+                    TextField("Preset", text: presetBinding(index))
+                    Button("Up") { movePreset(from: index, by: -1) }
+                        .disabled(index == 0)
+                    Button("Down") { movePreset(from: index, by: 1) }
+                        .disabled(index == notePresets.count - 1)
+                    Button("Remove", role: .destructive) {
+                        notePresets.remove(at: index)
+                        MailGentPreferences.setProposeSendNotePresets(notePresets)
+                    }
+                }
+            }
+            Button("Add preset") {
+                notePresets.append("")
+                MailGentPreferences.setProposeSendNotePresets(notePresets)
+            }
+        }
+    }
+
+    private func presetBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: { notePresets.indices.contains(index) ? notePresets[index] : "" },
+            set: { newValue in
+                guard notePresets.indices.contains(index) else { return }
+                notePresets[index] = newValue
+                MailGentPreferences.setProposeSendNotePresets(notePresets)
+            }
+        )
+    }
+
+    private func movePreset(from index: Int, by delta: Int) {
+        let next = index + delta
+        guard notePresets.indices.contains(next) else { return }
+        notePresets.swapAt(index, next)
+        MailGentPreferences.setProposeSendNotePresets(notePresets)
     }
 
     private func choosePersonalVaultRoot() {
@@ -353,5 +439,76 @@ struct MailGentSettingsView: View {
         #else
         "Off by default. When on, a paired agent may call MCP set_source (live Mail only in Release builds)."
         #endif
+    }
+}
+
+/// Click-to-record control. The next key chord with ⌘ or ⌃ becomes the refer shortcut.
+private struct ReferShortcutRecorder: NSViewRepresentable {
+    @Binding var isRecording: Bool
+    var onCapture: (ProposalReferShortcut) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.isRecording = $isRecording
+        context.coordinator.onCapture = onCapture
+        if isRecording {
+            context.coordinator.start()
+        } else {
+            context.coordinator.stop()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isRecording: $isRecording, onCapture: onCapture)
+    }
+
+    final class Coordinator: @unchecked Sendable {
+        var isRecording: Binding<Bool>
+        var onCapture: (ProposalReferShortcut) -> Void
+        private var monitor: Any?
+
+        init(isRecording: Binding<Bool>, onCapture: @escaping (ProposalReferShortcut) -> Void) {
+            self.isRecording = isRecording
+            self.onCapture = onCapture
+        }
+
+        func start() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.isRecording.wrappedValue else { return event }
+                let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                let meaningful = flags.intersection([.command, .shift, .option, .control])
+                guard meaningful.contains(.command) || meaningful.contains(.control),
+                      let raw = event.charactersIgnoringModifiers?.lowercased(),
+                      raw.count == 1,
+                      let character = raw.first,
+                      character.isLetter || character.isNumber
+                else {
+                    return event
+                }
+                let shortcut = ProposalReferShortcut(
+                    key: String(character),
+                    command: meaningful.contains(.command),
+                    shift: meaningful.contains(.shift),
+                    option: meaningful.contains(.option),
+                    control: meaningful.contains(.control)
+                )
+                self.onCapture(shortcut)
+                self.isRecording.wrappedValue = false
+                self.stop()
+                return nil
+            }
+        }
+
+        func stop() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
     }
 }

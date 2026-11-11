@@ -104,7 +104,8 @@ public struct SendProposalEventRef: Equatable, Sendable {
     public let party: SendProposalParty?
     public let at: Date
     public let summary: String
-    public let source: SendProposalEventSource
+    /// `nil` when the agent sent a note with no mail or vault source.
+    public let source: SendProposalEventSource?
 
     public init(
         id: String,
@@ -114,7 +115,7 @@ public struct SendProposalEventRef: Equatable, Sendable {
         party: SendProposalParty? = nil,
         at: Date,
         summary: String,
-        source: SendProposalEventSource
+        source: SendProposalEventSource? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -165,10 +166,14 @@ public struct SendProposalEventRef: Equatable, Sendable {
             throw SendProposalContextError.missingField("events[\(index)].party")
         }
 
-        guard let sourceRaw = raw["source"] as? [String: Any] else {
-            throw SendProposalContextError.missingField("events[\(index)].source")
+        let source: SendProposalEventSource?
+        if raw["source"] == nil || raw["source"] is NSNull {
+            source = nil
+        } else if let sourceRaw = raw["source"] as? [String: Any] {
+            source = try SendProposalEventSource.parse(sourceRaw, kind: kind, index: index)
+        } else {
+            throw SendProposalContextError.invalidField("events[\(index)].source")
         }
-        let source = try SendProposalEventSource.parse(sourceRaw, kind: kind, index: index)
 
         return SendProposalEventRef(
             id: idTrimmed,

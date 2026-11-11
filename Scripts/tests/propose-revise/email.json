@@ -1,0 +1,41 @@
+{
+  "sender": "markujcv@gmail.com",
+  "to": "dana@example.com",
+  "subject": "Server migration update",
+  "body": "Hi Dana,\n\nQuick update on the server migration plan: we're moving to Phase 2 next Tuesday. I'll send the detailed timeline tomorrow, and the rollback checklist by Friday.\n\nBest,\nAlex",
+  "revisedBody": "Hi Dana,\n\nQuick update on the server migration initiative: we're moving to Phase 2 next Tuesday. Timeline and rollback checklist by Friday.\n\nBest,\nAlex",
+  "context": {
+    "casePath": "cases/projects/server-migration",
+    "caseLabel": "Server migration",
+    "events": [
+      {
+        "id": "context-1",
+        "kind": "phone",
+        "scope": "private",
+        "ownership": "both",
+        "party": {
+          "name": "Dana",
+          "initials": "D"
+        },
+        "at": "2026-11-04T10:00:00Z",
+        "summary": "Agreed to start Phase 2 next Tuesday"
+      },
+      {
+        "id": "context-2",
+        "kind": "note",
+        "scope": "private",
+        "ownership": "you",
+        "at": "2026-11-05T14:30:00Z",
+        "summary": "Prepare the detailed timeline and rollback checklist"
+      }
+    ],
+    "links": [
+      {
+        "from": "context-2",
+        "to": "context-1",
+        "rel": "follow-up",
+        "label": "Follow-up"
+      }
+    ]
+  }
+}

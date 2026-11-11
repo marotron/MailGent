@@ -1422,7 +1422,129 @@ struct LoopbackMCPServerTests {
         #expect(first["proposalId"] as? String == second["proposalId"] as? String)
     }
 
-    @Test func proposeSendDedupesSameEnvelopeDifferentBody() async throws {
+    @Test func proposeSendRevisionParsesTypedInstructionResults() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalID = try #require(ack["proposalId"] as? String)
+        let reference = ProposalReferenceRecord(
+            id: "r1",
+            quote: "Hello",
+            note: nil,
+            stale: false,
+            instructions: [
+                ProposalPassageInstruction(
+                    id: "accurate",
+                    kind: .ask,
+                    label: "Check this is accurate",
+                    answerShape: .yesNo
+                ),
+            ]
+        )
+        #expect(
+            env.server.host.pendingProposals.publishInterim(
+                id: proposalID,
+                decision: .attentionRequested,
+                payload: ProposalAgentPayload(
+                    outcome: "attention_requested",
+                    proposalId: proposalID,
+                    references: [reference]
+                )
+            )
+        )
+
+        _ = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: [
+                "to": "a@b.c",
+                "subject": "Hi",
+                "body": "Hello",
+                "revises": [
+                    "proposalId": proposalID,
+                    "results": [[
+                        "referenceId": "r1",
+                        "instructionId": "accurate",
+                        "status": "pass",
+                        "answer": ["type": "yes_no", "value": true],
+                    ]],
+                ],
+            ]
+        )
+
+        #expect(
+            env.server.host.pendingProposals.revisionResults(id: proposalID)
+                == [
+                    ProposalInstructionResult(
+                        referenceID: "r1",
+                        instructionID: "accurate",
+                        status: .pass,
+                        answer: .yesNo(true)
+                    ),
+                ]
+        )
+    }
+
+    @Test func proposeSendBareAfterAttentionRevisesSameWindow() async throws {
+        let prompterCalls = PrompterCallCounter()
+        let revisedBodies = RevisionBodyBox()
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                prompterCalls.increment()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+        env.server.host.pendingProposals.setRevisionHandler { _, proposal, _ in
+            revisedBodies.value = proposal.body
+        }
+
+        let ack = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello"]
+        )
+        let proposalID = try #require(ack["proposalId"] as? String)
+        #expect(
+            env.server.host.pendingProposals.publishInterim(
+                id: proposalID,
+                decision: .attentionRequested,
+                payload: ProposalPayloadBuilder.attention(
+                    proposalId: proposalID,
+                    userEdits: ProposalChanges(),
+                    references: [],
+                    context: nil
+                )
+            )
+        )
+
+        let revised = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Hi", "body": "Hello formally"]
+        )
+        #expect(revised["proposalId"] as? String == proposalID)
+        #expect((revised["message"] as? String)?.contains("Updated the open confirm") == true)
+        #expect(prompterCalls.count == 1)
+        #expect(revisedBodies.value == "Hello formally")
+        #expect(env.server.host.pendingProposals.proposal(id: proposalID)?.body == "Hello formally")
+    }
+
+    @Test func proposeSendBareErrorsWhenMultipleAwaitingRevision() async throws {
         let env = try LoopbackFixture(
             mailOutgoingSender: FakeMailOutgoingSender(),
             agentMayProposeSend: true,
@@ -1436,19 +1558,47 @@ struct LoopbackMCPServerTests {
         let first = try await Self.proposeSendAck(
             env.server,
             credential: env.credential,
-            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Draft A"]
+            arguments: ["to": "a@b.c", "subject": "One", "body": "A"]
         )
         let second = try await Self.proposeSendAck(
             env.server,
             credential: env.credential,
-            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Fresh copy"]
+            arguments: ["to": "a@b.c", "subject": "Two", "body": "B"]
         )
-        #expect(first["proposalId"] as? String == second["proposalId"] as? String)
-        #expect(second["status"] as? String == "awaiting_user")
-        #expect((second["message"] as? String)?.contains("already open") == true)
+        let firstID = try #require(first["proposalId"] as? String)
+        let secondID = try #require(second["proposalId"] as? String)
+        #expect(
+            env.server.host.pendingProposals.publishInterim(
+                id: firstID,
+                decision: .attentionRequested,
+                payload: ProposalAgentPayload(outcome: "attention_requested", proposalId: firstID)
+            )
+        )
+        #expect(
+            env.server.host.pendingProposals.publishInterim(
+                id: secondID,
+                decision: .reviseRequested,
+                payload: ProposalAgentPayload(outcome: "revise_requested", proposalId: secondID)
+            )
+        )
+
+        let response = await env.server.handle(
+            LoopbackMCPRequest(
+                method: "POST",
+                path: "/mcp",
+                headers: ["Authorization": "Bearer \(env.credential)"],
+                body: try Self.toolCallJSONObject(
+                    name: "propose_send",
+                    arguments: ["to": "a@b.c", "subject": "Three", "body": "C"]
+                )
+            )
+        )
+        #expect(response.body.contains("isError"))
+        #expect(response.body.contains("Multiple proposals"))
+        #expect(response.body.contains(firstID) || response.body.contains(secondID))
     }
 
-    @Test func proposeSendAlreadySentAfterSend() async throws {
+@Test func proposeSendAlreadySentAfterSend() async throws {
         let env = try LoopbackFixture(
             mailOutgoingSender: FakeMailOutgoingSender(),
             agentMayProposeSend: true,
@@ -1479,7 +1629,7 @@ struct LoopbackMCPServerTests {
         #expect(second["outcome"] as? String == "send")
     }
 
-    @Test func proposeSendConflictAcrossAgents() async throws {
+@Test func proposeSendConflictAcrossAgents() async throws {
         let env = try LoopbackFixture(
             mailOutgoingSender: FakeMailOutgoingSender(),
             agentMayProposeSend: true,
@@ -1511,6 +1661,33 @@ struct LoopbackMCPServerTests {
         #expect(second["proposalId"] as? String == first["proposalId"] as? String)
         #expect(second["agentName"] as? String == "Cursor")
     }
+
+@Test func proposeSendDedupesSameEnvelopeDifferentBody() async throws {
+        let env = try LoopbackFixture(
+            mailOutgoingSender: FakeMailOutgoingSender(),
+            agentMayProposeSend: true,
+            sendProposalPrompter: { _ in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                return .cancel
+            }
+        )
+        defer { env.remove() }
+
+        let first = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Draft A"]
+        )
+        let second = try await Self.proposeSendAck(
+            env.server,
+            credential: env.credential,
+            arguments: ["to": "a@b.c", "subject": "Thanks", "body": "Fresh copy"]
+        )
+        #expect(first["proposalId"] as? String == second["proposalId"] as? String)
+        #expect(second["status"] as? String == "awaiting_user")
+        #expect((second["message"] as? String)?.contains("already open") == true)
+    }
+
 
     @Test func awaitProposeSendUnknownIdErrors() async throws {
         let env = try LoopbackFixture(
@@ -2788,6 +2965,41 @@ private final class FakeAppleMailOpener: AppleMailOpening, @unchecked Sendable {
 
 private final class ProposalCaptureBox: @unchecked Sendable {
     var value: SendProposal?
+}
+
+private final class PrompterCallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _count = 0
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _count
+    }
+
+    func increment() {
+        lock.lock()
+        _count += 1
+        lock.unlock()
+    }
+}
+
+private final class RevisionBodyBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: String?
+
+    var value: String? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _value
+        }
+        set {
+            lock.lock()
+            _value = newValue
+            lock.unlock()
+        }
+    }
 }
 
 private final class FakeMailOutgoingSender: MailOutgoingSending, @unchecked Sendable {

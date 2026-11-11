@@ -258,4 +258,21 @@ import Testing
         #expect(try SendProposalContext.parseOptional(nil) == nil)
         #expect(try SendProposalContext.parseOptional(NSNull()) == nil)
     }
+
+    @Test func omittedSourceParsesAsAgentNote() throws {
+        let context = try SendProposalContext.parse([
+            "casePath": "cases/jobs/acme",
+            "events": [
+                [
+                    "id": "n1",
+                    "kind": "note",
+                    "scope": "private",
+                    "ownership": "you",
+                    "at": "2026-10-20T11:40:00Z",
+                    "summary": "Remember the Thursday call"
+                ]
+            ]
+        ])
+        #expect(context.events[0].source == nil)
+    }
 }

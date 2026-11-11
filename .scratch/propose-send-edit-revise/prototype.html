@@ -1,0 +1,1326 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — propose_send confirm: Edit, Ask agent to revise, case context,
+  and passage references ("refer to agent's attention").
+  Not wired to Mail or MCP.
+
+  Try it:
+  1. Edit → change "Thursday 2pm" → Done editing → "Edited · 1 change" + highlight.
+  2. Select a sentence in the body → right-click → Refer to agent's attention. Add a note in the strip.
+  3. Expand "Case context", toggle Refer on an event. It is echoed back as context.referencedEventIds.
+  4. Ask agent to look (refs only, no changes) or Ask agent to revise… (preset + note + refs).
+  5. Right panel = the exact JSON the agent gets, live. Secret tokens stay [[mg:…]]; literals are redacted.
+
+  Secret constants in this mock: phone_mobile (allowlisted for Cursor), home_address (not allowlisted).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MailGent · Propose send edit, revise, refer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0071e3;
+      --red: #c33b3b;
+      --orange: #c96a00;
+      --violet: #6b3fd1;
+      --panel: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: linear-gradient(180deg, #c5ceda 0%, #9aa6b6 100%);
+      color: var(--ink); padding: 24px 16px 60px;
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 1060px; margin: 0 auto; display: grid; gap: 12px; }
+    .note {
+      color: #2c3a4a; font-size: 12px; line-height: 1.5;
+      background: #ffffffb8; border: 1px solid #ffffff90; border-radius: 10px; padding: 10px 14px;
+    }
+    .note b { font-weight: 650; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stage { display: flex; gap: 16px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+
+    /* ---- window ---- */
+    .window {
+      position: relative; width: 820px; height: 640px; flex: 0 0 auto;
+      background: var(--panel); border-radius: 10px; border: 1px solid #00000018;
+      box-shadow: 0 18px 50px #00000028; display: flex; flex-direction: column;
+    }
+    .titlebar {
+      height: 38px; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, #f6f6f7, #ebebec); border-bottom: 1px solid var(--line);
+      font-weight: 650; font-size: 13px; position: relative; flex: 0 0 auto; border-radius: 10px 10px 0 0;
+    }
+    .traffic { position: absolute; left: 12px; display: flex; gap: 7px; }
+    .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+    .traffic .r { background: #ff5f57; } .traffic .y { background: #febc2e; } .traffic .g { background: #28c840; }
+    .expires { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-weight: 500; color: var(--muted); font-size: 12px; }
+
+    .chrome { padding: 12px; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+    .lead {
+      display: flex; gap: 10px; align-items: flex-start;
+      background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    }
+    .lead .icon {
+      width: 28px; height: 28px; border-radius: 8px; background: #e8f1ff; color: var(--blue);
+      display: grid; place-items: center; font-weight: 700; flex: 0 0 auto;
+    }
+    .lead .muted { color: var(--muted); }
+
+    .card {
+      flex: 1; min-height: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .envelope { padding: 10px 12px 8px; display: grid; gap: 6px; }
+    .row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: baseline; }
+    .lbl { color: var(--muted); font-size: 12px; }
+    .val { font-weight: 500; }
+    .editable-field { outline: none; border-radius: 4px; }
+    .editable-field:empty::before { content: attr(data-ph); color: var(--muted); font-weight: 400; }
+    .window[data-mode="edit"] .editable-field { background: #f0f6ff; box-shadow: inset 0 0 0 1px #b8d4fb; padding: 0 4px; margin: 0 -4px; }
+    .divider { height: 1px; background: var(--line); }
+
+    /* split: case rail (left) + envelope/body (right), as in SendProposalContextThreadView */
+    .split { flex: 1; min-height: 0; display: flex; }
+    .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .rail { flex: 0 0 124px; display: flex; flex-direction: column; min-height: 0; background: #fff; border-right: 1px solid var(--line); }
+    .rail.full { flex-basis: 260px; }
+    .rhead {
+      display: flex; align-items: center; gap: 5px; padding: 7px 8px; background: #0000000a;
+      border-bottom: 1px solid var(--line); font-size: 11px; min-width: 0;
+    }
+    .rhead button { border: 0; background: none; color: var(--blue); font-size: 14px; padding: 0 2px; font-weight: 600; }
+    .rhead .rl { font-weight: 600; color: var(--muted); flex: 0 0 auto; }
+    .rhead .cl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .rhead .n { margin-left: auto; color: var(--muted); flex: 0 0 auto; }
+    .rows { flex: 1; min-height: 0; overflow: auto; }
+    .rrow { display: flex; align-items: flex-start; gap: 3px; padding: 4px 4px; background: #fff; }
+    .rrow.band { background: #0000001a; }
+    .rrow.dim { opacity: .72; filter: saturate(.85); }
+    .av, .av-gap { width: 14px; height: 14px; flex: 0 0 auto; }
+    .av { border-radius: 50%; color: #fff; font-size: 7px; font-weight: 700; display: grid; place-items: center; }
+    .av.them { background: var(--blue); }
+    .av.you { background: #f29b38; }
+    .rcard {
+      flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px;
+      padding: 6px; cursor: pointer; display: grid; gap: 4px; align-content: start;
+    }
+    .rcard.them { border-top-left-radius: 0; }
+    .rcard.you { border-top-right-radius: 0; }
+    .rcard.draft { background: #fff3c4; }
+    .rcard.sel { border: 1.5px solid #00000089; padding: 5.5px; }
+    .rcard .meta { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--muted); }
+    .rcard .kg { width: 12px; text-align: center; }
+    .rcard .subj { font-size: 10px; font-weight: 600; line-height: 1.3; }
+    .rcard .route { font-size: 9px; color: var(--muted); line-height: 1.3; word-break: break-word; }
+    .rcard .sum { font-size: 10px; line-height: 1.35; }
+    .rcard .orig {
+      justify-self: start; font-size: 9px; font-weight: 500; padding: 2px 5px; border-radius: 999px;
+    }
+    .rcard .orig.mail { background: #0071e324; color: #0a4fa3; }
+    .rcard .orig.vault { background: #6b3fd11f; color: var(--violet); }
+    .rcard .detail { font-size: 10px; line-height: 1.4; color: #555; border-top: 1px solid #ececf0; padding-top: 4px; }
+    .rcard .refer {
+      justify-self: start; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 2px 8px;
+      font-size: 10px; font-weight: 600;
+    }
+    .rcard .refer.on { background: #efe8ff; border-color: #c4b2f0; color: var(--violet); }
+
+    /* handed-off phase (sent state): same tint and copy as SendProposalPrompt phaseBanner */
+    .phase {
+      display: none; gap: 10px; align-items: flex-start; background: #34c75918; border-radius: 10px; padding: 10px 12px;
+    }
+    .phase .phase-ico { color: #28a745; font-size: 18px; font-weight: 700; line-height: 1; }
+    .phase strong { font-weight: 600; display: block; }
+    .phase .muted { color: var(--muted); font-size: 12px; }
+    .window[data-mode="sent"] .lead { display: none; }
+    .window[data-mode="sent"] .phase { display: flex; }
+    .window[data-mode="sent"] .card { opacity: .72; pointer-events: none; }
+
+    /* references strip */
+    .refs { border-bottom: 1px solid var(--line); background: #faf8ff; padding: 7px 12px; display: grid; gap: 6px; }
+    .refs .head { font-size: 11px; color: var(--violet); font-weight: 650; }
+    .ref { display: grid; grid-template-columns: 20px 1fr 1.1fr 20px; gap: 6px; align-items: center; font-size: 12px; }
+    .ref .no {
+      width: 20px; height: 20px; border-radius: 50%; background: var(--violet); color: #fff; font-size: 11px; font-weight: 700;
+      display: grid; place-items: center;
+    }
+    .ref .quote { font-style: italic; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ref .quote.stale { color: var(--muted); text-decoration: line-through; }
+    .ref .qwrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    /* secret inside a quoted passage: masked pill, same palette as .tok */
+    .qsec {
+      display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px; font-style: normal;
+      background: #ffd9a3; color: #6b3a00; font-size: 11px;
+    }
+    .secnote {
+      flex: 0 0 auto; font-size: 10px; font-weight: 600; white-space: nowrap;
+      color: #6b3a00; background: #fff3dd; border-radius: 999px; padding: 1px 8px;
+    }
+    .ref input {
+      border: 1px solid #ddd5f5; border-radius: 6px; padding: 3px 6px; font-size: 12px; outline: none; background: #fff; min-width: 0;
+    }
+    .ref input:focus { border-color: var(--violet); }
+    /* suggestion expansion: plain rows under the ref row, full width minus the number-chip column */
+    .refexp { display: none; margin-left: 26px; /* 20px chip + 6px gap */ }
+    .refexp.open { display: block; }
+    .refexp .panel { display: contents; }
+    .refexp .phead { font-size: 10px; color: var(--muted); padding: 2px 0 1px; }
+    .refexp button {
+      display: block; width: 100%; border: 0; background: none; text-align: left;
+      padding: 3px 0; font-size: 12px; color: #333; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .refexp button:hover { color: var(--violet); }
+    .refexp .empty { font-size: 12px; color: var(--muted); padding: 3px 0; }
+    .ref .x { border: 0; background: none; color: var(--muted); font-size: 14px; padding: 0; }
+
+    .status {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 7px 12px; background: #fafafb; min-height: 36px;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+      padding: 3px 9px; border-radius: 999px; background: #e8f1ff; color: #0a4fa3;
+    }
+    .chip.quiet { background: #ececf0; color: var(--muted); font-weight: 500; }
+    .chip.secret { background: #fff1de; color: var(--orange); }
+    .chip.refchip { background: #efe8ff; color: var(--violet); }
+    .linkbtn { background: none; border: 0; color: var(--blue); font-size: 12px; padding: 0; cursor: pointer; }
+    .status .spacer { flex: 1; }
+    .history-nav { display: inline-flex; gap: 5px; }
+    .history-nav button {
+      border: 0; background: none; color: var(--blue); font-size: 15px; line-height: 1; padding: 1px 3px;
+    }
+    .history-nav button:disabled { color: var(--muted); opacity: .55; }
+    .history-summary {
+      display: grid; gap: 4px; padding: 7px 12px; background: #f8f7fb; border-top: 1px solid var(--line);
+      font-size: 12px;
+    }
+    .history-summary .head { color: var(--violet); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-summary .swap { display: flex; gap: 6px; align-items: baseline; }
+    .history-summary .before { color: var(--muted); text-decoration: line-through; }
+    .history-summary .swap .note { color: var(--muted); }
+    .history-summary .swap .chip { flex: none; align-self: center; font-size: 10px; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; padding: 0; }
+
+    .body {
+      flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; color: #333;
+      white-space: pre-wrap; line-height: 1.5; font-size: 13px;
+    }
+    .window[data-mode="edit"] .body { outline: 2px solid #b8d4fb; outline-offset: -2px; background: #fcfdff; }
+    .tok {
+      display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+      background: #ffd9a3; color: #6b3a00; /* font-weight: 600; */ user-select: text;
+    }
+    .tok.chg { box-shadow: inset 0 -2px 0 var(--orange); }
+    .tok.ref { box-shadow: inset 0 -2px 0 var(--violet); }
+    /* passage marks: inline flow like text, same pill geometry as .tok (padding/radius), no block stacking */
+    mark.chg, mark.ref {
+      display: inline; padding: 0 3px; margin: 0 1px; border-radius: 4px; color: inherit;
+      -webkit-box-decoration-break: clone; box-decoration-break: clone; white-space: normal;
+    }
+    mark.chg { background: rgba(0, 113, 227, .13); box-shadow: inset 0 -2px 0 var(--blue); }
+    /* referred passage: violet palette, values as tuned by hand. inline-block keeps the passage as one box, so the chip sits on the same line after it. */
+    mark.ref {
+      padding: 1px 5px;
+      margin: 0 1px;
+      border-radius: 0px;
+      /* font-weight: 600; */
+      background: #efe8ff;
+      color: #4a2aa0;
+      display: inline-block;
+    }
+    /* number chip: a sibling after the highlight, so it sits outside the background.
+       A filled chip raised like a superscript ^(n). Same number as the reference strip above the body (.ref .no). Not part of the body text. */
+    .refno {
+      display: inline-flex; align-items: center; justify-content: center; margin-left: -5px;
+      width: 14px; height: 14px; border-radius: 50%; vertical-align: 11px; user-select: none;
+      position: relative; z-index: 1;
+      background: transparent; color: var(--violet); border: 0;
+      font-size: 9px; font-weight: 700; line-height: 0;
+      transition: transform .12s ease, background .12s ease, color .12s ease;
+    }
+    mark.ref:hover + .refno, .refno:hover {
+      transform: scale(1.45);
+      background: var(--violet); color: #fff; border-color: var(--violet);
+    }
+
+    /* ---- footer ---- */
+    .footer { display: flex; align-items: center; gap: 8px; padding: 0 12px 12px; flex: 0 0 auto; }
+    .footer .spacer { flex: 1; }
+    .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 12px; font-weight: 560; }
+    .btn:hover { background: #fafafa; }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .btn.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .btn.primary:hover { filter: brightness(1.05); }
+    .btn.ask { border-color: #b8d4fb; color: #0a4fa3; }
+    .btn.look { border-color: #d6c8f5; color: var(--violet); }
+    .btn.ghost { background: transparent; border-color: transparent; }
+
+    .f-review, .f-edit, .f-wait, .f-sent { display: none; width: 100%; align-items: center; gap: 8px; }
+    .window[data-mode="review"] .f-review,
+    .window[data-mode="edit"] .f-edit,
+    .window[data-mode="waiting"] .f-wait,
+    .window[data-mode="sent"] .f-sent { display: flex; }
+    .window[data-mode="edit"] .review-only { display: none; }
+    .window[data-mode="edit"] .status-review-only { display: none; }
+
+    .spin {
+      width: 14px; height: 14px; border-radius: 50%; border: 2px solid #c7d7ef; border-top-color: var(--blue);
+      animation: spin .7s linear infinite; flex: 0 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .wait-msg strong { display: block; font-weight: 650; }
+    .wait-msg span { color: var(--muted); font-size: 12px; }
+
+    /* ---- revise popover ---- */
+    .pop {
+      position: absolute; right: 12px; bottom: 58px; width: 480px; z-index: 5;
+      background: #fff; border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: 0 14px 40px #00000033; padding: 12px; display: none; gap: 10px; flex-direction: column;
+    }
+    .pop.on { display: flex; }
+    .pop h4 { margin: 0; font-size: 13px; font-weight: 650; }
+    .scope {
+      display: flex; align-items: flex-start; gap: 8px; background: #f5f5f7; border-radius: 8px; padding: 7px 9px; font-size: 12px;
+    }
+    .scope .k { color: var(--muted); font-weight: 600; flex: 0 0 auto; }
+    .scope .q { flex: 1; font-style: italic; color: #333; max-height: 3.2em; overflow: hidden; }
+    .scope .x { border: 0; background: none; color: var(--muted); padding: 0 2px; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .preset { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 550; }
+    .preset[aria-pressed="true"] { background: #e8f1ff; border-color: #8fb8f0; color: #0a4fa3; }
+    .pop input[type="text"] {
+      width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 13px; outline: none;
+    }
+    .pop input[type="text"]:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #0071e333; }
+    .pop .actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .pop .hint { color: var(--muted); font-size: 11px; line-height: 1.4; }
+
+    /* ---- context menu ---- */
+    .ctx {
+      display: none; position: fixed; z-index: 20; min-width: 240px; background: rgba(255,255,255,.97);
+      border: 1px solid #00000022; border-radius: 8px; box-shadow: 0 10px 30px #00000033; padding: 5px;
+    }
+    .ctx.on { display: block; }
+    .ctx button {
+      display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 10px; border-radius: 5px; font-size: 13px;
+    }
+    .ctx button:hover { background: var(--blue); color: #fff; }
+    .ctx button.first { font-weight: 600; }
+    .ctx hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+
+    /* selection bubble: one-click "refer to agent" after selecting text (alternative to right-click) */
+    .selbubble {
+      display: none; position: fixed; z-index: 25; transform: translateX(-50%);
+      border: 0; cursor: pointer; padding: 4px 11px; border-radius: 999px;
+      background: var(--violet); color: #fff; font-size: 12px; font-weight: 600;
+      box-shadow: 0 6px 16px rgba(74, 42, 160, .35); user-select: none;
+    }
+    .selbubble.on { display: block; }
+    .selbubble:hover { filter: brightness(1.08); }
+    .selbubble kbd, .ctx kbd {
+      font: inherit; font-size: 10px; font-weight: 600; margin-left: 6px;
+      padding: 1px 5px; border-radius: 4px;
+      background: #ffffff2e; border: 1px solid #ffffff47;
+    }
+    .ctx kbd { float: right; background: #f2f2f5; border-color: var(--line); color: #666; font-size: 11px; }
+
+    /* ---- payload panel ---- */
+    .payload {
+      width: 410px; background: #1d1d1f; color: #e5e5ea; border-radius: 10px; padding: 12px 14px;
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; min-height: 300px;
+    }
+    .payload h3 { margin: 0 0 4px; font: 650 13px -apple-system, sans-serif; color: #fff; }
+    .payload .when { font: 12px -apple-system, sans-serif; color: #9a9aa3; margin-bottom: 8px; }
+    .payload pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .payload .k { color: #7cc7ff; } .payload .s { color: #ffd08a; } .payload .r { color: #ff8f8f; } .payload .v { color: #c9adff; }
+    .payload .foot { font: 11px/1.45 -apple-system, sans-serif; color: #9a9aa3; margin-top: 10px; border-top: 1px solid #333; padding-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="note">
+    <b>Propose send · Edit, Ask agent to revise, case context, passage references</b> (throwaway prototype, not wired).
+    Select text in the body and choose <b>Refer to agent's attention</b> to pin it without asking for a rewrite.
+    Every reply carries the case context you were looking at. The right panel shows the exact JSON the agent receives.
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="btnEdit">Edit draft</button>
+    <button class="btn" id="btnAsk">Ask agent to revise…</button>
+    <button class="btn" id="btnReset">Reset</button>
+  </div>
+
+  <div class="stage">
+    <div class="window" id="win" data-mode="review">
+      <div class="titlebar">
+        <div class="traffic"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+        <span id="title">Send proposed mail?</span>
+        <span class="expires">Expires in 58 min</span>
+      </div>
+
+      <div class="chrome">
+        <div class="lead" id="lead">
+          <div class="icon">C</div>
+          <div>
+            <strong>Cursor proposes this mail.</strong>
+            <div class="muted">Review, edit, refer to passages, or ask Cursor to revise. Nothing is sent until you press Send.</div>
+          </div>
+        </div>
+        <!-- Same copy and green tint as the app's handedOff phase banner (SendProposalPrompt.swift) -->
+        <div class="phase" id="phase">
+          <span class="phase-ico">✓</span>
+          <div>
+            <strong>Handed to Apple Mail</strong>
+            <div class="muted">Mail accepted the send. It may take a moment to appear in Sent.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="split">
+            <aside class="rail" id="rail"></aside>
+            <div class="main">
+              <div class="envelope">
+                <div class="row"><span class="lbl">To</span><span class="val editable-field" id="to"></span></div>
+                <div class="row"><span class="lbl">Cc</span><span class="val editable-field" id="cc" data-ph="none"></span></div>
+                <div class="row"><span class="lbl">Subject</span><span class="val editable-field" id="subj"></span></div>
+              </div>
+              <div class="divider"></div>
+
+              <div class="refs" id="refs" hidden></div>
+
+              <div class="status">
+                <span class="history-nav" id="historyNav" hidden>
+                  <button id="prevVersion" title="View previous draft version">‹</button>
+                  <button id="nextVersion" title="Return to current draft">›</button>
+                </span>
+                <span class="chip quiet" id="draftVer">Draft v1 · Cursor</span>
+                <span class="chip" id="editChip" hidden>Edited · 1 change <button class="linkbtn" id="revert">Revert</button></span>
+                <span class="chip refchip" id="ctxChip" hidden></span>
+                <span class="spacer"></span>
+                <span class="chip secret status-review-only" id="secretChip" hidden></span>
+              </div>
+              <div class="history-summary" id="historySummary" hidden></div>
+              <div class="body" id="body" spellcheck="false"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="f-review">
+          <button class="btn" id="cancel">Cancel</button>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="edit">Edit</button>
+          <button class="btn look" id="askLook" disabled title="Pin at least one passage first">Ask agent to look</button>
+          <button class="btn ask" id="askFooter">Ask to revise…</button>
+          <button class="btn primary" id="sendReview">Send</button>
+        </div>
+        <div class="f-edit">
+          <button class="btn ghost" id="revert2">Revert</button>
+          <span class="spacer"></span>
+          <button class="btn ask" id="askFromEdit">Ask to revise…</button>
+          <button class="btn primary" id="doneEdit">Done editing</button>
+        </div>
+        <div class="f-wait">
+          <span class="spin"></span>
+          <div class="wait-msg"><strong id="waitTitle">Asked Cursor for a new draft</strong><span id="waitSub">Waiting for propose_send with revises</span></div>
+          <span class="spacer"></span>
+          <button class="btn" id="simulate">Simulate Cursor's reply</button>
+        </div>
+        <div class="f-sent">
+          <span class="spacer"></span>
+          <button class="btn primary" id="done">Done</button>
+        </div>
+      </div>
+
+      <div class="pop" id="pop" role="dialog" aria-label="Ask agent to revise">
+        <h4>Ask Cursor to revise</h4>
+        <div class="scope" id="scope"></div>
+        <div class="presets" id="presets"></div>
+        <input type="text" id="note" placeholder="Optional note, e.g. keep Thursday 2pm, or “in Polish”">
+        <div class="hint" id="popRefs"></div>
+        <div class="hint">Sends your instruction, hand edits, pinned passages, and case context to Cursor. Nothing goes to Joanna until you confirm again.</div>
+        <div class="actions">
+          <button class="btn" id="popCancel">Cancel</button>
+          <button class="btn primary" id="popSend">Send to agent</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="payload">
+      <h3 id="pTitle">Agent receives on Send</h3>
+      <div class="when" id="pWhen">Live. Updates as you edit.</div>
+      <pre id="pJson"></pre>
+      <div class="foot">Tokens stay <span class="s">[[mg:name]]</span>. Literal secret values never leave MailGent: typed matches become tokens (allowlisted, body) or <span class="r">[redacted]</span>.</div>
+    </aside>
+  </div>
+</div>
+
+<div class="ctx" id="ctx">
+  <button data-act="refer" class="first">Refer to agent's attention<kbd>⌘⇧A</kbd></button>
+  <hr>
+  <button data-act="rewrite">Rewrite selection…</button>
+  <button data-act="shorter">Make selection shorter</button>
+  <button data-act="tone">Change tone of selection…</button>
+  <hr>
+  <button data-act="edit">Edit draft by hand</button>
+</div>
+
+<script>
+(() => {
+  // ---------- mock data ----------
+  const CONSTS = {
+    phone_mobile: { value: '+1 555 0142', allowed: true },
+    home_address: { value: '12 Harbour Rd, Lisbon', allowed: false }
+  };
+  const PROPOSAL_ID = 'p_8f2c';
+  const CONTEXT = { casePath: 'cases/jobs/acme-staff-engineer', caseLabel: 'Acme · Staff Engineer' };
+  // Same fields as the app's ContextThreadItem (SendProposalContext.swift): ownership them|you|both,
+  // scope shared|private, party for them/both, source = mail (Open in Mail) or vault (file chip).
+  const EVENTS = [
+    { id: 'e1', kind: 'phone', scope: 'shared',  ownership: 'you',  at: 'Oct 20 · 11:40', summary: 'Prep notes before Joanna call',
+      original: { vault: 'prep-notes.md' }, detail: 'Joanna wants to talk Thursday. Keep the on-call question for the follow-up.' },
+    { id: 'e2', kind: 'mail',  scope: 'shared',  ownership: 'them', party: { name: 'Joanna Chen', initials: 'JC' }, at: 'Oct 21 · 09:12',
+      summary: 'Thanks for chatting yesterday', subject: 'Re: Staff Engineer role, next steps', from: 'Joanna Chen <joanna@acme.example>',
+      to: 'Alex <alex@acme.example>', original: { mail: true },
+      detail: 'Thanks for chatting yesterday. Could you share more about the team and how on-call works?' },
+    { id: 'e3', kind: 'note',  scope: 'private', ownership: 'you',  at: 'Oct 21 · 18:02', summary: 'Team on-call: one week in four, paid' }
+  ];
+  const DRAFT = { id: 'draft', kind: 'mail', scope: 'shared', ownership: 'you', at: 'Draft', isDraft: true,
+    summary: 'Re: Staff Engineer role, next steps', subject: 'Re: Staff Engineer role, next steps',
+    from: 'Alex <alex@acme.example>', to: 'Joanna Chen <joanna@acme.example>' };
+  const PRESETS = ['Shorter', 'Warmer', 'More formal', 'Plainer', 'Friendlier close', 'Change register…', 'Translate…'];
+  const PRESET_PHRASE = {
+    'Shorter': 'Make it shorter.',
+    'Warmer': 'Make it warmer.',
+    'More formal': 'Make it more formal.',
+    'Plainer': 'Use plainer words.',
+    'Friendlier close': 'Friendlier closing line.',
+    'Change register…': 'Change the register (ask in the note).',
+    'Translate…': 'Translate (language in the note).'
+  };
+
+  const V1 = {
+    to: 'Joanna Chen <joanna@acme.example>',
+    cc: '',
+    subject: 'Re: Staff Engineer role, next steps',
+    body: [
+      'Hi Joanna,',
+      '',
+      'Thanks for the call yesterday. Happy to share more. My mobile is [[mg:phone_mobile]] if a quick call is easier.',
+      '',
+      'Thursday 2pm works for me. I\'d also like to hear more about the team\'s on-call rotation.',
+      '',
+      'Best,',
+      'Alex'
+    ].join('\n')
+  };
+  const V2 = {
+    to: V1.to,
+    cc: '',
+    subject: V1.subject,
+    body: V1.body
+      .replace('Thursday 2pm works for me.', 'Thursday at 2pm would suit me well.')
+      .replace('I\'d also like to hear more about the team\'s on-call rotation.',
+               'I would love to hear how on-call is shared across the team.')
+  };
+
+  // ---------- state ----------
+  let base = clone(V1);     // what the agent proposed (current agent version)
+  let cur = clone(V1);      // what the human sees / would send (tokenized)
+  let versions = [{ draft: clone(V1), origin: 'Cursor proposal' }];
+  let viewedVersion = null; // null = newest editable version; an index previews a past snapshot
+  let pending = null;       // revise popover state: { scope, quote, presets:Set, note }
+  let refs = [];            // passage references: { id, tok, note }
+  let refSeq = 0;
+  let ctxRefs = new Set();  // referenced context event ids
+  let railThin = true;      // rail: thin (124px) or full cards
+  let selectedId = 'draft'; // selected rail item; draft spotlighted by default
+  let spotlight = true;     // when on, non-draft rows dim (same as spotlightDraft in the app)
+  let ctxQuote = '';        // selection captured on right-click
+  let waitKind = 'revise';  // 'revise' | 'attention'
+  let lastSent = null;      // last payload handed to the agent
+
+  const $ = id => document.getElementById(id);
+  const win = $('win'), bodyEl = $('body'), pop = $('pop');
+  const ENVELOPE_FIELDS = ['to', 'cc', 'subject'];
+  const elFor = k => $(k === 'subject' ? 'subj' : k);
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  // ---------- secret helpers ----------
+  function tokenFor(name) { return `[[mg:${name}]]`; }
+  // typed literal of an allowlisted constant → token (body only, v1)
+  function literalsToTokens(s) {
+    for (const [name, c] of Object.entries(CONSTS)) if (c.allowed) s = s.split(c.value).join(tokenFor(name));
+    return s;
+  }
+  // anything still literal → marker (allowlisted: named marker, otherwise generic)
+  function redact(s) {
+    for (const [name, c] of Object.entries(CONSTS)) {
+      s = s.split(c.value).join(c.allowed ? `[redacted:${name}]` : '[redacted]');
+    }
+    return s;
+  }
+  // selection text shows values; map back to tokens
+  function displayToTokens(s) { return literalsToTokens(s); }
+  // tokenized → what the human sees
+  function humanText(tok) { return tok.replace(/\[\[mg:([a-z][a-z0-9_]*)\]\]/g, (m, n) => (CONSTS[n] ? CONSTS[n].value : m)); }
+  function tokensUsed(s) { return [...new Set([...s.matchAll(/\[\[mg:([a-z][a-z0-9_]*)\]\]/g)].map(m => m[1]))]; }
+
+  // ---------- diff ----------
+  // word-level LCS over tokenized text; ranges in `b` coordinates; short common gaps merged
+  function diffHunks(a, b) {
+    const A = a.match(/\S+|\s+/g) || [], B = b.match(/\S+|\s+/g) || [];
+    const n = A.length, mm = B.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(mm + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = mm - 1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const raw = [];
+    let i = 0, j = 0, offA = 0, offB = 0, bA = '', bB = '', aS = null, bS = null;
+    const flush = () => {
+      if (bA || bB) raw.push({ aStart: aS ?? offA, aEnd: offA, bStart: bS ?? offB, bEnd: offB, before: bA.trim(), after: bB.trim() });
+      bA = ''; bB = ''; aS = null; bS = null;
+    };
+    while (i < n || j < mm) {
+      if (i < n && j < mm && A[i] === B[j]) { flush(); offA += A[i].length; offB += B[j].length; i++; j++; }
+      else if (j < mm && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { if (bS === null) bS = offB; bB += B[j]; offB += B[j].length; j++; }
+      else { if (aS === null) aS = offA; bA += A[i]; offA += A[i].length; i++; }
+    }
+    flush();
+    const merged = [];
+    for (const h of raw) {
+      const prev = merged[merged.length - 1];
+      const gap = prev ? b.slice(prev.bEnd, h.bStart) : '';
+      const gapWords = gap.trim() ? gap.trim().split(/\s+/).length : 0;
+      if (prev && !/[.!?\n]/.test(gap) && gapWords <= 3) {
+        merged[merged.length - 1] = {
+          aStart: prev.aStart, aEnd: h.aEnd, bStart: prev.bStart, bEnd: h.bEnd,
+          before: a.slice(prev.aStart, h.aEnd).trim(), after: b.slice(prev.bStart, h.bEnd).trim()
+        };
+      } else merged.push(h);
+    }
+    return merged.filter(h => h.before !== h.after).map(h => ({ before: h.before, after: h.after, bStart: h.bStart, bEnd: h.bEnd }));
+  }
+
+  function envelopeDiff() {
+    const out = {};
+    for (const k of ENVELOPE_FIELDS) {
+      if ((cur[k] || '').trim() !== (base[k] || '').trim()) {
+        out[k] = { before: redact(base[k] || ''), after: redact(cur[k] || '') };
+      }
+    }
+    return out;
+  }
+
+  function changeCount() {
+    return diffHunks(base.body, cur.body).length + Object.keys(envelopeDiff()).length;
+  }
+
+  // references are anchored by their tokenized quote; stale when the passage is gone
+  function refAnchors() {
+    return refs.map(r => {
+      const idx = cur.body.indexOf(r.tok);
+      return { ref: r, bStart: idx, bEnd: idx + r.tok.length, stale: idx === -1 };
+    });
+  }
+
+  // ---------- rendering ----------
+  function renderBody(el, tok, marks, editable) {
+    el.innerHTML = '';
+    el.contentEditable = editable ? 'true' : 'false';
+    const kindAt = i => {
+      let k = null;
+      // ref pieces carry their reference number ("ref:2") so adjacent passages stay separate
+      for (const m of marks) if (i >= m.bStart && i < m.bEnd) { if (m.kind === 'chg') return 'chg'; k = m.n ? `${m.kind}:${m.n}` : m.kind; }
+      return k;
+    };
+    const re = /\[\[mg:([a-z][a-z0-9_]*)\]\]/g;
+    const pieces = [];
+    let last = 0, m;
+    const textPieces = (a, b) => {
+      const out = []; let i = a;
+      while (i < b) { const k = kindAt(i); let j = i + 1; while (j < b && kindAt(j) === k) j++; out.push({ text: tok.slice(i, j), kind: k, start: i }); i = j; }
+      return out;
+    };
+    while ((m = re.exec(tok))) {
+      pieces.push(...textPieces(last, m.index));
+      pieces.push({ name: m[1], start: m.index, kind: kindAt(m.index) });
+      last = m.index + m[0].length;
+    }
+    pieces.push(...textPieces(last, tok.length));
+    pieces.forEach((p, idx) => {
+      let node;
+      if (p.name) {
+        const sp = document.createElement('span');
+        sp.className = 'tok' + (p.kind === 'chg' ? ' chg' : (p.kind || '').startsWith('ref') ? ' ref' : '');
+        sp.dataset.token = p.name;
+        sp.contentEditable = 'false';
+        sp.title = `Secret constant ${p.name}`;
+        sp.textContent = CONSTS[p.name] ? CONSTS[p.name].value : '[unknown]';
+        node = sp;
+      } else if (p.kind) {
+        const mk = document.createElement('mark'); mk.className = p.kind.split(':')[0];
+        mk.textContent = p.text; node = mk;
+      } else {
+        node = document.createTextNode(p.text);
+      }
+      el.appendChild(node);
+      // number chip after the last piece of a referred passage, outside its highlight
+      const ref = p.kind && p.kind.startsWith('ref:') ? p.kind.split(':')[1] : null;
+      const next = pieces[idx + 1];
+      if (ref && (!next || next.kind !== p.kind)) {
+        const chip = document.createElement('span');
+        chip.className = 'refno'; chip.contentEditable = 'false'; chip.textContent = ref;
+        el.appendChild(chip);
+      }
+    });
+  }
+
+  // DOM → tokenized string (token spans read back as [[mg:name]])
+  function readBody(node) {
+    let out = '';
+    for (const n of node.childNodes) {
+      if (n.nodeType === 3) out += n.textContent;
+      else if (n.nodeType === 1) {
+        if (n.classList && n.classList.contains('refno')) continue; // chip is UI, not body text
+        if (n.dataset && n.dataset.token) out += tokenFor(n.dataset.token);
+        else if (n.tagName === 'BR') out += '\n';
+        else if (n.tagName === 'DIV' || n.tagName === 'P') { if (out && !out.endsWith('\n')) out += '\n'; out += readBody(n); }
+        else out += readBody(n);
+      }
+    }
+    return out;
+  }
+
+  // Popular per-passage instructions, offered under the note input while it is focused.
+  const NOTE_PRESETS = [
+    'Check this is accurate and up to date',
+    'This is a guess — verify before sending',
+    'Check tone is right for the recipient',
+    'Make this shorter',
+    'Rewrite more formally',
+    'Check dates and times against my calendar',
+  ];
+
+  // Fuzzy subsequence match: 0 = no match, higher = better. Consecutive and word-start hits score up.
+  function fuzzyScore(q, text) {
+    const n = q.toLowerCase().replace(/\s+/g, ''), h = text.toLowerCase();
+    if (!n) return 1;
+    let hi = 0, score = 0, streak = 0;
+    for (const ch of n) {
+      const idx = h.indexOf(ch, hi);
+      if (idx === -1) return 0;
+      if (idx === hi && hi > 0) streak += 2; else streak = 0;
+      score += 2 + streak + (idx === 0 || ' -,.—\'('.includes(h[idx - 1]) ? 3 : 0);
+      hi = idx + 1;
+    }
+    return score;
+  }
+
+  function showRefHints(exp, inp, a) {
+    const panel = exp.firstElementChild;
+    panel.innerHTML = '';
+    const q = inp.value.trim();
+    const matches = NOTE_PRESETS
+      .map(t => ({ t, s: fuzzyScore(q, t) }))
+      .filter(m => m.s > 0)
+      .sort((x, y) => y.s - x.s);
+    if (!matches.length) {
+      const d = document.createElement('div');
+      d.className = 'empty'; d.textContent = 'No matching preset — keep typing, your text is sent as-is.';
+      panel.appendChild(d);
+    } else {
+      const head = document.createElement('div');
+      head.className = 'phead';
+      head.textContent = q ? 'Suggestions' : 'Common instructions';
+      panel.appendChild(head);
+      matches.slice(0, 6).forEach(m => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = m.t;
+        b.addEventListener('mousedown', e => {
+          e.preventDefault();               // keep focus in the input
+          inp.value = m.t; a.ref.note = m.t; renderPayload();
+          exp.classList.remove('open');
+        });
+        panel.appendChild(b);
+      });
+    }
+    exp.classList.add('open');
+  }
+
+  function renderRefs() {
+    const box = $('refs');
+    box.innerHTML = '';
+    const mode = win.dataset.mode;
+    box.hidden = !refs.length || mode === 'sent';
+    if (box.hidden) return;
+    const head = document.createElement('div');
+    head.className = 'head';
+    head.textContent = `Passages for Cursor's attention · ${refs.length} · sent on Ask to look, Ask to revise, or Send`;
+    box.appendChild(head);
+    const anchors = refAnchors();
+    anchors.forEach((a, i) => {
+      const row = document.createElement('div');
+      row.className = 'ref';
+      const no = document.createElement('span'); no.className = 'no'; no.textContent = String(i + 1);
+      // quote renders secret tokens as masked pills + a redaction badge; values never appear
+      const qwrap = document.createElement('span'); qwrap.className = 'qwrap';
+      const q = document.createElement('span'); q.className = 'quote' + (a.stale ? ' stale' : '');
+      const toks = tokensUsed(a.ref.tok);
+      if (a.stale) {
+        q.textContent = 'passage changed, will be sent as stale';
+      } else {
+        q.appendChild(document.createTextNode('“'));
+        for (const p of a.ref.tok.split(/(\[\[mg:[a-z][a-z0-9_]*\]\])/)) {
+          const m = p.match(/^\[\[mg:([a-z][a-z0-9_]*)\]\]$/);
+          if (m) {
+            const pill = document.createElement('span');
+            pill.className = 'qsec';
+            pill.textContent = '🔒 ' + m[1];
+            pill.title = 'Secret constant — its value is not revealed to the agent';
+            q.appendChild(pill);
+          } else if (p) q.appendChild(document.createTextNode(p));
+        }
+        q.appendChild(document.createTextNode('”'));
+      }
+      qwrap.appendChild(q);
+      if (!a.stale && toks.length) {
+        const badge = document.createElement('span');
+        badge.className = 'secnote';
+        badge.textContent = '🔒 redacted for agent';
+        badge.title = 'The secret value in this passage is replaced before anything is sent to the agent.';
+        qwrap.appendChild(badge);
+      }
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.placeholder = 'What should Cursor look at here?';
+      inp.value = a.ref.note;
+      inp.addEventListener('input', () => {
+        a.ref.note = inp.value; renderPayload();
+        showRefHints(exp, inp, a);        // live fuzzy suggestions while typing
+      });
+
+      // suggestion expansion: pushes rows below down, panel aligned to the right edge
+      const exp = document.createElement('div'); exp.className = 'refexp';
+      const panel = document.createElement('div'); panel.className = 'panel';
+      exp.appendChild(panel);
+      inp.addEventListener('focus', () => showRefHints(exp, inp, a));
+      inp.addEventListener('blur', () => setTimeout(() => exp.classList.remove('open'), 150));
+      inp.addEventListener('keydown', e => { if (e.key === 'Escape') { exp.classList.remove('open'); inp.blur(); } });
+      const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Remove reference';
+      x.onclick = () => { refs = refs.filter(r => r.id !== a.ref.id); renderAll(); };
+      row.append(no, qwrap, inp, x);
+      box.append(row, exp);
+    });
+  }
+
+  // Case conversation rail. Mirrors SendProposalContextThreadView: avatar on the ownership side,
+  // card with sharp corner on that side, kind glyph + date (thin) or subject/route/summary (full),
+  // private rows on a darker band, draft last and yellow, selecting a row dims the others.
+  const KIND_GLYPH = { mail: '✉', phone: '☎', video: '▶', note: '✎', log: '≡' };
+  function shortDate(at) { return at === 'Draft' ? 'Draft' : at; }
+  function avatar(item, side) {
+    const show = item.isDraft ? side === 'right' : (item.ownership === 'them' ? side === 'left' : side === 'right');
+    const a = document.createElement('span');
+    if (!show) { a.className = 'av-gap'; return a; }
+    a.className = 'av ' + (item.isDraft || side === 'right' ? 'you' : 'them');
+    a.textContent = item.isDraft || side === 'right' ? 'You' : (item.party ? item.party.initials : '?');
+    return a;
+  }
+  function renderContext() {
+    const rail = $('rail');
+    rail.className = 'rail' + (railThin ? '' : ' full');
+    rail.innerHTML = '';
+    const head = document.createElement('div'); head.className = 'rhead';
+    const tog = document.createElement('button');
+    tog.textContent = railThin ? '›' : '‹';
+    tog.title = railThin ? 'Expand context' : 'Collapse context';
+    tog.onclick = () => { railThin = !railThin; renderAll(); };
+    const lbl = document.createElement('span'); lbl.className = 'rl'; lbl.textContent = 'Case';
+    const cl = document.createElement('span'); cl.className = 'cl'; cl.textContent = CONTEXT.caseLabel;
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = String(EVENTS.length);
+    head.append(tog, lbl, cl, n);
+    rail.appendChild(head);
+
+    const rows = document.createElement('div'); rows.className = 'rows';
+    for (const it of [...EVENTS, DRAFT]) {
+      const selected = selectedId === it.id;
+      const row = document.createElement('div');
+      row.className = 'rrow' + (it.scope === 'private' && !it.isDraft ? ' band' : '')
+        + (spotlight && !it.isDraft ? ' dim' : '');
+      const card = document.createElement('div');
+      card.className = 'rcard' + (it.isDraft ? ' draft' : '') + (selected ? ' sel' : '')
+        + (it.ownership === 'them' ? ' them' : ' you');
+      card.onclick = () => { selectedId = it.id; spotlight = !!it.isDraft; renderAll(); };
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const g = document.createElement('span'); g.className = 'kg'; g.textContent = KIND_GLYPH[it.kind] || '•';
+      const d = document.createElement('span'); d.textContent = shortDate(it.at);
+      meta.append(g, d);
+      card.appendChild(meta);
+      if (!railThin) {
+        if (it.subject) { const s = document.createElement('div'); s.className = 'subj'; s.textContent = it.subject; card.appendChild(s); }
+        if (it.from) { const r = document.createElement('div'); r.className = 'route'; r.textContent = `${it.from} → ${it.to || ''}`; card.appendChild(r); }
+      }
+      if (!(it.subject && it.summary === it.subject)) {
+        const sm = document.createElement('div'); sm.className = 'sum'; sm.textContent = humanText(it.summary);
+        card.appendChild(sm);
+      }
+      if (it.original) {
+        const c = document.createElement('span'); c.className = 'orig ' + (it.original.mail ? 'mail' : 'vault');
+        c.textContent = it.original.mail ? 'Open in Mail' : it.original.vault;
+        if (!railThin) card.appendChild(c);
+      }
+      if (!railThin && selected && !it.isDraft && it.detail) {
+        const dt = document.createElement('div'); dt.className = 'detail'; dt.textContent = it.detail;
+        card.appendChild(dt);
+        const pin = document.createElement('button'); pin.className = 'refer' + (ctxRefs.has(it.id) ? ' on' : '');
+        pin.textContent = ctxRefs.has(it.id) ? 'Referenced' : 'Refer';
+        pin.onclick = (ev) => { ev.stopPropagation(); ctxRefs.has(it.id) ? ctxRefs.delete(it.id) : ctxRefs.add(it.id); renderAll(); };
+        card.appendChild(pin);
+      }
+      row.append(avatar(it, 'left'), card, avatar(it, 'right'));
+      rows.appendChild(row);
+    }
+    rail.appendChild(rows);
+    const chip = $('ctxChip');
+    chip.hidden = ctxRefs.size === 0;
+    chip.textContent = `Context: ${ctxRefs.size} event${ctxRefs.size === 1 ? '' : 's'} referenced`;
+  }
+
+  function updateChip() {
+    const mode = win.dataset.mode;
+    const n = changeCount();
+    $('editChip').hidden = !(n > 0 && mode !== 'waiting' && mode !== 'sent');
+    $('editChip').firstChild.textContent = `Edited · ${n} change${n === 1 ? '' : 's'} `;
+  }
+
+  function shownDraft() {
+    return viewedVersion === null ? cur : versions[viewedVersion].draft;
+  }
+
+  function renderHistorySummary() {
+    const panel = $('historySummary');
+    panel.innerHTML = '';
+    // The version on screen owns its own backward diff (v2 shows v1 → v2);
+    // v1 is a quiet snapshot with no summary.
+    const idx = viewedVersion === null ? versions.length - 1 : viewedVersion;
+    panel.hidden = versions.length < 2 || idx === 0;
+    if (panel.hidden) return;
+    const previous = versions[idx - 1].draft;
+    const current = versions[idx];
+    const vrefs = current.refs || [];
+    const cueFor = change => vrefs.filter(r => r.tok && (
+      (change.before && (change.before.toLowerCase().includes(r.tok.toLowerCase()) || r.tok.toLowerCase().includes(change.before.toLowerCase()))) ||
+      (change.after && (change.after.toLowerCase().includes(r.tok.toLowerCase()) || r.tok.toLowerCase().includes(change.after.toLowerCase())))));
+    const head = document.createElement('div');
+    head.className = 'head';
+    panel.appendChild(head);
+    const changes = [...diffHunks(previous.body, current.draft.body)];
+    const rowsCarry = changes.some(c => cueFor(c).some(r => (r.note || '').trim()));
+    head.textContent = `v${idx} → v${idx + 1} · ${rowsCarry ? (current.origin.split(' · ')[0] || current.origin) : current.origin}`;
+    if (!changes.length) {
+      const none = document.createElement('span'); none.textContent = 'No content changes — the agent resent the same draft.';
+      panel.appendChild(none);
+    }
+    changes.forEach(change => {
+      const row = document.createElement('div'); row.className = 'swap';
+      const cues = cueFor(change);
+      cues.forEach(r => {
+        const chip = document.createElement('span'); chip.className = 'chip refchip'; chip.textContent = r.id.replace(/^r/, '');
+        row.appendChild(chip);
+      });
+      const before = document.createElement('span'); before.className = 'before'; before.textContent = change.before;
+      const arrow = document.createElement('span'); arrow.textContent = '→';
+      const after = document.createElement('span'); after.textContent = change.after;
+      row.append(before, arrow, after);
+      const note = cues.map(r => (r.note || '').trim()).filter(Boolean).join(' · ');
+      if (note) {
+        const ins = document.createElement('span'); ins.className = 'note'; ins.textContent = `· ${note}`;
+        row.appendChild(ins);
+      }
+      panel.appendChild(row);
+    });
+  }
+
+  function renderAll() {
+    const mode = win.dataset.mode;
+    const shown = shownDraft();
+    const latest = viewedVersion === null;
+    $('historyNav').hidden = versions.length < 2;
+    $('prevVersion').disabled = !latest && viewedVersion === 0;
+    $('nextVersion').disabled = latest;
+    $('draftVer').textContent = latest ? `Draft v${versions.length} · Cursor` : `Viewing v${viewedVersion + 1} · read-only · ${versions[viewedVersion].origin}`;
+    for (const k of ENVELOPE_FIELDS) {
+      const el = elFor(k);
+      el.textContent = shown[k];
+      el.contentEditable = mode === 'edit' && latest ? 'true' : 'false';
+    }
+    const marks = [];
+    if (mode === 'review' && latest) for (const d of diffHunks(base.body, cur.body)) marks.push({ ...d, kind: 'chg' });
+    // number = position in the reference strip (stale pins keep their number but are not highlighted)
+    if (mode === 'review' || mode === 'waiting') refAnchors().forEach((a, i) => {
+      if (!a.stale) marks.push({ bStart: a.bStart, bEnd: a.bEnd, kind: 'ref', n: i + 1 });
+    });
+    renderBody(bodyEl, shown.body, marks, mode === 'edit' && latest);
+
+    renderContext();
+    renderRefs();
+    updateChip();
+    renderHistorySummary();
+
+    const names = tokensUsed(shown.body);
+    const secret = $('secretChip');
+    secret.textContent = names.length ? `Secret constants replaced for send: ${names.join(', ')}` : '';
+    secret.hidden = !names.length;
+
+    $('askLook').disabled = refs.length === 0 || mode !== 'review';
+    $('title').textContent = { review: 'Send proposed mail?', edit: 'Editing draft', waiting: 'Waiting for Cursor', sent: 'Handed to Mail' }[mode];
+    $('waitTitle').textContent = waitKind === 'attention'
+      ? `Asked Cursor to look at ${refs.length || 'the'} passage${refs.length === 1 ? '' : 's'}`
+      : 'Asked Cursor for a new draft';
+    $('waitSub').textContent = waitKind === 'attention'
+      ? 'Waiting for Cursor\'s reply. The draft stays as it is until Cursor proposes again.'
+      : 'Waiting for propose_send with revises';
+    renderPayload();
+  }
+
+  // ---------- payloads (what the agent receives) ----------
+  function contextPayload() {
+    return {
+      casePath: CONTEXT.casePath,
+      caseLabel: CONTEXT.caseLabel,
+      shownEventIds: EVENTS.map(e => e.id),
+      referencedEventIds: EVENTS.filter(e => ctxRefs.has(e.id)).map(e => e.id)
+    };
+  }
+
+  function referencesPayload() {
+    // refs are tokenized at capture (displayToTokens), so secret values are already
+    // [[mg:name]] placeholders; redact() is a second pass for any non-allowlisted literal.
+    // The agent sees the placeholder — never the value — same convention as the draft body.
+    return refAnchors().map(a => ({
+      id: a.ref.id,
+      quote: redact(a.ref.tok),
+      note: a.ref.note.trim() ? redact(a.ref.note.trim()) : null,
+      stale: a.stale
+    }));
+  }
+
+  function editsPayload() {
+    const hunks = diffHunks(base.body, cur.body);
+    const env = envelopeDiff();
+    if (!hunks.length && !Object.keys(env).length) return null;
+    const out = { ...env };
+    if (hunks.length) out.body = hunks.map(h => ({ before: redact(h.before), after: redact(h.after) }));
+    return out;
+  }
+
+  function withSharedFields(obj) {
+    obj.context = contextPayload();
+    if (refs.length) obj.references = referencesPayload();
+    return obj;
+  }
+
+  function sendPayload() {
+    const edits = editsPayload();
+    if (!edits) return withSharedFields({ outcome: 'send', edited: false });
+    return withSharedFields({ outcome: 'send', edited: true, changes: edits, sentBody: redact(cur.body) });
+  }
+
+  function revisePayload() {
+    const p = pending;
+    const edits = editsPayload();
+    const scope = p.scope === 'selection'
+      ? { type: 'selection', quote: redact(displayToTokens(p.quote)) }
+      : { type: 'draft' };
+    const note = redact(p.note.trim());
+    const phrases = [p.scope === 'selection' ? `Only change this passage: “${scope.quote}”.` : 'Regenerate the whole draft.'];
+    for (const x of p.presets) phrases.push(PRESET_PHRASE[x]);
+    if (note) phrases.push(`Note from the user: ${note}`);
+    if (refs.length) phrases.push(`The user also pinned ${refs.length} passage${refs.length === 1 ? '' : 's'} for your attention (references). Read them before you rewrite.`);
+    if (edits) phrases.push('The user also edited the draft by hand (userEdits). Keep those edits unless they conflict with the note.');
+    const out = {
+      outcome: 'revise_requested',
+      proposalId: PROPOSAL_ID,
+      revision: { scope, presets: [...p.presets], note: note || null, instructionText: phrases.join(' ') }
+    };
+    if (edits) out.userEdits = edits;
+    out.currentBody = redact(cur.body);
+    return withSharedFields(out);
+  }
+
+  function attentionPayload() {
+    const edits = editsPayload();
+    const out = {
+      outcome: 'attention_requested',
+      proposalId: PROPOSAL_ID,
+      instructionText: `The user pinned ${refs.length} passage${refs.length === 1 ? '' : 's'} for your attention. Read them and respond. Do not change the draft unless the user asks.`
+    };
+    if (edits) out.userEdits = edits;
+    return withSharedFields(out);
+  }
+
+  function renderPayload() {
+    const mode = win.dataset.mode;
+    const reviseOpen = !!pending && pop.classList.contains('on');
+    let obj, title, when;
+    if (reviseOpen) {
+      obj = revisePayload();
+      title = 'Agent receives on Ask to revise';
+      when = 'Live. This is what Cursor gets when you press Send to agent.';
+    } else if (mode === 'waiting' || mode === 'sent') {
+      obj = lastSent;
+      title = 'Agent received';
+      when = 'Delivered (prototype).';
+    } else {
+      obj = sendPayload();
+      title = 'Agent receives on Send';
+      when = obj.edited ? 'Live. Edits go back as a diff plus the final body.' : 'Live. No edits, so the agent gets a plain send.';
+      if (refs.length) when += ' Pinned passages and context are included.';
+    }
+    $('pTitle').textContent = title;
+    $('pWhen').textContent = when;
+    $('pJson').innerHTML = colorize(JSON.stringify(obj, null, 2));
+  }
+
+  function colorize(json) {
+    return json
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/("[^"]*")(\s*:)/g, '<span class="k">$1</span>$2')
+      .replace(/: ("(?:[^"\\]|\\.)*")/g, (m, s) => {
+        const cls = /\[redacted/.test(s) ? 'r' : /\[\[mg:/.test(s) ? 'v' : 's';
+        return `: <span class="${cls}">${s}</span>`;
+      });
+  }
+
+  // ---------- mode switching ----------
+  function setMode(mode) {
+    win.dataset.mode = mode;
+    renderAll();
+    if (mode === 'edit') bodyEl.focus();
+  }
+
+  function commitEdits() {
+    if (win.dataset.mode !== 'edit') return;
+    cur.body = literalsToTokens(readBody(bodyEl));
+    for (const k of ENVELOPE_FIELDS) cur[k] = elFor(k).textContent.replace(/\s+/g, ' ').trim();
+  }
+
+  function startEdit() {
+    if (win.dataset.mode === 'waiting' || win.dataset.mode === 'sent') return;
+    closePop();
+    setMode('edit');
+  }
+
+  function doneEdit() { commitEdits(); setMode('review'); }
+
+  // ---------- refer ----------
+  function referPassage(tok) {
+    if (!tok.trim()) return;
+    refs.push({ id: `r${++refSeq}`, tok: tok.trim(), note: '' });
+    window.getSelection().removeAllRanges();
+    renderAll();
+  }
+
+  // ---------- revise popover ----------
+  function openRevise(scope, quote, presetPick) {
+    if (win.dataset.mode === 'edit') commitEdits();
+    if (win.dataset.mode !== 'review' && win.dataset.mode !== 'edit') return;
+    pending = { scope, quote: quote || '', presets: new Set(presetPick ? [presetPick] : []), note: '' };
+    win.dataset.mode = 'review';
+    $('note').value = '';
+    pop.classList.add('on');
+    renderPop();
+    $('note').focus();
+    renderAll();
+  }
+
+  function closePop() {
+    pop.classList.remove('on');
+    pending = null;
+    renderAll();
+  }
+
+  function renderPop() {
+    const p = pending;
+    const sc = $('scope');
+    sc.innerHTML = '';
+    if (p.scope === 'selection') {
+      const k = document.createElement('span'); k.className = 'k'; k.textContent = 'Passage';
+      const q = document.createElement('span'); q.className = 'q'; q.textContent = `“${humanText(displayToTokens(p.quote))}”`;
+      const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Use whole draft';
+      x.onclick = () => { p.scope = 'draft'; p.quote = ''; renderPop(); renderPayload(); };
+      sc.append(k, q, x);
+    } else {
+      const k = document.createElement('span'); k.className = 'k'; k.textContent = 'Scope';
+      const q = document.createElement('span'); q.className = 'q'; q.style.fontStyle = 'normal'; q.textContent = 'Whole draft (Cursor regenerates everything)';
+      sc.append(k, q);
+    }
+    const box = $('presets');
+    box.innerHTML = '';
+    for (const label of PRESETS) {
+      const b = document.createElement('button');
+      b.className = 'preset';
+      b.textContent = label;
+      b.setAttribute('aria-pressed', p.presets.has(label) ? 'true' : 'false');
+      b.onclick = () => { p.presets.has(label) ? p.presets.delete(label) : p.presets.add(label); renderPop(); renderPayload(); };
+      box.appendChild(b);
+    }
+    $('popRefs').textContent = refs.length
+      ? `Includes ${refs.length} pinned passage${refs.length === 1 ? '' : 's'} and the case context you are viewing.`
+      : 'Includes the case context you are viewing.';
+    const edited = !!editsPayload();
+    $('popSend').disabled = !(p.presets.size || p.note.trim() || edited);
+  }
+
+  function sendToAgent() {
+    if (!pending) return;
+    lastSent = revisePayload();
+    console.log('revise payload', lastSent);
+    pop.classList.remove('on');
+    pending = null;
+    waitKind = 'revise';
+    setMode('waiting');
+  }
+
+  function askToLook() {
+    if (!refs.length) return;
+    commitEdits();
+    lastSent = attentionPayload();
+    console.log('attention payload', lastSent);
+    waitKind = 'attention';
+    setMode('waiting');
+  }
+
+  // ---------- context menu ----------
+  const ctx = $('ctx');
+  bodyEl.addEventListener('contextmenu', e => {
+    if (win.dataset.mode !== 'review') return;
+    const sel = window.getSelection();
+    const text = sel && sel.toString().trim();
+    if (!text || !bodyEl.contains(sel.anchorNode)) return;
+    e.preventDefault();
+    ctxQuote = text;
+    ctx.style.left = Math.min(e.clientX, window.innerWidth - 260) + 'px';
+    ctx.style.top = Math.min(e.clientY, window.innerHeight - 220) + 'px';
+    ctx.classList.add('on');
+  });
+  document.addEventListener('mousedown', e => { if (!ctx.contains(e.target)) ctx.classList.remove('on'); });
+  ctx.addEventListener('click', e => {
+    const act = e.target.dataset.act;
+    ctx.classList.remove('on');
+    if (!act) return;
+    if (act === 'refer') referPassage(displayToTokens(ctxQuote));
+    if (act === 'rewrite') openRevise('selection', ctxQuote);
+    if (act === 'shorter') openRevise('selection', ctxQuote, 'Shorter');
+    if (act === 'tone') openRevise('selection', ctxQuote, 'Warmer');
+    if (act === 'edit') startEdit();
+  });
+
+  // ---------- selection bubble (quick refer, alternative to right-click) ----------
+  const selBubble = document.createElement('button');
+  selBubble.type = 'button';
+  selBubble.className = 'selbubble';
+  selBubble.innerHTML = "Refer to agent's attention <kbd>⌘⇧A</kbd>";
+  document.body.appendChild(selBubble);
+
+  // ⌘⇧A refers the current selection, same path as the bubble / context menu
+  document.addEventListener('keydown', e => {
+    if (!(e.metaKey && e.shiftKey && !e.altKey && !e.ctrlKey) || e.key.toLowerCase() !== 'a') return;
+    if (win.dataset.mode !== 'review') return;
+    const sel = window.getSelection();
+    const text = sel && sel.toString().trim();
+    if (!text || !sel.rangeCount || !bodyEl.contains(sel.anchorNode)) return;
+    e.preventDefault();
+    selBubble.classList.remove('on');
+    referPassage(displayToTokens(text));
+  });
+
+  function selBubbleUpdate() {
+    selBubble.classList.remove('on');
+    if (win.dataset.mode !== 'review') return;
+    const sel = window.getSelection();
+    const text = sel && sel.toString().trim();
+    if (!text || !sel.rangeCount || !bodyEl.contains(sel.anchorNode)) return;
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    // centered over the selection; above it, flipped below when near the top edge
+    selBubble.style.left = Math.min(Math.max(r.left + r.width / 2, 70), window.innerWidth - 70) + 'px';
+    selBubble.style.top = (r.top < 34 ? r.bottom + 6 : r.top - 30) + 'px';
+    selBubble.classList.add('on');
+  }
+  document.addEventListener('mouseup', () => setTimeout(selBubbleUpdate, 0));
+  document.addEventListener('selectionchange', () => {
+    if (window.getSelection().isCollapsed) selBubble.classList.remove('on');
+  });
+  selBubble.addEventListener('mousedown', e => e.preventDefault()); // keep the selection alive
+  selBubble.addEventListener('click', () => {
+    const sel = window.getSelection();
+    const text = sel && sel.toString().trim();
+    selBubble.classList.remove('on');
+    if (text) referPassage(displayToTokens(text));
+  });
+
+  // ---------- wiring ----------
+  $('btnEdit').onclick = startEdit;
+  $('edit').onclick = startEdit;
+  $('btnAsk').onclick = () => openRevise('draft', '');
+  $('askFooter').onclick = () => openRevise('draft', '');
+  $('askFromEdit').onclick = () => openRevise('draft', '');
+  $('askLook').onclick = askToLook;
+  $('doneEdit').onclick = doneEdit;
+  $('revert').onclick = () => { cur = clone(base); renderAll(); };
+  $('revert2').onclick = () => { cur = clone(base); setMode('review'); };
+  $('cancel').onclick = () => alert('Prototype: Cancel → cancelled outcome');
+  $('sendReview').onclick = () => {
+    lastSent = sendPayload();
+    setMode('sent');
+  };
+  $('done').onclick = () => setMode('review');
+  $('popCancel').onclick = closePop;
+  $('popSend').onclick = sendToAgent;
+  $('note').addEventListener('input', e => { if (pending) { pending.note = e.target.value; renderPop(); renderPayload(); } });
+  $('prevVersion').onclick = () => {
+    if (versions.length < 2) return;
+    viewedVersion = viewedVersion === null ? versions.length - 2 : Math.max(0, viewedVersion - 1);
+    renderAll();
+  };
+  $('nextVersion').onclick = () => {
+    if (viewedVersion === null) return;
+    viewedVersion = viewedVersion >= versions.length - 2 ? null : viewedVersion + 1;
+    renderAll();
+  };
+  $('simulate').onclick = () => {
+    // Cursor answers: a new draft (v2). Pinned passages were addressed, so clear them,
+    // but snapshot the refs into the version so its summary rows can carry chips + notes.
+    base = clone(V2); cur = clone(V2);
+    versions.push({ draft: clone(V2), origin: 'Ask to revise · Warmer', refs: refs.map(r => ({ ...r })) });
+    viewedVersion = null;
+    refs = []; ctxRefs.clear();
+    setMode('review');
+  };
+  $('btnReset').onclick = () => {
+    base = clone(V1); cur = clone(V1); versions.splice(1); viewedVersion = null; pending = null; refs = []; refSeq = 0; ctxRefs.clear(); lastSent = null;
+    pop.classList.remove('on');
+    setMode('review');
+  };
+  bodyEl.addEventListener('input', () => { updateChip(); renderPayload(); });
+  for (const k of ENVELOPE_FIELDS) elFor(k).addEventListener('input', () => { updateChip(); renderPayload(); });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

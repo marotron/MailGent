@@ -1,0 +1,1488 @@
+<!doctype html>
+<!--
+  THROWAWAY LOOKALIKE — org plus five variants, switchable via ?variant= and the bottom bar.
+  org    = the 09:42 / 09:43 screenshots (do not restyle this one).
+  checks = instructions grouped as Ask (comment, passage stays) or Rewrite (replaces the passage). Multi-select.
+           A chip beside Ask shows the answer shape (yes/no, text, options, number). The agent fills the result later.
+  square = pin wash and number are one square mark. The number matches the reference badge. Ref numbers and change cues are square.
+           Passage instructions match checks.
+  focus  = square wash, no inline number. Ref numbers and change cues stay circles.
+           The wash turns white on dark while that passage row is in use. Passage instructions match checks.
+  round  = pin wash and number are one rounded mark. The number sits toward the rounded end. Ref numbers stay circles.
+           Passage instructions match checks.
+  circle = same rounded wash as round. The inline number is a full circle. Passage instructions match checks.
+
+  Open:  open .scratch/propose-send-edit-revise/confirm-windows.html
+  Map:   .scratch/propose-send-edit-revise/confirm-windows-map.md
+
+  Click any part of a window. The panel names the Swift view (data-map).
+  Right window chevrons step v2 → read-only v1, same as SendProposalEditModel.stepBack / stepForward.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MailGent · confirm windows lookalike</title>
+  <style>
+    :root {
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --violet: #6b40d1;
+      --violet-ink: #4a2aa0;
+      --pin: #efe8ff;
+      --refs: #faf8ff;
+      --blue: #0071e3;
+      --chg: rgba(0, 113, 227, 0.13);
+      --chg-green: #248a3d;
+      --chg-green-wash: rgba(36, 138, 61, 0.14);
+      --window: #ececee;
+      --card-line: rgba(0, 0, 0, 0.12);
+      --btn-line: rgba(60, 60, 67, 0.32);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: #111;
+      color: var(--ink);
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .stage {
+      display: flex;
+      gap: 28px;
+      align-items: flex-start;
+      padding: 28px;
+      min-height: 100vh;
+      width: max-content;
+    }
+    .col { display: grid; gap: 8px; justify-items: center; }
+    .shot {
+      color: #c7c7cc;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+
+    .window {
+      width: 560px;
+      height: 658px;
+      background: var(--window);
+      border-radius: 12px;
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    .window[data-pin="1"],
+    [data-pin="1"] { outline: 2px solid var(--blue); outline-offset: -1px; }
+    .titlebar {
+      height: 38px;
+      flex: 0 0 auto;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: linear-gradient(#f6f6f7, #ececee);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .traffic { display: flex; gap: 8px; align-items: center; }
+    .traffic i {
+      width: 12px; height: 12px; border-radius: 50%; display: block;
+    }
+    .traffic .close { background: #ff5f57; }
+    .traffic .mini { background: #d0d0d4; }
+    .traffic .zoom { background: #28c840; }
+    .title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-weight: 650;
+      font-size: 13px;
+      pointer-events: auto;
+    }
+    .expires {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      padding-right: 2px;
+    }
+    .chrome {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+    }
+    .lead {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .lead svg { flex: 0 0 auto; display: block; }
+    .card {
+      flex: 1;
+      min-height: 0;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid var(--card-line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .envelope { padding: 10px; display: grid; gap: 6px; }
+    .field { display: grid; grid-template-columns: 52px 1fr; gap: 8px; align-items: center; }
+    .field .lbl { color: var(--muted); font-size: 12px; }
+    .field input {
+      border: 0; background: transparent; padding: 0; font-size: 12px; outline: none; width: 100%;
+    }
+    .refs {
+      background: var(--refs);
+      padding: 7px 12px;
+      display: grid;
+      gap: 6px;
+    }
+    .refs-head { color: var(--violet); font-size: 11px; font-weight: 650; }
+    .ref {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1.45fr) minmax(0, 0.7fr) 14px;
+      gap: 6px;
+      align-items: center;
+    }
+    body[data-variant="focus"] .ref {
+      position: relative;
+      cursor: pointer;
+    }
+    body[data-variant="focus"] .ref:not(.expanded) .note { display: none; }
+    body[data-variant="focus"] .ref:not(.expanded) {
+      grid-template-columns: 20px minmax(0, 1fr) auto 14px;
+    }
+    .instruction-icons { display: none; }
+    body[data-variant="focus"] .ref:not(.expanded) .instruction-icons {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+    body[data-variant="focus"] .ref .num:hover {
+      color: transparent;
+      position: relative;
+    }
+    body[data-variant="focus"] .change .cue:hover { color: transparent; }
+    body[data-variant="focus"] .ref .num:hover::before,
+    body[data-variant="focus"] .change .cue:hover::before {
+      content: "";
+      position: absolute;
+      width: 9px;
+      height: 5px;
+      border: 1.25px solid #fff;
+      border-radius: 50%;
+    }
+    body[data-variant="focus"] .ref .num:hover::after,
+    body[data-variant="focus"] .change .cue:hover::after {
+      content: "";
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .instruction-chip {
+      display: inline-grid;
+      place-items: center;
+      height: 14px;
+      padding: 0 4px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .instruction-chip.ask { background: var(--pin); color: var(--violet-ink); }
+    .instruction-chip.rewrite { background: #fff1de; color: #9a4d00; }
+    /* Icon chips: Ask = question mark, Rewrite = pencil. Right-aligned so they move left when Remove expands. */
+    .instruction-chip.icon { width: 16px; height: 16px; padding: 0; border-radius: 4px; }
+    .instruction-chip.icon svg { display: block; }
+    body[data-variant="focus"] .ref:not(.expanded) .instruction-icons { justify-self: end; justify-content: flex-end; }
+    body[data-variant="focus"] .ref.expanded {
+      grid-template-columns: 20px minmax(0, 1fr) 14px;
+    }
+    body[data-variant="focus"] .ref.expanded .num,
+    body[data-variant="focus"] .ref.expanded .quote,
+    body[data-variant="focus"] .ref.expanded .x {
+      grid-row: 1;
+    }
+    body[data-variant="focus"] .ref.expanded .note {
+      grid-column: 2 / -1;
+      grid-row: 2;
+      width: 100%;
+      padding: 3px 6px;
+      border: 1px solid #d0d0d4;
+      border-radius: 5px;
+      background: #fff;
+    }
+    body[data-variant="focus"] .ref.expanded + .suggest {
+      margin-left: 26px;
+    }
+    .num, .cue, .badge {
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--violet);
+      color: #fff;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .num { width: 20px; height: 20px; font-size: 11px; }
+    .cue, .badge { width: 14px; height: 14px; font-size: 9px; }
+    .badge { vertical-align: 1px; margin: 0 1px; }
+    .quote {
+      font-size: 12px;
+      font-style: italic;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .note, .revise-note {
+      border: 0;
+      background: transparent;
+      font-size: 12px;
+      padding: 0;
+      width: 100%;
+      outline: none;
+    }
+    .revise-note {
+      border: 1px solid #d0d0d4;
+      border-radius: 5px;
+      background: #fff;
+      padding: 3px 6px;
+    }
+    .x {
+      border: 0; background: none; color: var(--muted); font-size: 13px; padding: 0; line-height: 1;
+    }
+    .suggest {
+      margin: 0 0 2px 26px;
+      display: grid;
+      gap: 2px;
+    }
+    .suggest .cap { font-size: 10px; color: var(--muted); }
+    .suggest button {
+      border: 0; background: none; text-align: left; padding: 2px 0; font-size: 12px;
+    }
+    .suggest button:hover { color: var(--violet); }
+
+    /* checks — Ask comments vs Rewrite. Also used by square, focus, round, and circle. Org list is unchanged. */
+    body[data-checks="1"] .window { height: auto; min-height: 658px; }
+    body[data-checks="1"] .suggest { gap: 1px; }
+    body[data-checks="1"] .irow {
+      display: flex; align-items: center; gap: 6px; min-height: 22px; font-size: 12px;
+    }
+    body[data-checks="1"] .irow input[type="checkbox"] { margin: 0; flex: 0 0 auto; }
+    body[data-checks="1"] .ilab {
+      flex: 1; min-width: 0; text-align: left;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body[data-checks="1"] .kchip,
+    body[data-checks="1"] .tchip {
+      flex: 0 0 auto; font-size: 9px; font-weight: 700; line-height: 1;
+      height: 14px; display: inline-grid; place-items: center;
+      padding: 0 4px; border-radius: 3px;
+    }
+    body[data-checks="1"] .kchip.ask,
+    body[data-checks="1"] .tchip { background: var(--pin); color: var(--violet-ink); }
+    body[data-checks="1"] .kchip.rewrite { background: #fff1de; color: #9a4d00; }
+    body[data-checks="1"] .tchip { min-width: 14px; letter-spacing: -0.03em; }
+
+    /* square — wash and number share one square. Number matches the reference badge. */
+    body[data-variant="square"] .mark-ref,
+    body[data-variant="square"] .badge {
+      height: 16px;
+      line-height: 16px;
+      vertical-align: text-bottom;
+      border-radius: 0;
+    }
+    body[data-variant="square"] .mark-ref {
+      display: inline-block; padding: 0 3px 0 4px;
+      background: var(--pin); color: var(--violet-ink);
+    }
+    body[data-variant="square"] .badge {
+      display: inline-grid; place-items: center;
+      width: 16px; margin: 0 2px 0 -1px; font-size: 9px;
+      background: var(--violet); color: #fff;
+    }
+    body[data-variant="square"] .num,
+    body[data-variant="square"] .cue { border-radius: 0; }
+
+    /* focus — square wash, no inline number. Ref numbers and change cues stay circles.
+       White on dark while that passage row is clicked, edited, or otherwise in use. */
+    body[data-variant="focus"] .badge { display: none; }
+    body[data-variant="focus"] .mark-ref {
+      display: inline-block;
+      height: 16px;
+      line-height: 16px;
+      vertical-align: text-bottom;
+      border-radius: 0;
+      padding: 0 4px;
+      background: var(--pin);
+      color: var(--violet-ink);
+    }
+    body[data-variant="focus"] .mark-ref.on {
+      background: var(--violet);
+      color: #fff;
+    }
+    body[data-variant="focus"] .num,
+    body[data-variant="focus"] .cue {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      font-size: 10px;
+    }
+    /* focus — changed passages are green, not violet, because this draft is still editable and violet means "selected to ask". */
+    body[data-variant="focus"] .mark-chg.on {
+      background: var(--chg-green);
+      color: #fff;
+    }
+    body[data-variant="focus"] .mark-chg:not(.on) {
+      background: var(--chg-green-wash);
+      color: var(--ink);
+    }
+
+    /* round — wash and number are one rounded mark. Number matches the reference badge. */
+    body[data-variant="round"] .mark-ref,
+    body[data-variant="round"] .badge {
+      height: 16px;
+      line-height: 16px;
+      vertical-align: text-bottom;
+    }
+    body[data-variant="round"] .mark-ref {
+      display: inline-block;
+      padding: 0 2px 0 7px;
+      border-radius: 8px 0 0 8px;
+      background: var(--pin); color: var(--violet-ink);
+    }
+    body[data-variant="round"] .badge {
+      display: inline-grid; place-items: center;
+      width: auto; min-width: 16px; margin: 0 3px 0 -1px; padding: 0 4px 0 4px;
+      border-radius: 0 8px 8px 0; font-size: 9px;
+      background: var(--violet); color: #fff;
+    }
+
+    /* circle — same rounded wash as round. The inline number is a full circle. */
+    body[data-variant="circle"] .mark-ref,
+    body[data-variant="circle"] .badge {
+      height: 16px;
+      line-height: 16px;
+      vertical-align: text-bottom;
+    }
+    body[data-variant="circle"] .mark-ref {
+      display: inline-block;
+      padding: 0 2px 0 7px;
+      border-radius: 8px 0 0 8px;
+      background: var(--pin); color: var(--violet-ink);
+    }
+    body[data-variant="circle"] .badge {
+      display: inline-grid; place-items: center;
+      width: 16px; height: 16px; margin: 0 3px 0 0; padding: 0;
+      border-radius: 50%; font-size: 9px;
+      background: var(--violet); color: #fff;
+    }
+
+    #switcher {
+      position: fixed; z-index: 40; left: 50%; bottom: 16px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 10px;
+      max-width: calc(100vw - 24px);
+      background: #fff; color: var(--ink);
+      border-radius: 14px; padding: 6px 8px 6px 6px;
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+    }
+    #switcher button {
+      width: 28px; height: 28px; border: 0; border-radius: 50%;
+      background: #1d1d1f; color: #fff; font-size: 14px; line-height: 1; flex: 0 0 auto;
+    }
+    #var-label { font-size: 12px; font-weight: 650; }
+    #var-blurb { font-size: 11px; color: var(--muted); max-width: 460px; line-height: 1.35; }
+    .status, .changes {
+      padding: 7px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .status { background: rgba(236, 236, 238, 0.95); min-height: 32px; }
+    .status b { font-weight: 500; }
+    .chev {
+      border: 0; background: none; padding: 0 1px; font-size: 12px; font-weight: 650; color: var(--blue);
+    }
+    .chev:disabled { color: #aeaeb2; cursor: default; }
+    /* Changes toggle: same pattern as Revert. Eye icon anchored right; label grows leftward on hover or focus. */
+    .changes-toggle {
+      margin-left: auto;
+      display: inline-flex; flex-direction: row-reverse; align-items: center; gap: 4px;
+      height: 16px; padding: 0; border: 0; background: none;
+      color: var(--muted); font-size: 11px; font-weight: 650; white-space: nowrap;
+    }
+    .changes-toggle .rv-label {
+      max-width: 0; opacity: 0; overflow: hidden;
+      transition: max-width 0.15s ease, opacity 0.15s ease;
+    }
+    .changes-toggle:hover,
+    .changes-toggle:focus-visible { color: var(--blue); }
+    .changes-toggle:hover .rv-label,
+    .changes-toggle:focus-visible .rv-label { max-width: 100px; opacity: 1; }
+    /* Passage remove: same pattern. Icon anchored right; "Remove" grows leftward on hover in the collapsed row. */
+    .ref .x {
+      justify-self: end;
+      display: inline-flex; flex-direction: row-reverse; align-items: center; gap: 4px;
+      height: 16px; padding: 0; border: 0; background: none;
+      color: var(--muted); font-size: 11px; font-weight: 650; white-space: nowrap;
+    }
+    .ref .x .rv-label {
+      max-width: 0; opacity: 0; overflow: hidden;
+      transition: max-width 0.15s ease, opacity 0.15s ease;
+    }
+    .ref .x:hover,
+    .ref .x:focus-visible { color: var(--blue); }
+    .ref .x:hover .rv-label,
+    .ref .x:focus-visible .rv-label { max-width: 46px; opacity: 1; }
+    body[data-variant="focus"] .ref:not(.expanded) { grid-template-columns: 20px minmax(0, 1fr) auto 16px; }
+    /* Quote takes all space left after the icon chips, so it only truncates when the Remove label expands. */
+    body[data-variant="focus"] .ref:not(.expanded):has(.x:hover, .x:focus-visible) { grid-template-columns: 20px minmax(0, 1fr) auto 62px; }
+    #v2-window[data-changes="off"] .changes-toggle .ico-eye-slash { display: none; }
+    #v2-window:not([data-changes="off"]) .changes-toggle .ico-eye { display: none; }
+    /* Revert: icon anchored at the right; on hover or focus the label grows leftward as a link. */
+    .change .revert {
+      justify-self: end;
+      display: inline-flex; flex-direction: row-reverse; align-items: center; gap: 4px;
+      height: 16px; padding: 0; border: 0; background: none;
+      color: var(--muted); font-size: 11px; font-weight: 650; white-space: nowrap;
+    }
+    .change .rv-label {
+      max-width: 0; opacity: 0; overflow: hidden;
+      transition: max-width 0.15s ease, opacity 0.15s ease;
+    }
+    .change .revert:hover,
+    .change .revert:focus-visible { color: var(--blue); }
+    .change .revert:hover .rv-label,
+    .change .revert:focus-visible .rv-label { max-width: 40px; opacity: 1; }
+    body[data-variant="focus"] .change:not(.expanded) {
+      display: grid;
+      grid-template-columns: 45% 14px minmax(0, 1fr) 16px;
+      column-gap: 6px;
+      align-items: baseline;
+    }
+    /* Reserve label room only while Revert is hovered or focused. The percentage before-column keeps the arrow fixed. */
+    body[data-variant="focus"] .change:not(.expanded):has(.revert:hover, .revert:focus-visible) {
+      grid-template-columns: 45% 14px minmax(0, 1fr) 58px;
+    }
+    #v2-window[data-changes="off"] .changes { display: none; }
+    #v2-window[data-changes="off"] .mark-chg { background: none; color: inherit; }
+    .changes {
+      background: rgba(246, 246, 247, 0.95);
+      display: grid;
+      gap: 4px;
+      justify-items: stretch;
+    }
+    .changes-head { color: var(--violet); font-weight: 650; font-size: 12px; }
+    .change {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 6px;
+      row-gap: 1px;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .change .before, .change .after { max-width: none; }
+    .change .before { color: var(--muted); text-decoration: line-through; }
+    .change .arrow { color: var(--muted); font-weight: 650; text-align: center; }
+    .change .cnote { color: var(--muted); white-space: nowrap; }
+    .change .after.results { display: flex; flex-direction: column; gap: 2px; white-space: normal; }
+    body[data-variant="focus"] .change .after.changed { color: var(--chg-green); }
+    .res { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+    .res:not(.on) { color: var(--muted); }
+    .res .box {
+      width: 11px; height: 11px; flex: 0 0 auto;
+      border: 1px solid var(--muted); border-radius: 3px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 9px; line-height: 1;
+    }
+    .res.on .box { background: var(--chg-green); border-color: var(--chg-green); }
+    .res.on .box::before { content: "✓"; }
+    .res-all { display: none; }
+    body[data-variant="focus"] .change:not(.expanded) .res-all { display: flex; }
+    body[data-variant="focus"] .change:not(.expanded) .res-list { display: none; }
+    body[data-variant="focus"] .change.expanded .res-all { display: none; }
+    body[data-variant="focus"] .change {
+      position: relative;
+      padding: 0 0 0 23px;
+      cursor: pointer;
+    }
+    body[data-variant="focus"] .change .cue {
+      position: absolute;
+      left: 0;
+      top: 0;
+      background: var(--chg-green);
+    }
+    body[data-variant="focus"] .change:not(.expanded) .cnote { display: none; }
+    body[data-variant="focus"] .change:not(.expanded) .before,
+    body[data-variant="focus"] .change:not(.expanded) .after {
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    body[data-variant="focus"] .change:not(.expanded) .after.results {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+    body[data-variant="focus"] .change.expanded .revert {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+    }
+    body[data-variant="focus"] .change.expanded {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      row-gap: 2px;
+      align-items: baseline;
+    }
+    body[data-variant="focus"] .change.expanded .before {
+      grid-column: 1;
+      grid-row: 1;
+      max-width: none;
+    }
+    body[data-variant="focus"] .change.expanded .arrow {
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: start;
+      font-size: 0;
+      line-height: 12px;
+    }
+    body[data-variant="focus"] .change.expanded .arrow::after {
+      content: "↓";
+      font-size: 14px;
+    }
+    body[data-variant="focus"] .change.expanded .cnote {
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: start;
+      margin-left: 20px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #ececef;
+      color: var(--muted);
+    }
+    body[data-variant="focus"] .change .cnote .kchip,
+    body[data-variant="focus"] .change .cnote .tchip {
+      background: #dcdce0;
+      color: var(--muted);
+    }
+    body[data-variant="focus"] .change.expanded .after {
+      grid-column: 1;
+      grid-row: 3;
+      max-width: none;
+    }
+    .body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      outline: none;
+    }
+    .mark-ref { background: var(--pin); color: var(--violet-ink); }
+    .mark-chg {
+      background: var(--chg);
+    }
+    .caret {
+      display: inline-block;
+      width: 1px;
+      height: 0.95em;
+      background: var(--blue);
+      vertical-align: text-bottom;
+      margin-left: 1px;
+      animation: blink 1.05s steps(1) infinite;
+    }
+    .body:focus-within .caret { display: none; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .footer { display: flex; gap: 8px; align-items: center; }
+    .footer .spacer { flex: 1; }
+    .btn {
+      border: 1px solid var(--btn-line);
+      background: #fff;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .btn.prominent {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn:active { opacity: 0.9; }
+    .popover {
+      position: absolute;
+      right: 148px;
+      bottom: 52px;
+      width: 320px;
+      background: #f4f4f6;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 10px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      z-index: 3;
+    }
+    .whole {
+      justify-self: start;
+      font-size: 12px;
+      font-weight: 650;
+      background: #efe8ff;
+      border-radius: 999px;
+      padding: 3px 8px;
+    }
+    .presets { display: grid; gap: 4px; justify-items: start; }
+    .presets button {
+      border: 0;
+      background: rgba(0, 0, 0, 0.06);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .presets button.on { background: rgba(0, 113, 227, 0.2); }
+    .bubble {
+      position: absolute;
+      z-index: 4;
+      height: 22px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--violet);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    #v2-window[data-view="current"] .only-past { display: none; }
+    #v2-window[data-view="past"] .only-current { display: none; }
+
+    #inspector {
+      position: sticky;
+      top: 12px;
+      flex: 0 0 320px;
+      height: calc(100vh - 24px);
+      width: 320px;
+      background: #1c1c1e;
+      color: #f5f5f7;
+      border-radius: 12px;
+      padding: 14px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+    #inspector h1 { font-size: 13px; margin: 0; font-weight: 650; }
+    #inspector .hint, #inspector .state { color: #aeaeb2; font-size: 11px; line-height: 1.45; margin: 0; }
+    #pinned {
+      background: #2c2c2e;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      min-height: 72px;
+    }
+    #pinned b { font-weight: 650; }
+    #pinned code, #catalog code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+    #filter {
+      border: 0;
+      border-radius: 6px;
+      background: #2c2c2e;
+      color: #fff;
+      padding: 6px 8px;
+    }
+    #catalog { overflow: auto; display: grid; gap: 2px; align-content: start; }
+    #catalog button {
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: #e5e5ea;
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 12px;
+    }
+    #catalog button:hover, #catalog button.on { background: #3a3a3c; }
+    #catalog button small { display: block; color: #8e8e93; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="col">
+      <div class="shot">09:42 · v1 · pins, before the revision</div>
+      <section class="window" id="v1-window" data-map="window" data-view="current">
+        <header class="titlebar" data-map="titlebar" id="v1-titlebar">
+          <div class="traffic" data-map="traffic" id="v1-traffic">
+            <i class="close" data-map="traffic-close" id="v1-traffic-close" title="Close → Cancel"></i>
+            <i class="mini" data-map="traffic-mini" id="v1-traffic-mini" title="Miniaturize removed"></i>
+            <i class="zoom" data-map="traffic-zoom" id="v1-traffic-zoom" title="Zoom"></i>
+          </div>
+          <div class="title" data-map="title" id="v1-title">Send proposed mail?</div>
+          <div class="expires" data-map="expires" id="v1-expires">Expires in 59:25</div>
+        </header>
+        <div class="chrome" data-map="chrome" id="v1-chrome">
+          <div class="lead" data-map="lead" id="v1-lead">
+            <svg data-map="lead-icon" id="v1-lead-icon" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#ff9f0a" d="M1.2 8.7 16.4 1.6 9.8 16.6 7.9 10.2 1.2 8.7z"/>
+            </svg>
+            <span data-map="lead-copy" id="v1-lead-copy">Cursor wants to send this message via Apple Mail</span>
+          </div>
+          <div class="card" data-map="card" id="v1-card">
+            <div class="envelope" data-map="envelope" id="v1-envelope">
+              <label class="field" data-map="field-to" id="v1-field-to"><span class="lbl" data-map="field-label" id="v1-to-label">To</span><input data-map="field-value" id="v1-to-value" value="dana@example.com"></label>
+              <label class="field" data-map="field-cc" id="v1-field-cc"><span class="lbl" data-map="field-label" id="v1-cc-label">Cc</span><input data-map="field-value" id="v1-cc-value" value=""></label>
+              <label class="field" data-map="field-bcc" id="v1-field-bcc"><span class="lbl" data-map="field-label" id="v1-bcc-label">Bcc</span><input data-map="field-value" id="v1-bcc-value" value=""></label>
+              <label class="field" data-map="field-subject" id="v1-field-subject"><span class="lbl" data-map="field-label" id="v1-subject-label">Subject</span><input data-map="field-value" id="v1-subject-value" value="Server migration update"></label>
+            </div>
+<div class="status" data-map="status" id="v1-status">
+              <b data-map="status-draft" id="v1-status-draft">Draft</b>
+            </div>
+            <div class="body" data-map="body" id="v1-body" contenteditable="true" spellcheck="false">Hi Dana,
+
+Quick update on the <span class="mark-ref" data-map="mark-ref" id="v1-mark-1">server migration plan</span><span class="badge" data-map="mark-badge" id="v1-badge-1" contenteditable="false">1</span>: we're moving to Phase 2 next Tuesday. <span class="mark-ref" data-map="mark-ref" id="v1-mark-2">I'll send the detailed timeline tomorrow, and the rollback checklist by Friday.</span><span class="badge" data-map="mark-badge" id="v1-badge-2" contenteditable="false">2</span>
+
+Best,
+Alex<span class="caret" data-map="caret" id="v1-caret" contenteditable="false"></span></div>
+            <div class="refs" data-map="refs" id="v1-refs">
+              <div class="refs-head" data-map="refs-head" id="v1-refs-head">Passages for Cursor's attention · 2 · sent on Ask to look, Ask to revise, or Send</div>
+              <div class="ref" data-map="ref" id="v1-ref-1">
+                <span class="num" data-map="ref-badge" id="v1-ref-badge-1">1</span>
+                <span class="quote" data-map="ref-quote" id="v1-ref-quote-1">server migration plan</span>
+                <span class="instruction-icons" data-map="ref-instruction-icons" id="v1-ref-instruction-icons-1" aria-label="Selected instruction types"></span>
+                <input class="note" data-map="ref-note" id="v1-ref-note-1" value="Rewrite more formally" placeholder="What should Cursor look at here?">
+                <button class="x" data-map="ref-remove" id="v1-ref-remove-1" type="button" aria-label="Remove passage 1" title="Remove"><span class="rv-label">Remove</span><svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+              </div>
+              <div class="suggest" data-map="note-suggestions" id="v1-suggest-1" hidden></div>
+              <div class="ref" data-map="ref" id="v1-ref-2">
+                <span class="num" data-map="ref-badge" id="v1-ref-badge-2">2</span>
+                <span class="quote" data-map="ref-quote" id="v1-ref-quote-2" title="I'll send the detailed timeline tomorrow, and the rollback checklist by Friday.">I'll send the detailed timeline tomorrow, and the rollback checklist by Friday.</span>
+                <span class="instruction-icons" data-map="ref-instruction-icons" id="v1-ref-instruction-icons-2" aria-label="Selected instruction types"></span>
+                <input class="note" data-map="ref-note" id="v1-ref-note-2" value="Make this shorter" placeholder="What should Cursor look at here?">
+                <button class="x" data-map="ref-remove" id="v1-ref-remove-2" type="button" aria-label="Remove passage 2" title="Remove"><span class="rv-label">Remove</span><svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+              </div>
+              <div class="suggest" data-map="note-suggestions" id="v1-suggest-2" hidden></div>
+            </div>
+          </div>
+          <div class="footer" data-map="footer" id="v1-footer">
+            <button class="btn" data-map="btn-cancel" id="v1-btn-cancel" type="button">Cancel</button>
+            <span class="spacer"></span>
+            <button class="btn" data-map="btn-look" id="v1-btn-look" type="button">Ask agent to look</button>
+            <button class="btn" data-map="btn-revise" id="v1-btn-revise" type="button">Ask to revise…</button>
+            <button class="btn" data-map="btn-open" id="v1-btn-open" type="button">Open in Mail</button>
+            <button class="btn prominent" data-map="btn-send" id="v1-btn-send" type="button">Send</button>
+          </div>
+        </div>
+        <div class="popover" data-map="revise-popover" id="v1-popover" hidden>
+          <div class="whole" data-map="revise-chip" id="v1-revise-chip">Whole draft</div>
+          <div class="presets" data-map="revise-presets" id="v1-revise-presets"></div>
+          <input class="revise-note" data-map="revise-note" id="v1-revise-note" placeholder="Optional note">
+          <div class="suggest" data-map="note-suggestions" id="v1-revise-suggest" hidden></div>
+          <button class="btn prominent" data-map="revise-send" id="v1-revise-send" type="button" disabled>Send to agent</button>
+        </div>
+        <button class="bubble" data-map="refer-bubble" id="v1-bubble" type="button" hidden>Refer to agent's attention  ⇧⌘A</button>
+      </section>
+    </div>
+
+    <div class="col">
+      <div class="shot">09:43 · v2 · same window after propose_send revises</div>
+      <section class="window" id="v2-window" data-map="window" data-view="current">
+        <header class="titlebar" data-map="titlebar" id="v2-titlebar">
+          <div class="traffic" data-map="traffic" id="v2-traffic">
+            <i class="close" data-map="traffic-close" id="v2-traffic-close" title="Close → Cancel"></i>
+            <i class="mini" data-map="traffic-mini" id="v2-traffic-mini" title="Miniaturize removed"></i>
+            <i class="zoom" data-map="traffic-zoom" id="v2-traffic-zoom" title="Zoom"></i>
+          </div>
+          <div class="title" data-map="title" id="v2-title">Send proposed mail?</div>
+          <div class="expires" data-map="expires" id="v2-expires">Expires in 58:09</div>
+        </header>
+        <div class="chrome" data-map="chrome" id="v2-chrome">
+          <div class="lead" data-map="lead" id="v2-lead">
+            <svg data-map="lead-icon" id="v2-lead-icon" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#ff9f0a" d="M1.2 8.7 16.4 1.6 9.8 16.6 7.9 10.2 1.2 8.7z"/>
+            </svg>
+            <span data-map="lead-copy" id="v2-lead-copy">Cursor wants to send this message via Apple Mail</span>
+          </div>
+          <div class="card" data-map="card" id="v2-card">
+            <div class="envelope" data-map="envelope" id="v2-envelope">
+              <label class="field" data-map="field-to" id="v2-field-to"><span class="lbl" data-map="field-label" id="v2-to-label">To</span><input data-map="field-value" id="v2-to-value" value="dana@example.com"></label>
+              <label class="field" data-map="field-cc" id="v2-field-cc"><span class="lbl" data-map="field-label" id="v2-cc-label">Cc</span><input data-map="field-value" id="v2-cc-value" value=""></label>
+              <label class="field" data-map="field-bcc" id="v2-field-bcc"><span class="lbl" data-map="field-label" id="v2-bcc-label">Bcc</span><input data-map="field-value" id="v2-bcc-value" value=""></label>
+              <label class="field" data-map="field-subject" id="v2-field-subject"><span class="lbl" data-map="field-label" id="v2-subject-label">Subject</span><input data-map="field-value" id="v2-subject-value" value="Server migration update"></label>
+            </div>
+<div class="status" data-map="status" id="v2-status">
+              <button class="chev" data-map="status-back" id="v2-status-back" type="button" title="View the previous draft version">‹</button>
+              <button class="chev" data-map="status-forward" id="v2-status-forward" type="button" title="Return to the current draft" disabled>›</button>
+              <b class="only-current" data-map="status-draft" id="v2-status-draft">Draft v2</b>
+              <b class="only-past" data-map="status-viewing" id="v2-status-viewing">Viewing v1 · read-only · Agent proposal</b>
+              <button class="changes-toggle only-current" data-map="changes-toggle" id="v2-changes-toggle" type="button" aria-pressed="true" aria-label="Hide changes" title="Hide changes"><span class="rv-label">Hide changes</span><svg class="ico-eye" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8C3 5 5.2 3.5 8 3.5S13 5 14.5 8C13 11 10.8 12.5 8 12.5S3 11 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><svg class="ico-eye-slash" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8C3 5 5.2 3.5 8 3.5S13 5 14.5 8C13 11 10.8 12.5 8 12.5S3 11 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2.5 2.5l11 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+            </div>
+            <div class="changes only-current" data-map="changes" id="v2-changes">
+              <div class="changes-head" data-map="changes-head" id="v2-changes-head">v1 → v2 · Ask to look</div>
+              <div class="change" data-map="change-row" id="v2-change-1">
+                <span class="cue" data-map="change-cue" id="v2-change-cue-1">1</span>
+                <span class="before" data-map="change-before" id="v2-change-before-1">server migration plan</span>
+                <span class="arrow" data-map="change-arrow" id="v2-change-arrow-1">→</span>
+                <span class="after changed" data-map="change-after" id="v2-change-after-1">server migration initiative</span>
+                <span class="cnote" data-map="change-note" id="v2-change-note-1">· Rewrite more formally</span>
+                <button class="revert" data-map="change-revert" id="v2-change-revert-1" type="button" aria-label="Revert change 1" title="Revert"><span class="rv-label">Revert</span><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4 2.5 7.5 6 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 7.5H9.5a4 4 0 0 1 0 8H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              </div>
+              <div class="change" data-map="change-row" id="v2-change-2">
+                <span class="cue" data-map="change-cue" id="v2-change-cue-2">2</span>
+                <span class="before" data-map="change-before" id="v2-change-before-2">I'll send the detailed timeline tomorrow, and the rollback checklist by Friday.</span>
+                <span class="arrow" data-map="change-arrow" id="v2-change-arrow-2">→</span>
+                <span class="after changed" data-map="change-after" id="v2-change-after-2">Timeline and rollback checklist by Friday.</span>
+                <span class="cnote" data-map="change-note" id="v2-change-note-2">· Make this shorter</span>
+                <button class="revert" data-map="change-revert" id="v2-change-revert-2" type="button" aria-label="Revert change 2" title="Revert"><span class="rv-label">Revert</span><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4 2.5 7.5 6 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 7.5H9.5a4 4 0 0 1 0 8H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              </div>
+              <div class="change" data-map="change-row" id="v2-change-3">
+                <span class="cue" data-map="change-cue" id="v2-change-cue-3">3</span>
+                <span class="before" data-map="change-before" id="v2-change-before-3">we're moving to Phase 2 next Tuesday</span>
+                <span class="arrow" data-map="change-arrow" id="v2-change-arrow-3">?</span>
+                <span class="after results" data-map="change-after" id="v2-change-after-3">
+                  <span class="res res-all on"><span class="box"></span>accurate and up to date</span>
+                  <span class="res-list">
+                    <span class="res on"><span class="box"></span>accurate</span>
+                    <span class="res on"><span class="box"></span>up to date</span>
+                  </span>
+                </span>
+                <span class="cnote" data-map="change-note" id="v2-change-note-3">· <span class="kchip ask">Ask</span><span class="tchip">✓✕</span> Check this is accurate and up to date</span>
+              </div>
+            </div>
+            <div class="body only-current" data-map="body" id="v2-body" contenteditable="true" spellcheck="false">Hi Dana,
+
+Quick update on the <span class="mark-chg" data-map="mark-chg" id="v2-mark-1">server migration initiative</span>: <span class="mark-ref" data-map="mark-ref" id="v2-mark-3">we're moving to Phase 2 next Tuesday</span>. <span class="mark-chg" data-map="mark-chg" id="v2-mark-2">Timeline and rollback checklist by Friday.</span>
+
+Best,
+Alex<span class="caret" data-map="caret" id="v2-caret" contenteditable="false"></span></div>
+            <div class="body only-past" data-map="body" id="v2-body-past" contenteditable="false" spellcheck="false">Hi Dana,
+
+Quick update on the server migration plan: we're moving to Phase 2 next Tuesday. I'll send the detailed timeline tomorrow, and the rollback checklist by Friday.
+
+Best,
+Alex</div>
+            <div class="refs only-current" data-map="refs" id="v2-refs">
+              <div class="refs-head" data-map="refs-head" id="v2-refs-head">Passages for Cursor's attention · 1 · sent on Ask to look, Ask to revise, or Send</div>
+              <div class="ref" data-map="ref" id="v2-ref-3">
+                <span class="num" data-map="ref-badge" id="v2-ref-badge-3">3</span>
+                <span class="quote" data-map="ref-quote" id="v2-ref-quote-3">we're moving to Phase 2 next Tuesday</span>
+                <span class="instruction-icons" data-map="ref-instruction-icons" id="v2-ref-instruction-icons-3" aria-label="Selected instruction types"></span>
+                <input class="note" data-map="ref-note" id="v2-ref-note-3" value="Check this is accurate and up to date" placeholder="What should Cursor look at here?">
+                <button class="x" data-map="ref-remove" id="v2-ref-remove-3" type="button" aria-label="Remove passage 3" title="Remove"><span class="rv-label">Remove</span><svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+              </div>
+              <div class="suggest" data-map="note-suggestions" id="v2-suggest-3" hidden></div>
+            </div>
+          </div>
+          <div class="footer" data-map="footer" id="v2-footer">
+            <button class="btn" data-map="btn-cancel" id="v2-btn-cancel" type="button">Cancel</button>
+            <span class="spacer"></span>
+            <button class="btn" data-map="btn-look" id="v2-btn-look" type="button">Ask agent to look</button>
+            <button class="btn" data-map="btn-revise" id="v2-btn-revise" type="button">Ask to revise…</button>
+            <button class="btn" data-map="btn-open" id="v2-btn-open" type="button">Open in Mail</button>
+            <button class="btn prominent" data-map="btn-send" id="v2-btn-send" type="button">Send</button>
+          </div>
+        </div>
+        <div class="popover" data-map="revise-popover" id="v2-popover" hidden>
+          <div class="whole" data-map="revise-chip" id="v2-revise-chip">Whole draft</div>
+          <div class="presets" data-map="revise-presets" id="v2-revise-presets"></div>
+          <input class="revise-note" data-map="revise-note" id="v2-revise-note" placeholder="Optional note">
+          <div class="suggest" data-map="note-suggestions" id="v2-revise-suggest" hidden></div>
+          <button class="btn prominent" data-map="revise-send" id="v2-revise-send" type="button" disabled>Send to agent</button>
+        </div>
+        <button class="bubble" data-map="refer-bubble" id="v2-bubble" type="button" hidden>Refer to agent's attention  ⇧⌘A</button>
+      </section>
+    </div>
+  </div>
+
+  <aside id="inspector">
+    <h1>Swift map</h1>
+    <p class="hint">Click a part of either window. The id is what to say in chat. <code>data-map</code> is the Swift view, shared by both windows when the same view draws both.</p>
+    <div id="pinned">Nothing selected.</div>
+    <p class="state" id="state"></p>
+    <input id="filter" placeholder="Filter parts" aria-label="Filter parts">
+    <div id="catalog"></div>
+  </aside>
+
+  <nav id="switcher" aria-label="Prototype variants">
+    <button type="button" id="var-prev" aria-label="Previous variant">←</button>
+    <div>
+      <div id="var-label">org — Original</div>
+      <div id="var-blurb"></div>
+    </div>
+    <button type="button" id="var-next" aria-label="Next variant">→</button>
+  </nav>
+
+  <script type="application/json" id="swift-map">
+  {
+    "window": ["HostedWindow", "MailGent/CompanionWindow.swift", "makeWindow inside runSendProposalConfirm. Content size 560×620 when there is no case context. styleMask drops miniaturizable. maxSize height 900."],
+    "titlebar": ["NSWindow titlebar", "MailGent/CompanionWindow.swift", "Not a SwiftUI view. Title string and the expiry accessory sit in this bar."],
+    "traffic": ["NSWindow traffic lights", "MailGent/CompanionWindow.swift", "Standard close / miniaturize / zoom. Miniaturize is removed, so the middle light stays and does nothing."],
+    "traffic-close": ["window close", "MailGent/CompanionWindow.swift", "Traffic-light close ends the confirm as Cancel (finishSendProposal decision .cancel)."],
+    "traffic-mini": ["styleMask miniaturizable", "MailGent/CompanionWindow.swift", "runSendProposalConfirm removes .miniaturizable. The yellow light is disabled."],
+    "traffic-zoom": ["NSWindow zoom", "MailGent/CompanionWindow.swift", "Resizable stays on. Zoom is the green light."],
+    "title": ["SendProposalEditModel.windowTitle", "MailGent/SendProposalEditModel.swift", "Review phase title is “Send proposed mail?”. Waiting phases retitle the window to “Waiting for Cursor”."],
+    "expires": ["ProposeSendExpiryTitlebarLabel", "MailGent/ProposeSendExpiryTitlebarLabel.swift", "Trailing titlebar accessory from attachProposeSendExpiryTitlebar. Caption, medium, secondary, monospaced digits. Ticks every second. Orange when under 60s. Copy from ProposeSendExpiryFormat.countdownLabel. These stills are frozen at 59:25 and 58:09."],
+    "chrome": ["SendProposalEditDialog.body", "MailGent/SendProposalEditDialog.swift", "Root VStack. padding 12, spacing 12 (ConditionalAskLayout.pad / .gap)."],
+    "lead": ["SendProposalEditDialog.lead", "MailGent/SendProposalEditDialog.swift", "Shown only while phase is review. Other phases replace this with phaseBanner, which is not in these stills."],
+    "lead-icon": ["Image paperplane.fill", "MailGent/SendProposalEditDialog.swift", "lead. system 18 semibold, orange."],
+    "lead-copy": ["lead Text", "MailGent/SendProposalEditDialog.swift", "“\\(agentName) wants to send this message via Apple Mail”. callout medium, secondary. agentName is Cursor in these stills."],
+    "card": ["editorColumn", "MailGent/SendProposalEditDialog.swift", "White rounded rect, radius 10, stroke primary 0.12. Holds envelope, references, status, version changes, body."],
+    "envelope": ["envelope", "MailGent/SendProposalEditDialog.swift", "To / Cc / Bcc / Subject. Padding 10, row spacing 6. Past a version, the fields are read-only."],
+    "field-to": ["field To", "MailGent/SendProposalEditDialog.swift", "field(\"To\", text: envelopeBinding(.to)). Binding is $model.toLine on the current draft."],
+    "field-cc": ["field Cc", "MailGent/SendProposalEditDialog.swift", "field(\"Cc\"). Empty string still shows the row."],
+    "field-bcc": ["field Bcc", "MailGent/SendProposalEditDialog.swift", "field(\"Bcc\"). Empty string still shows the row."],
+    "field-subject": ["field Subject", "MailGent/SendProposalEditDialog.swift", "field(\"Subject\", text: envelopeBinding(.subject))."],
+    "field-label": ["field label", "MailGent/SendProposalEditDialog.swift", "Text(label). caption, secondary, width 52, leading."],
+    "field-value": ["TextField", "MailGent/SendProposalEditDialog.swift", "Plain text field, caption. Disabled when not review or when viewing a past version."],
+    "refs": ["referencesStrip", "MailGent/SendProposalEditDialog.swift", "Visible when pins is not empty and phase is not handed off. v1 has two pins. v2 cleared pins in applyAgentDraft, so this strip is absent there."],
+    "refs-head": ["referencesStrip title", "MailGent/SendProposalEditDialog.swift", "“Passages for Cursor's attention · \\(count) · sent on Ask to look, Ask to revise, or Send”. 11pt semibold, rgb(0.42, 0.25, 0.82)."],
+    "ref": ["ReferenceNoteRow", "MailGent/SendProposalEditDialog.swift", "One row per anchoredReferences(). Number, quote, note field, remove."],
+    "ref-badge": ["ReferenceNoteRow number", "MailGent/SendProposalEditDialog.swift", "White bold 11pt on a 20×20 violet circle."],
+    "ref-quote": ["quoteLabel", "MailGent/SendProposalEditDialog.swift", "Italic caption, one line, ellipsis. Strikethrough when the pin is stale."],
+    "ref-note": ["ReferenceNoteRow TextField", "MailGent/SendProposalEditDialog.swift", "Placeholder “What should Cursor look at here?”. Plain caption field. Focus opens PresetSuggestionList."],
+    "ref-remove": ["ReferenceNoteRow remove", "MailGent/SendProposalEditDialog.swift", "xmark button. Removes that pin from model.pins."],
+    "note-suggestions": ["PresetSuggestionList", "MailGent/SendProposalEditDialog.swift", "Shown while a note field is focused. Header “Common instructions” or “Suggestions”. Presets from ProposalNoteFuzzy.defaultPresets unless Settings overrides them."],
+    "status": ["statusStrip", "MailGent/SendProposalEditDialog.swift", "Gray bar under the pins (v1) or under the envelope (v2). Background windowBackgroundColor at 0.65 opacity."],
+    "status-back": ["stepBack", "MailGent/SendProposalEditDialog.swift", "chevron.left. Shown only when versions.count > 1. Help “View the previous draft version”. Accent when canStepBack, secondary when not."],
+    "status-forward": ["stepForward", "MailGent/SendProposalEditDialog.swift", "chevron.right. Help “Return to the current draft”. Disabled on the newest version."],
+    "status-draft": ["Draft label", "MailGent/SendProposalEditDialog.swift", "“Draft” when revisionRoundTrips is 0, otherwise “Draft v\\(roundTrips + 1)”. Caption medium, secondary. Hidden while viewing a past version, and hidden when the human has local edits (that branch says “Edited · N changes”)."],
+    "status-viewing": ["Viewing past label", "MailGent/SendProposalEditDialog.swift", "“Viewing v\\(id) · read-only · \\(origin)”. v1 origin is “Agent proposal”. Only while viewingIndex is set."],
+    "changes": ["versionChanges", "MailGent/SendProposalEditDialog.swift", "Shown when displayedVersionChangeSummary is non-nil. That is nil on v1 and when stepped back to v1. Background windowBackgroundColor at 0.45."],
+    "changes-head": ["versionChanges header", "MailGent/SendProposalEditDialog.swift", "“v\\(from) → v\\(to) · \\(kind or origin)”. Kind “Ask to look” because the rows carry pin notes. Violet semibold caption."],
+    "change-row": ["versionChanges pair", "MailGent/SendProposalEditDialog.swift", "HStack for one VersionChangePair from bodyChangeRows. Widened to the pinned quote, not the smallest changed word."],
+    "change-cue": ["VersionChangePair.PinCue", "MailGent/SendProposalEditDialog.swift", "White bold 9pt on a 14×14 violet circle. Number is the pin’s index from the ask, not a new counter."],
+    "change-before": ["pair.before", "MailGent/SendProposalEditDialog.swift", "Caption, secondary, strikethrough. The quote as it stood in the previous version."],
+    "change-arrow": ["arrow.right", "MailGent/SendProposalEditDialog.swift", "Image(systemName: \"arrow.right\"). caption2 semibold, secondary."],
+    "change-after": ["pair.after", "MailGent/SendProposalEditDialog.swift", "Caption, primary. The replacement text in the version on screen."],
+    "change-note": ["cueNote", "MailGent/SendProposalEditDialog.swift", "“· \\(note)”, secondary. Joined pin notes for that row. Omitted when every note is empty."],
+    "body": ["ProposalBodyEditor", "MailGent/ProposalBodyEditor.swift", "NSTextView inside the card. 13pt, line spacing 4, horizontal padding 8. Current draft is editable. A past version passes isEditable: false and pins: []."],
+    "mark-ref": ["refreshMarks pin wash", "MailGent/ProposalBodyEditor.swift", "Background #efe8ff, foreground #4a2aa0, on each pin quote that still occurs in the body. v1 only. v2 quotes no longer match, and live pins were cleared."],
+    "mark-badge": ["ProposalReferenceMarkerCell", "MailGent/ProposalBodyEditor.swift", "14×14 violet circle inserted at the end of the pin quote. v1 shows ① after “plan” and ② after “Friday.”"],
+    "mark-chg": ["refreshMarks changed passage", "MailGent/ProposalBodyEditor.swift", "changedPassages from displayedChangePassages. Blue wash alpha 0.13 and a single underline #0071e3. Text stays label color. v2 only."],
+    "caret": ["NSTextView insertion point", "MailGent/ProposalBodyEditor.swift", "The stills show the caret after “Alex”. Accent blue. Not a separate SwiftUI view."],
+    "footer": ["footer review branch", "MailGent/SendProposalEditDialog.swift", "HStack spacing 8. Cancel, spacer, Ask agent to look, Ask to revise…, Open in Mail, Send. Same buttons while waiting, with some disabled."],
+    "btn-cancel": ["Button Cancel", "MailGent/SendProposalEditDialog.swift", "onCancel. AskPrimaryFooterButtonStyle prominent false. keyboardShortcut .cancelAction."],
+    "btn-look": ["Button Ask agent to look", "MailGent/SendProposalEditDialog.swift", "askToLook(). Disabled when there are no pins, when revise is capped, or when not in review. The style does not gray a disabled button. v2 is disabled because applyAgentDraft set pins = []."],
+    "btn-revise": ["Button Ask to revise…", "MailGent/SendProposalEditDialog.swift", "Sets showRevise. Popover arrowEdge .top. Disabled only when canRevise is false (round trips ≥ 5)."],
+    "btn-open": ["Button Open in Mail", "MailGent/SendProposalEditDialog.swift", "onOpenInMail(deliveredProposal()). Disabled when secret constants cannot be delivered. These stills have none, so it is enabled."],
+    "btn-send": ["Button Send", "MailGent/SendProposalEditDialog.swift", "Title becomes “Send edited” when model.changes is not empty. These stills have no local edits, so the title is Send. Prominent style. keyboardShortcut .defaultAction."],
+    "revise-popover": ["revisePopover", "MailGent/SendProposalEditDialog.swift", "Not in the stills. Opens above Ask to revise…. Width 320, padding 12. Not on screen until that button is clicked."],
+    "revise-chip": ["Whole draft chip", "MailGent/SendProposalEditDialog.swift", "Text “Whole draft” on a violet capsule."],
+    "revise-presets": ["FlowPresets", "MailGent/SendProposalEditDialog.swift", "ProposalRevisePreset.allCases as capsules. Selected fill is accent at 0.2."],
+    "revise-note": ["ProposalNoteField", "MailGent/SendProposalEditDialog.swift", "Rounded text field, placeholder “Optional note”. Focus opens the same suggestion list as a pin note."],
+    "revise-send": ["Button Send to agent", "MailGent/SendProposalEditDialog.swift", "Disabled until a preset or a non-empty note is set. Then stageAskOriginRevise, phase = waitingRevise, onInterim(.reviseRequested)."],
+    "refer-bubble": ["Coordinator.placeBubble", "MailGent/ProposalBodyEditor.swift", "Not in the stills. Violet capsule above a non-empty selection: “Refer to agent's attention  ⇧⌘A”. Click calls onRefer → model.refer(quote:)."]
+  }
+  </script>
+  <script>
+    const MAP = JSON.parse(document.getElementById("swift-map").textContent);
+    const NOTE_PRESETS = [
+      "Check this is accurate and up to date",
+      "This is a guess — verify before sending",
+      "Check tone is right for the recipient",
+      "Make this shorter",
+      "Rewrite more formally",
+      "Check dates and times against my calendar"
+    ];
+    /* Ask = send a check to the agent. The answer is a comment and does not replace the passage.
+       Rewrite = ask the agent to change the passage.
+       The shape chip says what kind of answer to expect. The result is not known here. */
+    const ANSWER_SHAPE = {
+      yesno: { mark: "✓✕", title: "Yes or no" },
+      text: { mark: "Aa", title: "Text" },
+      choice: { mark: "ABC", title: "Options" },
+      number: { mark: "#", title: "Number" }
+    };
+    const INSTRUCTIONS = [
+      { id: "accurate", label: "Check this is accurate and up to date", kinds: ["ask"], answer: "yesno" },
+      { id: "guess", label: "This is a guess — verify before sending", kinds: ["ask"], answer: "text" },
+      { id: "tone", label: "Check tone is right for the recipient", kinds: ["ask"], answer: "choice" },
+      { id: "shorter", label: "Make this shorter", kinds: ["rewrite"] },
+      { id: "formal", label: "Rewrite more formally", kinds: ["rewrite"] },
+      { id: "dates", label: "Check dates and times against my calendar", kinds: ["ask", "rewrite"], answer: "number" }
+    ];
+    const VARIANTS = [
+      { id: "org", name: "Original", blurb: "The screenshot lookalike. Instructions are one plain list." },
+      { id: "checks", name: "Ask and rewrite", blurb: "Tick any mix for one passage. Chips name Ask, Rewrite, and the answer shape. The agent works out the result." },
+      { id: "square", name: "Square marks", blurb: "The highlight and its number are one square. Passage instructions match Ask and rewrite." },
+      { id: "focus", name: "Square focus", blurb: "Square highlight with no inline number. Passage and change numbers stay circles. The highlight turns white on dark while that passage is in use." },
+      { id: "round", name: "Rounded marks", blurb: "The highlight and its number are one rounded mark. Passage instructions match Ask and rewrite." },
+      { id: "circle", name: "Circle marks", blurb: "Same rounded highlight as Rounded marks, with a circular number. Passage instructions match Ask and rewrite." }
+    ];
+    const REVISE_PRESETS = ["Shorter", "Warmer", "More formal", "Plainer", "Friendlier close", "Change register…", "Translate…"];
+    const pinnedEl = document.getElementById("pinned");
+    const stateEl = document.getElementById("state");
+    const catalog = document.getElementById("catalog");
+    const proto = { v2: "current", popover: null, last: "matches the two screenshots" };
+
+    function renderState() {
+      const pins = document.querySelectorAll("#v1-refs .ref").length;
+      const v = document.body.dataset.variant || "org";
+      stateEl.textContent = "variant: " + v + "  ·  v2 view: " + proto.v2 + "  ·  popover: " + (proto.popover || "closed") + "  ·  v1 pins: " + pins + "  ·  " + proto.last + checksSummary();
+    }
+
+    function pin(el) {
+      document.querySelectorAll("[data-pin]").forEach((n) => n.removeAttribute("data-pin"));
+      el.setAttribute("data-pin", "1");
+      const key = el.dataset.map;
+      const row = MAP[key] || ["(unmapped)", "", ""];
+      const ids = [...document.querySelectorAll('[data-map="' + key + '"]')].map((n) => n.id).filter(Boolean);
+      pinnedEl.innerHTML = "<b>" + (el.id || key) + "</b><br>data-map <code>" + key + "</code><br><br><b>" + row[0] + "</b><br>" + row[1] + "<br>" + row[2] + (ids.length > 1 ? "<br><br>Same view: " + ids.join(", ") : "");
+      catalog.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.key === key));
+    }
+
+    function noteInputFor(box) {
+      const prev = box.previousElementSibling;
+      if (!prev) return null;
+      if (prev.matches("input")) return prev;
+      return prev.querySelector("input.note, input.revise-note");
+    }
+    function usesChecks(id) {
+      id = id || document.body.dataset.variant;
+      return id === "checks" || id === "square" || id === "focus" || id === "round" || id === "circle";
+    }
+    function fillSuggest(box) {
+      if (usesChecks()) {
+        fillChecks(box);
+        return;
+      }
+      box.innerHTML = '<div class="cap">Common instructions</div>' + NOTE_PRESETS.map((p) => '<button type="button">' + p + "</button>").join("");
+    }
+    function fillChecks(box) {
+      const input = noteInputFor(box);
+      const org = input ? (input.dataset.org || "") : "";
+      const matched = INSTRUCTIONS.find((item) => item.label === org);
+      const on = new Set(matched ? [matched.id] : []);
+      if (box.id === "v1-suggest-1") on.add("accurate");
+      box.innerHTML = "";
+      const cap = document.createElement("div");
+      cap.className = "cap";
+      cap.textContent = "Common instructions";
+      box.appendChild(cap);
+      INSTRUCTIONS.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "irow";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "pick";
+        cb.dataset.id = item.id;
+        cb.dataset.label = item.label;
+        cb.checked = on.has(item.id);
+        cb.id = (box.id || "note") + "-" + item.id;
+        const lab = document.createElement("label");
+        lab.className = "ilab";
+        lab.htmlFor = cb.id;
+        lab.textContent = item.label;
+        lab.title = item.label;
+        row.appendChild(cb);
+        row.appendChild(lab);
+        item.kinds.forEach((kind) => {
+          const chip = document.createElement("span");
+          chip.className = "kchip " + kind;
+          chip.textContent = kind === "ask" ? "Ask" : "Rewrite";
+          row.appendChild(chip);
+          if (kind === "ask" && item.answer && ANSWER_SHAPE[item.answer]) {
+            const shape = ANSWER_SHAPE[item.answer];
+            const type = document.createElement("span");
+            type.className = "tchip";
+            type.textContent = shape.mark;
+            type.title = shape.title;
+            row.appendChild(type);
+          }
+        });
+        box.appendChild(row);
+      });
+      updateRefInstructionIcons(box);
+    }
+    const INSTRUCTION_ICON = {
+      ask: '<svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.7-.9 1.4v.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="12.5" r="1" fill="currentColor"/></svg>',
+      rewrite: '<svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5l2.5 2.5L6 12.5 2.5 13.5l1-3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>'
+    };
+    function updateRefInstructionIcons(box) {
+      const ref = box.previousElementSibling;
+      const icons = ref && ref.querySelector(".instruction-icons");
+      if (!icons) return;
+      const selected = new Set([...box.querySelectorAll("input.pick:checked")].map((pick) => pick.dataset.id));
+      const shown = new Set();
+      icons.innerHTML = "";
+      INSTRUCTIONS.forEach((item) => {
+        if (!selected.has(item.id)) return;
+        item.kinds.forEach((kind) => {
+          const shape = kind === "ask" && item.answer ? ANSWER_SHAPE[item.answer] : null;
+          const label = kind === "ask" ? "Ask" + (shape ? " " + shape.mark : "") : "Rewrite";
+          if (shown.has(kind)) return;
+          shown.add(kind);
+          const chip = document.createElement("span");
+          chip.className = "instruction-chip icon " + kind;
+          chip.innerHTML = INSTRUCTION_ICON[kind];
+          chip.title = item.label;
+          chip.setAttribute("aria-label", label);
+          icons.appendChild(chip);
+        });
+      });
+    }
+    function syncNote(box) {
+      const input = noteInputFor(box);
+      if (!input || !usesChecks()) return;
+      const picked = [...box.querySelectorAll("input.pick:checked")].map((el) => el.dataset.label);
+      input.value = picked.join(" · ");
+    }
+    function checksSummary() {
+      if (!usesChecks()) return "";
+      const parts = [];
+      document.querySelectorAll(".suggest").forEach((box) => {
+        const picks = [...box.querySelectorAll("input.pick:checked")];
+        if (!picks.length) return;
+        const bits = picks.map((el) => el.dataset.id);
+        parts.push((box.id || "note") + " [" + bits.join(", ") + "]");
+      });
+      return parts.length ? " · " + parts.join(" · ") : "";
+    }
+    document.querySelectorAll(".presets").forEach((box) => {
+      box.innerHTML = REVISE_PRESETS.map((p) => '<button type="button">' + p + "</button>").join("");
+    });
+
+    function selectPassage(n, side) {
+      if (side === "v1") {
+        document.querySelectorAll("#v1-body .mark-ref, #v1-refs .ref").forEach((node) => node.classList.remove("on"));
+        const mark = document.getElementById("v1-mark-" + n);
+        const row = document.getElementById("v1-ref-" + n);
+        if (mark) mark.classList.add("on");
+        if (row) row.classList.add("on");
+        return;
+      }
+      document.querySelectorAll("#v2-body .mark-chg, #v2-body .mark-ref, #v2-refs .ref").forEach((node) => node.classList.remove("on"));
+      const changedMark = document.getElementById("v2-mark-" + n);
+      const v2Row = document.getElementById("v2-ref-" + n);
+      if (changedMark) changedMark.classList.add("on");
+      if (v2Row) v2Row.classList.add("on");
+    }
+
+    document.addEventListener("click", (event) => {
+      const el = event.target.closest("[data-map]");
+      if (!el || event.target.closest("#inspector")) return;
+      pin(el);
+      const ref = el.closest(".ref");
+      const suggest = el.closest(".suggest");
+      if (ref && /^v[12]-ref-/.test(ref.id)) {
+        const selectingOnly = event.target.closest(".num");
+        if (document.body.dataset.variant === "focus" && !selectingOnly && !event.target.closest("input, button")) {
+          const next = ref.nextElementSibling;
+          const expanded = ref.classList.toggle("expanded");
+          if (next && next.classList.contains("suggest")) next.hidden = !expanded;
+        }
+        selectPassage(ref.id.replace(/^v[12]-ref-/, ""), ref.id.slice(0, 2));
+      }
+      else if (suggest && /^v[12]-suggest-/.test(suggest.id)) selectPassage(suggest.id.replace(/^v[12]-suggest-/, ""), suggest.id.slice(0, 2));
+      else {
+        const change = el.closest("#v2-changes .change");
+        if (change && change.id.indexOf("v2-change-") === 0 && !el.closest(".revert")) {
+          const cueOnly = event.target.closest(".cue");
+          if (usesChecks() && !(document.body.dataset.variant === "focus" && cueOnly)) change.classList.toggle("expanded");
+          selectPassage(change.id.slice("v2-change-".length), "v2");
+        } else {
+          const changedMark = el.closest("#v2-body .mark-chg, #v2-body .mark-ref");
+          if (changedMark && changedMark.id.indexOf("v2-mark-") === 0) {
+            selectPassage(changedMark.id.slice("v2-mark-".length), "v2");
+          } else {
+            const mark = el.closest("#v1-body .mark-ref");
+            if (mark && mark.id.indexOf("v1-mark-") === 0) {
+              selectPassage(mark.id.slice("v1-mark-".length), "v1");
+            }
+          }
+        }
+      }
+      const win = el.closest(".window");
+      if (el.dataset.map === "status-back") setV2("past");
+      if (el.dataset.map === "status-forward") setV2("current");
+      if (el.dataset.map === "change-revert") revertChange(el);
+      if (el.dataset.map === "changes-toggle") {
+        const showing = document.getElementById("v2-window").dataset.changes !== "off";
+        setChangesShown(!showing);
+        proto.last = (showing ? "hid" : "showed") + " v2 changes and highlights";
+      }
+      if (el.dataset.map === "btn-revise" && win) togglePopover(win);
+      else if (!el.closest(".popover")) closePopovers();
+      if (el.dataset.map === "btn-look") {
+        proto.last = el.dataset.disabled ? "Ask agent to look is disabled (no pins)" : "would call askToLook()";
+      }
+      if (el.dataset.map === "btn-cancel" || el.dataset.map === "traffic-close") proto.last = "would call onCancel";
+      if (el.dataset.map === "btn-open") proto.last = "would call onOpenInMail";
+      if (el.dataset.map === "btn-send") proto.last = "would call onSend";
+      if (el.dataset.map === "ref-remove") removePin(el);
+      if (el.dataset.map === "revise-send") proto.last = el.disabled ? "Send to agent disabled until a preset or note" : "would call onInterim(.reviseRequested)";
+      renderState();
+    });
+
+    document.addEventListener("mouseup", (event) => {
+      const body = event.target.closest(".body");
+      document.querySelectorAll(".bubble").forEach((b) => { b.hidden = true; });
+      if (!body || body.getAttribute("contenteditable") === "false") return;
+      const sel = document.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      const text = sel.toString().trim();
+      if (!text) return;
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const win = body.closest(".window");
+      const bubble = win.querySelector(".bubble");
+      const host = win.getBoundingClientRect();
+      bubble.hidden = false;
+      bubble.style.left = Math.max(8, rect.left - host.left) + "px";
+      bubble.style.top = Math.max(40, rect.top - host.top - 26) + "px";
+      bubble.dataset.quote = text;
+      proto.last = "selection “" + text.slice(0, 48) + (text.length > 48 ? "…" : "") + "”";
+      renderState();
+    });
+
+    document.querySelectorAll(".bubble").forEach((bubble) => {
+      bubble.addEventListener("click", () => {
+        proto.last = "would call model.refer(quote:) with “" + (bubble.dataset.quote || "") + "”";
+        bubble.hidden = true;
+        renderState();
+      });
+    });
+
+    function setV2(view) {
+      proto.v2 = view;
+      const win = document.getElementById("v2-window");
+      win.dataset.view = view;
+      document.getElementById("v2-status-back").disabled = view === "past";
+      document.getElementById("v2-status-forward").disabled = view === "current";
+      win.querySelectorAll(".envelope input").forEach((input) => { input.readOnly = view === "past"; });
+      if (view === "current") setChangesShown(true);
+      proto.last = view === "past" ? "stepBack → viewing v1 read-only" : "stepForward → current v2";
+    }
+    function revertChange(button) {
+      const row = button.closest(".change");
+      const n = row.id.slice("v2-change-".length);
+      const before = document.getElementById("v2-change-before-" + n).textContent;
+      const mark = document.getElementById("v2-mark-" + n);
+      if (mark) mark.replaceWith(document.createTextNode(before));
+      row.remove();
+      proto.last = "reverted change " + n;
+    }
+    function setChangesShown(shown) {
+      const btn = document.getElementById("v2-changes-toggle");
+      document.getElementById("v2-window").dataset.changes = shown ? "on" : "off";
+      btn.querySelector(".rv-label").textContent = shown ? "Hide changes" : "Show changes";
+      btn.title = shown ? "Hide changes" : "Show changes";
+      btn.setAttribute("aria-label", btn.title);
+      btn.setAttribute("aria-pressed", String(shown));
+    }
+
+    function togglePopover(win) {
+      const pop = win.querySelector(".popover");
+      const open = pop.hidden;
+      closePopovers();
+      pop.hidden = !open;
+      proto.popover = open ? win.id.replace("-window", "") : null;
+      proto.last = open ? "showRevise = true" : "popover closed";
+    }
+    function closePopovers() {
+      document.querySelectorAll(".popover").forEach((p) => { p.hidden = true; });
+      proto.popover = null;
+    }
+
+    function removePin(button) {
+      const row = button.closest(".ref");
+      const side = row.id.slice(0, 2);
+      const n = row.querySelector(".num").textContent.trim();
+      row.remove();
+      const mark = document.getElementById(side + "-mark-" + n);
+      const badge = document.getElementById(side + "-badge-" + n);
+      if (mark) mark.replaceWith(document.createTextNode(mark.textContent));
+      if (badge) badge.remove();
+      const left = document.querySelectorAll("#" + side + "-refs .ref").length;
+      const head = document.getElementById(side + "-refs-head");
+      head.textContent = "Passages for Cursor's attention · " + left + " · sent on Ask to look, Ask to revise, or Send";
+      document.getElementById(side + "-refs").hidden = left === 0;
+      document.getElementById(side + "-btn-look").dataset.disabled = left === 0 ? "1" : "";
+      proto.last = "removed pin " + n;
+    }
+
+    document.querySelectorAll(".note, .revise-note").forEach((input) => {
+      input.addEventListener("focus", () => {
+        const row = input.closest(".ref");
+        if (row && /^v[12]-ref-/.test(row.id)) {
+          if (document.body.dataset.variant === "focus") {
+            row.classList.add("expanded");
+            const next = row.nextElementSibling;
+            if (next && next.classList.contains("suggest")) next.hidden = false;
+          }
+          selectPassage(row.id.replace(/^v[12]-ref-/, ""), row.id.slice(0, 2));
+        }
+        const next = row ? row.nextElementSibling : input.nextElementSibling;
+        if (next && next.classList.contains("suggest")) next.hidden = false;
+      });
+      input.addEventListener("blur", () => {
+        setTimeout(() => {
+          const box = input.closest(".ref")
+            ? input.closest(".ref").nextElementSibling
+            : input.nextElementSibling;
+          if (!box || !box.classList.contains("suggest") || box.contains(document.activeElement)) return;
+          if (usesChecks() && box.querySelector("input.pick:checked")) return;
+          box.hidden = true;
+        }, 160);
+      });
+    });
+    document.querySelectorAll(".suggest").forEach((box) => {
+      box.addEventListener("mousedown", (event) => {
+        if (!usesChecks()) return;
+        if (event.target.closest("input, button")) return;
+        event.preventDefault();
+      });
+      box.addEventListener("click", (event) => {
+        if (usesChecks()) return;
+        const button = event.target.closest("button");
+        if (!button) return;
+        const input = noteInputFor(box);
+        if (input) input.value = button.textContent;
+        box.hidden = true;
+        proto.last = "note set to “" + button.textContent + "”";
+        refreshReviseSend();
+        renderState();
+      });
+      box.addEventListener("change", (event) => {
+        if (!event.target.classList.contains("pick")) return;
+        if (document.body.dataset.variant !== "focus") syncNote(box);
+        updateRefInstructionIcons(box);
+        proto.last = (event.target.checked ? "added" : "removed") + " “" + event.target.dataset.label + "”";
+        refreshReviseSend();
+        renderState();
+      });
+    });
+    document.querySelectorAll(".presets").forEach((box) => {
+      box.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        button.classList.toggle("on");
+        refreshReviseSend();
+      });
+    });
+    document.querySelectorAll(".revise-note").forEach((input) => {
+      input.addEventListener("input", refreshReviseSend);
+    });
+    function refreshReviseSend() {
+      document.querySelectorAll(".window").forEach((win) => {
+        const send = win.querySelector('[data-map="revise-send"]');
+        if (!send) return;
+        const note = win.querySelector(".revise-note").value.trim();
+        const picked = win.querySelector(".presets button.on");
+        send.disabled = !note && !picked;
+      });
+    }
+
+    const filter = document.getElementById("filter");
+    function renderCatalog() {
+      const q = filter.value.trim().toLowerCase();
+      catalog.innerHTML = "";
+      Object.keys(MAP).forEach((key) => {
+        const row = MAP[key];
+        const hay = (key + " " + row.join(" ")).toLowerCase();
+        if (q && !hay.includes(q)) return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.key = key;
+        button.innerHTML = "<code>" + key + "</code><small>" + row[0] + "</small>";
+        button.addEventListener("click", () => {
+          const el = document.querySelector('[data-map="' + key + '"]');
+          if (!el) return;
+          pin(el);
+          el.scrollIntoView({ block: "nearest", inline: "nearest" });
+        });
+        catalog.appendChild(button);
+      });
+    }
+    filter.addEventListener("input", renderCatalog);
+    renderCatalog();
+
+    function applyVariant(id, push) {
+      const v = VARIANTS.find((item) => item.id === id) || VARIANTS[0];
+      document.body.dataset.variant = v.id;
+      document.body.dataset.checks = usesChecks(v.id) ? "1" : "";
+      document.getElementById("var-label").textContent = v.id + " — " + v.name;
+      document.getElementById("var-blurb").textContent = v.blurb;
+      document.querySelectorAll(".note, .revise-note").forEach((input) => {
+        if (!input.dataset.orgSet) {
+          input.dataset.org = input.value;
+          input.dataset.orgPh = input.placeholder;
+          input.dataset.orgSet = "1";
+        }
+        if (usesChecks(v.id)) {
+          input.placeholder = input.classList.contains("revise-note")
+            ? "Anything else?"
+            : "Anything else for this passage?";
+          if (v.id === "focus" && input.classList.contains("note")) input.value = "";
+        } else {
+          input.value = input.dataset.org;
+          input.placeholder = input.dataset.orgPh;
+        }
+      });
+      document.querySelectorAll(".suggest").forEach((box) => {
+        fillSuggest(box);
+        box.hidden = true;
+      });
+      if (usesChecks(v.id)) {
+        if (v.id !== "focus") {
+          const open = document.getElementById("v1-suggest-1");
+          if (open) open.hidden = false;
+        }
+        if (v.id !== "focus") document.querySelectorAll(".suggest").forEach(syncNote);
+      }
+      if (push) {
+        const url = new URL(location.href);
+        if (v.id === "org") url.searchParams.delete("variant");
+        else url.searchParams.set("variant", v.id);
+        history.replaceState(null, "", url);
+      }
+      proto.last = "variant " + v.id;
+      renderState();
+    }
+    function stepVariant(dir) {
+      const cur = document.body.dataset.variant || "org";
+      let i = VARIANTS.findIndex((item) => item.id === cur);
+      if (i < 0) i = 0;
+      applyVariant(VARIANTS[(i + dir + VARIANTS.length) % VARIANTS.length].id, true);
+    }
+    document.getElementById("var-prev").addEventListener("click", () => stepVariant(-1));
+    document.getElementById("var-next").addEventListener("click", () => stepVariant(1));
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const t = event.target;
+      if (t && t.closest && t.closest("input, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+      stepVariant(event.key === "ArrowLeft" ? -1 : 1);
+    });
+    applyVariant(new URLSearchParams(location.search).get("variant") || "org", false);
+  </script>
+</body>
+</html>

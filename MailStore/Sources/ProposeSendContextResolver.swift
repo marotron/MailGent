@@ -69,6 +69,8 @@ public struct ContextThreadItem: Equatable, Sendable, Identifiable {
     /// Open original in Apple Mail / Finder when present.
     public let original: ContextThreadOriginal?
     public let linkChips: [ContextThreadLinkChip]
+    /// Agent text with no mail or vault source. Not an error.
+    public let isAgentNote: Bool
 
     public init(
         id: String,
@@ -87,7 +89,8 @@ public struct ContextThreadItem: Equatable, Sendable, Identifiable {
         unavailableReason: String? = nil,
         isDraft: Bool = false,
         original: ContextThreadOriginal? = nil,
-        linkChips: [ContextThreadLinkChip] = []
+        linkChips: [ContextThreadLinkChip] = [],
+        isAgentNote: Bool = false
     ) {
         self.id = id
         self.kind = kind
@@ -106,6 +109,7 @@ public struct ContextThreadItem: Equatable, Sendable, Identifiable {
         self.isDraft = isDraft
         self.original = original
         self.linkChips = linkChips
+        self.isAgentNote = isAgentNote
     }
 }
 
@@ -162,13 +166,22 @@ public struct ProposeSendContextResolver: Sendable {
             _ = index
             let chips = chipsByEvent[event.id] ?? []
             switch event.source {
-            case let .mail(accountID, placement, id):
-                let original = ContextThreadOriginal.mail(
-                    accountID: accountID,
-                    placement: placement,
-                    id: id,
-                    internetMessageID: nil
+            case nil:
+                items.append(
+                    ContextThreadItem(
+                        id: event.id,
+                        kind: event.kind,
+                        scope: event.scope,
+                        ownership: event.ownership,
+                        party: event.party,
+                        at: event.at,
+                        summary: event.summary,
+                        linkChips: chips,
+                        isAgentNote: true
+                    )
                 )
+
+            case let .mail(accountID, placement, id):
                 let content = await mail.fetchMail(
                     accountID: accountID,
                     placement: placement,
@@ -212,8 +225,7 @@ public struct ProposeSendContextResolver: Sendable {
                             party: event.party,
                             at: event.at,
                             summary: event.summary,
-                            unavailableReason: "Mail unavailable",
-                            original: original,
+                            unavailableReason: "Source unavailable",
                             linkChips: chips
                         )
                     )
@@ -251,8 +263,7 @@ public struct ProposeSendContextResolver: Sendable {
                             party: event.party,
                             at: event.at,
                             summary: event.summary,
-                            unavailableReason: "Vault file unavailable",
-                            original: original,
+                            unavailableReason: "Source unavailable",
                             linkChips: chips
                         )
                     )

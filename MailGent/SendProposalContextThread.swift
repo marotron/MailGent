@@ -9,6 +9,8 @@ struct SendProposalContextThreadView: View {
     /// When true, history (non-draft) rows are dimmed.
     @Binding var spotlightDraft: Bool
     var onOpenOriginal: (ContextThreadOriginal) -> Void = { _ in }
+    /// When set, each history card can be marked for `referencedEventIds`.
+    var referencedEventIDs: Binding<Set<String>>? = nil
 
     /// Bubble corner radius; ownership-side top corner stays sharp (0).
     private static let cardRadius: CGFloat = 14
@@ -43,9 +45,21 @@ struct SendProposalContextThreadView: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(paneShape)
         .overlay(
-            Rectangle()
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            paneShape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var paneShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            cornerRadii: RectangleCornerRadii(
+                topLeading: 10,
+                bottomLeading: 10,
+                bottomTrailing: 0,
+                topTrailing: 0
+            ),
+            style: .continuous
         )
     }
 
@@ -206,6 +220,11 @@ struct SendProposalContextThreadView: View {
             // Meta: kind · party · date (date moves into labeled block when expanded mail)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 kindBadge(item.kind)
+                if item.isAgentNote {
+                    Text("Agent note")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
                 if let party = item.party?.name, !party.isEmpty {
                     Text(party)
                         .font(.caption2.weight(.semibold))
@@ -252,6 +271,25 @@ struct SendProposalContextThreadView: View {
                 Text(reason)
                     .font(.caption2)
                     .foregroundStyle(.orange)
+            }
+
+            if let referencedEventIDs, !item.isDraft {
+                let referred = referencedEventIDs.wrappedValue.contains(item.id)
+                Button(referred ? "Referenced" : "Refer") {
+                    if referencedEventIDs.wrappedValue.contains(item.id) {
+                        referencedEventIDs.wrappedValue.remove(item.id)
+                    } else {
+                        referencedEventIDs.wrappedValue.insert(item.id)
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule().fill(referred ? Color(red: 0.937, green: 0.910, blue: 1) : Color.clear)
+                )
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.15)))
             }
 
             // Open / link chips sit between header and body (or under compact meta).
