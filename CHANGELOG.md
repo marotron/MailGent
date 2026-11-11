@@ -8,6 +8,8 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ## [Unreleased]
 
+## [0.24.4] - 2026-11-11
+
 ### Changed
 
 - Conditional Ask close (traffic light / ⌘W) is `await_ask` outcome `dismissed` — not Block; never writes Remember; a fresh `get` / `get_attachment` re-prompts
