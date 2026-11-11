@@ -492,10 +492,10 @@ private final class ProposalBodyTextView: NSTextView {
     }
 }
 
-final class ProposalTokenAttachment: NSTextAttachment {
-    let tokenName: String
+final class ProposalTokenAttachment: NSTextAttachment, @unchecked Sendable {
+    nonisolated(unsafe) let tokenName: String
 
-    init(name: String, display: String, fontScale: CGFloat = 1) {
+    nonisolated init(name: String, display: String, fontScale: CGFloat = 1) {
         self.tokenName = name
         super.init(data: nil, ofType: nil)
         attachmentCell = ProposalTokenCell(display: display, fontScale: fontScale)
@@ -507,8 +507,8 @@ final class ProposalTokenAttachment: NSTextAttachment {
     }
 }
 
-final class ProposalReferenceMarkerAttachment: NSTextAttachment {
-    init(number: Int) {
+final class ProposalReferenceMarkerAttachment: NSTextAttachment, @unchecked Sendable {
+    nonisolated init(number: Int) {
         super.init(data: nil, ofType: nil)
         attachmentCell = ProposalReferenceMarkerCell(number: number)
     }
@@ -519,18 +519,22 @@ final class ProposalReferenceMarkerAttachment: NSTextAttachment {
     }
 }
 
-private final class ProposalTokenCell: NSTextAttachmentCell {
-    let display: String
-    let fontScale: CGFloat
+/// Attachment cells draw from AppKit's nonisolated layout path; keep metrics in
+/// `nonisolated(unsafe)` storage so Xcode 16.4 MainActor NSCell isolation compiles.
+private final class ProposalTokenCell: NSTextAttachmentCell, @unchecked Sendable {
+    nonisolated(unsafe) private let display: String
+    nonisolated(unsafe) private let tokenFont: NSFont
+    nonisolated(unsafe) private let horizontalPadding: CGFloat
+    nonisolated(unsafe) private let verticalPadding: CGFloat
+    nonisolated(unsafe) private let cornerRadius: CGFloat
 
-    /// Same size as plain body text so glyph baselines match on the line.
-    private var tokenFont: NSFont { NSFont.systemFont(ofSize: 13 * fontScale) }
-    private var horizontalPadding: CGFloat { 5 * fontScale }
-    private var verticalPadding: CGFloat { 1.5 * fontScale }
-
-    init(display: String, fontScale: CGFloat) {
+    nonisolated init(display: String, fontScale: CGFloat) {
         self.display = display
-        self.fontScale = fontScale
+        // Same size as plain body text so glyph baselines match on the line.
+        self.tokenFont = NSFont.systemFont(ofSize: 13 * fontScale)
+        self.horizontalPadding = 5 * fontScale
+        self.verticalPadding = 1.5 * fontScale
+        self.cornerRadius = 4 * fontScale
         super.init(textCell: display)
     }
 
@@ -539,22 +543,22 @@ private final class ProposalTokenCell: NSTextAttachmentCell {
         fatalError("not used")
     }
 
-    override func cellSize() -> NSSize {
+    nonisolated override func cellSize() -> NSSize {
         let width = (display as NSString).size(withAttributes: [.font: tokenFont]).width
         let height = ceil(tokenFont.ascender - tokenFont.descender) + verticalPadding * 2
         return NSSize(width: ceil(width) + horizontalPadding * 2, height: height)
     }
 
     /// Pin the attachment baseline to the surrounding text baseline (not the cell mid-Y).
-    override func cellBaselineOffset() -> NSPoint {
+    nonisolated override func cellBaselineOffset() -> NSPoint {
         NSPoint(x: 0, y: tokenFont.descender - verticalPadding)
     }
 
-    override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
+    nonisolated override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
         let path = NSBezierPath(
             roundedRect: cellFrame,
-            xRadius: 4 * fontScale,
-            yRadius: 4 * fontScale
+            xRadius: cornerRadius,
+            yRadius: cornerRadius
         )
         NSColor(srgbRed: 1, green: 0.851, blue: 0.639, alpha: 1).setFill()
         path.fill()
@@ -572,10 +576,10 @@ private final class ProposalTokenCell: NSTextAttachmentCell {
     }
 }
 
-private final class ProposalReferenceMarkerCell: NSTextAttachmentCell {
-    let number: Int
+private final class ProposalReferenceMarkerCell: NSTextAttachmentCell, @unchecked Sendable {
+    nonisolated(unsafe) private let number: Int
 
-    init(number: Int) {
+    nonisolated init(number: Int) {
         self.number = number
         super.init(textCell: "\(number)")
     }
@@ -585,11 +589,11 @@ private final class ProposalReferenceMarkerCell: NSTextAttachmentCell {
         fatalError("not used")
     }
 
-    override func cellSize() -> NSSize {
+    nonisolated override func cellSize() -> NSSize {
         NSSize(width: 14, height: 14)
     }
 
-    override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
+    nonisolated override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
         let rect = cellFrame.insetBy(dx: 1, dy: 1)
         NSColor(srgbRed: 0.42, green: 0.25, blue: 0.82, alpha: 1).setFill()
         NSBezierPath(ovalIn: rect).fill()
