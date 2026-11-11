@@ -8,6 +8,8 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-11-11
+
 ### Added
 
 - Experimental propose-send edit / revise confirm (Settings → Experimental): editable draft, Ask to look / Ask to revise, draft version history; Send and Open in Mail use the browsed draft version
