@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). While a line is a **rel
 
 Release section headings use semver only (`## [0.4.0]`). **alpha** stays in README / About / GitHub titles. **`-rc.N`** is display/MCP only — never in `MARKETING_VERSION` or ship tags.
 
+## [0.25.1] - 2026-11-11
+
+### Changed
+
+- Propose-send **Send** no longer attaches passage `references` (pins reach the agent only via Ask agent to look / Ask to revise); `outcome: send` stays terminal
+- When a passage has an instruction chip or note, primary chrome prefers **Ask agent to look** over Send (passage-note Enter submits Look; body Enter still inserts a newline)
+
 ## [0.25.0] - 2026-11-11
 
 ### Breaking

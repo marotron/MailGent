@@ -120,6 +120,15 @@ final class SendProposalEditModel: ObservableObject {
         isReview && revisionRoundTrips < PendingProposalRegistry.revisionCap
     }
 
+    /// When true, Enter / primary chrome prefers **Ask agent to look** over Send.
+    /// Requires review + revise capacity and at least one pin with an instruction chip or note.
+    var preferAskToLookDefault: Bool {
+        canRevise && pins.contains { pin in
+            !pin.instructions.isEmpty
+                || !pin.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     var changes: ProposalChanges {
         ProposalPayloadBuilder.changes(
             beforeTo: baseline.to,
@@ -277,8 +286,8 @@ final class SendProposalEditModel: ObservableObject {
             sentBody: edits.isEmpty
                 ? nil
                 : ProposalRedaction.redact(snap.tokenizedBody, constants: constants, agentID: agentID),
-            // Pins belong to the live draft; past previews are read-only with the strip hidden.
-            references: viewingPast ? [] : anchoredReferences(),
+            // Terminal send never carries passage rewrite intent — pins go only via Look / Revise.
+            references: [],
             context: replyContext(from: resolved)
         )
     }
