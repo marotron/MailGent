@@ -13,8 +13,8 @@ struct MailGentVersionTests {
 
     @Test func currentConstantsMatchSemVerProgression() {
         #expect(MailGentVersion.marketing == "0.24.2")
-        #expect(MailGentVersion.releaseCandidate == 1)
-        #expect(MailGentVersion.label == "0.24.2-rc.1")
-        #expect(MailGentVersion.isCandidate)
+        #expect(MailGentVersion.releaseCandidate == 0)
+        #expect(MailGentVersion.label == "0.24.2")
+        #expect(!MailGentVersion.isCandidate)
     }
 }

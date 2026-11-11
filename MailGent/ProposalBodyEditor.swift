@@ -77,7 +77,8 @@ struct ProposalBodyEditor: NSViewRepresentable {
         Coordinator(parent: self)
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate, @unchecked Sendable {
+    @MainActor
+    final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ProposalBodyEditor
         var shortcut: ProposalReferShortcut
         weak var textView: NSTextView?
@@ -165,16 +166,23 @@ struct ProposalBodyEditor: NSViewRepresentable {
         func startShortcutMonitor() {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, let textView = self.textView else { return event }
-                guard textView.window?.firstResponder === textView else { return event }
-                guard self.shortcut.matches(
-                    characters: event.charactersIgnoringModifiers,
-                    modifierFlags: event.modifierFlags
-                ) else {
-                    return event
+                // Local key monitors for this window run on the main thread.
+                guard let self else { return event }
+                let characters = event.charactersIgnoringModifiers
+                let modifiers = event.modifierFlags
+                let handled = MainActor.assumeIsolated { () -> Bool in
+                    guard let textView = self.textView else { return false }
+                    guard textView.window?.firstResponder === textView else { return false }
+                    guard self.shortcut.matches(
+                        characters: characters,
+                        modifierFlags: modifiers
+                    ) else {
+                        return false
+                    }
+                    self.referSelection()
+                    return true
                 }
-                self.referSelection()
-                return nil
+                return handled ? nil : event
             }
         }
 
