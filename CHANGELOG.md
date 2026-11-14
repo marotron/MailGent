@@ -8,6 +8,8 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 ## [Unreleased]
 
+## [0.25.2] - 2026-11-14
+
 ### Changed
 
 - Ask window expiry: the window stays open with a grey **Request expired** banner (same top slot and chrome as propose-send send banners), Allow / Block / Remember are removed, the body dims, and the footer shows **Close**; the titlebar countdown reads **Expired at HH:MM**. The agent still gets the expired result immediately. The expired request stays in the menu bar **Needs your action** list as **Expired** with only a **Close** button (no Allow / Block), and it still counts toward the menu-bar and Dock badge until you press Close
