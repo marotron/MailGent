@@ -14,6 +14,8 @@ Release section headings use semver only (`## [0.4.0]`). **alpha** stays in READ
 
 - Expired Ask titlebar countdown (**Expired at HH:MM**) stays on one line
 
+- Propose-send pin references no longer echo the free-text note as `instructionText` (`Note: …`); note stays in `note`, and per-reference `instructionText` is chip prose only (omitted when empty)
+
 ## [0.25.1] - 2026-11-11
 
 ### Changed

@@ -126,43 +126,14 @@ struct SendProposalPromptDialog: View {
     }
 
     private var phaseBanner: some View {
-        HStack(alignment: .top, spacing: 10) {
-            phaseIcon
-            VStack(alignment: .leading, spacing: 2) {
-                Text(phaseTitle)
-                    .font(.callout.weight(.semibold))
-                Text(phaseSubtitle)
-                    .font(.caption)
-                    .foregroundStyle(phaseSubtitleColor)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(phaseBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(phaseTitle). \(phaseSubtitle)")
+        PhaseBanner(tone: phaseTone, title: phaseTitle, subtitle: phaseSubtitle)
     }
 
-    @ViewBuilder
-    private var phaseIcon: some View {
+    private var phaseTone: PhaseBanner.Tone {
         switch model.phase {
-        case .sending:
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 18, height: 18)
-        case .handedOff:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(.green)
-        case .failed:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(.red)
-        case .review:
-            EmptyView()
+        case .sending, .review: .progress
+        case .handedOff: .success
+        case .failed: .failure
         }
     }
 
@@ -185,20 +156,6 @@ struct SendProposalPromptDialog: View {
             message
         case .review:
             ""
-        }
-    }
-
-    private var phaseSubtitleColor: Color {
-        if case .failed = model.phase { return .red.opacity(0.85) }
-        return .secondary
-    }
-
-    private var phaseBackground: Color {
-        switch model.phase {
-        case .sending: Color.accentColor.opacity(0.08)
-        case .handedOff: Color.green.opacity(0.10)
-        case .failed: Color.red.opacity(0.08)
-        case .review: .clear
         }
     }
 

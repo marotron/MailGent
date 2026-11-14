@@ -119,8 +119,26 @@ import Testing
         #expect(refs[0].stale == false)
         #expect(refs[0].quote == "call {{mg:phone_mobile}}")
         #expect(refs[0].note == "check [redacted:phone_mobile]")
+        #expect(refs[0].instructionText.isEmpty)
+        #expect(refs[0].dictionary()["instructionText"] == nil)
         #expect(!((refs[0].note ?? "").contains("+1 555 0142")))
         #expect(refs[1].stale == true)
+    }
+
+    @Test func noteOnlyReferenceOmitsInstructionText() {
+        let pin = ProposalPin(
+            id: "r1",
+            quote: "ale bardzo dobrze wspominam nasze rozmowy",
+            note: "to powinno byc odnosnie rozmowy z patrycja"
+        )
+        let reference = ProposalPins.anchor([pin], in: pin.quote) { $0 }[0]
+        let dictionary = reference.dictionary()
+
+        #expect(reference.note == pin.note)
+        #expect(reference.instructionText.isEmpty)
+        #expect(dictionary["note"] as? String == pin.note)
+        #expect(dictionary["instructionText"] == nil)
+        #expect(dictionary["instructions"] == nil)
     }
 
     @Test func passageInstructionsAreStructuredAndHaveARedactedTextFallback() {
@@ -154,11 +172,14 @@ import Testing
         #expect(instructions?[0]["kind"] as? String == "ask")
         #expect((instructions?[0]["answerShape"] as? [String: Any])?["type"] as? String == "yes_no")
         #expect(instructions?[1]["kind"] as? String == "rewrite")
+        #expect(reference.note == "Confirm with [redacted:phone_mobile]")
         #expect(
             reference.instructionText
-                == "Ask: Check [redacted:phone_mobile] is accurate (answer: yes/no). Rewrite: Rewrite more formally. Note: Confirm with [redacted:phone_mobile]."
+                == "Ask: Check [redacted:phone_mobile] is accurate (answer: yes/no). Rewrite: Rewrite more formally."
         )
+        #expect(!reference.instructionText.contains("Note:"))
         #expect(!reference.instructionText.contains("+1 555 0142"))
+        #expect(dictionary["instructionText"] as? String == reference.instructionText)
     }
 
     @Test func revisionResultsValidateTypedAnswersAgainstTheDeclaredShape() throws {
