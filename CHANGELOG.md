@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). While a line is a **rel
 
 Release section headings use semver only (`## [0.4.0]`). **alpha** stays in README / About / GitHub titles. **`-rc.N`** is display/MCP only — never in `MARKETING_VERSION` or ship tags.
 
+## [Unreleased]
+
+### Changed
+
+- Ask window expiry: the window stays open with a grey **Request expired** banner (same top slot and chrome as propose-send send banners), Allow / Block / Remember are removed, the body dims, and the footer shows **Close**; the titlebar countdown reads **Expired at HH:MM**. The agent still gets the expired result immediately. The expired request stays in the menu bar **Needs your action** list as **Expired** with only a **Close** button (no Allow / Block), and it still counts toward the menu-bar and Dock badge until you press Close
+
+- Expired Ask titlebar countdown (**Expired at HH:MM**) stays on one line
+
 ## [0.25.1] - 2026-11-11
 
 ### Changed

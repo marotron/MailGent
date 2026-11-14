@@ -40,7 +40,12 @@ enum MailGentPreferences {
     static let defaultAskDecisionCacheTTLSeconds = 3_600
     /// Default hard wait for propose_send confirmation (1 hour).
     static let defaultProposeSendHardTimeoutSeconds = 3_600
+    /// DEBUG builds allow 1 minute for dogfooding expiry; Release keeps 5 minutes.
+    #if DEBUG
+    static let proposeSendHardTimeoutMinSeconds = 60
+    #else
     static let proposeSendHardTimeoutMinSeconds = 300
+    #endif
     static let proposeSendHardTimeoutMaxSeconds = 28_800
     /// UserDefaults tag for forever (no wall-clock expiry; persisted).
     static let askDecisionCacheTTLForever = -1

@@ -215,7 +215,7 @@ import Testing
 
     @Test func hardTimeoutClampedFromSettingsSeconds() {
         let registry = PendingProposalRegistry(hardTimeoutSeconds: 10)
-        #expect(registry.readHardTimeoutSeconds() == 300)
+        #expect(registry.readHardTimeoutSeconds() == PendingProposalRegistry.hardTimeoutMinSeconds)
 
         registry.setHardTimeoutSeconds(99_999)
         #expect(registry.readHardTimeoutSeconds() == 28_800)

@@ -121,6 +121,9 @@ struct MailGentSettingsView: View {
     private var proposeSendHardTimeoutPicker: some View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("Human wait limit", selection: $proposeSendHardTimeoutSeconds) {
+                #if DEBUG
+                Text("1 minute (dev)").tag(60)
+                #endif
                 Text("15 minutes").tag(900)
                 Text("30 minutes").tag(1_800)
                 Text("1 hour").tag(3_600)

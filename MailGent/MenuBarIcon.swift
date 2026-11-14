@@ -12,6 +12,8 @@ struct PendingAskSummary: Equatable, Sendable {
     let agent: String
     let subject: String
     let kind: PendingUserActionKind
+    /// Hard timeout passed with no answer. Stays listed until the window is closed.
+    var isExpired = false
 }
 
 /// Concurrent human-action prompts (Ask + propose-send) in stable registration order.
@@ -54,6 +56,15 @@ struct PendingAskState: Equatable, Sendable {
         return decision
     }
 
+    /// Keeps the row but marks it expired. Returns false when unknown or already expired.
+    @discardableResult
+    mutating func markExpired(id: String) -> Bool {
+        guard let index = summaries.firstIndex(where: { $0.id == id }) else { return false }
+        guard !summaries[index].isExpired else { return false }
+        summaries[index].isExpired = true
+        return true
+    }
+
     /// Drops one pending request without an Allow/Block (e.g. rematch recheck).
     @discardableResult
     mutating func remove(id: String) -> Bool {
@@ -78,6 +89,7 @@ struct AccessRequestMenu: Equatable, Sendable {
         let label: String
         let kind: PendingUserActionKind
         let isSelected: Bool
+        var isExpired = false
     }
 
     let isVisible: Bool
@@ -92,7 +104,8 @@ struct AccessRequestMenu: Equatable, Sendable {
                 id: summary.id,
                 label: rowLabel(summary),
                 kind: summary.kind,
-                isSelected: summary.id == state.selectedID
+                isSelected: summary.id == state.selectedID,
+                isExpired: summary.isExpired
             )
         }
         return AccessRequestMenu(
@@ -104,12 +117,14 @@ struct AccessRequestMenu: Equatable, Sendable {
     }
 
     static func rowLabel(_ summary: PendingAskSummary) -> String {
+        let base: String
         switch summary.kind {
         case .ask:
-            return "\(summary.agent) · \(summary.subject)"
+            base = "\(summary.agent) · \(summary.subject)"
         case .proposeSend:
-            return "\(summary.agent) · Send · \(summary.subject)"
+            base = "\(summary.agent) · Send · \(summary.subject)"
         }
+        return summary.isExpired ? "\(base) · Expired" : base
     }
 
     static func phrase(for count: Int) -> String? {
@@ -155,6 +170,11 @@ final class AskQueueIndicator: ObservableObject {
         let removed = pending.remove(id: id)
         if removed { syncDockBadge() }
         return removed
+    }
+
+    /// Hard timeout: keep the row in the menu as Expired. It still counts toward badges until Close.
+    func markExpired(id: String) {
+        _ = pending.markExpired(id: id)
     }
 
     private func syncDockBadge() {
