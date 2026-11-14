@@ -724,11 +724,14 @@ public struct ProposalReferenceRecord: Equatable, Sendable {
             "id": id,
             "quote": quote,
             "stale": stale,
-            "instructionText": instructionText,
         ]
         if let note { out["note"] = note }
         if !instructions.isEmpty {
             out["instructions"] = instructions.map { $0.dictionary() }
+        }
+        // Chip prose fallback only — never echo `note` as `Note: …`.
+        if !instructionText.isEmpty {
+            out["instructionText"] = instructionText
         }
         return out
     }
@@ -744,10 +747,7 @@ public enum ProposalPins {
             let trimmedNote = pin.note.trimmingCharacters(in: .whitespacesAndNewlines)
             let note = trimmedNote.isEmpty ? nil : redact(trimmedNote)
             let instructions = pin.instructions.map { $0.redacted(using: redact) }
-            var fallback = instructions.map(\.fallbackText)
-            if let note {
-                fallback.append("Note: \(note).")
-            }
+            let instructionText = instructions.map(\.fallbackText).joined(separator: " ")
             let stale = pin.quote.isEmpty || !body.contains(pin.quote)
             return ProposalReferenceRecord(
                 id: pin.id,
@@ -755,7 +755,7 @@ public enum ProposalPins {
                 note: note,
                 stale: stale,
                 instructions: instructions,
-                instructionText: fallback.joined(separator: " ")
+                instructionText: instructionText
             )
         }
     }

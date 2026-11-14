@@ -389,6 +389,22 @@ struct AskPreviewZoomControls: View {
     }
 }
 
+/// Expiry state for one Ask window. The registry expires the request; the window stays
+/// open with the expired banner until the user presses Close.
+@MainActor
+final class ConditionalAskExpiryModel: ObservableObject {
+    let deadline: Date
+    @Published private(set) var isExpired = false
+
+    init(deadline: Date = .distantFuture) {
+        self.deadline = deadline
+    }
+
+    func markExpired() {
+        isExpired = true
+    }
+}
+
 /// SwiftUI view for the conditional access prompt dialog (previews / optional hosts).
 struct ConditionalAccessPromptDialog: View {
     let request: ConditionalAccessPromptRequest
@@ -407,6 +423,9 @@ struct ConditionalAccessPromptDialog: View {
     var onPreviewVisibilityChange: ((Bool) -> Void)? = nil
     /// Host fits window height to the left column when content is measured.
     var onPreferredHeightChange: ((CGFloat) -> Void)? = nil
+    @ObservedObject var expiry: ConditionalAskExpiryModel = ConditionalAskExpiryModel()
+    /// Expired-state Close: dismisses the window; the decision was already reported.
+    var onClose: () -> Void = {}
 
     @State private var messagePreviewVisible: Bool = true
     @State private var hoveringIdentity = false
@@ -508,7 +527,15 @@ struct ConditionalAccessPromptDialog: View {
         // do not put a zero-height scroll anchor above the first card (VStack `gap`
         // would still insert a scroll-away top margin). Pin scroll via first card id.
         VStack(alignment: .leading, spacing: 0) {
-            whyThisWindowHelp
+            if expiry.isExpired {
+                PhaseBanner(
+                    tone: .neutral,
+                    title: "Request expired",
+                    subtitle: "No answer by \(expiry.deadline.formatted(date: .omitted, time: .shortened)), so access was not granted. \(request.agentName) was told the request expired."
+                )
+            } else {
+                whyThisWindowHelp
+            }
 
             // Scroll the whole card stack. Attachment fields sit above Body so a long
             // body never buries them; Body itself is hard-capped (see maxTextHeight).
@@ -556,6 +583,8 @@ struct ConditionalAccessPromptDialog: View {
                 .contentMargins(.top, 0, for: .scrollIndicators)
                 .padding(.top, ConditionalAskLayout.pad)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .opacity(expiry.isExpired ? 0.72 : 1)
+                .allowsHitTesting(!expiry.isExpired)
                 .onPreferenceChange(AskLeftScrollContentHeightKey.self) { height in
                     guard height > 0 else { return }
                     leftScrollContentHeight = height
@@ -766,6 +795,27 @@ struct ConditionalAccessPromptDialog: View {
     }
 
     private var askFooter: some View {
+        Group {
+            if expiry.isExpired {
+                expiredFooter
+            } else {
+                decisionFooter
+            }
+        }
+    }
+
+    private var expiredFooter: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 8)
+            Button("Close") {
+                onClose()
+            }
+            .buttonStyle(AskPrimaryFooterButtonStyle(prominent: true))
+            .keyboardShortcut(.defaultAction)
+        }
+    }
+
+    private var decisionFooter: some View {
         HStack(spacing: 8) {
             Button("Block") {
                 resolveDecision(.block)

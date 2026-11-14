@@ -22,7 +22,12 @@ public enum PendingProposalAwaitResult: Equatable, Sendable {
 /// In-memory pending `propose_send` proposals: envelope dedupe, soft wait, hard expire.
 public final class PendingProposalRegistry: @unchecked Sendable {
     public static let defaultHardTimeoutSeconds: TimeInterval = 3_600
+    /// DEBUG builds allow 1 minute for dogfooding expiry; Release keeps 5 minutes.
+    #if DEBUG
+    public static let hardTimeoutMinSeconds: TimeInterval = 60
+    #else
     public static let hardTimeoutMinSeconds: TimeInterval = 300
+    #endif
     public static let hardTimeoutMaxSeconds: TimeInterval = 28_800
     public static let defaultSoftTimeoutSeconds: TimeInterval = 60
     public static let softTimeoutMinSeconds: TimeInterval = 1

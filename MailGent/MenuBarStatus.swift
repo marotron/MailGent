@@ -294,6 +294,8 @@ private struct AccessRequestMenuRow: View {
     private static let blockInk = Color(red: 196 / 255, green: 18 / 255, blue: 18 / 255)
     private static let allowFill = Color(red: 223 / 255, green: 244 / 255, blue: 228 / 255)
     private static let allowInk = Color(red: 22 / 255, green: 106 / 255, blue: 45 / 255)
+    private static let closeFill = Color(red: 232 / 255, green: 232 / 255, blue: 237 / 255)
+    private static let closeInk = Color(red: 60 / 255, green: 60 / 255, blue: 67 / 255)
 
     var body: some View {
         HStack(spacing: 4) {
@@ -323,7 +325,14 @@ private struct AccessRequestMenuRow: View {
             .accessibilityLabel(row.label)
             .accessibilityAddTraits(row.isSelected ? .isSelected : [])
 
-            if row.kind == .ask {
+            if row.isExpired {
+                quickButton("Close", fill: Self.closeFill, ink: Self.closeInk) {
+                    let id = row.id
+                    DispatchQueue.main.async {
+                        DetachedWindowHost.shared.closeExpiredAsk(id: id)
+                    }
+                }
+            } else if row.kind == .ask {
                 quickButton("Block", fill: Self.blockFill, ink: Self.blockInk) {
                     let id = row.id
                     DispatchQueue.main.async {

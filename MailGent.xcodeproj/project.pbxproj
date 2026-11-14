@@ -102,6 +102,7 @@
 		B9E6DCEA0A6B4A01253DE300 /* AccessLogFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54AAD95EB9AF00C859818E0 /* AccessLogFormatTests.swift */; };
 		BADDAB295AD650E9C0D67B95 /* AskRememberCaption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A85065F377E799CC50BB092 /* AskRememberCaption.swift */; };
 		BB0C8A7F305D6B97B06FF3AE /* ProposeSendSecretUsedStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F8F365621A87382C33ED8E /* ProposeSendSecretUsedStrip.swift */; };
+		BB374D4C352853989B4DED4D /* PhaseBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0165B59594E5EC109E02F80E /* PhaseBanner.swift */; };
 		BD0E9A2F6FA8AEF1D4874EF9 /* ReadAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B797690ED8A0EBFAA89EAF9D /* ReadAPITests.swift */; };
 		BE336D250DB06FE6A29E8243 /* SecretConstantResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3008DE9DC8B4206C75D71D8 /* SecretConstantResolverTests.swift */; };
 		C0188CC8CD8EC3134C07EED7 /* MailGentPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C26C62157AAF64661A97F30 /* MailGentPreferences.swift */; };
@@ -212,6 +213,7 @@
 
 /* Begin PBXFileReference section */
 		01496F0FD0D47CAC2DC7B46B /* SecretConstantsCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretConstantsCatalogView.swift; sourceTree = "<group>"; };
+		0165B59594E5EC109E02F80E /* PhaseBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseBanner.swift; sourceTree = "<group>"; };
 		025830C9CA5995BC5E28B733 /* MailAddressPartsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailAddressPartsTests.swift; sourceTree = "<group>"; };
 		02DE02224C266C47BBE954DF /* SecretConstantsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretConstantsStore.swift; sourceTree = "<group>"; };
 		0494EF0811DFF9341CED4AE3 /* MailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailStore.swift; sourceTree = "<group>"; };
@@ -513,6 +515,7 @@
 				B01EAE67A01E63C81591AAF1 /* OptionalEnvelopeVisibility.swift */,
 				D630ADC66DDB31FC9C4BE691 /* PassDeskPane.swift */,
 				7E3850B891AD2B1CAF5D10A7 /* PersonalVaultBookmark.swift */,
+				0165B59594E5EC109E02F80E /* PhaseBanner.swift */,
 				709E0881BCC1890B64868055 /* ProposalBodyEditor.swift */,
 				1A7F0EC0BF6BD7360A73FF99 /* ProposeSendConfirmRouting.swift */,
 				E1C654E2A30274DAD9058180 /* ProposeSendExpiryTitlebarLabel.swift */,
@@ -812,6 +815,7 @@
 				C45DF6C1475D8A74DE4D9A31 /* OptionalEnvelopeVisibility.swift in Sources */,
 				8C9F498B2E7159C45FEA825C /* PassDeskPane.swift in Sources */,
 				9B7F2171D55140D736C87F99 /* PersonalVaultBookmark.swift in Sources */,
+				BB374D4C352853989B4DED4D /* PhaseBanner.swift in Sources */,
 				D9723ECA1978ECD95432E480 /* ProposalBodyEditor.swift in Sources */,
 				7F229CABA59834D70FCA839E /* ProposeSendConfirmRouting.swift in Sources */,
 				7507BC217CFA11ABCA54067D /* ProposeSendExpiryTitlebarLabel.swift in Sources */,
@@ -1118,7 +1122,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 90;
+				CURRENT_PROJECT_VERSION = 98;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1135,7 +1139,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.25.1;
+				MARKETING_VERSION = 0.25.2;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};
@@ -1164,7 +1168,7 @@
 				CODE_SIGN_ENTITLEMENTS = MailGent/MailGent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 90;
+				CURRENT_PROJECT_VERSION = 98;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1181,7 +1185,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.25.1;
+				MARKETING_VERSION = 0.25.2;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mailgent.MailGent;
 				SDKROOT = macosx;
 			};

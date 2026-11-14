@@ -29,15 +29,18 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         var finished = false
         var pokeToken = 0
         let presentedAt = Date()
+        let expiry: ConditionalAskExpiryModel
 
         init(
             window: NSWindow,
             context: ConditionalAccessPromptContext,
-            continuation: CheckedContinuation<ConditionalAccessPromptFinish, Never>
+            continuation: CheckedContinuation<ConditionalAccessPromptFinish, Never>,
+            expiry: ConditionalAskExpiryModel
         ) {
             self.window = window
             self.context = context
             self.continuation = continuation
+            self.expiry = expiry
         }
     }
 
@@ -218,6 +221,15 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         finishAsk(id: id, finish: finish)
     }
 
+    /// Menu Close on an expired row — same as the window Close button (no decision reported).
+    func closeExpiredAsk(id: String) {
+        guard asks[id] != nil else {
+            _ = AskQueueIndicator.shared.remove(id: id)
+            return
+        }
+        finishAsk(id: id, finish: .dismissed)
+    }
+
     /// True when an Ask dialog for this registry askId is already on screen.
     func hasOpenAsk(id: String) -> Bool {
         asks[id] != nil
@@ -227,18 +239,18 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
     /// Resumes the UI waiter with `.dismissed` (non-cache); resolve is a no-op when already terminal.
     func expireConditionalAsk(id: String) {
         guard let record = asks[id] else { return }
-        if record.finished {
+        if record.finished || record.expiry.isExpired {
             MailGentLog.trace("ask expire ignored (already decided) id=\(id)")
             return
         }
         MailGentLog.trace("ask expired id=\(id)")
-        record.finished = true
+        // Window stays up with the expired banner until Close (or ⌘W) dismisses it.
+        // The menu row stays listed as Expired until then.
+        record.expiry.markExpired()
         record.pokeToken += 1
-        _ = AskQueueIndicator.shared.remove(id: id)
+        AskQueueIndicator.shared.markExpired(id: id)
         let continuation = record.continuation
         record.continuation = nil
-        asks[id] = nil
-        dismissAskWindow(record.window)
         continuation?.resume(returning: .dismissed)
     }
 
@@ -465,6 +477,7 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 subject: request.context.envelope.subject
             )
             let index = max(0, AskQueueIndicator.shared.pending.count - 1)
+            let expiry = ConditionalAskExpiryModel(deadline: expiresAt)
             let dialog = ConditionalAccessPromptDialog(
                 request: request,
                 accountLabel: accountLabel,
@@ -486,6 +499,10 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
                 },
                 onPreferredHeightChange: { [weak self] height in
                     self?.fitAskWindowHeight(id: request.id, preferredHeight: height)
+                },
+                expiry: expiry,
+                onClose: { [weak self] in
+                    self?.finishAsk(id: request.id, finish: .dismissed)
                 }
             )
 
@@ -506,7 +523,8 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
             asks[request.id] = AskRecord(
                 window: window,
                 context: request.context,
-                continuation: continuation
+                continuation: continuation,
+                expiry: expiry
             )
             bringAskForward(id: request.id)
         }
@@ -719,6 +737,14 @@ final class DetachedWindowHost: NSObject, NSWindowDelegate {
         guard let record = asks[id] else { return }
         if record.finished {
             MailGentLog.trace("ask finish ignored (already decided) id=\(id)")
+            return
+        }
+        if record.expiry.isExpired {
+            // Decision was reported at expiry; Close / ⌘W only dismisses the window and menu row.
+            record.finished = true
+            asks[id] = nil
+            _ = AskQueueIndicator.shared.remove(id: id)
+            dismissAskWindow(record.window)
             return
         }
         let removed: Bool

@@ -109,6 +109,34 @@ struct PendingAskStateTests {
         #expect(AccessRequestMenu.phrase(for: 1) == "1 item needs your action")
     }
 
+    @Test func expiredRequestStaysListedAsExpiredAndCountsUntilClosed() {
+        var state = PendingAskState()
+        state.register(id: "first", agent: "Cursor", subject: "Payslip April")
+        state.register(id: "second", agent: "Grok", subject: "Contract")
+
+        let firstExpiry = state.markExpired(id: "first")
+        let repeatExpiry = state.markExpired(id: "first")
+        #expect(firstExpiry)
+        #expect(repeatExpiry == false)
+
+        #expect(state.count == 2)
+        let menu = AccessRequestMenu.project(state)
+        #expect(menu.isVisible)
+        #expect(menu.rows.first?.isExpired == true)
+        #expect(menu.rows.first?.label == "Cursor · Payslip April · Expired")
+        #expect(menu.rows.last?.isExpired == false)
+    }
+
+    @Test func removingAnExpiredRequestDropsItFromTheMenu() {
+        var state = PendingAskState()
+        state.register(id: "first", agent: "Cursor", subject: "Payslip April")
+        _ = state.markExpired(id: "first")
+
+        let removed = state.remove(id: "first")
+        #expect(removed)
+        #expect(AccessRequestMenu.project(state).isVisible == false)
+    }
+
     @Test func proposeSendAndAskShareBadgeCountAndKindAwareLabels() {
         var state = PendingAskState()
         state.register(id: "ask-1", agent: "Cursor", subject: "Payslip", kind: .ask)

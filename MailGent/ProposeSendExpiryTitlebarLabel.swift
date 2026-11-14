@@ -8,13 +8,18 @@ struct ProposeSendExpiryTitlebarLabel: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let remaining = expiresAt.timeIntervalSince(context.date)
-            let label = ProposeSendExpiryFormat.countdownLabel(remaining: remaining)
+            let expired = remaining <= 0
+            let label = expired
+                ? "Expired at \(expiresAt.formatted(date: .omitted, time: .shortened))"
+                : ProposeSendExpiryFormat.countdownLabel(remaining: remaining)
             Text(label)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(remaining > 0 && remaining < 60 ? Color.orange : Color.secondary)
+                .foregroundStyle(expired ? Color.red : (remaining < 60 ? Color.orange : Color.secondary))
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 10)
-                .accessibilityLabel(accessibilityLabel(remaining: remaining))
+                .accessibilityLabel(expired ? label : accessibilityLabel(remaining: remaining))
         }
     }
 

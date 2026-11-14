@@ -14,7 +14,7 @@ Loop:
 
 1. Agent calls `propose_send`. MailGent opens one confirm and returns `awaiting_user` plus `proposalId`.
 2. Agent calls `await_propose_send` on that id and holds the call. Soft timeout stays at or below 50 seconds (Cursor drops the HTTP call around 60). A soft timeout is `awaiting_user` again. Call await again. Do not propose a new mail.
-3. Human pins passages, expands each row, selects one or more structured Ask/Rewrite instructions, and optionally adds a note. MailGent returns `attention_requested` with `references[]` (`quote`, `instructions`, optional `note`, and redacted `instructionText`). The window stays open. The deadline does not move. On the fake server this is automatic: the first await is held for a few seconds, then 1 or 2 passages from that draft come back.
+3. Human pins passages, expands each row, selects one or more structured Ask/Rewrite instructions, and optionally adds a note. MailGent returns `attention_requested` with `references[]` (`quote`, optional `note`, optional `instructions`, and chip-only redacted `instructionText` when instructions exist — note is never echoed as `Note: …`). The window stays open. The deadline does not move. On the fake server this is automatic: the first await is held for a few seconds, then 1 or 2 passages from that draft come back.
 4. Agent reads each quote and its instructions. It calls `propose_send` with the same `to` / `subject` and `revises: { proposalId, results? }`. The new body must change passages selected for Rewrite. Each optional result is keyed by `referenceId` + `instructionId`; Ask answers must match the declared answer shape.
 5. MailGent swaps the draft in place (v1 → v2) and returns `awaiting_user` on the **same** id.
 
