@@ -72,6 +72,33 @@ About: `Version 0.24.1-rc.1 alpha (65)`. Menu bar: `v0.24.1-rc.1`.
 
 **Never bump to a dated CHANGELOG section + tag while still rc.**
 
+## CHANGELOG UI detail (Unreleased bullets)
+
+If a bullet changes something the user can see, describe the screen, not just the rule. Someone reading it should be able to picture the window or menu after the change.
+
+Cover only the surfaces that changed, in this order:
+
+1. **Window**: which window, its top banner or titlebar, the body, and the footer. Say which buttons appear and which are removed.
+2. **Menu bar dropdown**: the row label and state suffix (for example `· Expired`), plus the row's buttons.
+3. **Badge or icon**: the count shown and when it clears.
+
+Rules:
+
+- Quote on-screen copy exactly, in **bold** (for example **Request expired**, **Expired at HH:MM**, **Close**).
+- Name the state (waiting, expired, closed) and the visual change for each one.
+- Say what is removed as well as what is added.
+- Use → for before → after when a control or label is swapped.
+- Leave out type names, file names, and internals. Those belong in commit messages.
+- Keep the closeout Dogfood **Expect** lines to the same wording.
+
+Example (0.25.2-rc.6 Ask expiry):
+
+```
+- Ask window expiry: the window stays open with a grey **Request expired** banner in the top slot, Allow / Block / Remember are removed, the body dims, and the footer shows only **Close**; the titlebar reads **Expired at HH:MM**. The menu bar **Needs your action** row shows `… · Expired` with a single **Close** button, and the badge counts it until Close.
+```
+
+Existing bullets do not need rewriting. This applies to every new Unreleased UI bullet.
+
 ## Files to keep in sync
 
 | File | Field |
